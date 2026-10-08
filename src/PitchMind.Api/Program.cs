@@ -3,6 +3,8 @@ using PitchMind.Api;
 using PitchMind.Contracts.Health;
 using PitchMind.Infrastructure.Storage;
 using PitchMind.Contracts.V1;
+using Microsoft.AspNetCore.Http.Features;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +14,11 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (rejected, _) =>
+    {
+        var context = rejected.HttpContext;
+        await ApiProblem(context, StatusCodes.Status429TooManyRequests, "RATE_LIMITED", "Too many requests").ExecuteAsync(context);
+    };
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -24,7 +31,44 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     if (context.Request.Path.StartsWithSegments("/api/v1"))
         context.Response.Headers["X-Contract-Version"] = ContractVersion.V1;
-    try { await next(context); }
+    try
+    {
+        if (context.Request.ContentLength is > 4096)
+        {
+            await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+            return;
+        }
+
+        if (context.Features.Get<IHttpRequestBodyDetectionFeature>()?.CanHaveBody == true)
+        {
+            var originalBody = context.Request.Body;
+            using var bufferedBody = new MemoryStream(capacity: 4096);
+            var chunk = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = await originalBody.ReadAsync(chunk.AsMemory(), context.RequestAborted)) > 0)
+            {
+                if (bufferedBody.Length + bytesRead > 4096)
+                {
+                    await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+                    return;
+                }
+                await bufferedBody.WriteAsync(chunk.AsMemory(0, bytesRead), context.RequestAborted);
+            }
+
+            bufferedBody.Position = 0;
+            context.Request.Body = bufferedBody;
+            try { await next(context); }
+            finally { context.Request.Body = originalBody; }
+        }
+        else
+        {
+            await next(context);
+        }
+    }
+    catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+    }
     catch (ArgumentException exception)
     {
         await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request", exception.Message).ExecuteAsync(context);
@@ -55,7 +99,27 @@ match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/events", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/insights", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context));
-match.MapPost("/analyst", (HttpContext context) => MatchDataUnavailable(context)).RequireRateLimiting("analyst");
+match.MapPost("/analyst", async (HttpContext context) =>
+{
+    if (!context.Request.HasJsonContentType())
+        return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Analyst requests must use application/json");
+
+    AnalystRequest? request;
+    try
+    {
+        request = await context.Request.ReadFromJsonAsync<AnalystRequest>(context.RequestAborted);
+    }
+    catch (JsonException)
+    {
+        return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be valid JSON");
+    }
+
+    if (request is null || string.IsNullOrWhiteSpace(request.InsightId))
+        return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires an insightId");
+
+    return MatchDataUnavailable(context);
+})
+    .RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();
