@@ -16,7 +16,7 @@
 **North-star experience:** Open a synthetic match → see score, time, and developing story → notice a contextual tactical Key Moment → select **Why?** → inspect the event sequence and evidence on a synchronized intelligent pitch → ask an AI Analyst for a grounded, audience-appropriate explanation → continue watching or replay an earlier period without losing place.
 
 **Mandatory hackathon constraints:**
-- Use **synthetic football-realistic data**, not real Premier League match data. Clearly label the experience **Simulated match**. Use fictional team/player identities and appropriately licensed or original graphics/media for the demo.
+- Use **synthetic football-realistic data**, not real Premier League match data. Clearly label the experience **Simulated match**. Use explicitly **synthetic match telemetry**. The newly supplied simulation JSON uses Manchester United/Liverpool and real player names as labels; these are not proof of a real fixture. Rights/provenance and misleading-real-match risk must be cleared, and unlicensed official branding, real broadcast footage and real match tracking must not be used.
 - Present a **public GitHub repository**, elevator pitch, Microsoft/Azure technologies and value proposition, and a **public working demo video strictly under two minutes** by the submission deadline.
 - Use Microsoft Azure/Foundry meaningfully rather than for decorative service-count. Document what each service actually does.
 
