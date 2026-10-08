@@ -5,14 +5,11 @@ steps:
     versionSpec: 22.x
 - bash: |
     set -euo pipefail
-    if [[ -f package-lock.json ]]; then
-      npm ci
-    else
-      echo "WARNING: lockfile missing; using npm install. Commit package-lock.json to make CI deterministic."
-      npm install --no-audit --no-fund
-    fi
+    test -f package-lock.json
+    npm ci
     npm run build
-    npm test
+    mkdir -p "$(Agent.TempDirectory)/pitchmind-frontend-results"
+    npm test -- --reporter=junit --outputFile="$(Agent.TempDirectory)/pitchmind-frontend-results/results.xml"
     npm run lint
     node ../scripts/validate_operating_model.mjs
     node ../scripts/validate_operating_model.mjs --self-test
@@ -20,3 +17,11 @@ steps:
     node ../scripts/audit_simulation_feed.mjs
   workingDirectory: frontend
   displayName: Frontend install, build, test and lint
+- task: PublishTestResults@2
+  displayName: Publish frontend test results
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFormat: JUnit
+    testResultsFiles: $(Agent.TempDirectory)/pitchmind-frontend-results/*.xml
+    failTaskOnFailedTests: true
+    failTaskOnMissingResultsFile: true

@@ -8,5 +8,15 @@ steps:
     set -euo pipefail
     dotnet restore PitchMind.slnx
     dotnet build PitchMind.slnx --no-restore -c Release
-    dotnet test PitchMind.slnx --no-build -c Release
+    dotnet test PitchMind.slnx --no-build -c Release \
+      --logger "trx;LogFileName=pitchmind-tests.trx" \
+      --results-directory "$(Agent.TempDirectory)/pitchmind-dotnet-results"
   displayName: Restore, build and test solution
+- task: PublishTestResults@2
+  displayName: Publish .NET test results
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFormat: VSTest
+    testResultsFiles: $(Agent.TempDirectory)/pitchmind-dotnet-results/**/*.trx
+    failTaskOnFailedTests: true
+    failTaskOnMissingResultsFile: true

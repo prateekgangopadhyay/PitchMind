@@ -99,8 +99,8 @@ function parseArgs(argv) {
   return result;
 }
 function test() {
-  const e=(id,n,clock)=>({eventId:id,matchId:'test-match',sequence:n,clockSeconds:clock,period:1,eventType:n?'Goal':'KickOff',playerPositions:[{x:2,y:98,heartRate:70}]});
-  const data=[e('a',1,0),e('b',2,3)];
+  const e=(id,n,clock,eventType)=>({eventId:id,matchId:'test-match',sequence:n,clockSeconds:clock,period:1,eventType,playerPositions:[{x:2,y:98,heartRate:70}]});
+  const data=[e('a',1,0,'KickOff'),e('b',2,3,'Goal')];
   const r=inspect(data); assert.equal(r.eventCount,2);assert.equal(r.eventTypeCounts.Goal,1);assert.ok(r.hasBiometricLikeAttributes);
   assert.throws(()=>inspect([data[0],data[0]]),/Duplicate/);
   assert.throws(()=>inspect([data[0],e('b',3,3)]),/gap/);
