@@ -30,3 +30,7 @@ The full local quality log was observed in the terminal for the 2026-10-09 revie
 - Sequence, source event IDs, source clock and period are hashed and reported without normalization. The tool does not write a derived feed, canonical ledger, PostgreSQL row or API response.
 - The manifest records owner-confirmed synthetic provenance and redistribution permission; independent rights/privacy review remains pending.
 - Product Owner review of realism, score/goal semantics and a complete acceptable replay remains pending. The source runs through 96:01 and is not certified as the requested PO-approved 90-minute scenario.
+
+## Rebased-head verification — 2026-10-09
+
+At rebased head `7f1727175606d5c1e497f5ada323de4c467d7aa3`, the candidate validator tests passed 11/11, feed profiler tests passed 5/5, the validator again returned `structurally_valid_candidate_blocked_for_canonicalization` with the pinned source hash and stable ledger digests, and the operating-model validator, DAG self-test, design-skill self-test and `git diff --check` passed. The integrated `bash scripts/validate-all.sh` was attempted on this rebased head but did not emit output or complete during the observed run; it is not counted as a pass. The earlier full-gate result above belongs to the pre-rebase code head.
