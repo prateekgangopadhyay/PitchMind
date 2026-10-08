@@ -38,4 +38,20 @@
 | npm advisory threshold | `npm audit --audit-level=high` | Exit 0; 0 vulnerabilities in the locked frontend dependency tree. |
 | Updated full local quality gate | `./scripts/validate-all.sh` on the preceding scanner revision | Exit 0; NuGet advisory gate passed for 12 projects; .NET restore/build had 0 warnings/errors; .NET tests 23 passed, 0 failed, 5 PostgreSQL skips; frontend install/build/lint and 3 tests passed; npm audit 0 vulnerabilities; source profiler tests 5 passed; NuGet parser tests 4 passed; operating-model validation and DAG self-test passed. Full output: `/private/tmp/ep01-s05-quality-gate-final-2026-10-09.log`. This full-gate result predates the independent-review parser hardening in the current revision. |
 
-These dependency advisories are current at the execution date and should be rerun in CI. No secret scanner or full threat-model exercise ran in this change. The Azure DevOps pipeline has not been registered or executed in Azure DevOps, and no branch policy/required check was observed. The five aggregate-run PostgreSQL skips are separately covered by earlier local PostgreSQL integration evidence above; this latest aggregate invocation did not execute them.
+These dependency advisories are current at the execution date and should be rerun in CI. No secret scanner or full threat-model exercise ran in this change. The Azure DevOps pipeline has not been registered or executed in Azure DevOps, and no branch policy/required check was observed. The five aggregate-run PostgreSQL skips are separately covered by earlier local PostgreSQL integration evidence above; this aggregate invocation did not execute them.
+
+## 2026-10-09 current-head revalidation
+
+**Code revision:** `59507d182161b61db0a099dcd6f3abf66bab2c0e` (EP01-S05 feature commits rebased onto main `16733960eb17b6213805ea1242bcd59888132355`; evidence captured before the documentation-only evidence commit). The rebased `scripts/validate-all.sh` retains both dependency-advisory gates and the current-main design-skill validation.
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| Complete local quality script | `./scripts/validate-all.sh` | Exit 0. Final output: `PASS: .NET, dependency audits, frontend, feed profiler, design and council contract validation`. |
+| .NET restore/build and tests | Invoked by the quality script | Restore succeeded; Release build succeeded with 0 warnings and 0 errors; 23 tests passed, 0 failed, 5 skipped. The five skipped tests are PostgreSQL integration tests because this aggregate command had no test database configured. |
+| NuGet advisories | `python3 scripts/check_nuget_vulnerabilities.py PitchMind.slnx` and quality-script invocation | PASS: no advisories across all 12 solution projects. This supersedes the earlier timeout recorded above for this branch before the rebase. |
+| Frontend dependencies/build/tests/lint | Invoked by the quality script | `npm ci` installed 224 packages; both npm audit invocations found 0 vulnerabilities; Vite production build and ESLint passed; Vitest passed 3/3. npm printed deprecation warnings for `whatwg-encoding` and ESLint 9.39.5. |
+| Python validation | Invoked by the quality script | Feed profiler tests passed 5/5; NuGet parser tests passed 7/7. |
+| Council/design checks | Operating-model validator, DAG self-test and `node scripts/test_design_skills.mjs` | All passed; validator reported 12 epics, 59 stories, 28 Council skills + 3 design skills, zero dependency cycles, and two approval gates. |
+| Diff and shell syntax | `git diff --check`; `bash -n scripts/validate-all.sh` | Passed. |
+
+The aggregate run still skips all five PostgreSQL tests; isolated PostgreSQL evidence remains in the earlier section of this file. No Azure DevOps run, required branch check, deliberate-failure gate, hosted clean-runner result, secret scanner, full threat-model execution, accessibility run, or performance/load test was observed. This local run is not Product Owner acceptance. No Azure resource or deployment action was performed.
