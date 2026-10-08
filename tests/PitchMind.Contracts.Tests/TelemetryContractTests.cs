@@ -66,6 +66,42 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
+    public void Event_contract_rejects_whitespace_values_non_utc_timestamp_and_incomplete_substitution()
+    {
+        var whitespaceErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            EventId = "   ",
+            Source = Source() with { ProviderId = "\t" }
+        }).Errors;
+        Assert.Contains(whitespaceErrors, error => error.Path == "eventId");
+        Assert.Contains(whitespaceErrors, error => error.Path == "source.providerId");
+
+        var timestampErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            Source = Source() with { SourceTimestampUtc = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.FromHours(5.5)) }
+        }).Errors;
+        Assert.Contains(timestampErrors, error => error.Code == "SOURCE_TIMESTAMP_NOT_UTC");
+
+        var substitutionErrors = TelemetryContractValidatorV1.Validate(Event("Substitution") with { RelatedPlayerId = null }).Errors;
+        Assert.Contains(substitutionErrors, error => error.Path == "relatedPlayerId");
+    }
+
+    [Fact]
+    public void Versioned_json_schemas_are_valid_json_and_declare_runtime_string_and_substitution_rules()
+    {
+        var root = FindRepositoryRoot();
+        using var eventSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "event-envelope.schema.json")));
+        using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
+
+        Assert.Equal(".*\\S.*", eventSchema.RootElement.GetProperty("properties").GetProperty("eventId").GetProperty("pattern").GetString());
+        Assert.Equal("(?:Z|[+-]00:00)$", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceTimestampUtc").GetProperty("pattern").GetString());
+        Assert.Equal(".*\\S.*", frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
+        Assert.Contains(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
+            rule.GetProperty("if").GetProperty("properties").GetProperty("eventType").GetProperty("const").GetString() == "Substitution" &&
+            rule.GetProperty("then").GetProperty("required").EnumerateArray().Any(field => field.GetString() == "relatedPlayerId"));
+    }
+
+    [Fact]
     public void Tracking_frame_rejects_out_of_frame_coordinates_and_missing_team_direction()
     {
         var frame = Frame() with
@@ -209,4 +245,11 @@ public sealed class TelemetryContractTests
         ProvenanceStatus = "owner_declared_synthetic",
         RightsReviewStatus = "pending"
     };
+
+    private static string FindRepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "PitchMind.slnx"))) return directory.FullName;
+        throw new DirectoryNotFoundException("Could not find PitchMind.slnx above the test output directory.");
+    }
 }

@@ -33,11 +33,21 @@ public static class TelemetryContractValidatorV1
         if (string.IsNullOrWhiteSpace(value.EventType) || !EventTypes.Contains(value.EventType))
             Add(errors, "UNKNOWN_EVENT_TYPE", "eventType", "Event type is not defined by telemetry v1.");
         Required(value.SourceEventType, "sourceEventType", errors);
-        if (value.EventType is not null && PlayerEventTypes.Contains(value.EventType))
+        var playerEvent = value.EventType is not null && PlayerEventTypes.Contains(value.EventType);
+        if (!playerEvent)
+        {
+            Optional(value.TeamId, "teamId", errors);
+            Optional(value.PlayerId, "playerId", errors);
+        }
+        if (value.EventType != "Substitution") Optional(value.RelatedPlayerId, "relatedPlayerId", errors);
+        Optional(value.Outcome, "outcome", errors);
+        if (playerEvent)
         {
             Required(value.TeamId, "teamId", errors);
             Required(value.PlayerId, "playerId", errors);
         }
+        if (value.EventType == "Substitution")
+            Required(value.RelatedPlayerId, "relatedPlayerId", errors);
         Source(value.Source, errors);
         return new(errors);
     }
@@ -215,6 +225,12 @@ public static class TelemetryContractValidatorV1
     private static void Required(string? value, string path, List<TelemetryValidationError> errors)
     {
         if (string.IsNullOrWhiteSpace(value)) Add(errors, "REQUIRED_VALUE_MISSING", path, "A non-empty value is required.");
+    }
+
+    private static void Optional(string? value, string path, List<TelemetryValidationError> errors)
+    {
+        if (value is not null && string.IsNullOrWhiteSpace(value))
+            Add(errors, "REQUIRED_VALUE_MISSING", path, "A supplied value must not be empty or whitespace.");
     }
 
     private static TelemetryValidationResult Invalid(string code, string path, string message) => new(new[] { new TelemetryValidationError(code, path, message) });

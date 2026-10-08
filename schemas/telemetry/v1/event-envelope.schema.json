@@ -7,19 +7,23 @@
   "required": ["schemaVersion", "matchId", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1 },
-    "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "sequence": { "type": "integer", "minimum": 0 },
     "matchTime": { "$ref": "#/$defs/matchTime" },
     "eventType": { "enum": ["KickOff", "Pass", "Shot", "Goal", "Foul", "Turnover", "FullTime", "Pressure", "HalfTime", "BallRecovery", "Carry", "Clearance", "Interception", "PressureApplied", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] },
-    "sourceEventType": { "type": "string", "minLength": 1 },
-    "teamId": { "type": "string", "minLength": 1 },
-    "playerId": { "type": "string", "minLength": 1 },
-    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1 },
-    "outcome": { "type": ["string", "null"], "minLength": 1 },
+    "sourceEventType": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
+    "outcome": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
     "source": { "$ref": "#/$defs/source" }
   },
   "allOf": [
+    {
+      "if": { "properties": { "eventType": { "const": "Substitution" } } },
+      "then": { "required": ["relatedPlayerId"] }
+    },
     {
       "if": { "properties": { "eventType": { "enum": ["Pass", "Shot", "Goal", "Foul", "Turnover", "Pressure", "PressureApplied", "BallRecovery", "Carry", "Clearance", "Interception", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] } } },
       "then": { "required": ["teamId", "playerId"] }
@@ -43,15 +47,15 @@
       "additionalProperties": false,
       "required": ["providerId", "sourceMatchId", "sourceRecordId", "sourceSequence", "sourceSchemaVersion", "sourceSha256", "provenanceStatus", "rightsReviewStatus"],
       "properties": {
-        "providerId": { "type": "string", "minLength": 1 },
-        "sourceMatchId": { "type": "string", "minLength": 1 },
-        "sourceRecordId": { "type": "string", "minLength": 1 },
+        "providerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "sourceMatchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "sourceRecordId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
         "sourceSequence": { "type": "integer", "minimum": 0 },
-        "sourceSchemaVersion": { "type": "string", "minLength": 1 },
+        "sourceSchemaVersion": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
         "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "sourceTimestampUtc": { "type": ["string", "null"], "format": "date-time" },
-        "provenanceStatus": { "type": "string", "minLength": 1 },
-        "rightsReviewStatus": { "type": "string", "minLength": 1 }
+        "sourceTimestampUtc": { "type": ["string", "null"], "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
+        "provenanceStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "rightsReviewStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
       }
     }
   }
