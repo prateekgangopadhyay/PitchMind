@@ -1,29 +1,23 @@
-# C4 architecture index
+# PitchMind — Living architecture index
+
+Architecture documents explicitly distinguish **CURRENT OBSERVED**, **TARGET PROPOSED**, and **OPTIONAL** service integration. A diagram never proves deployment or functional acceptance.
 
 - [C4 Level 1 — System Context](01-system-context.md)
-- [C4 Level 2 — Containers](02-container.md)
-- [C4 Level 3 — Components](03-components.md)
-- [Deployment and trust boundaries](04-deployment.md)
+- [C4 Level 2 — Containers, current versus target](02-container.md)
+- [C4 Level 3 — Components and ports/adapters](03-components.md)
+- [C4 Level 4 — Deployment/trust and environments](04-deployment.md)
+- [Football analytics baseline LLD](05-football-lld.md) and [detailed football LLD](07-football-analytics-detailed-lld.md)
+- [Azure HLD](06-target-azure-hld.md)
+- [Architecture review + findings](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) and [ADR index](../adr/README.md)
+- [Observed source profile](../data/MANU-LIV-SOURCE-PROFILE.md) and [source feed contract](../data/SIMULATION-FEED-CONTRACT.md)
+- [Consolidated API current/target registry](../api/API.md)
+- [Engineering Council operating model](../operating-model/ENGINEERING-OPERATING-MODEL.md), [all 59 stories routed](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) and [existing story status register](../backlog/STORY-EXECUTION.md)
 
-**Status:** Proposed target architecture. Advanced optional capabilities are not MVP prerequisites.
-
-### Invariants
-1. Domain project has zero external package/framework dependencies.
-2. Canonical football truth is computed deterministically from versioned events and tracking.
-3. Event Hubs partition by match ID; consumers must still enforce sequence and idempotency.
-4. Canonical write + outbox record occur in one PostgreSQL transaction.
-5. Agent output is untrusted until evidence and policy checks pass.
-6. Local Docker and Azure deployment adapters implement the same application ports.
-
-- [Football LLD and reference decisions](05-football-lld.md)
-- [Azure implementation delta and release contract](../engineering/AZURE-DELIVERY-GAPS.md)
-- [Consolidated API contracts](../api/API.md)
-- [Story execution register](../backlog/STORY-EXECUTION.md)
-
-## Engineering Council execution architecture
-- [Detailed Azure-native HLD (proposed)](06-target-azure-hld.md)
-- [Football intelligence target LLD (proposed)](07-football-analytics-detailed-lld.md)
-- [Simulation feed import/source contract (blocked on JSON)](../data/SIMULATION-FEED-CONTRACT.md)
-- [Seven-screen UX contracts](../engineering/FRONTEND-SCREEN-CONTRACTS.md)
-- [59-story work packets](../backlog/STORY-WORKPACK-INDEX.md)
-These are **target designs**, not evidence that managed PostgreSQL, Event Hubs, Foundry, SignalR or production identity are wired. Any material changes to containers, trust boundaries, event/data contracts or deployment flow require diagrams, API and ADR updated in the same PR. DEV changes remain owner-approval gated.
+## Invariants and architecture drift policy
+1. Domain project has zero external package/framework dependencies; adapters only in Infrastructure.
+2. Canonical football truth is deterministic from reviewed, rights-cleared synthetic source and verifiable spatial/time semantics. Claims always cite event IDs, source SHA and detector versions.
+3. Event Hubs partitions by matchId; consumers enforce unique EventId/sequence, at-least-once + idempotency and explicit gap/quarantine. No global exactly-once claim.
+4. PostgreSQL commits canonical facts+outbox transactionally; projections/search/Redis/SignalR never become football truth.
+5. Generated AI text is untrusted until independent evidence validation; deterministic fallback remains available.
+6. LOCAL Docker adapters; DEV/STAGE/PROD Azure-only. Deployment requires explicit repository-owner approval for **each DEV change set**, then Azure DevOps protected/manual gate.
+7. Every PR that changes an architecture boundary must update the relevant C4/ADR, source contract, LLD, API, tests, threat model and runbook with proof and decision-maker. Never invent a "deployed" arrow because Bicep contains a resource.

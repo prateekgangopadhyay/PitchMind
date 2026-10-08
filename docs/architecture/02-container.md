@@ -1,38 +1,54 @@
-# C4 L2 — Containers
+# C4 Level 2 — PitchMind containers and data-plane boundaries
+
+**Legend:** Solid arrows under **CURRENT** are backed by existing implementation or recorded demo behavior. **TARGET** describes the desired Azure-only deployment and is **not verified as an integrated cloud path**. **OPTIONAL** is feature/cost gated. [Target HLD](06-target-azure-hld.md) | [Observed limitations](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) | [Azure deployment evidence](../engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md).
+
+## CURRENT — offline synthetic demonstration (not canonical Azure ingestion)
 
 ```mermaid
-flowchart TB
-  Browser[React Client] --> Edge[Front Door / WAF - optional MVP]
-  Edge --> API[Container Apps API / BFF]
-  API <--> SignalR[Azure SignalR]
-  Feed[Telemetry Producer] --> EH[Event Hubs]
-  EH --> Worker[Container Apps Event Worker + Tactical Engine]
-  Worker --> PG[(PostgreSQL)]
-  Worker --> Cache[(Azure Managed Redis)]
-  Worker --> Outbox[Transactional Outbox in PostgreSQL]
-  Outbox --> Bus[Service Bus]
-  Bus --> Agents[Container Apps Agent Worker]
-  Bus --> Fn[Azure Functions: AutoRecap / Recovery]
-  Agents --> Foundry[Foundry]
-  Agents --> PG
-  Fn --> Blob[Blob Storage]
-  API --> PG
-  API --> Cache
-  API --> SignalR
-  EH -. archival .-> Lake[Data Lake P2]
-  Lake -. analytics .-> ADX[Data Explorer P2]
-  PG -. indexed projection .-> Search[AI Search P2]
+flowchart LR
+  U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
+  A --> S["SyntheticMatchService"]
+  S --> G["C# generated fixture (transitional)"]
+  S --> T["Deterministic pressing rule"]
+  S --> E["Selected-time evidence and fallback"]
+  L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
+  J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-## Contracts
-- Event Hubs: high-throughput match telemetry; partition key `matchId`.
-- Service Bus: durable commands, retries and dead letters.
-- PostgreSQL: canonical state, immutable evidence and outbox.
-- Redis: rebuildable cache; never canonical truth.
-- SignalR: fan-out, not a source of durable events.
-- Foundry: only candidate narratives; deterministic fallback required.
-- Functions: background jobs, not the core stream processor.
+The current PostgreSQL adapter persists `MatchEvent` but does **not** provide the fixture-backed API's match frames, projections, evidence or transactional outbox. The earlier Central India ACA prototype serves this offline path only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
 
-## Executable local slice (2026-10-08)
+## TARGET — canonical Azure platform
 
-The implemented local path is browser → API `SyntheticMatchService` → seeded immutable fixture → deterministic projection/evidence/fallback. It does not traverse PostgreSQL, Event Hubs, SignalR or Foundry. The diagram above remains the Azure target; deployability gaps are tracked in [Azure delivery delta](../engineering/AZURE-DELIVERY-GAPS.md). Do not enable a cloud profile by renaming the in-memory adapter.
+```mermaid
+flowchart LR
+  Web["React client"] --> Ingress["TLS ingress to ACA (optional Front Door/WAF)"]
+  Ingress --> BFF["ASP.NET Core API / BFF, Azure Container Apps"]
+  Web <-. "live cursor" .-> Signal["Azure SignalR"]
+  BFF --> Signal
+  BFF --> PG[("Azure PostgreSQL Flexible Server — canonical")]
+  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer"]
+  Sim --> EH["Azure Event Hubs (matchId partition)"]
+  EH --> Worker["ACA EventWorker: validation / projections / tactical"]
+  Worker --> PG
+  PG --> Outbox["Transactional outbox / inbox"]
+  Outbox --> Dispatcher["Background dispatcher"]
+  Dispatcher --> Signal
+  Dispatcher --> Bus["Azure Service Bus commands / DLQ"]
+  Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
+  Agent --> PG
+  Agent --> Foundry["Microsoft Foundry (candidate explanation)"]
+  Agent --> Guard["Independent claim validator"]
+  Guard --> PG
+  BFF -. "optional rebuildable cache" .-> Redis["Azure Managed Redis (P1)"]
+  Bus -. "optional recap" .-> Functions["Azure Functions (P1)"]
+  Functions --> Blob["Azure Blob Storage"]
+  PG -. "optional indexed copy" .-> Search["Azure AI Search (P2)"]
+  EH -. "optional archival" .-> Lake["Data Lake / Data Explorer (P2)"]
+  BFF -. "OTel" .-> Monitor["Azure Monitor / Application Insights"]
+```
+
+**Non-negotiable contract:** Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
+
+**Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
+
+**Release state:** The Azure integration arrows above are **proposed**. An existing hosted offline demo does not prove the connectivity represented here, and no new DEV deployment is authorized by this diagram.

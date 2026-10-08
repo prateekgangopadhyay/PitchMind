@@ -1,0 +1,1292 @@
+{
+  "version": 1,
+  "sourceBacklog": "docs/backlog/HACKATHON-MVP-EPICS.md",
+  "executionRegister": "docs/backlog/STORY-EXECUTION.md",
+  "storyStatusAuthority": "docs/backlog/STORY-EXECUTION.md",
+  "riskPolicy": "No story is accepted without observed independent tests and Product Owner signoff. Deployment is separate, owner-controlled.",
+  "stories": [
+    {
+      "storyId": "EP01-S01",
+      "epicId": "EP-01",
+      "title": "Enforce layered solution architecture",
+      "priority": "P0",
+      "wave": "W0",
+      "accountableSkill": "developer-experience-engineer",
+      "consultSkills": [
+        "principal-software-architect",
+        "devops-architect",
+        "qa-architect"
+      ],
+      "dependsOn": [],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP01/EP01-S01.md"
+    },
+    {
+      "storyId": "EP01-S02",
+      "epicId": "EP-01",
+      "title": "Reproducible local developer workstation",
+      "priority": "P0",
+      "wave": "W0",
+      "accountableSkill": "developer-experience-engineer",
+      "consultSkills": [
+        "principal-software-architect",
+        "devops-architect",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP01-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP01/EP01-S02.md"
+    },
+    {
+      "storyId": "EP01-S03",
+      "epicId": "EP-01",
+      "title": "Azure DevOps validation pipeline",
+      "priority": "P0",
+      "wave": "W0",
+      "accountableSkill": "developer-experience-engineer",
+      "consultSkills": [
+        "principal-software-architect",
+        "devops-architect",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP01-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP01/EP01-S03.md"
+    },
+    {
+      "storyId": "EP01-S04",
+      "epicId": "EP-01",
+      "title": "Shared contracts and engineering conventions",
+      "priority": "P0",
+      "wave": "W0",
+      "accountableSkill": "developer-experience-engineer",
+      "consultSkills": [
+        "principal-software-architect",
+        "devops-architect",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP01-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP01/EP01-S04.md"
+    },
+    {
+      "storyId": "EP01-S05",
+      "epicId": "EP-01",
+      "title": "Quality, security and developer readiness gate",
+      "priority": "P0",
+      "wave": "W0",
+      "accountableSkill": "developer-experience-engineer",
+      "consultSkills": [
+        "principal-software-architect",
+        "devops-architect",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP01-S02",
+        "EP01-S03",
+        "EP01-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP01/EP01-S05.md"
+    },
+    {
+      "storyId": "EP02-S01",
+      "epicId": "EP-02",
+      "title": "Reconcile IaC with deployed MVP needs",
+      "priority": "P0",
+      "wave": "W0-W2",
+      "accountableSkill": "azure-solution-architect",
+      "consultSkills": [
+        "azure-infrastructure-engineer",
+        "security-architect",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP01-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP02/EP02-S01.md"
+    },
+    {
+      "storyId": "EP02-S02",
+      "epicId": "EP-02",
+      "title": "Workload identity and least-privilege access",
+      "priority": "P0",
+      "wave": "W0-W2",
+      "accountableSkill": "azure-solution-architect",
+      "consultSkills": [
+        "azure-infrastructure-engineer",
+        "security-architect",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP02-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP02/EP02-S02.md"
+    },
+    {
+      "storyId": "EP02-S03",
+      "epicId": "EP-02",
+      "title": "Network, Bicep and preflight validation",
+      "priority": "P0",
+      "wave": "W0-W2",
+      "accountableSkill": "azure-solution-architect",
+      "consultSkills": [
+        "azure-infrastructure-engineer",
+        "security-architect",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP02-S01",
+        "EP02-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP02/EP02-S03.md"
+    },
+    {
+      "storyId": "EP02-S04",
+      "epicId": "EP-02",
+      "title": "Deploy and observe a minimal DEV workload",
+      "priority": "P0",
+      "wave": "W0-W2",
+      "accountableSkill": "azure-solution-architect",
+      "consultSkills": [
+        "azure-infrastructure-engineer",
+        "security-architect",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP02-S03",
+        "EP02-S05",
+        "EP01-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP02/EP02-S04.md"
+    },
+    {
+      "storyId": "EP02-S05",
+      "epicId": "EP-02",
+      "title": "Cost and deployment safety gate",
+      "priority": "P0",
+      "wave": "W0-W2",
+      "accountableSkill": "azure-solution-architect",
+      "consultSkills": [
+        "azure-infrastructure-engineer",
+        "security-architect",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP02-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP02/EP02-S05.md"
+    },
+    {
+      "storyId": "EP03-S01",
+      "epicId": "EP-03",
+      "title": "Govern a synthetic match scenario",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "event-streaming-engineer",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP01-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP03/EP03-S01.md"
+    },
+    {
+      "storyId": "EP03-S02",
+      "epicId": "EP-03",
+      "title": "Versioned canonical telemetry contracts",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "event-streaming-engineer",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP03-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP03/EP03-S02.md"
+    },
+    {
+      "storyId": "EP03-S03",
+      "epicId": "EP-03",
+      "title": "Synthetic producer + Event Hubs adapter",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "event-streaming-engineer",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP03-S02",
+        "EP02-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP03/EP03-S03.md"
+    },
+    {
+      "storyId": "EP03-S04",
+      "epicId": "EP-03",
+      "title": "Dedupe, ordering and poison-event rules",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "event-streaming-engineer",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP03-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP03/EP03-S04.md"
+    },
+    {
+      "storyId": "EP03-S05",
+      "epicId": "EP-03",
+      "title": "Defined 500 events/second burst test",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "event-streaming-engineer",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP03-S03",
+        "EP03-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP03/EP03-S05.md"
+    },
+    {
+      "storyId": "EP04-S01",
+      "epicId": "EP-04",
+      "title": "Govern canonical football aggregates",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "domain-driven-design-specialist",
+        "postgresql-engineer",
+        "distributed-systems-engineer"
+      ],
+      "dependsOn": [
+        "EP03-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP04/EP04-S01.md"
+    },
+    {
+      "storyId": "EP04-S02",
+      "epicId": "EP-04",
+      "title": "PostgreSQL schema, migrations and provenance",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "domain-driven-design-specialist",
+        "postgresql-engineer",
+        "distributed-systems-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP04/EP04-S02.md"
+    },
+    {
+      "storyId": "EP04-S03",
+      "epicId": "EP-04",
+      "title": "Transactional outbox and resilient projection",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "domain-driven-design-specialist",
+        "postgresql-engineer",
+        "distributed-systems-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP04/EP04-S03.md"
+    },
+    {
+      "storyId": "EP04-S04",
+      "epicId": "EP-04",
+      "title": "Deterministic replay and point-in-time queries",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "domain-driven-design-specialist",
+        "postgresql-engineer",
+        "distributed-systems-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP04/EP04-S04.md"
+    },
+    {
+      "storyId": "EP04-S05",
+      "epicId": "EP-04",
+      "title": "Match integrity golden tests",
+      "priority": "P0",
+      "wave": "W1-W2",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "domain-driven-design-specialist",
+        "postgresql-engineer",
+        "distributed-systems-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP04/EP04-S05.md"
+    },
+    {
+      "storyId": "EP05-S01",
+      "epicId": "EP-05",
+      "title": "Formal football concept dictionary",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP03-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S01.md"
+    },
+    {
+      "storyId": "EP05-S02",
+      "epicId": "EP-05",
+      "title": "Deterministic tactical sequence detector",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP05-S01",
+        "EP04-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S02.md"
+    },
+    {
+      "storyId": "EP05-S03",
+      "epicId": "EP-05",
+      "title": "Match context and tactical neutrality",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP05-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S03.md"
+    },
+    {
+      "storyId": "EP05-S04",
+      "epicId": "EP-05",
+      "title": "Evidence graph and truth classification",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP05-S02",
+        "EP04-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S04.md"
+    },
+    {
+      "storyId": "EP05-S05",
+      "epicId": "EP-05",
+      "title": "Key Moment generation and relevance policy",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP05-S03",
+        "EP05-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S05.md"
+    },
+    {
+      "storyId": "EP05-S06",
+      "epicId": "EP-05",
+      "title": "Mechanism replay and negative validation suite",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "football-analytics-engineer",
+      "consultSkills": [
+        "product-owner",
+        "domain-driven-design-specialist",
+        "qa-architect"
+      ],
+      "dependsOn": [
+        "EP05-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP05/EP05-S06.md"
+    },
+    {
+      "storyId": "EP06-S01",
+      "epicId": "EP-06",
+      "title": "Match BFF contracts",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "real-time-streaming-engineer",
+        "application-security-engineer",
+        "lead-frontend-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S04",
+        "EP05-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP06/EP06-S01.md"
+    },
+    {
+      "storyId": "EP06-S02",
+      "epicId": "EP-06",
+      "title": "Azure SignalR live event fan-out",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "real-time-streaming-engineer",
+        "application-security-engineer",
+        "lead-frontend-engineer"
+      ],
+      "dependsOn": [
+        "EP06-S01",
+        "EP03-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP06/EP06-S02.md"
+    },
+    {
+      "storyId": "EP06-S03",
+      "epicId": "EP-06",
+      "title": "Reconnect, backfill and historical context",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "real-time-streaming-engineer",
+        "application-security-engineer",
+        "lead-frontend-engineer"
+      ],
+      "dependsOn": [
+        "EP06-S01",
+        "EP06-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP06/EP06-S03.md"
+    },
+    {
+      "storyId": "EP06-S04",
+      "epicId": "EP-06",
+      "title": "Identity, authorization and abuse controls",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "real-time-streaming-engineer",
+        "application-security-engineer",
+        "lead-frontend-engineer"
+      ],
+      "dependsOn": [
+        "EP06-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP06/EP06-S04.md"
+    },
+    {
+      "storyId": "EP06-S05",
+      "epicId": "EP-06",
+      "title": "Observability, latency and degradation",
+      "priority": "P0",
+      "wave": "W2-W3",
+      "accountableSkill": "lead-backend-engineer",
+      "consultSkills": [
+        "real-time-streaming-engineer",
+        "application-security-engineer",
+        "lead-frontend-engineer"
+      ],
+      "dependsOn": [
+        "EP06-S03",
+        "EP06-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP06/EP06-S05.md"
+    },
+    {
+      "storyId": "EP07-S01",
+      "epicId": "EP-07",
+      "title": "Product information architecture and design system",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP01-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S01.md"
+    },
+    {
+      "storyId": "EP07-S02",
+      "epicId": "EP-07",
+      "title": "Home / synthetic match overview",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP07-S01",
+        "EP06-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S02.md"
+    },
+    {
+      "storyId": "EP07-S03",
+      "epicId": "EP-07",
+      "title": "Live match header, story and Key Moments",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP07-S02",
+        "EP05-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S03.md"
+    },
+    {
+      "storyId": "EP07-S04",
+      "epicId": "EP-07",
+      "title": "Intelligent 2D pitch and synchronized timeline",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP07-S01",
+        "EP04-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S04.md"
+    },
+    {
+      "storyId": "EP07-S05",
+      "epicId": "EP-07",
+      "title": "'Why?' evidence drawer and tactical replay",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP07-S04",
+        "EP05-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S05.md"
+    },
+    {
+      "storyId": "EP07-S06",
+      "epicId": "EP-07",
+      "title": "Audience modes and resilient interface states",
+      "priority": "P0",
+      "wave": "W1-W4",
+      "accountableSkill": "lead-frontend-engineer",
+      "consultSkills": [
+        "ui-ux-engineer",
+        "accessibility-engineer",
+        "product-owner"
+      ],
+      "dependsOn": [
+        "EP07-S03",
+        "EP07-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP07/EP07-S06.md"
+    },
+    {
+      "storyId": "EP08-S01",
+      "epicId": "EP-08",
+      "title": "Govern the canonical `MatchIntelligence` AI context",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP05-S04",
+        "EP06-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S01.md"
+    },
+    {
+      "storyId": "EP08-S02",
+      "epicId": "EP-08",
+      "title": "Microsoft Foundry explanation adapter",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP08-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S02.md"
+    },
+    {
+      "storyId": "EP08-S03",
+      "epicId": "EP-08",
+      "title": "Meaningful multi-agent handoffs (hackathon differentiator)",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP08-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S03.md"
+    },
+    {
+      "storyId": "EP08-S04",
+      "epicId": "EP-08",
+      "title": "Claim validation and trust boundaries",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP08-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S04.md"
+    },
+    {
+      "storyId": "EP08-S05",
+      "epicId": "EP-08",
+      "title": "Deterministic fallback and resource governance",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP08-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S05.md"
+    },
+    {
+      "storyId": "EP08-S06",
+      "epicId": "EP-08",
+      "title": "AI Analyst UX integration",
+      "priority": "P0",
+      "wave": "W2-W4",
+      "accountableSkill": "ai-agentic-systems-architect",
+      "consultSkills": [
+        "football-analytics-engineer",
+        "application-security-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP07-S01",
+        "EP08-S02",
+        "EP08-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP08/EP08-S06.md"
+    },
+    {
+      "storyId": "EP09-S01",
+      "epicId": "EP-09",
+      "title": "Rebuildable Azure Managed Redis projections",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "site-reliability-engineer",
+      "consultSkills": [
+        "redis-engineer",
+        "event-streaming-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP09/EP09-S01.md"
+    },
+    {
+      "storyId": "EP09-S02",
+      "epicId": "EP-09",
+      "title": "Service Bus background jobs and recovery",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "site-reliability-engineer",
+      "consultSkills": [
+        "redis-engineer",
+        "event-streaming-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP04-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP09/EP09-S02.md"
+    },
+    {
+      "storyId": "EP09-S03",
+      "epicId": "EP-09",
+      "title": "Azure Functions AutoRecap",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "site-reliability-engineer",
+      "consultSkills": [
+        "redis-engineer",
+        "event-streaming-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP09-S02",
+        "EP08-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP09/EP09-S03.md"
+    },
+    {
+      "storyId": "EP09-S04",
+      "epicId": "EP-09",
+      "title": "Permissioned evidence exports and retention",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "site-reliability-engineer",
+      "consultSkills": [
+        "redis-engineer",
+        "event-streaming-engineer",
+        "finops-engineer"
+      ],
+      "dependsOn": [
+        "EP05-S04",
+        "EP06-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP09/EP09-S04.md"
+    },
+    {
+      "storyId": "EP10-S01",
+      "epicId": "EP-10",
+      "title": "One golden end-to-end synthetic match journey",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP03-S04",
+        "EP04-S05",
+        "EP05-S06",
+        "EP06-S03",
+        "EP07-S05",
+        "EP08-S06"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S01.md"
+    },
+    {
+      "storyId": "EP10-S02",
+      "epicId": "EP-10",
+      "title": "Football, evidence, AI and accessibility certification",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP10-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S02.md"
+    },
+    {
+      "storyId": "EP10-S03",
+      "epicId": "EP-10",
+      "title": "Resilience, performance and security release gates",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP02-S05",
+        "EP03-S05",
+        "EP06-S05",
+        "EP08-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S03.md"
+    },
+    {
+      "storyId": "EP10-S04",
+      "epicId": "EP-10",
+      "title": "Azure DEV integrated certification and rollback",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP02-S04",
+        "EP10-S02",
+        "EP10-S03"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S04.md"
+    },
+    {
+      "storyId": "EP10-S05",
+      "epicId": "EP-10",
+      "title": "Hackathon public submission assets",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP10-S01",
+        "EP10-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S05.md"
+    },
+    {
+      "storyId": "EP10-S06",
+      "epicId": "EP-10",
+      "title": "Judges' evidence map and demo contingency",
+      "priority": "P0",
+      "wave": "W3-W5",
+      "accountableSkill": "qa-architect",
+      "consultSkills": [
+        "product-owner",
+        "devops-architect",
+        "performance-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP10-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP10/EP10-S06.md"
+    },
+    {
+      "storyId": "EP11-S01",
+      "epicId": "EP-11",
+      "title": "Environment parity and protected release controls",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "devops-architect",
+      "consultSkills": [
+        "azure-solution-architect",
+        "site-reliability-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP10-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP11/EP11-S01.md"
+    },
+    {
+      "storyId": "EP11-S02",
+      "epicId": "EP-11",
+      "title": "Backup, recovery and incident drills",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "devops-architect",
+      "consultSkills": [
+        "azure-solution-architect",
+        "site-reliability-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP04-S05",
+        "EP11-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP11/EP11-S02.md"
+    },
+    {
+      "storyId": "EP11-S03",
+      "epicId": "EP-11",
+      "title": "Ongoing security and FinOps controls",
+      "priority": "P1",
+      "wave": "Post-P0",
+      "accountableSkill": "devops-architect",
+      "consultSkills": [
+        "azure-solution-architect",
+        "site-reliability-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP11-S01"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP11/EP11-S03.md"
+    },
+    {
+      "storyId": "EP12-S01",
+      "epicId": "EP-12",
+      "title": "Provenance-aware historical retrieval (M14)",
+      "priority": "P2",
+      "wave": "Post-P0",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "finops-engineer",
+        "football-analytics-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP04-S04",
+        "EP06-S04"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP12/EP12-S01.md"
+    },
+    {
+      "storyId": "EP12-S02",
+      "epicId": "EP-12",
+      "title": "Historical tracking and spatial data exploration (M15)",
+      "priority": "P2",
+      "wave": "Post-P0",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "finops-engineer",
+        "football-analytics-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP12-S01",
+        "EP03-S02"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP12/EP12-S02.md"
+    },
+    {
+      "storyId": "EP12-S03",
+      "epicId": "EP-12",
+      "title": "Model and partner expansion (M16)",
+      "priority": "P2",
+      "wave": "Post-P0",
+      "accountableSkill": "data-engineer",
+      "consultSkills": [
+        "finops-engineer",
+        "football-analytics-engineer",
+        "security-architect"
+      ],
+      "dependsOn": [
+        "EP12-S01",
+        "EP08-S05"
+      ],
+      "status": "unverified",
+      "assignedHuman": null,
+      "acceptanceEvidence": null,
+      "requiresOwnerDevApproval": true,
+      "workPacket": "docs/engineering/stories/EP12/EP12-S03.md"
+    }
+  ],
+  "approvalInterpretation": "For every story, any planned deployment or Azure DEV mutation requires explicit owner approval of that exact change; false is never acceptable because some stories are noncloud."
+}

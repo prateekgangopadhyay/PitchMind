@@ -12,4 +12,6 @@ dotnet test PitchMind.slnx --no-build -c Release
   npm run lint
 )
 python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
-echo "PASS: .NET, frontend and JSON schema-profiler unit validation"
+node scripts/validate_operating_model.mjs
+node scripts/validate_operating_model.mjs --self-test
+echo "PASS: .NET, frontend, feed profiler and council contract validation"

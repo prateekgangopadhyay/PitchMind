@@ -92,11 +92,33 @@ stages:
     - checkout: self
     - template: templates/validate-infra.yml
 
-# Configured main builds automatically deliver the one immutable image to DEV.
-# STAGE/PROD deliberately require separate protected deployment jobs/approvals.
+# Only a deliberately queued parameterized run may reach these stages. The default
+# validation-only main/PR pipeline CANNOT deploy. Owner approval for the exact story,
+# scope, resource diff, costs, SHA and rollback is mandatory BEFORE ACR push/DEV write.
+# ManualValidation and Azure DevOps Environment checks are defense in depth; their
+# existence does not substitute for explicit approval by the repository owner.
 - ${{ if eq(parameters.enableDevDelivery, true) }}:
-  - stage: BuildRelease
+  - stage: OwnerApprovalBeforeAzureMutation
     dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+    - job: AwaitExplicitOwnerApproval
+      displayName: Review the approved change set before ACR push or DEV mutation
+      pool: server
+      timeoutInMinutes: 1440
+      steps:
+      - task: ManualValidation@0
+        timeoutInMinutes: 1440
+        inputs:
+          notifyUsers: ''
+          instructions: |
+            STOP. Obtain and record explicit repository-owner approval for THIS story/change set.
+            Verify Git SHA, resource group/subscription, Bicep what-if, image plan,
+            migration, cost budget, ingress/security and rollback.
+            No approval => Reject. Protected Azure DevOps Environment checks remain mandatory.
+          onTimeout: reject
+  - stage: BuildRelease
+    dependsOn: OwnerApprovalBeforeAzureMutation
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
     jobs:
     - job: Image
@@ -106,8 +128,27 @@ stages:
         parameters:
           azureServiceConnection: ${{ parameters.azureServiceConnection }}
           registryName: ${{ parameters.registryName }}
-  - stage: DeployDev
+  - stage: OwnerApprovalOfReleaseDigest
     dependsOn: BuildRelease
+    condition: succeeded()
+    jobs:
+    - job: AwaitDigestConfirmation
+      displayName: Owner reconfirms the immutable image and DEV deployment
+      pool: server
+      timeoutInMinutes: 1440
+      steps:
+      - task: ManualValidation@0
+        timeoutInMinutes: 1440
+        inputs:
+          notifyUsers: ''
+          instructions: |
+            STOP. Inspect the release manifest image digest published by BuildRelease.
+            Reconfirm the same explicit owner approval covers this digest and DEV impact.
+            Never treat the previous approval as blanket permission for other stories.
+            Approve only with recorded owner consent; otherwise Reject.
+          onTimeout: reject
+  - stage: DeployDev
+    dependsOn: OwnerApprovalOfReleaseDigest
     condition: succeeded()
     jobs:
     - deployment: Dev
