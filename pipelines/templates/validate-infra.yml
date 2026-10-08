@@ -6,4 +6,7 @@ steps:
     for params in infra/environments/*.bicepparam; do
       az bicep build-params --file "$params" --outfile "$(Agent.TempDirectory)/$(basename "$params").json"
     done
-  displayName: Compile Bicep and environment parameters (no deployment)
+    test ! -f infra/environments/dev.parameters.json
+    grep -q "enableDevFoundation = true" infra/environments/dev.bicepparam
+    grep -q "enableDevFoundation = false" infra/environments/prod.bicepparam
+  displayName: Compile DEV/STAGE/PROD Bicep and check environment isolation (no deployment)

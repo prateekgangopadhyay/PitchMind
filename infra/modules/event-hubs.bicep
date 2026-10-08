@@ -1,4 +1,5 @@
 param location string
+@minLength(3)
 param prefix string
 resource ns 'Microsoft.EventHub/namespaces@2024-01-01' = {
   name: '${prefix}-eh'

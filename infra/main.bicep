@@ -4,8 +4,14 @@ targetScope = 'resourceGroup'
 param environment string
 param location string = resourceGroup().location
 
-@description('Deploy optional expensive data services only after review')
+@description('Cost-controlled optional analytics; not provisioned by M03.')
 param enableAdvancedAnalytics bool = false
+
+@description('Provision the DEV network and Key Vault baseline. Disabled for other environments until reviewed.')
+param enableDevFoundation bool = false
+
+@description('Address space for the DEV VNet. Must not overlap with connected networks.')
+param virtualNetworkCidr string = '10.42.0.0/16'
 
 var prefix = 'pm-${environment}'
 var suffix = uniqueString(resourceGroup().id)
@@ -32,7 +38,7 @@ module eventHubs './modules/event-hubs.bicep' = {
 
 module serviceBus './modules/service-bus.bicep' = {
   name: 'serviceBus'
-  params: { location: location, name: take('${prefix}-${suffix}-sb', 50) }
+  params: { location: location, name: take('${prefix}-${suffix}-sbus', 50) }
 }
 
 module apps './modules/container-apps.bicep' = {
@@ -40,9 +46,29 @@ module apps './modules/container-apps.bicep' = {
   params: { location: location, prefix: prefix, logAnalyticsId: monitoring.outputs.workspaceId }
 }
 
+module network './modules/networking.bicep' = if (enableDevFoundation && environment == 'dev') {
+  name: 'devNetwork'
+  params: {
+    location: location
+    prefix: prefix
+    addressSpace: virtualNetworkCidr
+  }
+}
+
+module vault './modules/key-vault.bicep' = if (enableDevFoundation && environment == 'dev') {
+  name: 'devKeyVault'
+  params: {
+    location: location
+    name: replace('${prefix}-${suffix}-kv', '-', '')
+  }
+}
+
 output containerAppsEnvironmentId string = apps.outputs.environmentId
 output registryLoginServer string = registry.outputs.loginServer
 output eventHubNamespace string = eventHubs.outputs.namespaceName
 output serviceBusNamespace string = serviceBus.outputs.namespaceName
 output storageAccountName string = storage.outputs.accountName
+output devNetworkId string = enableDevFoundation && environment == 'dev' ? network!.outputs.vnetId : ''
+output devPostgresSubnetId string = enableDevFoundation && environment == 'dev' ? network!.outputs.postgresSubnetId : ''
+output devKeyVaultName string = enableDevFoundation && environment == 'dev' ? vault!.outputs.vaultName : ''
 output advancedAnalyticsEnabled bool = enableAdvancedAnalytics
