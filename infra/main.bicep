@@ -59,7 +59,7 @@ module vault './modules/key-vault.bicep' = if (enableDevFoundation && environmen
   name: 'devKeyVault'
   params: {
     location: location
-    name: take(replace('${prefix}-${suffix}-kv', '-', ''), 24)
+    name: replace('${prefix}-${suffix}-kv', '-', '')
   }
 }
 
@@ -68,7 +68,7 @@ output registryLoginServer string = registry.outputs.loginServer
 output eventHubNamespace string = eventHubs.outputs.namespaceName
 output serviceBusNamespace string = serviceBus.outputs.namespaceName
 output storageAccountName string = storage.outputs.accountName
-output devNetworkId string = enableDevFoundation && environment == 'dev' ? network.outputs.vnetId : ''
-output devPostgresSubnetId string = enableDevFoundation && environment == 'dev' ? network.outputs.postgresSubnetId : ''
-output devKeyVaultName string = enableDevFoundation && environment == 'dev' ? vault.outputs.vaultName : ''
+output devNetworkId string = enableDevFoundation && environment == 'dev' ? network!.outputs.vnetId : ''
+output devPostgresSubnetId string = enableDevFoundation && environment == 'dev' ? network!.outputs.postgresSubnetId : ''
+output devKeyVaultName string = enableDevFoundation && environment == 'dev' ? vault!.outputs.vaultName : ''
 output advancedAnalyticsEnabled bool = enableAdvancedAnalytics
