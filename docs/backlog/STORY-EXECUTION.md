@@ -81,3 +81,9 @@ Existing DEV resources were inventoried read-only in `rg-pitchmind-dev-001`, cen
 ## Verified DEV prototype delta
 
 ARM deployment and actual HTTPS API/frontend checks now pass for the explicitly offline synthetic DEV workload. [Evidence](../engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md) records exact image digest, amd64 architecture, source-content hash caveat and ready revision. This advances EP02-S04's hosting portion only; no managed PostgreSQL, Event Hubs adapter, SignalR or Foundry path is claimed. No entire cloud-dependent epic is accepted by this partial result. Azure DevOps org/project now resolve; no pipeline exists and no AzureRM connection exists, so CI execution/automatic delivery is still unproved.
+
+## Engineering Council planning overlay (2026-10-08)
+
+All existing 59 story IDs now have individually linked HLD/LLD implementation packets in [STORY-WORKPACK-INDEX](STORY-WORKPACK-INDEX.md). [Execution programme](../engineering/COUNCIL-EXECUTION-PLAN.md), [Azure HLD](../architecture/06-target-azure-hld.md), [Football LLD](../architecture/07-football-analytics-detailed-lld.md), [single API specification](../api/API.md), [screen contracts](../engineering/FRONTEND-SCREEN-CONTRACTS.md) and [QA/release gates](../engineering/QA-RELEASE-GATES.md) are proposed implementation plans. **No story status is automatically upgraded.**
+
+**Blocked: feed import**. The user-requested `data/simulations` JSON is not present on the inspected current repository branch or as an attachment available to this run. Read-only schema profiler `scripts/profile_simulation_feed.py` is added with Python unit tests; no vendor mapping is claimed. Once the file arrives, record its source hash and football data/right-to-use acceptance before writing any source adapter. **DEV deployment requires the owner's explicit specific approval even if all local checks pass.**

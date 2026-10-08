@@ -2,9 +2,16 @@
 
 Azure-native football intelligence, rebuilt from an evidence-first architecture.
 
-**Status:** Working offline synthetic match slice: deterministic replay, evidence-backed pressing sequence, match APIs and integrated pitch/timeline/analyst UI. Canonical Azure ingestion, Foundry and production certification remain incomplete. See [execution evidence](docs/engineering/EXECUTION-EVIDENCE.md) for verified scope and deployment status.
+**Status:** Working offline synthetic match slice: deterministic replay, evidence-backed pressing sequence, match APIs and integrated pitch/timeline/analyst UI. Canonical Azure ingestion, Foundry and production certification remain incomplete. See [execution evidence](docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md) for verified scope and deployment status.
 
 ## Start here
+- [Engineering Council: all 59 stories execution programme](docs/engineering/COUNCIL-EXECUTION-PLAN.md)
+- [59 story HLD/LLD work packets](docs/backlog/STORY-WORKPACK-INDEX.md)
+- [Azure target HLD](docs/architecture/06-target-azure-hld.md)
+- [Football analytics detailed LLD](docs/architecture/07-football-analytics-detailed-lld.md)
+- [Simulation JSON onboarding — source missing](docs/data/SIMULATION-FEED-CONTRACT.md)
+- [Frontend seven-screen requirements](docs/engineering/FRONTEND-SCREEN-CONTRACTS.md)
+- [Quality/release gates](docs/engineering/QA-RELEASE-GATES.md)
 - [Architecture and C4](docs/architecture/README.md)
 - [Architecture decision records](docs/adr/README.md)
 - [MVP backlog and gates](docs/backlog/MVP-BACKLOG.md)
@@ -45,3 +52,6 @@ Open `http://127.0.0.1:5081` for the same-origin application. PostgreSQL integra
 - PostgreSQL is canonical; Redis, AI Search and Data Explorer are projections or ephemeral state.
 - AI-generated claims require evidence validation.
 - `PitchMind_Old` is read-only reference material; do not bulk-copy code.
+
+## Engineering Council delivery hold
+The 59 stories have **work packets and a dependency-driven plan**, but are **not all implemented**. The requested `data/simulations` live JSON feed is not present in reviewed `main`; the current C# generated fixture is a noncompliant transitional offline demo until an approved JSON source is wired. Use `python3 scripts/profile_simulation_feed.py data/simulations/<source>.json` to profile the actual file after it is supplied. The profile does not validate football correctness or grant rights. **Do not deploy to Azure DEV without asking and obtaining explicit approval for the exact proposed changes.**

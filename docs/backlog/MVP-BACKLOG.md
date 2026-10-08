@@ -2,6 +2,15 @@
 
 Status: Proposed. Stories are not implemented by virtue of appearing here. Priority P0 is MVP-critical; P1 optional MVP expansion; P2 advanced.
 
+## Coordinated execution and story-level designs
+
+- [Engineering Council programme and DEV approval gate](../engineering/COUNCIL-EXECUTION-PLAN.md)
+- [59 per-story HLD/LLD work packets](STORY-WORKPACK-INDEX.md)
+- [Azure HLD](../architecture/06-target-azure-hld.md) · [Football LLD](../architecture/07-football-analytics-detailed-lld.md) · [Consolidated APIs](../api/API.md)
+- [JSON feed onboarding — blocked until file is accessible](../data/SIMULATION-FEED-CONTRACT.md) · [QA release gates](../engineering/QA-RELEASE-GATES.md)
+
+**Governance:** Plans and packets do not indicate completion; `data/simulations` is absent on reviewed main; and DEV deployment is explicitly prohibited without owner approval.
+
 ## Hackathon MVP product epics and development stories
 
 **Submission target:** October 27, 2026. **Status:** proposed planning specification; neither epic nor story creation implies an implemented or accepted feature.

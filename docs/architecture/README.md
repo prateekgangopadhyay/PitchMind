@@ -19,3 +19,11 @@
 - [Azure implementation delta and release contract](../engineering/AZURE-DELIVERY-GAPS.md)
 - [Consolidated API contracts](../api/API.md)
 - [Story execution register](../backlog/STORY-EXECUTION.md)
+
+## Engineering Council execution architecture
+- [Detailed Azure-native HLD (proposed)](06-target-azure-hld.md)
+- [Football intelligence target LLD (proposed)](07-football-analytics-detailed-lld.md)
+- [Simulation feed import/source contract (blocked on JSON)](../data/SIMULATION-FEED-CONTRACT.md)
+- [Seven-screen UX contracts](../engineering/FRONTEND-SCREEN-CONTRACTS.md)
+- [59-story work packets](../backlog/STORY-WORKPACK-INDEX.md)
+These are **target designs**, not evidence that managed PostgreSQL, Event Hubs, Foundry, SignalR or production identity are wired. Any material changes to containers, trust boundaries, event/data contracts or deployment flow require diagrams, API and ADR updated in the same PR. DEV changes remain owner-approval gated.
