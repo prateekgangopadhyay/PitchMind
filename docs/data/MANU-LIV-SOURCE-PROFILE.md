@@ -62,4 +62,16 @@ This JSON contains **real club and player names**, location and synthetic-lookin
 6. API/UI serves *this* match only after canonical adapter verification; source names/scores not hardcoded in C# or React. Frontend matches 96:01, both team labels and score changes, missing footage is explicit.
 7. Demonstrated model grounding uses cited source-derived evidence, never real-match knowledge.
 
-**Implemented so far:** read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py) with standalone tests; source-specific canonical import is **not yet implemented**.
+**Implemented so far:** a read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py) and a source-specific [candidate integrity validator](../../scripts/validate_manu_liv_candidate.py), both with standalone tests. Source-specific canonical import is **not yet implemented**.
+
+## EP03-S01 candidate source integrity check (2026-10-09)
+
+The versioned [candidate manifest](../../data/simulations/manu-liv-candidate-manifest.json) pins the source SHA and size, records the owner-confirmed synthetic provenance/redistribution declaration, and explicitly keeps coordinate units, player metrics, canonical mapping and independent review unapproved. The [candidate validator](../../scripts/validate_manu_liv_candidate.py) checks JSON shape, pinned source bytes, event UUID uniqueness, contiguous source sequence, nondecreasing source clock, periods, team identity consistency, event vocabulary and attached-position field types. It hashes source event IDs and ordered event semantics without changing them. It emits aggregate metadata only and does not produce canonical events or admit the source to production APIs/PostgreSQL.
+
+Executed locally on 2026-10-09:
+
+- `python3 -m unittest scripts.test_validate_manu_liv_candidate -v` — 7 passed, 0 failed.
+- `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation.json` — completed with status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 48,048 attached positions, source sequence 1..2199, source clock 0..5761 seconds. Repeated validation produced the same source event-ID and ordered-semantics SHA-256 digests.
+- Observed event counts include 124 shots and 254 fouls; the tool requires domain review and does not apply an unapproved professional-match threshold.
+
+This is structural/source-conservation evidence only. It does not validate football realism, infer coordinate units or player-metric meaning, approve canonical event mappings, certify rights/privacy, or replace the requested 90-minute PO-approved scenario and its football golden review. See [EP03-S01 candidate validation evidence](../engineering/evidence/EP03-S01-CANDIDATE-VALIDATION-2026-10-09.md).

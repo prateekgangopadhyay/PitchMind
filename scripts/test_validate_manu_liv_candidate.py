@@ -1,0 +1,145 @@
+"""Integrity and non-canonicalization tests for the pinned candidate feed."""
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+import unittest
+
+SCRIPT = Path(__file__).with_name("validate_manu_liv_candidate.py")
+spec = importlib.util.spec_from_file_location("manu_liv_candidate", SCRIPT)
+validator = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(validator)
+ROOT = SCRIPT.parent.parent
+
+
+def position(team_id: str, team_name: str, name: str = "Player One", jersey: int = 1) -> dict:
+    return {
+        "playerName": name, "teamName": team_name, "teamId": team_id, "jerseyNumber": jersey,
+        "position": "MID", "x": 50.0, "y": 45.0, "speed": 2.3, "distanceCovered": 1.1,
+        "heatIndex": 0.2, "passAccuracy": 90.0, "touches": 3, "stamina": 80.0, "heartRate": 100,
+    }
+
+
+def event(event_id: str, sequence: int, clock: int, event_type: str = "Pass") -> dict:
+    team_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    return {
+        "eventId": event_id, "matchId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "sequence": sequence, "clockSeconds": clock, "period": 1, "eventType": event_type,
+        "teamId": team_id, "teamName": "Synthetic Home", "outcome": "complete", "metadata": {},
+        "playerPositions": [position(team_id, "Synthetic Home")], "pitchX": 50.0, "pitchY": 45.0,
+        "ballX": 50.0, "ballY": 45.0, "endX": None, "endY": None,
+        "playerName": "Player One", "receiverName": None,
+    }
+
+
+def test_manifest(events: list[dict], payload: bytes) -> dict:
+    return {
+        "manifestVersion": "test", "fixtureId": "test-candidate", "status": "candidate_not_canonical",
+        "source": {
+            "sha256": validator.sha256(payload).hexdigest(), "byteSize": len(payload),
+            "expectedEventCount": len(events), "sequenceStart": 1, "sequenceEnd": len(events), "synthetic": True,
+            "provenance": "repository-owner-confirmed", "redistributionPermission": "repository-owner-confirmed",
+            "independentRightsPrivacyReview": "pending",
+        },
+        "match": {
+            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "seconds",
+            "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
+            "sourceClockEnd": events[-1]["clockSeconds"],
+        },
+        "coordinates": {"status": "unverified", "unit": None, "axisConvention": None, "pitchDimensionsMetres": None},
+        "playerMetrics": {"status": "unvalidated", "unitsAndValidity": "unverified", "mayBePresentedAsObservedPerformance": False},
+        "canonicalization": {"mappingStatus": "not_approved", "mayCreateCanonicalEvents": False,
+                             "sourceEventTypes": sorted({e["eventType"] for e in events})},
+    }
+
+
+class CandidateValidationTests(unittest.TestCase):
+    def setUp(self):
+        self.events = [
+            event("11111111-1111-4111-8111-111111111111", 1, 0, "KickOff"),
+            event("22222222-2222-4222-8222-222222222222", 2, 12, "FullTime"),
+        ]
+        self.payload = json.dumps(self.events, separators=(",", ":")).encode()
+        self.manifest = test_manifest(self.events, self.payload)
+
+    def test_preserves_order_and_reproduces_source_digests_without_mapping(self):
+        first = validator.validate_source(self.payload, self.manifest)
+        second = validator.validate_source(self.payload, self.manifest)
+        self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2, "preserved": True})
+        self.assertEqual(first["sourceClock"]["last"], 12)
+        self.assertTrue(first["sourceClock"]["preservedWithoutNormalization"])
+        self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
+        self.assertEqual(first["orderedEventSemanticsSha256"], second["orderedEventSemanticsSha256"])
+        self.assertEqual(first["status"], "structurally_valid_candidate_blocked_for_canonicalization")
+        self.assertFalse(first["canonicalMappingsApproved"])
+        self.assertFalse(first["coordinateUnitsVerified"])
+        self.assertFalse(first["playerMetricsValidated"])
+
+    def test_rejects_duplicate_source_event_ids(self):
+        invalid = [self.events[0], {**self.events[1], "eventId": self.events[0]["eventId"]}]
+        payload = json.dumps(invalid).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate source event ID"):
+            validator.validate_source(payload, test_manifest(invalid, payload))
+
+    def test_rejects_sequence_gaps_and_clock_regression(self):
+        invalid_sequence = [self.events[0], {**self.events[1], "sequence": 3}]
+        payload = json.dumps(invalid_sequence).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "sequence is not contiguous"):
+            validator.validate_source(payload, test_manifest(invalid_sequence, payload))
+        invalid_clock = [self.events[0], {**self.events[1], "clockSeconds": -1}]
+        payload = json.dumps(invalid_clock).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "clock is not an ordered integer"):
+            validator.validate_source(payload, test_manifest(invalid_clock, payload))
+
+    def test_rejects_period_regression(self):
+        invalid = [
+            self.events[0],
+            {**self.events[1], "period": 2},
+            event("33333333-3333-4333-8333-333333333333", 3, 20),
+        ]
+        payload = json.dumps(invalid).encode()
+        manifest = test_manifest(invalid, payload)
+        manifest["match"]["expectedPeriods"] = [1, 2]
+        with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
+            validator.validate_source(payload, manifest)
+
+    def test_rejects_manifest_drift_and_unapproved_truth_changes(self):
+        wrong_hash = {**self.manifest, "source": {**self.manifest["source"], "sha256": "0" * 64}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "SHA-256"):
+            validator.validate_source(self.payload, wrong_hash)
+        approved_map = {**self.manifest, "canonicalization": {**self.manifest["canonicalization"], "mappingStatus": "approved"}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "mappings must remain unapproved"):
+            validator.validate_source(self.payload, approved_map)
+        assumed_units = {**self.manifest, "coordinates": {"status": "unverified", "unit": "metres"}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Coordinate semantics must remain explicitly unverified"):
+            validator.validate_source(self.payload, assumed_units)
+
+    def test_rejects_nonfinite_source_values(self):
+        payload = b'[{"x":NaN}]'
+        manifest = test_manifest(self.events, self.payload)
+        manifest["source"] = {**manifest["source"], "sha256": validator.sha256(payload).hexdigest(), "byteSize": len(payload)}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Non-finite JSON constant"):
+            validator.validate_source(payload, manifest)
+
+    def test_pinned_repository_candidate_has_stable_source_integrity_report(self):
+        source = ROOT / "data/simulations/manu-liv-match-dataset.json"
+        manifest_path = ROOT / "data/simulations/manu-liv-candidate-manifest.json"
+        first = validator.validate_file(source, manifest_path)
+        second = validator.validate_file(source, manifest_path)
+        self.assertEqual(first["eventCount"], 2199)
+        self.assertEqual(first["attachedPositionCount"], 48048)
+        self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2199, "preserved": True})
+        self.assertEqual(first["sourceClock"]["last"], 5761)
+        self.assertEqual(first["eventCounts"], second["eventCounts"])
+        self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
+        self.assertEqual(first["orderedEventSemanticsSha256"], second["orderedEventSemanticsSha256"])
+        self.assertEqual(first["eventCounts"]["Shot"], 124)
+        self.assertEqual(first["eventCounts"]["Foul"], 254)
+        self.assertTrue(first["footballReviewRequired"])
+        self.assertEqual(first["independentRightsPrivacyReview"], "pending")
+
+
+if __name__ == "__main__":
+    unittest.main()
