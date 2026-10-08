@@ -1,6 +1,6 @@
 # EP01-S05 local validation evidence — 2026-10-08
 
-**Scope:** Current local baseline only; no Azure or hosted CI activity. The commands ran in the isolated `codex/ep01-s05-quality-gate` worktree at base revision `764251b39a497a0440ede1a0b87365e330692012`. Toolchains observed: .NET SDK 10.0.401, Node v22.17.1, npm 11.12.1.
+**Scope:** Current local baseline only; no Azure or hosted CI activity. The commands ran in the isolated `codex/ep01-s05-quality-gate` worktree based on `764251b39a497a0440ede1a0b87365e330692012`. The effective source tree is recorded in feature commit `fa4e85ea28ac12cc6117790b3bf39b79bc798285`; the subsequent integration/API checks ran at that commit, with documentation-only edits pending. The full quality script ran immediately before that commit against the same executable source and working-tree executable-bit change. Toolchains observed: .NET SDK 10.0.401, Node v22.17.1, npm 11.12.1.
 
 ## Executed checks
 
