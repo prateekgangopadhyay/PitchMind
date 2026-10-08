@@ -51,4 +51,18 @@ flowchart LR
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 
+## C# project responsibilities and dependency policy
+
+`tests/PitchMind.Architecture.Tests` enforces this source-project reference map. A source project added without a documented policy, an unexpected reference, or a missing declared dependency fails the architecture test. `PitchMind.Domain` must have no project, package, or framework references.
+
+| Project | Responsibility | Allowed project references |
+|---|---|---|
+| `PitchMind.Domain` | Pure football concepts and rules | None |
+| `PitchMind.Contracts` | Transport contracts | None |
+| `PitchMind.Application` | Use cases and ports | `PitchMind.Domain` |
+| `PitchMind.Infrastructure` | Persistence and external adapters | `PitchMind.Application` |
+| `PitchMind.Api` | HTTP composition and endpoints | `PitchMind.Application`, `PitchMind.Infrastructure`, `PitchMind.Contracts` |
+| `PitchMind.EventWorker` | Event-processing host composition | `PitchMind.Application` |
+| `PitchMind.AgentWorker` | Explanation-worker host composition | `PitchMind.Application` |
+
 **Release state:** The Azure integration arrows above are **proposed**. An existing hosted offline demo does not prove the connectivity represented here, and no new DEV deployment is authorized by this diagram.

@@ -1,5 +1,7 @@
 # C4 Level 3 — Components, domain purity and realization map
 
+**CURRENT** sections document the source-verified local implementation; **TARGET** sections describe proposed ports and adapters, not an integrated runtime.
+
 **Authority:** [Football LLD](07-football-analytics-detailed-lld.md), [API](../api/API.md), [Architecture review](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md). Current runtime and target ports are intentionally separated to avoid asserting unavailable integrations.
 
 ## Realized application components (source verified, not new test evidence)
