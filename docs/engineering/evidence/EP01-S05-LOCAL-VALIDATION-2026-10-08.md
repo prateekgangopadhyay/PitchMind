@@ -22,6 +22,7 @@
 - No Azure DevOps run, required GitHub branch check, deliberately failing gate, or hosted clean-runner result was observed.
 - No security scanner, threat model execution, accessibility run, or performance/load test was run in this validation.
 - The API smoke proves the existing offline demo contract only. The current `SyntheticMatchService` still supplies a transitional in-code fixture; it does not prove ingestion of the owner-supplied JSON or canonical PostgreSQL API behavior.
+- Direct API startup emitted a warning that `src/PitchMind.Api/wwwroot` was absent. The API routes passed; combined-image static asset serving and a browser journey were not tested here.
 - This is local evidence at the stated base revision, not a pipeline run or Product Owner acceptance. EP01-S05 remains unaccepted until hosted pipeline evidence and the remaining baseline checks are independently reviewed.
 
 ## Change made
