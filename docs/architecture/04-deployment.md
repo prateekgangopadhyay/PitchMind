@@ -2,7 +2,7 @@
 
 **Two separate realities:** Previous DEV evidence proves only one read-only synthetic ACA demonstration. The target below is **not** evidence that service connections/private network are implemented. [Azure HLD](06-target-azure-hld.md) | [DEV evidence](../engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md) | [Operating model](../operating-model/ENGINEERING-OPERATING-MODEL.md).
 
-## Observed DEV prototype (limited)
+## CURRENT — observed DEV prototype (limited)
 ```mermaid
 flowchart LR
   Browser["Public browser"] --> TLS["TLS-only ACA ingress"]

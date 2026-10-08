@@ -7,33 +7,52 @@
       "name": "product-owner",
       "skillFile": ".github/skills/product-owner/SKILL.md",
       "primaryEpicIds": [
-        "EP-10",
+        "EP-03",
         "EP-05",
-        "EP-07"
+        "EP-07",
+        "EP-10"
       ]
     },
     {
       "name": "principal-software-architect",
       "skillFile": ".github/skills/principal-software-architect/SKILL.md",
       "primaryEpicIds": [
-        "EP-01"
+        "EP-01",
+        "EP-02",
+        "EP-04",
+        "EP-06",
+        "EP-08"
       ]
     },
     {
       "name": "distinguished-engineer",
       "skillFile": ".github/skills/distinguished-engineer/SKILL.md",
-      "primaryEpicIds": []
+      "primaryEpicIds": [
+        "EP-04",
+        "EP-05",
+        "EP-08",
+        "EP-10"
+      ]
     },
     {
       "name": "staff-principal-engineer",
       "skillFile": ".github/skills/staff-principal-engineer/SKILL.md",
-      "primaryEpicIds": []
+      "primaryEpicIds": [
+        "EP-01",
+        "EP-03",
+        "EP-04",
+        "EP-05",
+        "EP-06",
+        "EP-07",
+        "EP-08"
+      ]
     },
     {
       "name": "lead-backend-engineer",
       "skillFile": ".github/skills/lead-backend-engineer/SKILL.md",
       "primaryEpicIds": [
         "EP-04",
+        "EP-05",
         "EP-06"
       ]
     },
@@ -41,15 +60,18 @@
       "name": "lead-frontend-engineer",
       "skillFile": ".github/skills/lead-frontend-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-06",
-        "EP-07"
+        "EP-07",
+        "EP-08"
       ]
     },
     {
       "name": "distributed-systems-engineer",
       "skillFile": ".github/skills/distributed-systems-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-04"
+        "EP-03",
+        "EP-04",
+        "EP-06",
+        "EP-09"
       ]
     },
     {
@@ -64,6 +86,7 @@
       "name": "real-time-streaming-engineer",
       "skillFile": ".github/skills/real-time-streaming-engineer/SKILL.md",
       "primaryEpicIds": [
+        "EP-03",
         "EP-06"
       ]
     },
@@ -71,9 +94,9 @@
       "name": "football-analytics-engineer",
       "skillFile": ".github/skills/football-analytics-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-12",
         "EP-03",
         "EP-05",
+        "EP-07",
         "EP-08"
       ]
     },
@@ -88,42 +111,48 @@
       "name": "azure-solution-architect",
       "skillFile": ".github/skills/azure-solution-architect/SKILL.md",
       "primaryEpicIds": [
-        "EP-11",
-        "EP-02"
+        "EP-02",
+        "EP-10",
+        "EP-11"
       ]
     },
     {
       "name": "azure-infrastructure-engineer",
       "skillFile": ".github/skills/azure-infrastructure-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-02"
+        "EP-02",
+        "EP-11"
       ]
     },
     {
       "name": "devops-architect",
       "skillFile": ".github/skills/devops-architect/SKILL.md",
       "primaryEpicIds": [
+        "EP-01",
+        "EP-02",
         "EP-10",
-        "EP-11",
-        "EP-01"
+        "EP-11"
       ]
     },
     {
       "name": "site-reliability-engineer",
       "skillFile": ".github/skills/site-reliability-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-11",
-        "EP-09"
+        "EP-02",
+        "EP-06",
+        "EP-09",
+        "EP-10",
+        "EP-11"
       ]
     },
     {
       "name": "security-architect",
       "skillFile": ".github/skills/security-architect/SKILL.md",
       "primaryEpicIds": [
-        "EP-10",
-        "EP-11",
-        "EP-12",
-        "EP-02"
+        "EP-02",
+        "EP-06",
+        "EP-08",
+        "EP-10"
       ]
     },
     {
@@ -131,28 +160,32 @@
       "skillFile": ".github/skills/application-security-engineer/SKILL.md",
       "primaryEpicIds": [
         "EP-06",
-        "EP-08"
+        "EP-08",
+        "EP-10"
       ]
     },
     {
       "name": "data-engineer",
       "skillFile": ".github/skills/data-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-12",
-        "EP-03"
+        "EP-03",
+        "EP-04",
+        "EP-12"
       ]
     },
     {
       "name": "postgresql-engineer",
       "skillFile": ".github/skills/postgresql-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-04"
+        "EP-04",
+        "EP-10"
       ]
     },
     {
       "name": "redis-engineer",
       "skillFile": ".github/skills/redis-engineer/SKILL.md",
       "primaryEpicIds": [
+        "EP-06",
         "EP-09"
       ]
     },
@@ -168,16 +201,18 @@
       "name": "qa-architect",
       "skillFile": ".github/skills/qa-architect/SKILL.md",
       "primaryEpicIds": [
-        "EP-10",
-        "EP-01",
-        "EP-03",
-        "EP-05"
+        "EP-05",
+        "EP-07",
+        "EP-08",
+        "EP-10"
       ]
     },
     {
       "name": "performance-engineer",
       "skillFile": ".github/skills/performance-engineer/SKILL.md",
       "primaryEpicIds": [
+        "EP-03",
+        "EP-06",
         "EP-10"
       ]
     },
@@ -185,37 +220,45 @@
       "name": "accessibility-engineer",
       "skillFile": ".github/skills/accessibility-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-07"
+        "EP-07",
+        "EP-08",
+        "EP-10"
       ]
     },
     {
       "name": "ui-ux-engineer",
       "skillFile": ".github/skills/ui-ux-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-07"
+        "EP-07",
+        "EP-08"
       ]
     },
     {
       "name": "developer-experience-engineer",
       "skillFile": ".github/skills/developer-experience-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-01"
+        "EP-01",
+        "EP-10"
       ]
     },
     {
       "name": "finops-engineer",
       "skillFile": ".github/skills/finops-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-12",
         "EP-02",
         "EP-08",
-        "EP-09"
+        "EP-09",
+        "EP-11"
       ]
     },
     {
       "name": "technical-writer",
       "skillFile": ".github/skills/technical-writer/SKILL.md",
-      "primaryEpicIds": []
+      "primaryEpicIds": [
+        "EP-01",
+        "EP-07",
+        "EP-10"
+      ]
     }
   ]
 }
