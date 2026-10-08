@@ -113,6 +113,10 @@ match.MapPost("/analyst", async (HttpContext context) =>
     {
         return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be valid JSON");
     }
+    catch (InvalidOperationException)
+    {
+        return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Analyst requests require application/json");
+    }
 
     if (request is null || string.IsNullOrWhiteSpace(request.InsightId))
         return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires an insightId");

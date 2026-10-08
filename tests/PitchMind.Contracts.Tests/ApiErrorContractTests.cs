@@ -116,6 +116,14 @@ public sealed class ApiErrorContractTests : IAsyncLifetime
         await AssertProblem(response, HttpStatusCode.BadRequest, "INVALID_REQUEST");
     }
 
+    [Fact]
+    public async Task Unsupported_analyst_content_type_returns_the_versioned_problem_contract()
+    {
+        using var response = await Client.PostAsync(AnalystPath, new StringContent("{}", Encoding.UTF8, "text/plain"));
+
+        await AssertProblem(response, HttpStatusCode.UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE");
+    }
+
     public async Task DisposeAsync()
     {
         _client?.Dispose();
