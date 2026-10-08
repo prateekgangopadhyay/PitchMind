@@ -7,6 +7,8 @@ describe('Match experience', () => {
   it('labels simulation while loading without inventing score or evidence', () => {
     const markup = renderToStaticMarkup(createElement(App));
     expect(markup).toContain('Simulated match');
+    expect(markup).toContain('Skip to match content');
+    expect(markup).toContain('id="main-content"');
     expect(markup).toContain('Loading simulated fixtures');
     expect(markup).not.toContain('Arsenal');
   });

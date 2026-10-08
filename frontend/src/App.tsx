@@ -55,7 +55,7 @@ export function App() {
     catch(e) {if (version === contextVersion.current) setError(e instanceof Error ? e.message : 'Explanation unavailable.');}
     finally {setBusy(false);}
   }
-  return <><header><div className="brand"><span>◈</span> PitchMind</div><span className="tag">Simulated match · Fictional teams</span></header><main>
+  return <><a href="#main-content" className="skip-link">Skip to match content</a><header><div className="brand"><span>◈</span> PitchMind</div><span className="tag">Simulated match · Fictional teams</span></header><main id="main-content">
     <div className="intro"><div><p className="eyebrow">Football intelligence, grounded in evidence</p><h1>The match. The mechanism. The proof.</h1></div>{fixtures.length > 0 && <select aria-label="Select simulated match" value={matchId} onChange={e => {setMatchId(e.target.value); selectTime(0); setPlaying(false);}}>{fixtures.map(f => <option key={f.matchId} value={f.matchId}>{f.home.name} vs {f.away.name}</option>)}</select>}</div>
     {error && <div role="alert" className="notice error">{error} <button onClick={() => window.location.reload()}>Retry connection</button></div>}
     {!fixture && !error && <div role="status" className="notice">Loading simulated fixtures…</div>}
