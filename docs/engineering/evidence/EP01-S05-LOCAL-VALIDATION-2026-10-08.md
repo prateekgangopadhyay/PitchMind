@@ -27,4 +27,15 @@
 
 ## Change made
 
-`scripts/validate-all.sh` is now executable, matching the documented command in `docs/engineering/M02-LOCAL-DEVELOPMENT.md` and `docs/operating-model/STATIC-VERIFICATION-2026-10-08.md`. The command was rerun after changing the file mode and completed successfully with the limitations above.
+`scripts/validate-all.sh` is executable, matching the documented command in `docs/engineering/M02-LOCAL-DEVELOPMENT.md` and `docs/operating-model/STATIC-VERIFICATION-2026-10-08.md`. On 2026-10-09 this PR adds a fail-closed NuGet advisory gate to the local validation script and Azure DevOps .NET template, explicit `npm audit --audit-level=high` to the local and pipeline frontend gates, and four parser tests that prove top-level/transitive advisories and malformed report data fail closed.
+
+## 2026-10-09 dependency-gate verification
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| NuGet advisory report and fail-closed parser | `python3 scripts/check_nuget_vulnerabilities.py PitchMind.slnx` | Exit 0; no advisories across all 12 solution projects using `https://api.nuget.org/v3/index.json`. The scanner rejects vulnerability records, malformed report/version, missing project list or missing advisory sources. |
+| Scanner positive and negative cases | `python3 -m unittest scripts.test_check_nuget_vulnerabilities -v` | 4 passed, 0 failed; validates clean report acceptance and top-level, transitive, malformed-version, malformed-advisory and missing-source rejection. |
+| npm advisory threshold | `npm audit --audit-level=high` | Exit 0; 0 vulnerabilities in the locked frontend dependency tree. |
+| Updated full local quality gate | `./scripts/validate-all.sh` | Exit 0; NuGet advisory gate passed for 12 projects; .NET restore/build had 0 warnings/errors; .NET tests 23 passed, 0 failed, 5 PostgreSQL skips; frontend install/build/lint and 3 tests passed; npm audit 0 vulnerabilities; source profiler tests 5 passed; NuGet parser tests 4 passed; operating-model validation and DAG self-test passed. Full output: `/private/tmp/ep01-s05-quality-gate-final-2026-10-09.log`. |
+
+These dependency advisories are current at the execution date and should be rerun in CI. No secret scanner or full threat-model exercise ran in this change. The Azure DevOps pipeline has not been registered or executed in Azure DevOps, and no branch policy/required check was observed. The five aggregate-run PostgreSQL skips are separately covered by earlier local PostgreSQL integration evidence above; this latest aggregate invocation did not execute them.
