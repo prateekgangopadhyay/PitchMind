@@ -37,3 +37,11 @@ Use when planning test strategy, validating acceptance, certifying story complet
 **Blocking condition:** Reject acceptance based on screenshots, docs, scaffolds or a passing /health alone.
 **Handoff:** Product Owner for acceptance; domain and specialist reviewers for signoff; SRE/DevOps for integrated evidence.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP05, EP07, EP08, EP10. **Gate to enforce:** Map all 59 original acceptance criteria to observable test evidence; ban skipped PG integration, mock-only cloud proof, future-score leakage and unsupported tactical certainty.
+
+**Mandatory deliverable:** Traceable golden, negative, degraded and E2E evidence matrix with real execution results. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** football-analytics-engineer, accessibility-engineer, performance-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.

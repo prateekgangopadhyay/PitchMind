@@ -37,3 +37,11 @@ Use for product information architecture, match screen redesign, visual hierarch
 **Blocking condition:** Reject an attractive design that obscures sources, time, simulation status or unsupported certainty.
 **Handoff:** Product for priorities; Football Analytics for claims; Frontend/Accessibility for implementation.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP07, EP08. **Gate to enforce:** Use seven committed screens as design, never false football data; plan honest missing/stale/unauthorized states, meaningful controls and progressive explanation path.
+
+**Mandatory deliverable:** Seven-screen questions, Figma/mockup delta, data dependency map and mobile behavior. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** product-owner, accessibility-engineer, lead-frontend-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.

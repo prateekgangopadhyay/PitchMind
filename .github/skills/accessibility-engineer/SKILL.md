@@ -37,3 +37,11 @@ Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders
 **Blocking condition:** Block core 'Why?' evidence paths inaccessible to keyboard or assistive tech.
 **Handoff:** UX and Frontend for design/remediation; QA for regression gate.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP07, EP08, EP10. **Gate to enforce:** Verify WCAG 2.2 AA target, keyboard pitch/Why dialog, source-linked nonvisual table, reduced-motion, focus restoration, 320px reflow and stable live announcements.
+
+**Mandatory deliverable:** Axe/manual assistive-technology checks, defect evidence, acceptance. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** lead-frontend-engineer, ui-ux-engineer, qa-architect. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.

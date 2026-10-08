@@ -37,3 +37,11 @@ Use for load planning, profiling, latency budgets, burst handling and capacity/s
 **Blocking condition:** Stop performance marketing based on an unspecified burst or mocked backend.
 **Handoff:** Streaming/PostgreSQL/Frontend for tuning; SRE for service budgets; FinOps for spend.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP06, EP10. **Gate to enforce:** Define 500 events/sec hot match plus multiple partitions, match payload mix and viewer load; report measured p50/p95/p99, lag, losses, quarantine and cost.
+
+**Mandatory deliverable:** Replayable load config, raw perf report, bottleneck and budget. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** event-streaming-engineer, site-reliability-engineer, finops-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.

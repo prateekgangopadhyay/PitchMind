@@ -38,3 +38,11 @@ Use for C4/ADR/docs maintenance, developer guides, API contracts, release report
 **Blocking condition:** Stop misleading 'production-ready', 'real-time Azure' or 'AI-verified' claims without actual supporting evidence.
 **Handoff:** Principal Architect for diagram accuracy; Product/Football for narrative; SRE/DevOps for operational proof.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP01, EP07, EP10. **Gate to enforce:** Update C4 L1–L3, contracts, ADR, workpack and runbooks with every major change; maintain observed-vs-target state, fixture provenance and exact test/certification URLs.
+
+**Mandatory deliverable:** Drift check, docs index, changelog, evidence traceability with no false 'complete' claims. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** principal-software-architect, qa-architect, product-owner. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.

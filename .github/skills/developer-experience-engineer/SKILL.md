@@ -38,3 +38,11 @@ Use for local bootstrap, build/test tooling, repository conventions, contributor
 **Blocking condition:** Block claims that fresh setup works without a tested path or that local adapters satisfy Azure release gates.
 **Handoff:** DevOps for clean pipeline; Backend/Frontend for failing commands; Technical Writer for docs.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP01, EP10. **Gate to enforce:** Verify clean-machine local Docker/API/frontend startup, deterministic fixture test coverage, developer no-cloud-credential path and fast failures without secret leaks.
+
+**Mandatory deliverable:** Reproducible bootstrap scripts, smoke receipt, failure guide and tooling lockfiles. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
+
+**Handoff to:** devops-architect, lead-backend-engineer, technical-writer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
