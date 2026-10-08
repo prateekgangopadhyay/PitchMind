@@ -22,7 +22,10 @@
   "allOf": [
     {
       "if": { "properties": { "eventType": { "const": "Substitution" } } },
-      "then": { "required": ["relatedPlayerId"] }
+      "then": {
+        "required": ["relatedPlayerId"],
+        "properties": { "relatedPlayerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" } }
+      }
     },
     {
       "if": { "properties": { "eventType": { "enum": ["Pass", "Shot", "Goal", "Foul", "Turnover", "Pressure", "PressureApplied", "BallRecovery", "Carry", "Clearance", "Interception", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] } } },
