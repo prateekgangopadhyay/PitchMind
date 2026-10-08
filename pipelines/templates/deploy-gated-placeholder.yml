@@ -1,0 +1,11 @@
+# Intentionally not invoked by the bootstrap pipeline.
+# Implement after approved Azure service connections, environment checks,
+# immutable image digests, schema migration, health verification and rollback.
+parameters:
+- name: environmentName
+  type: string
+steps:
+- bash: |
+    echo "Deployment for ${{ parameters.environmentName }} is not configured." >&2
+    exit 1
+  displayName: Block unconfigured deployment

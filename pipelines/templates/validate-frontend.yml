@@ -1,0 +1,12 @@
+parameters:
+- name: workingDirectory
+  type: string
+  default: frontend
+steps:
+- bash: |
+    set -euo pipefail
+    npm ci
+    npm run build
+    npm test -- --run
+  workingDirectory: ${{ parameters.workingDirectory }}
+  displayName: Frontend install, build and test

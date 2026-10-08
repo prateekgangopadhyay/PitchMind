@@ -1,0 +1,5 @@
+steps:
+- bash: |
+    set -euo pipefail
+    az bicep build --file infra/main.bicep
+  displayName: Bicep compile

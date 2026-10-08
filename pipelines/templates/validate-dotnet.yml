@@ -1,0 +1,11 @@
+parameters:
+- name: solution
+  type: string
+  default: PitchMind.sln
+steps:
+- bash: |
+    set -euo pipefail
+    dotnet restore "${{ parameters.solution }}"
+    dotnet build "${{ parameters.solution }}" --no-restore -c Release
+    dotnet test "${{ parameters.solution }}" --no-build -c Release
+  displayName: .NET restore, build and test

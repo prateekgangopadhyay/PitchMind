@@ -1,0 +1,30 @@
+# Bootstrap validation only. No deploy until Azure resource permissions and approvals are configured.
+trigger:
+  branches:
+    include: [main]
+pr:
+  branches:
+    include: [main]
+pool:
+  vmImage: ubuntu-latest
+stages:
+- stage: Validate
+  jobs:
+  - job: Repository
+    steps:
+    - checkout: self
+    - bash: |
+        set -euo pipefail
+        test -f docs/architecture/01-system-context.md
+        test -f docs/architecture/02-container.md
+        test -f docs/architecture/03-components.md
+        test -f docs/backlog/MVP-BACKLOG.md
+        test ! -d .github/workflows
+      displayName: Validate architecture baseline
+  - job: Infrastructure
+    steps:
+    - checkout: self
+    - bash: |
+        set -euo pipefail
+        az bicep build --file infra/main.bicep
+      displayName: Compile Bicep (requires Azure CLI + Bicep on agent)
