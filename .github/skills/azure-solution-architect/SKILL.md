@@ -37,3 +37,11 @@ Use for selecting Azure PaaS components, reviewing logical/physical deployment o
 **Blocking condition:** Block deployment based solely on Bicep compilation, diagram links or assumed private connectivity.
 **Handoff:** Azure Infrastructure for Bicep; Security for trust boundaries; DevOps and SRE for runtime evidence.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP02, EP10, EP11. **Gate to enforce:** Separate offline ACA DEV proof from canonical PostgreSQL/Event Hubs/Foundry/SignalR; verify Central India service SKUs, private DNS, ACA VNet and identity ahead of release.
+
+**Mandatory deliverable:** CURRENT/TARGET Azure C4, costed topology, dependency readiness matrix and preflight. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** azure-infrastructure-engineer, security-architect, finops-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.

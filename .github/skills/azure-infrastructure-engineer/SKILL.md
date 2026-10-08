@@ -38,3 +38,11 @@ Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monit
 **Blocking condition:** Stop unapproved cloud mutation, public exposure by default or assumed private connectivity.
 **Handoff:** Azure Solution Architect for topology; DevOps for pipeline; Security/FinOps for controls.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP02, EP11. **Gate to enforce:** Use Bicep what-if and managed-identity RBAC with private network paths; refuse Azure create/update/delete until the owner approves exact story deployment.
+
+**Mandatory deliverable:** IaC modules, parameters/identity matrix, diff receipt and rollback plan. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** azure-solution-architect, devops-architect, security-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.

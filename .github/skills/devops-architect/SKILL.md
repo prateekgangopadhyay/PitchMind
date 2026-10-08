@@ -37,3 +37,11 @@ Use for Azure DevOps Pipelines, branch validation, immutable image delivery, env
 **Blocking condition:** Stop unapproved DEV automation, mutable-tag release, cross-environment image rebuild or invented green run.
 **Handoff:** DX for reproducible CI, Azure Infra for target, Security for federation, SRE for smoke.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP01, EP02, EP10, EP11. **Gate to enforce:** Do not equate enableDevDelivery=true, PR merge or pipeline run with owner consent; demand change-scoped owner approval AND protected/manual Azure DevOps gate before DEV apply.
+
+**Mandatory deliverable:** Immutable artifact/release manifest, CI result, approval record and rollback evidence. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** site-reliability-engineer, security-architect, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.

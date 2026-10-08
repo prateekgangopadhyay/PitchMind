@@ -37,3 +37,11 @@ Use for tactical detection, pitch coordinate transforms, xT/xG proposals, eviden
 **Blocking condition:** Veto unsupported tactical certainty, reconstructed player velocities from sparse frames or unlicensed real-match claims.
 **Handoff:** DDD/backend for pure detector; AI and UX for permitted explanatory language; QA for independent goldens.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP05, EP07, EP08. **Gate to enforce:** Audit the Manchester United/Liverpool 2,199-event source for implausible shot/foul rates, unstated coordinate units, and sparse tracking; do not infer 3m pressure or tactics until unit/coverage verified.
+
+**Mandatory deliverable:** Football concept dictionary, source realism verdict, positive/negative/insufficient goldens. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** product-owner, domain-driven-design-specialist, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.

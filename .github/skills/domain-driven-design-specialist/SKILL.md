@@ -37,3 +37,11 @@ Use when defining football aggregate boundaries, ubiquitous language, domain ser
 **Blocking condition:** Block persistence/AI libraries in Domain and any mutation of football truth by a language model.
 **Handoff:** Football Analytics for football validity; Backend/PostgreSQL for serialization and persistence.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP04, EP05. **Gate to enforce:** Differentiate nominal position, inferred role, phase-dependent shape and mechanism; enforce pure value types and source anti-corruption mapping.
+
+**Mandatory deliverable:** Aggregate boundaries, versioned value objects, invariants and negative football tests. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** football-analytics-engineer, lead-backend-engineer, postgresql-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.

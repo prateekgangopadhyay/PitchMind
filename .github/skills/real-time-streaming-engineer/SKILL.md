@@ -37,3 +37,11 @@ Use for low-latency event-time processing, windowed tactical detection, backpres
 **Blocking condition:** Stop publishing a time-window insight whose supporting records are incomplete, late or inconsistent.
 **Handoff:** Event Streaming for broker adapters; Football Analytics for conditions; Performance/SRE for tests.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP06. **Gate to enforce:** Keep elapsed/period source time distinct from UTC ingest and client selected time; prove replay/live cursor isolation and reconnect backfill.
+
+**Mandatory deliverable:** Clock/cursor contract, ordered message test and measured lag. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
+
+**Handoff to:** event-streaming-engineer, lead-frontend-engineer, site-reliability-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
