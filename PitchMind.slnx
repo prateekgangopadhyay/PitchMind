@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PitchMind.Domain/PitchMind.Domain.csproj" />
+    <Project Path="src/PitchMind.Application/PitchMind.Application.csproj" />
+    <Project Path="src/PitchMind.Infrastructure/PitchMind.Infrastructure.csproj" />
+    <Project Path="src/PitchMind.Contracts/PitchMind.Contracts.csproj" />
+    <Project Path="src/PitchMind.Api/PitchMind.Api.csproj" />
+    <Project Path="src/PitchMind.EventWorker/PitchMind.EventWorker.csproj" />
+    <Project Path="src/PitchMind.AgentWorker/PitchMind.AgentWorker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj" />
+    <Project Path="tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj" />
+    <Project Path="tests/PitchMind.Architecture.Tests/PitchMind.Architecture.Tests.csproj" />
+  </Folder>
+</Solution>
