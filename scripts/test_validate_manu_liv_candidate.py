@@ -123,6 +123,12 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "Non-finite JSON constant"):
             validator.validate_source(payload, manifest)
 
+    def test_rejects_overflowing_raw_coordinates(self):
+        invalid = [{**self.events[0], "pitchX": 10 ** 1000}, self.events[1]]
+        payload = json.dumps(invalid).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Non-numeric source coordinate"):
+            validator.validate_source(payload, test_manifest(invalid, payload))
+
     def test_pinned_repository_candidate_has_stable_source_integrity_report(self):
         source = ROOT / "data/simulations/manu-liv-match-dataset.json"
         manifest_path = ROOT / "data/simulations/manu-liv-candidate-manifest.json"
