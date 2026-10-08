@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pitchmind.example/schemas/telemetry/v1/event-envelope.schema.json",
+  "title": "PitchMind canonical telemetry event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "matchId", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "matchId": { "type": "string", "minLength": 1 },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "matchTime": { "$ref": "#/$defs/matchTime" },
+    "eventType": { "enum": ["KickOff", "Pass", "Shot", "Goal", "Foul", "Turnover", "FullTime", "Pressure", "HalfTime", "BallRecovery", "Carry", "Clearance", "Interception", "PressureApplied", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] },
+    "sourceEventType": { "type": "string", "minLength": 1 },
+    "teamId": { "type": "string", "minLength": 1 },
+    "playerId": { "type": "string", "minLength": 1 },
+    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1 },
+    "outcome": { "type": ["string", "null"], "minLength": 1 },
+    "source": { "$ref": "#/$defs/source" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "eventType": { "enum": ["Pass", "Shot", "Goal", "Foul", "Turnover", "Pressure", "PressureApplied", "BallRecovery", "Carry", "Clearance", "Interception", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] } } },
+      "then": { "required": ["teamId", "playerId"] }
+    }
+  ],
+  "$defs": {
+    "matchTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["period", "elapsedSeconds", "sourceClockValue", "sourceClockUnit", "sourceClockBasis"],
+      "properties": {
+        "period": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "elapsedSeconds": { "type": "integer", "minimum": 0 },
+        "sourceClockValue": { "type": "number", "minimum": 0 },
+        "sourceClockUnit": { "enum": ["seconds", "milliseconds", "provider_defined"] },
+        "sourceClockBasis": { "enum": ["match_elapsed", "period_elapsed", "provider_defined"] }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providerId", "sourceMatchId", "sourceRecordId", "sourceSequence", "sourceSchemaVersion", "sourceSha256", "provenanceStatus", "rightsReviewStatus"],
+      "properties": {
+        "providerId": { "type": "string", "minLength": 1 },
+        "sourceMatchId": { "type": "string", "minLength": 1 },
+        "sourceRecordId": { "type": "string", "minLength": 1 },
+        "sourceSequence": { "type": "integer", "minimum": 0 },
+        "sourceSchemaVersion": { "type": "string", "minLength": 1 },
+        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceTimestampUtc": { "type": ["string", "null"], "format": "date-time" },
+        "provenanceStatus": { "type": "string", "minLength": 1 },
+        "rightsReviewStatus": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
