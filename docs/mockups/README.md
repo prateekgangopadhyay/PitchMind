@@ -31,3 +31,6 @@ These seven screens illustrate the proposed PitchMind hackathon MVP. All footbal
 The mockups are **design references, not pixel-perfect specifications**. Engineering and product review must validate tactical definitions, metric labels, data provenance, accessibility, and design consistency prior to acceptance.
 
 See [MVP Backlog](../backlog/MVP-BACKLOG.md) and [Detailed Epic and Development Stories](../backlog/HACKATHON-MVP-EPICS.md) for delivery scope.
+
+## From visual concepts to tested web pages
+Frontend stories must follow [Taste → Vercel Web Design Guidelines → Awesome Design review](../design/FRONTEND-DESIGN-DELIVERY.md), comparing actual desktop/tablet/mobile browser render to the concept and recording observed positive, negative and degraded states. The seven designs are **not** source-data records. [Design system](../design/PITCHMIND-DESIGN-SYSTEM.md) and [upstream provenance](../design/VENDOR-SOURCES.md) guide implementation without arbitrary framework swaps or unsupported football claims.

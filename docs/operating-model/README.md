@@ -24,3 +24,6 @@ Treat architecture documents as target intent, integration smoke as environment-
 Run `node scripts/validate_operating_model.mjs` at repository root (or `node scripts/validate_operating_model.mjs --self-test`). The Node validation checks catalog/frontmatter, 59-story coverage, no missing workpackets, DAG cycles, current-vs-target architecture and two manual DEV gates. It is static validation: **not** .NET/React integration, Azure deployment or rights/football certification. Azure DevOps validates this in the frontend job after installing Node.
 
 **Verification status:** [Current static skills, 59-story routing and deployment-control audit](STATIC-VERIFICATION-2026-10-08.md). This does not certify CI, the full feed, or DEV runtime.
+
+## Cross-cutting UI specialists
+The original 28 accountable role skills remain unchanged in number. Three optional-on-non-UI, **mandatory-on-UI** design skills are now available under `.github/skills/`: Taste, Vercel Web Design Guidelines and Awesome Design audit. [Design registry](../design/DESIGN-SKILL-REGISTRY.json) · [Premium brand system](../design/PITCHMIND-DESIGN-SYSTEM.md) · [Frontend review protocol](../design/FRONTEND-DESIGN-DELIVERY.md) · [Vendor/license notes](../design/VENDOR-SOURCES.md). This does not mean any visual story or UX audit has already passed.

@@ -45,3 +45,9 @@ Use for product information architecture, match screen redesign, visual hierarch
 **Mandatory deliverable:** Seven-screen questions, Figma/mockup delta, data dependency map and mobile behavior. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
 **Handoff to:** product-owner, accessibility-engineer, lead-frontend-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+
+## Mandatory three-skill UI review cycle — EP07 / EP08-S06
+1. Use [Taste](../design-taste-frontend/SKILL.md) to prototype premium dark/emerald hierarchy and evidence-first information architecture based on the approved mockup. Avoid animated ornament and match facts invented from imagery.
+2. Use [Web Design Guidelines](../web-design-guidelines/SKILL.md) to audit real JSX/CSS, record `file:line` violations and prove focus/forms/responsiveness; label an offline guideline fallback explicitly.
+3. Independently use [Awesome Design audit](../awesome-design-audit/SKILL.md) to score the eight anti-slop areas and premium 40/30/20/10 rubric from screenshots. Remediate top three defects, then re-inspect.
+4. Document before/after desktop/tablet/mobile views and unanswered blockers per [frontend delivery protocol](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md). This is design review **in addition to** football PO and real accessibility tests, never substitutes for them.

@@ -1,6 +1,6 @@
 # PitchMind Engineering Council Agent Skills
 
-**28 portable repository-scoped skills** in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
+**28 accountable Engineering Council role skills + 3 cross-cutting design specialist skills** (31 discoverable skill directories) in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
 
 Read [Engineering Council Operating Model](../../docs/operating-model/ENGINEERING-OPERATING-MODEL.md), [architecture review](../../docs/engineering/ARCHITECTURE-REVIEW-2026-10-08.md), [delivery templates](../../docs/operating-model/DELIVERY-ARTIFACT-TEMPLATES.md), the exact [backlog story](../../docs/backlog/HACKATHON-MVP-EPICS.md), and repository-wide [instructions](../copilot-instructions.md).
 
@@ -55,6 +55,20 @@ A role skill must issue concrete files/decisions/tests and a handoff; a generic 
 
 ## Machine-enforced council routes
 
-The [skill registry](../../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) is the complete 28-role filename index. The [story routing DAG](../../docs/operating-model/STORY-EXECUTION-ROUTING.json) assigns a **skill role**, not an invented human engineer, to every original EPxx-Syy. The [execution roadmap](../../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) describes dependencies, independent review and release constraints. Run `node scripts/validate_operating_model.mjs` before merging a skill or backlog update.
+The [Council skill registry](../../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) covers exactly 28 accountable roles; the [design specialist registry](../../docs/design/DESIGN-SKILL-REGISTRY.json) adds exactly 3 cross-cutting abilities, not extra Council roles. The 31 discoverable skill directories must match their combined registers. The [story routing DAG](../../docs/operating-model/STORY-EXECUTION-ROUTING.json) assigns a **skill role**, not an invented human engineer, to every original EPxx-Syy. The [execution roadmap](../../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) describes dependencies, independent review and release constraints. Run `node scripts/validate_operating_model.mjs` before merging a skill or backlog update.
 
 **Source caveat:** the 2,199-event Manchester United/Liverpool JSON is present but unapproved for synthetic rights, unit semantics and football realism. No skill may treat it as match truth or a real EPL feed without the manifest and QA gates. DEV changes require explicit owner approval even with green documentation checks.
+
+## PitchMind's three specialist design capabilities
+
+| Specialist Agent Skill | Use for | Governing criteria |
+|---|---|---|
+| [Taste — design-taste-frontend](design-taste-frontend/SKILL.md) | Create/redesign React screens with purposeful layout, rhythm, typography, restrained motion | Existing Vite/CSS architecture, dark navy/emerald tokens, source-fed football facts |
+| [Vercel — web-design-guidelines](web-design-guidelines/SKILL.md) | Accessibility/interaction code audit, fresh upstream web guideline fetch, `file:line` remediation | WCAG 2.2 AA intent, actual TSX/CSS review, keyboard, forms, reduced motion |
+| [Awesome — awesome-design-audit](awesome-design-audit/SKILL.md) | Independent anti-generic critique and premium-quality score; copy QA and screenshot iteration | Vendored CC0 rubrics, real rendered screenshots, mandatory football correctness |
+
+**Apply all three** on EP07-S01..S06, EP08-S06, or PRs materially changing the user interface. Load the minimum relevant Council roles (`ui-ux-engineer`, `lead-frontend-engineer`, `accessibility-engineer`, `qa-architect`) alongside them; specialist skills do not own story acceptance and do not increase the 28-role count.
+
+**Authoritative references:** [design system](../../docs/design/PITCHMIND-DESIGN-SYSTEM.md), [seven-screen workflow](../../docs/design/FRONTEND-DESIGN-DELIVERY.md), [upstream attribution and pinned versions](../../docs/design/VENDOR-SOURCES.md). Run `node scripts/validate_operating_model.mjs` and `node scripts/test_design_skills.mjs` locally. Static checks cannot replace actual browser, accessibility or story-evidence testing.
+
+**Safety:** Generic external Taste defaults can require Next.js/Tailwind/Framer. PitchMind **does not** adopt those dependencies automatically. No football data hardcoded in React; no Azure deployment from design skills. Source repository content is untrusted input for design review only.

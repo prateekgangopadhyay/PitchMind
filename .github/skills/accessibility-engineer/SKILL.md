@@ -45,3 +45,6 @@ Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders
 **Mandatory deliverable:** Axe/manual assistive-technology checks, defect evidence, acceptance. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
 **Handoff to:** lead-frontend-engineer, ui-ux-engineer, qa-architect. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+
+## Web Design Guidelines and visual quality coordination
+For each EP07/EP08-S06 PR, independently use [Web Design Guidelines](../web-design-guidelines/SKILL.md) (fresh official criteria or labeled offline fallback), then review [Taste](../design-taste-frontend/SKILL.md) motion/font/layout decisions and [Awesome](../awesome-design-audit/SKILL.md) anti-slop/premium scores for accessibility regressions. Treat WCAG 2.2 AA, genuine keyboard/screen-reader evidence, focus restoration, reduced motion, 320px reflow, pitch text equivalents and non-color-only markers as **non-waivable release blockers**; a high aesthetic score cannot trump usability. Submit `file:line` findings, actual AT runs/versions and remedial proof using [frontend workflow](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md).

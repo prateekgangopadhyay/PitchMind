@@ -46,3 +46,9 @@ Use for React/Vite match pages, selected-time state, intelligent pitch, replay, 
 **Mandatory deliverable:** Seven-route screen contract, responsive UI PR, screenshot/a11y and Playwright evidence. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
 
 **Handoff to:** ui-ux-engineer, accessibility-engineer, lead-backend-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.
+
+## Required design-skill engineering handoff
+- Load [Taste](../design-taste-frontend/SKILL.md) before implementing each of the seven React route designs, but preserve **React/Vite/TypeScript and CSS**, actual package dependencies, source-fed API data and match-time context. Do not auto-adopt Tailwind, Next.js, motion kits or unrelated icons.
+- Load [Vercel Web Design Guidelines](../web-design-guidelines/SKILL.md) to inspect changed components with `file:line` findings and required keyboard/a11y and degraded-state tests.
+- Run [Awesome Design critique](../awesome-design-audit/SKILL.md), `node scripts/design-slop-scan.mjs <changed user-facing copy>` where appropriate, review screenshots and map fixes to real code. Do not claim a visual pass without browser inspection.
+- Add actual build/lint/unit/browser and visual evidence to the story PR per [workflow](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md). No invented match data in TSX and no DEV deployment.
