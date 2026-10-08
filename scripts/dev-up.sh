@@ -11,5 +11,7 @@ if [[ ! -f docker/.env ]]; then
   printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
+[[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
+chmod 600 docker/.env
 docker compose --env-file docker/.env -f docker/compose.yml up -d --wait
 echo "Local PostgreSQL and Redis are healthy."

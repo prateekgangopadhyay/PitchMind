@@ -26,15 +26,21 @@ Azure-native football intelligence, rebuilt from an evidence-first architecture.
 
 ## Run the simulated match
 
-Requires .NET 10 and Node 22+. No Azure credentials are required for the offline experience.
+Requires .NET 10 and Node 22+. No Azure credentials are required for the offline experience. For PostgreSQL/Redis local services, Docker Desktop with Compose v2, and first-run/teardown instructions, see [local workstation guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
 
 ```bash
+./scripts/dev-up.sh
+./scripts/dev-health.sh
 dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 # In a second terminal
 cd frontend
 npm ci
 npm run dev
 ```
+
+From the repository root, `./scripts/dev-health.sh http://127.0.0.1:5080` verifies API readiness with the Docker services. `./scripts/dev-api-health.sh` checks API readiness by itself.
+
+Stop services while preserving local data with `./scripts/dev-down.sh`. To delete the local PostgreSQL and Redis data volumes, use `./scripts/dev-reset.sh` and confirm by typing `RESET`.
 
 Open the Vite URL, play the simulation or choose 55:09, then select **Show me why** and **Explain this moment**. Teams and telemetry are fictional. The deterministic explanation is labeled as a fallback; an active AI model is not implied.
 
