@@ -35,9 +35,17 @@ app.Use(async (context, next) =>
     {
         await ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time").ExecuteAsync(context);
     }
-    catch (Exception)
+    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
     {
-        await ApiProblem(context, StatusCodes.Status500InternalServerError, "INTERNAL_ERROR", "The request could not be completed").ExecuteAsync(context);
+        // The caller disconnected; do not turn cancellation into a server error response.
+    }
+    catch (Exception exception)
+    {
+        app.Logger.LogError(exception, "Unhandled request failure for {Path}", context.Request.Path);
+        if (!context.Response.HasStarted)
+            await ApiProblem(context, StatusCodes.Status500InternalServerError, "INTERNAL_ERROR", "The request could not be completed").ExecuteAsync(context);
+        else
+            throw;
     }
 });
 app.UseRateLimiter();
