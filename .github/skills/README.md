@@ -52,3 +52,9 @@ A role skill must issue concrete files/decisions/tests and a handoff; a generic 
 - [Developer Experience Engineer](developer-experience-engineer/SKILL.md) — Enable a clean-machine LOCAL workflow and reduce invalid assumptions in day-to-day development.
 - [FinOps Engineer](finops-engineer/SKILL.md) — Maximize football evidence delivered per cost while limiting unattended Azure consumption.
 - [Technical Writer](technical-writer/SKILL.md) — Keep implementation, architecture, instructions and evidence discoverable, precise and mutually consistent.
+
+## Machine-enforced council routes
+
+The [skill registry](../../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) is the complete 28-role filename index. The [story routing DAG](../../docs/operating-model/STORY-EXECUTION-ROUTING.json) assigns a **skill role**, not an invented human engineer, to every original EPxx-Syy. The [execution roadmap](../../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) describes dependencies, independent review and release constraints. Run `node scripts/validate_operating_model.mjs` before merging a skill or backlog update.
+
+**Source caveat:** the 2,199-event Manchester United/Liverpool JSON is present but unapproved for synthetic rights, unit semantics and football realism. No skill may treat it as match truth or a real EPL feed without the manifest and QA gates. DEV changes require explicit owner approval even with green documentation checks.

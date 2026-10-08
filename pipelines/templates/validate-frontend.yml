@@ -14,5 +14,7 @@ steps:
     npm run build
     npm test
     npm run lint
+    node ../scripts/validate_operating_model.mjs
+    node ../scripts/validate_operating_model.mjs --self-test
   workingDirectory: frontend
   displayName: Frontend install, build, test and lint

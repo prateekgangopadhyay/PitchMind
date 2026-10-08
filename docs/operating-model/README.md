@@ -15,3 +15,10 @@ The 28 portable GitHub Copilot Agent Skills live in [../../.github/skills](../..
 7. **Ask the owner before every DEV story deployment.** No deployment/approval inference from earlier prototype activity.
 
 Treat architecture documents as target intent, integration smoke as environment-scoped proof and clean pipeline output as build-scoped proof.
+## Executable routing and validation (added)
+- [28-role machine-readable skills registry](COUNCIL-SKILL-REGISTRY.json)
+- [All 59 story routes, owners by skill and dependency DAG](STORY-EXECUTION-ROUTING.json)
+- [Readable per-story execution roadmap](ALL-STORIES-EXECUTION-ROADMAP.md)
+- [Current-vs-target C4](../architecture/README.md)
+
+Run `node scripts/validate_operating_model.mjs` at repository root (or `node scripts/validate_operating_model.mjs --self-test`). The Node validation checks catalog/frontmatter, 59-story coverage, no missing workpackets, DAG cycles, current-vs-target architecture and two manual DEV gates. It is static validation: **not** .NET/React integration, Azure deployment or rights/football certification. Azure DevOps validates this in the frontend job after installing Node.
