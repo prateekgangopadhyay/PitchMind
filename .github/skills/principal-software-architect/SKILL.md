@@ -39,3 +39,11 @@ Use when reviewing C4 diagrams, defining service boundaries, selecting patterns,
 **Blocking condition:** Block conflicting canonical owners, unproven privacy/security topology or an Azure environment silently running local adapters.
 **Handoff:** Distinguished Engineer for high-blast-radius review; Staff Engineer and implementation leads for executable designs.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP01, EP02, EP04, EP06, EP08. **Gate to enforce:** Enforce Domain zero dependencies, single PostgreSQL canonical authority, explicit current-vs-target C4, stable match-time/evidence contracts and Azure-only deployed adapters.
+
+**Mandatory deliverable:** Versioned ADR/C4 delta, ownership map, alternative analysis and integration test boundary. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** distinguished-engineer, staff-principal-engineer, security-architect. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

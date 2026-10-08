@@ -36,3 +36,11 @@ Use when refining MVP epics, splitting or accepting PitchMind stories, arbitrati
 **Blocking condition:** Block a story with no observed user value, unverifiable evidence, improper data rights or retrospective timestamp leakage.
 **Handoff:** Principal Architect for architectural delta; Football Analytics for claims; story DRI for build; QA for verification.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP05, EP07, EP10. **Gate to enforce:** Validate whether the source feed's 124 shots, 254 fouls, EPL-club names and player-like biometrics can be truthfully presented as synthetic. Accept football meaning and evidence-driven fan journey, not screenshots.
+
+**Mandatory deliverable:** Product acceptance ledger with priority/risks, synthetic provenance decision and demo sign-off. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** football-analytics-engineer, qa-architect, ui-ux-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

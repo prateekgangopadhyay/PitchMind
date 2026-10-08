@@ -37,3 +37,11 @@ Use when building .NET API/BFF endpoints, application ports, canonical match rea
 **Blocking condition:** Stop release if returned score, evidence or explanation can refer to different timestamps or unsupported facts.
 **Handoff:** DDD/PostgreSQL for state; Frontend for consumers; AppSec for authorization; QA for contracts.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP04, EP05, EP06. **Gate to enforce:** Move fixture-only read routes behind canonical revisioned replay ports; validate event/clock/coordinate constraints, pagination, ProblemDetails and authenticated BFF access.
+
+**Mandatory deliverable:** ASP.NET implementation diff, OpenAPI examples, integration and negative tests. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** postgresql-engineer, application-security-engineer, qa-architect. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

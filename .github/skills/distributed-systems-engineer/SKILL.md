@@ -37,3 +37,11 @@ Use when designing cross-process consistency, outbox/inbox, deduplication, order
 **Blocking condition:** Block silent canonical reordering, lost committed outbox work or double score application.
 **Handoff:** PostgreSQL for transaction semantics; Event Streaming for broker behavior; SRE for resilience.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP04, EP06, EP09. **Gate to enforce:** Prove Event Hubs match partition scope; identical duplicate no-op, conflicting duplicate quarantine, gap hold and transactional outbox/inbox restart; never claim global exactly-once.
+
+**Mandatory deliverable:** Ordering/inbox/outbox state machine, crash-recovery tests and broker lag evidence. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** event-streaming-engineer, postgresql-engineer, site-reliability-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

@@ -37,3 +37,11 @@ Use when decomposing HLD into LLD, coordinating multiple team lanes, reviewing i
 **Blocking condition:** Stop concurrent work that invents incompatible canonical state, time or evidence formats.
 **Handoff:** Backend, frontend, data, streaming, infrastructure leads; QA for independently reproduced verification.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP01, EP03, EP04, EP05, EP06, EP07, EP08. **Gate to enforce:** Freeze shared schema/match-time/version contracts before parallel implementation; partition ownership so no competing edits to Domain IDs, public DTOs or Api Program.cs.
+
+**Mandatory deliverable:** Explicit story dependency graph, PR ownership matrix, contract freeze and integration checkpoints. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** domain-driven-design-specialist, lead-backend-engineer, lead-frontend-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

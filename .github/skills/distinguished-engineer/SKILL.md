@@ -37,3 +37,11 @@ Use for irreversible architecture choices, major scalability risks, correctness 
 **Blocking condition:** Escalate irreversible data loss, unsupported truth claims or architecture that cannot be restored or explained.
 **Handoff:** Principal Architect to record ADR; domain/security/SRE reviewers to enforce specialist gates.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP04, EP05, EP08, EP10. **Gate to enforce:** Falsify assumed deterministic replay, causal football claims, exactly-once guarantees and model grounding; challenge costly/inflexible choices and record alternative designs.
+
+**Mandatory deliverable:** Independent cross-boundary risk critique, challenge scenarios and reversal plan. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** principal-software-architect, football-analytics-engineer, site-reliability-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.

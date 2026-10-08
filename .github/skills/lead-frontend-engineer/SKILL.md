@@ -38,3 +38,11 @@ Use for React/Vite match pages, selected-time state, intelligent pitch, replay, 
 **Blocking condition:** Block a visually impressive interface that fabricates positions, leaks future facts or leaves the evidence route inaccessible.
 **Handoff:** UX and Accessibility for review; Backend for contract; Football Analytics for copy; QA for end-to-end.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP07, EP08. **Gate to enforce:** Never hardcode team/player/score/match facts in TSX; use one live-vs-selected-time state, abort stale requests, honest missing evidence and keyboard alternative to pitch visualization.
+
+**Mandatory deliverable:** Seven-route screen contract, responsive UI PR, screenshot/a11y and Playwright evidence. Record the exact EPxx-Syy, source fixture SHA/version, interface change and C4/ADR update, tests actually run with results and unresolved blocker in the existing story execution register.
+
+**Handoff to:** ui-ux-engineer, accessibility-engineer, lead-backend-engineer. No skill can certify its own unexecuted tests or approve DEV deployment; the repository owner must approve the exact Azure change set before any DEV mutation.
