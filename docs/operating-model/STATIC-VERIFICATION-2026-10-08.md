@@ -2,7 +2,7 @@
 **Branch:** `docs/engineering-council-skills-operating-model` | **Scope checked:** source files at GitHub commit `11dd3f2831dca41b8e2a1909fb6582107605a312` (2026-10-08). **Method:** GitHub REST metadata/content checks and JavaScript syntax parse; this is **not** a CI run or a deployment.
 ## Actually checked
 - Existing draft PR: [#7](https://github.com/prateekgangopadhyay/PitchMind/pull/7); commit tree is on the requested branch, not main.
-- 28 unique skill directories with `SKILL.md` and corresponding registry entries. Each now has a role-specific proof/handoff gate.
+- **All 28 skill contents individually retrieved and checked** for matching frontmatter role name, role-specific story gate and explicit DEV hold. All 28 passed this GitHub-source content check (four groups of seven). This does not execute the skill at runtime.
 - 59 source backlog story headings map one-to-one to machine-readable story routes and workpacket file paths; distinct IDs = 59. Priority counts: 49 P0, 7 P1, 3 P2.
 - Story dependency graph traversed without unknown predecessor IDs or cycles.
 - C4 L1/L2/L3 and deployment diagrams explicitly distinguish OBSERVED CURRENT from TARGET / optional. Existing offline DEV demo **is not** asserted to use managed PostgreSQL/Foundry/SignalR.
