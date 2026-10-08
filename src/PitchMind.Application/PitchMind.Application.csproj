@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../PitchMind.Domain/PitchMind.Domain.csproj" /></ItemGroup>
+</Project>
