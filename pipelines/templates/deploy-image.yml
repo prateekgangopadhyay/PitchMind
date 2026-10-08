@@ -1,0 +1,26 @@
+# Invoke only for configured Azure-backed workloads after validation.
+# Protected STAGE/PROD Environment checks and owner/admin approvals live outside YAML.
+parameters:
+- name: azureServiceConnection
+  type: string
+- name: resourceGroup
+  type: string
+- name: appName
+  type: string
+steps:
+- download: current
+  artifact: release
+- task: AzureCLI@2
+  displayName: Deploy the already built digest and prove HTTP smoke
+  inputs:
+    azureSubscription: ${{ parameters.azureServiceConnection }}
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -euo pipefail
+      image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$(Pipeline.Workspace)/release/manifest.json")
+      [[ "$image" == *@sha256:* ]]
+      az containerapp update --resource-group '${{ parameters.resourceGroup }}' --name '${{ parameters.appName }}' --image "$image" --output none
+      fqdn=$(az containerapp show --resource-group '${{ parameters.resourceGroup }}' --name '${{ parameters.appName }}' --query properties.configuration.ingress.fqdn -o tsv)
+      test -n "$fqdn"
+      python3 scripts/api-smoke.py "https://$fqdn"

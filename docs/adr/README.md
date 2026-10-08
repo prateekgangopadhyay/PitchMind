@@ -8,3 +8,5 @@ Accepted as **target decisions**, pending executable verification:
 - [ADR-005](ADR-005-delivery.md) — Azure DevOps Pipelines
 - [ADR-006](ADR-006-ai-governance.md) — Governed evidence-grounded AI
 - [ADR-007](ADR-007-environments-security.md) — Azure-only environments and identity
+
+- [ADR-008 — Bounded offline synthetic vertical slice](ADR-008-offline-vertical-slice.md)

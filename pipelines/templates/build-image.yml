@@ -1,0 +1,38 @@
+# Publish once. Service connection must use workload identity federation.
+parameters:
+- name: azureServiceConnection
+  type: string
+- name: registryName
+  type: string
+- name: imageRepository
+  type: string
+  default: pitchmind
+steps:
+- task: AzureCLI@2
+  displayName: Build immutable application image and release manifest
+  inputs:
+    azureSubscription: ${{ parameters.azureServiceConnection }}
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -euo pipefail
+      registry='${{ parameters.registryName }}'
+      repository='${{ parameters.imageRepository }}'
+      tag="$(Build.SourceVersion)"
+      loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
+      az acr login --name "$registry" --output none
+      docker build --platform linux/amd64 --file docker/Dockerfile --tag "$loginServer/$repository:$tag" .
+      docker push "$loginServer/$repository:$tag"
+      digest=$(az acr repository show --name "$registry" --image "$repository:$tag" --query digest -o tsv)
+      loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
+      test -n "$digest"
+      mkdir -p "$(Build.ArtifactStagingDirectory)/release"
+      export RELEASE_IMAGE="$loginServer/$repository@$digest" RELEASE_COMMIT="$tag"
+      python3 - <<'PY'
+      import json, os
+      from pathlib import Path
+      Path(os.environ['BUILD_ARTIFACTSTAGINGDIRECTORY'], 'release', 'manifest.json').write_text(json.dumps({'image':os.environ['RELEASE_IMAGE'],'commit':os.environ['RELEASE_COMMIT'],'buildId':os.environ['BUILD_BUILDID']}, indent=2))
+      PY
+- publish: $(Build.ArtifactStagingDirectory)/release
+  artifact: release
+  displayName: Publish immutable release manifest

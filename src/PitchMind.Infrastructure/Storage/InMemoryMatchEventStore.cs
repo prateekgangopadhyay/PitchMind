@@ -15,8 +15,20 @@ public sealed class InMemoryMatchEventStore : IMatchEventStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         var matchEvents = _events.GetOrAdd(matchEvent.MatchId, _ => new());
-        if (!matchEvents.TryAdd(matchEvent.EventId, matchEvent))
-            throw new InvalidOperationException("Duplicate event ID.");
+        lock (matchEvents)
+        {
+            if (matchEvents.TryGetValue(matchEvent.EventId, out var existing))
+            {
+                if (existing != matchEvent) throw new InvalidOperationException("Conflicting payload for existing event ID.");
+                return Task.CompletedTask;
+            }
+            if (matchEvents.Values.Any(e => e.Sequence == matchEvent.Sequence))
+                throw new InvalidOperationException("Sequence already belongs to another event.");
+            var expected = matchEvents.IsEmpty ? 0 : matchEvents.Values.Max(e => e.Sequence) + 1;
+            if (matchEvent.Sequence != expected)
+                throw new InvalidOperationException("Sequence gap or out-of-order event; reconciliation required.");
+            matchEvents[matchEvent.EventId] = matchEvent;
+        }
         return Task.CompletedTask;
     }
 

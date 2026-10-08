@@ -2,7 +2,7 @@ using PitchMind.Domain.Match;
 
 namespace PitchMind.Domain.Events;
 
-public enum MatchEventType { KickOff, Pass, Shot, Goal, Foul, Turnover, FullTime }
+public enum MatchEventType { KickOff, Pass, Shot, Goal, Foul, Turnover, FullTime, Pressure }
 
 public sealed record MatchEvent(
     Guid EventId,
@@ -16,6 +16,7 @@ public sealed record MatchEvent(
     public static MatchEvent Create(Guid eventId, MatchId matchId, long sequence,
         MatchEventType type, int clockSeconds, int period, DateTimeOffset occurredAt)
     {
+        if (!Enum.IsDefined(type)) throw new ArgumentOutOfRangeException(nameof(type));
         if (eventId == Guid.Empty) throw new ArgumentException("Event ID required.", nameof(eventId));
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID required.", nameof(matchId));
         if (sequence < 0) throw new ArgumentOutOfRangeException(nameof(sequence));

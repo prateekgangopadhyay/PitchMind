@@ -14,3 +14,8 @@
 4. Canonical write + outbox record occur in one PostgreSQL transaction.
 5. Agent output is untrusted until evidence and policy checks pass.
 6. Local Docker and Azure deployment adapters implement the same application ports.
+
+- [Football LLD and reference decisions](05-football-lld.md)
+- [Azure implementation delta and release contract](../engineering/AZURE-DELIVERY-GAPS.md)
+- [Consolidated API contracts](../api/API.md)
+- [Story execution register](../backlog/STORY-EXECUTION.md)

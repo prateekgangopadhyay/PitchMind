@@ -1,4 +1,20 @@
-# Azure DevOps is the only CI/CD orchestrator. Deployment is intentionally out of scope for M02.
+# Azure DevOps is the only CI/CD orchestrator. DEV delivery activates after service-connection configuration.
+parameters:
+- name: enableDevDelivery
+  type: boolean
+  default: false
+- name: azureServiceConnection
+  type: string
+  default: unconfigured
+- name: registryName
+  type: string
+  default: pmdev4iwntkatliy6sacr
+- name: devResourceGroup
+  type: string
+  default: rg-pitchmind-dev-001
+- name: devAppName
+  type: string
+  default: pm-dev-api
 trigger:
   branches:
     include:
@@ -44,15 +60,58 @@ stages:
     displayName: PostgreSQL and Redis smoke tests
     steps:
     - checkout: self
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: 10.0.x
     - bash: |
         set -euo pipefail
         chmod +x scripts/dev-*.sh
         trap './scripts/dev-down.sh' EXIT
         ./scripts/dev-up.sh
         ./scripts/dev-health.sh
-      displayName: Docker Compose health and smoke
+        PITCHMIND_TEST_RESULTS_DIRECTORY="$(Agent.TempDirectory)/pitchmind-postgres-results" ./scripts/test-postgres.sh
+      displayName: Docker Compose health and real PostgreSQL integration
+    - task: PublishTestResults@2
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: $(Agent.TempDirectory)/pitchmind-postgres-results/postgres.trx
+        failTaskOnFailedTests: true
+        failTaskOnMissingResultsFile: true
   - job: Infrastructure
     displayName: Azure Bicep static compilation
     steps:
     - checkout: self
     - template: templates/validate-infra.yml
+
+# Configured main builds automatically deliver the one immutable image to DEV.
+# STAGE/PROD deliberately require separate protected deployment jobs/approvals.
+- ${{ if eq(parameters.enableDevDelivery, true) }}:
+  - stage: BuildRelease
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+    - job: Image
+      steps:
+      - checkout: self
+      - template: templates/build-image.yml
+        parameters:
+          azureServiceConnection: ${{ parameters.azureServiceConnection }}
+          registryName: ${{ parameters.registryName }}
+  - stage: DeployDev
+    dependsOn: BuildRelease
+    condition: succeeded()
+    jobs:
+    - deployment: Dev
+      environment: pitchmind-dev
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: self
+            - template: templates/deploy-image.yml
+              parameters:
+                azureServiceConnection: ${{ parameters.azureServiceConnection }}
+                resourceGroup: ${{ parameters.devResourceGroup }}
+                appName: ${{ parameters.devAppName }}

@@ -14,7 +14,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
       {
         name: 'postgres'
         properties: {
-          addressPrefix: '10.42.1.0/24'
+          addressPrefix: cidrSubnet(addressSpace, 24, 1)
           delegations: [
             {
               name: 'postgres-flexible-server'
@@ -29,7 +29,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
       {
         name: 'private-endpoints'
         properties: {
-          addressPrefix: '10.42.2.0/24'
+          addressPrefix: cidrSubnet(addressSpace, 24, 2)
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }

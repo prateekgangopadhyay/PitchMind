@@ -21,7 +21,7 @@ flowchart TB
   API --> SignalR
   EH -. archival .-> Lake[Data Lake P2]
   Lake -. analytics .-> ADX[Data Explorer P2]
-  PG -. indexed projection .-> Search[AI Search P1]
+  PG -. indexed projection .-> Search[AI Search P2]
 ```
 
 ## Contracts
@@ -32,3 +32,7 @@ flowchart TB
 - SignalR: fan-out, not a source of durable events.
 - Foundry: only candidate narratives; deterministic fallback required.
 - Functions: background jobs, not the core stream processor.
+
+## Executable local slice (2026-10-08)
+
+The implemented local path is browser → API `SyntheticMatchService` → seeded immutable fixture → deterministic projection/evidence/fallback. It does not traverse PostgreSQL, Event Hubs, SignalR or Foundry. The diagram above remains the Azure target; deployability gaps are tracked in [Azure delivery delta](../engineering/AZURE-DELIVERY-GAPS.md). Do not enable a cloud profile by renaming the in-memory adapter.
