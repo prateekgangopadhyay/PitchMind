@@ -1,0 +1,32 @@
+# PitchMind web application — screen & integration contracts
+**Status:** implementation design. Visual reference [seven committed mockups](../mockups/README.md), not proof of implemented screens. Product order: Story → Insight → Why → Evidence → Visualisation → Data → Deep Analysis.
+
+## Design system and navigation
+Dark charcoal/navy surfaces, quiet emerald accent, restrained blue for comparison, meaningful warning/red, accessible white/gray contrast, predictable card radius, 8-point spacing system, modern sans-serif with clear type scale. Avoid crowded hero dashboards despite mockups. All controls have clear purpose, focus ring, keyboard operation and actual service-backed actions. Do not reproduce official EPL/club logos, copyrighted match clips or player photos without a license. All demonstrated match data is clearly marked **Simulated EPL-context fixture**.
+Information architecture: public `/welcome` → `/sign-in` → accessible app shell `/home`, `/matches/:id`, `/teams/:id`, `/players/:id`, `/insights/:id`, `/analyst?matchId=`; `/replay/:id` deep link as evidence drill-down. Route guards and role permissions remain server-enforced. Every page answers exactly one primary football question; empty data is an honest empty state.
+
+## Data ownership
+Never include literal club names, player names, scores, tactics, match IDs, timeline events, xG/xT, line breaks, heatmap values or narrative snippets in `*.tsx` (except static UX/test fixture metadata in test assets). Fixture source is supplied under `data/simulations/` but its rights and importer remain **unapproved**; BFF exposes canonical summaries and evidence. React components receive props derived from network contracts; mockups' numbers are illustrative placeholders only. Components may render static labels and format backend-approved statistics (not recompute raw football intelligence).
+
+## Screens, questions, products, APIs and acceptance
+| Screen | Primary question | Product contract | States + tested actions | Mockup |
+|---|---|---|---|---|
+| Welcome / Login | How can I enter securely? | Entra PKCE/session, demo label | keyboard input, remember session if approved, validation, error, recovery, signed-out, denied; no decorative buttons | [01](../mockups/01-login.webp) |
+| Home | What matters across simulated EPL matches? | fixture summaries, live/recorded status, top Key Moments with citations | empty fixture, stale feed, filter/search, open match, no invented live standings | [02](../mockups/02-home.webp) |
+| Match | How is this match being played? | selected-time score, sampled pitch, events, insights, moments, evidence cursor | seek/play/pause, phase switch, evidence drawer, reconnect, return-live | [03](../mockups/03-match.webp) |
+| Teams | How does this team play and what supports it? | observed aggregate from same synthetic source, nominal vs inferred shape differentiated | filter phase/window, click evidence, insufficient sample size, compare only supported teams | [04](../mockups/04-teams.webp) |
+| Players | What is this player's observable contribution? | source action attribution, role context, declared denominators | filter match/player, touch map, comparisons, sparse/no tracking, assistive table | [05](../mockups/05-players.webp) |
+| Insights | Why is the match developing this way? | ranked truth-classified mechanisms, evidence refs, event timeline, limitations | observed vs derived tabs, causal-language audit, show why, past-time cutoff | [06](../mockups/06-insights.webp) |
+| AI Analyst | What do I want to understand? | structured question + same selected context + claim cites and fallback | suggestions from supported insight IDs, ask, timeout, model offline, invalid evidence, screen-reader citations | [07](../mockups/07-ai-analyst.webp) |
+
+## Shared client state
+`MatchContextProvider` owns `{matchId, mode, selectedElapsedMs, clientContextRevision, canonicalRevision, selectedInsightId}`. Only one store owns match context; pages subscribe. Every time/match selection increments `clientContextRevision` and cancels stale in-flight calls via AbortController; every response must match selected match/time/revision before render. Live cursor never mutates historical SelectedTime; user gets explicit return-to-live CTA. Pitch, score, events, narrative and AI proof are co-revisioned.
+
+## Component boundaries
+`AppShell`, `RouteGuard`, `MainNavigation`, `SimulationLabel`, `MatchScoreboard`, `MatchClock`, `PitchRenderer`, `TrackingQualityLegend`, `Timeline`, `KeyMomentCard`, `EvidenceDrawer`, `MechanismSequence`, `TruthClassBadge`, `AnalyticsMetric`, `TeamProfile`, `PlayerImpact`, `AnalystConversation`, `CitedClaim`, `StatusBanner`, `ErrorBoundary`, `LoadingSkeleton`. Hooks: `useMatchContext`, `useMatchSnapshot`, `useRealtimeCursor`, `useEvidence`, `useAnalystQuestion`. Query cache keys include matchId, selectedElapsedMs, canonicalRevision and role; never show stale score from another match.
+No derived tactical assertions from SVG coordinates in UI. Pitch renders canonical observed positions only, interpolated layer labeled and switchable; nonvisual tactical event table offered. Distinguish `Observed`, `Derived`, `Supported interpretation`, `Hypothesis`, `Simulated`; no unlabeled AI inference.
+
+## Accessibility, resilience, performance
+WCAG 2.2 AA objective: semantic regions/headings, labeled icon buttons, visible focus, keyboard route/toolbar/modal controls, escape returns focus, live announcements throttled, reduced motion, 200% zoom and 320px reflow; keyboard/screen-reader equivalent of pitch moment. Color not sole event encoding. No auto-playing animation without pause.
+Network: skeleton load, source unavailable/empty, intermittent reconnect, auth expiry, AI unavailable, evidence incomplete, stale revision, no tracking; consistent honest status. Retry with bounded exponential backoff only on transient GETs. Data ingest and explanation never silently fabricated. 1-page demo on slow connection must remain usable; instrument Web Vitals and network payload sizes, validate real p95 under target device/network before claiming speed.
+All desktop mockups need mobile/tablet adaptations and visual-regression baselines reviewed by PO. End-to-end Playwright verifies golden path, selected-time no future leak, keyboard, contrast and degraded model.
