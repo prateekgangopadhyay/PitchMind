@@ -7,6 +7,7 @@ steps:
     set -euo pipefail
     test -f package-lock.json
     npm ci
+    npm audit --audit-level=high
     npm run build
     mkdir -p "$(Agent.TempDirectory)/pitchmind-frontend-results"
     npm test -- --reporter=junit --outputFile="$(Agent.TempDirectory)/pitchmind-frontend-results/results.xml"
