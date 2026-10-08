@@ -1,0 +1,34 @@
+# Synthetic football JSON — feed onboarding, canonical mapping and acceptance
+**STATUS: BLOCKED — source file not available.** On 2026-10-08 GitHub `main` contains no `data/simulations` directory, no alternate branch, and conversation uploads contain no live-feed JSON. This document is a *proposed canonical contract*, NOT a description of the user's unseen feed.
+
+## Source onboarding required before implementation
+Owner places exact original feed under `data/simulations/<filename>.json` or explicitly attaches it. Confirm it is **synthetic, distributable and contains no real EPL match telemetry**. Inspect byte count, SHA-256, JSON vs NDJSON, top-level keys/schema versions, events/frames/lineups, source timezones, coordinates, periods, lineup roster, action outcome meanings and rights; record actual null distributions, event count, player/frame coverage, gaps and conflicts. Source cannot be silently normalized by guessing missing data. Publish field-by-field source→canonical mapping after examination.
+
+## Proposed canonical envelope (adapter output, not guessed source)
+`EventEnvelope`: `schemaVersion`, `matchId`, `eventId` stable, `sequence` contiguous per match, `sourceId/version/hash/recordPointer`, `provenance=synthetic`, `period`, `elapsedMatchMilliseconds`, optional source UTC, `eventType`, `teamId/playerId/relatedPlayerId`, `outcome`, `qualifiers`, `possessionId`, optional start/end pitch coordinates **in metres**, `payloadHash`, `supersedesEventId` for corrections.
+`TrackingFrame`: `frameId, matchId, elapsedMatchMilliseconds, ball, players [{playerId,x,y,observed,quality}], pitchDimensions, orientationVersion, sourceRecordPointer/hash`. Null/missing positions remain null; interpolated samples are tagged and **never presented as observed**.
+`FixtureManifest`: `fixtureId, schemaVersion, sourceFilename, sha256, dataRights, syntheticFlag, competitionContext, teamRoster, periods, matchClockPolicy, pitchMetres, sourceCoordinateSpec, scenarioNames, generatorVersion`.
+
+## Flow and anti-corruption layer
+```mermaid
+flowchart LR
+ J[Approved JSON] --> H[Hash + JSON profiler]
+ H --> V{Schema + football validation}
+ V -->|Invalid| Q[Quarantine source pointer, reason, payload hash]
+ V -->|Valid| A[Source adapter converts time, IDs, pitch coordinates]
+ A --> E[Canonical event/frame + provenance]
+ E --> L[LOCAL deterministic replay]
+ E --> EH[Azure Event Hubs producer]
+ L --> PG[PostgreSQL] 
+ EH --> W[EventWorker] --> PG
+ ```
+Ports: `ISimulationFeedReader`, `ISourceFeedMapper`, `IEnvelopeValidator`, `ITrackingFrameMapper`, `IQuarantineSink`, `ISimulationClock`; adapters only in Infrastructure. File path configured (no source file name hardcoded in C#); size/depth bounded and path traversal rejected. Browser reads API not source JSON.
+
+## Football validation
+Clock seconds/ms per period vs elapsed (added time explicit), stable sequence for tied timestamps, active roster after substitutions, cards/goal transitions, 11v11 unless send-off, half-time direction change, pitch metre ranges and coordinate transform per team/period. Preserve raw stadium coordinates; team-relative analyses attack positive x with explicit version. Possession requires controlled action/provider evidence, not nearest player. Missing 10 Hz tracking cannot support closing speed or sustained shape from 30-second sparse frames. Never label a one-off turnover 'pressing trap' without trigger/opponent response/geometric evidence. Score is canonical goal projection, not decorative fixture metadata.
+
+## Replay semantics
+Approved fixture hash + schema + rule version + ordered event IDs deterministically reconstruct match state. Simulation speed, pause, seek are virtual-clock operations with isolated session state; canonical PostgreSQL immutable. Duplicates with identical payload = idempotent no-op; conflicting payload same ID = quarantine; sequence gaps hold projection and alert; correction = new revision with audit. Producer Event Hubs partition by match ID and resumes from last accepted checkpoint with no unaccounted loss.
+
+## Tests and release gate
+Schema positive/negative, real file validation report, source hash equivalence, coordinate mirror/halftime invariance, goals-score match, gap/duplicate/conflicting payload, invalid roster/period, missing tracking, replay hash on N runs, restart/recovery and specified 500 event/sec burst with lag/p95 metrics. No EP03 feed story can be accepted without **actual input file** and PO-approved football golden scenarios. No fake feed or replacement fixture should be claimed as the user's data.
