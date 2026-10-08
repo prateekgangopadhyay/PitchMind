@@ -37,3 +37,11 @@ Use for canonical ledger design, transactions, schemas, indexing, migrations, da
 **Blocking condition:** Block event corruption, unbounded schema privilege, partial canonical writes or an untestable migration.
 **Handoff:** DDD for ownership; Distributed Systems for outbox/inbox; Azure/SRE for managed database readiness.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP04, EP10. **Gate to enforce:** Prove atomic event/frame/projection/evidence/outbox commit with separate migration/runtime principals, sequence uniqueness, immutable history, restart/readback and PITR.
+
+**Mandatory deliverable:** Physical migration/locking design, SQL integration proof and recovery receipt. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
+
+**Handoff to:** distributed-systems-engineer, data-engineer, site-reliability-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.

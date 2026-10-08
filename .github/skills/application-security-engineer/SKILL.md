@@ -37,3 +37,11 @@ Use for secure code reviews, API authorization, input validation, prompt injecti
 **Blocking condition:** Block unauthorized match mutation/export, unsafe tool execution or prompt-driven fabricated truth.
 **Handoff:** Security Architect for systemic controls; Backend/AI for fixes; QA for independent repro.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP06, EP08, EP10. **Gate to enforce:** Test unauthorized match subscriptions, evidence/export replay IDOR, prompt/tool injection, source parser size/path/depth, CSP/CORS/XSS and model rate abuse.
+
+**Mandatory deliverable:** Adversarial cases with reproduction and patch/test/owner references. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
+
+**Handoff to:** security-architect, ai-agentic-systems-architect, qa-architect. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.

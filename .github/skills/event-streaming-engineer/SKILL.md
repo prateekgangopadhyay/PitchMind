@@ -37,3 +37,11 @@ Use when integrating Azure Event Hubs producers/consumers, Service Bus commands,
 **Blocking condition:** Block retry flows that can double-apply a score or lose committed work.
 **Handoff:** Real-Time Streaming for event windows; Distributed Systems for consistent projection; Azure/SRE for connectivity.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP03, EP09. **Gate to enforce:** Key Event Hubs telemetry by matchId; commit checkpoint after PG, distinguish Service Bus command queue, enforce DLQ/retry and poison case isolation.
+
+**Mandatory deliverable:** Producer/consumer protocol, partition skew test, replay and lag dashboard. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
+
+**Handoff to:** distributed-systems-engineer, data-engineer, real-time-streaming-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.

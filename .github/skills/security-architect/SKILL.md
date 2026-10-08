@@ -37,3 +37,11 @@ Use when changing trust boundaries, Entra identity, IAM, network exposure, data 
 **Blocking condition:** Block material identity/network exposure, missing authorization or secrets in source/pipeline.
 **Handoff:** AppSec for code tests; Azure Infra for network/RBAC; DevOps for credential-free pipelines.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP02, EP06, EP08, EP10. **Gate to enforce:** Model direct ACA ingress and optional WAF, Entra JWT roles, workload RBAC/private endpoints and player-like biometric field governance; block unidentified source licensing.
+
+**Mandatory deliverable:** Threat model with trust zones, data classification, deny matrix and safety sign-off. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
+
+**Handoff to:** application-security-engineer, azure-solution-architect, data-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.

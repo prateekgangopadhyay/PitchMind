@@ -37,3 +37,11 @@ Use for match read caching, invalidation, TTLs, bounded cache capacity or Redis 
 **Blocking condition:** Block score or evidence whose only source is Redis, or cloud using a local Redis endpoint.
 **Handoff:** Backend/PostgreSQL for truth; SRE for resilience; FinOps for optional-service approval.
 **Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+
+## Role-specific story gate and executable evidence
+
+**Primary epics:** EP06, EP09. **Gate to enforce:** Keep Redis strictly disposable, key by match/revision/selected time/rules, invalidate on correction, test cache flush preserves canonical outputs and fail-to-PG.
+
+**Mandatory deliverable:** Cache invalidation contract, eviction/outage proof and memory/TTL budget. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
+
+**Handoff to:** postgresql-engineer, site-reliability-engineer, performance-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.
