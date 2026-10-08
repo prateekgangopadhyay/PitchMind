@@ -1,59 +1,73 @@
-# C4 L3 — Application components
+# C4 Level 3 — Components, domain purity and realization map
+
+**Authority:** [Football LLD](07-football-analytics-detailed-lld.md), [API](../api/API.md), [Architecture review](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md). Current runtime and target ports are intentionally separated to avoid asserting unavailable integrations.
+
+## Realized application components (source verified, not new test evidence)
 
 ```mermaid
 flowchart TB
-  subgraph Domain["PitchMind.Domain (zero external dependencies)"]
-    E[MatchEvent + TrackingFrame]
-    M[MatchState / Possession / Phase]
-    T[Tactical Mechanism Rules]
-    V[Evidence Graph / Claim Validation Rules]
-  end
-  subgraph Application["PitchMind.Application"]
-    I[IngestMatchEvent]
-    P[ProjectMatchState]
-    D[DetectTacticalMechanism]
-    R[ReplayTimeline]
-    X[GenerateGroundedExplanation]
-    O[Outbox Dispatcher]
-    Ports[Repository / Model / Publisher Ports]
-  end
-  subgraph Infrastructure["Adapters"]
-    Pg[PostgresMatchEventStore / explicit schema migrator]
-    Hubs[Event Hubs]
-    Bus[Service Bus]
-    Ai[Foundry]
-    Redis[Managed Redis]
-  end
-  I --> E
-  P --> M
-  D --> T
-  D --> V
-  X --> V
-  I --> P --> D
-  R --> Ports
-  X --> Ports
-  O --> Ports
-  Pg -. implements .-> Ports
-  Hubs -. implements .-> Ports
-  Bus -. implements .-> Ports
-  Ai -. implements .-> Ports
-  Redis -. implements .-> Ports
-  Api[HTTP API] --> ReadModel[SyntheticMatchService]
-  ReadModel --> Fixture[Seeded immutable fixture]
-  ReadModel --> D
-  PostgresLedger[PostgresMatchEventStore] -. implements IMatchEventStore .-> Ports
+  API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
+  Match --> Fixture["SyntheticFixtureGenerator, in-source data"]
+  Match --> Press["PressingSequenceDetector"]
+  Match --> Replay["Selected-time projection/evidence/fallback"]
+  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  Migrator["PostgresSchemaMigrator"] --> DB
+  EventWorker["EventWorker scaffold (idle)"]
+  AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-## Verified versus target paths (2026-10-08)
+The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
 
-`PitchMind.Api` currently composes `SyntheticMatchService`, which reads the generated immutable fixture directly and provides selected-time state, events, insight, evidence and deterministic explanation. `SyntheticFixtureGenerator` uses seed/version-derived IDs and stable timestamps. `PressingSequenceDetector` is a bounded demonstration rule with metre coordinates and a same-period ordered event chain. This endpoint path does not call the event store.
+## Target Ports and Adapters
 
-Separately, `PostgresMatchEventStore` implements `IMatchEventStore` and `PostgresSchemaMigrator` applies an explicit schema operation using a migration connection. Infrastructure integration tests exercise durable event ledger behavior and runtime-role restrictions against local PostgreSQL. The ledger persists `MatchEvent`; it does not yet persist the simulation wrapper metadata, tracking frames, projections, evidence, or outbox. Event Hubs, Service Bus, Foundry and Redis remain target adapters. EP04 and complete cloud paths are therefore still open.
+```mermaid
+flowchart TB
+  subgraph Domain["PitchMind.Domain — zero external dependencies"]
+    MatchId["Match / Period / Team / Player / Clock"]
+    Facts["Canonical event / tracking / possession"]
+    Rules["Phase-aware tactical detectors"]
+    Evidence["Typed evidence graph / truth classification"]
+  end
+  subgraph App["PitchMind.Application — use cases and ports"]
+    Validate["Normalize / Admit / Quarantine"]
+    Project["Project match / score / active roster"]
+    Detect["Detect mechanism / key moment"]
+    Query["SelectedTime / ReplayAt"]
+    Explain["Grounded explanation policy"]
+    Ports["IEventLedger / IFrameStore / IOutbox / IModelClient / IRealtimeNotifier"]
+  end
+  subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
+    Feed["JSON source adapter / manifest"]
+    Pg["PostgreSQL schema / checkpoint / outbox"]
+    EventHubs["Event Hubs publisher/consumer"]
+    Bus["Service Bus + DLQ"]
+    Hub["Azure SignalR"]
+    Model["Microsoft Foundry client"]
+    Cache["Redis (optional)"]
+  end
+  BFF["Thin API / role + selected-time guards"] --> Query
+  EventWorker2["EventWorker host"] --> Validate
+  AgentWorker2["AgentWorker host"] --> Explain
+  Feed --> Validate
+  EventHubs --> Validate
+  Validate --> Facts
+  Facts --> Project --> MatchId
+  Project --> Detect --> Rules
+  Detect --> Evidence
+  Query --> Ports
+  Explain --> Ports
+  Pg -. "implements" .-> Ports
+  Bus -. "implements" .-> Ports
+  Hub -. "implements" .-> Ports
+  Model -. "implements" .-> Ports
+  Cache -. "optional" .-> Ports
+```
 
-## Required invariants
-- `Domain` references neither Application nor Infrastructure.
-- Input event IDs are stable; sequence violations quarantine, not silently reorder truth.
-- Observed ≠ Derived ≠ Supported Interpretation ≠ Hypothesis.
-- No unsupported AI claim can be published.
-- Replay with identical input and algorithm version yields identical outputs.
-- Agent tools are read-only and budgeted.
+## Runtime, data and code invariants
+- Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
+- `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
+- PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.
+- `MatchTimeContext` fixes match, selected timestamp, revision and period across API, pitch, scoreboard, events, claims and AI.
+- Foundry receives read-only evidence scoped to selected time; separate deterministic validator checks every published claim; malformed model output falls back.
+- React gets data via BFF; no clubs, players, scores, tactical observations or event-specific narrative hardcoded in `*.cs` or `*.tsx` after feed integration.
+- **Every actual change** to an aggregate, port, trust boundary or deployment needs an updated diagram/ADR/API and contract tests in the same PR. Docs do not imply feature acceptance or authorize Azure DEV mutation.
