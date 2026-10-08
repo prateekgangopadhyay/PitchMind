@@ -1,6 +1,6 @@
 ---
 name: developer-experience-engineer
-description: "Use for local bootstrap, build/test tooling, repository conventions, contributor onboarding and automated quality checks. Specialist for PitchMind's Enable a clean-machine LOCAL workflow and reduce invalid assumptions in day-to-day development."
+description: "Use for local bootstrap, build/test tooling, repository conventions, contributor onboarding and automated quality checks. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Developer Experience Engineer — PitchMind Engineering Council

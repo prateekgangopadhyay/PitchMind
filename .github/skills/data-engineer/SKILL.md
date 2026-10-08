@@ -1,6 +1,6 @@
 ---
 name: data-engineer
-description: "Use for telemetry schema evolution, source ingestion, fixture governance, data quality, provenance and transformations. Specialist for PitchMind's Admit only traceable, schema-valid, rights-cleared match data and publish reproducible derived datasets."
+description: "Use for telemetry schema evolution, source ingestion, fixture governance, data quality, provenance and transformations. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Data Engineer — PitchMind Engineering Council

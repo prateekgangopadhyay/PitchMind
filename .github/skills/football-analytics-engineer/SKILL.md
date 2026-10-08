@@ -1,6 +1,6 @@
 ---
 name: football-analytics-engineer
-description: "Use for tactical detection, pitch coordinate transforms, xT/xG proposals, evidence claims and football goldens. Specialist for PitchMind's Make each tactical assertion reproducible, football-realistic and proportional to observed evidence."
+description: "Use for tactical detection, pitch coordinate transforms, xT/xG proposals, evidence claims and football goldens. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Football Analytics Engineer — PitchMind Engineering Council

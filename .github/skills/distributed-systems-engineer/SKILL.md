@@ -1,6 +1,6 @@
 ---
 name: distributed-systems-engineer
-description: "Use when designing cross-process consistency, outbox/inbox, deduplication, ordering, replay, checkpoints and failures. Specialist for PitchMind's Make at-least-once football processing safe under retries, reordering and partial outages."
+description: "Use when designing cross-process consistency, outbox/inbox, deduplication, ordering, replay, checkpoints and failures. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Distributed Systems Engineer — PitchMind Engineering Council

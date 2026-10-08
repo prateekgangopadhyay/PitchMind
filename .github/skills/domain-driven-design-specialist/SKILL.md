@@ -1,6 +1,6 @@
 ---
 name: domain-driven-design-specialist
-description: "Use when defining football aggregate boundaries, ubiquitous language, domain services, reducers or invariants. Specialist for PitchMind's Protect a pure versioned football domain without contaminating match meaning with infrastructure or AI."
+description: "Use when defining football aggregate boundaries, ubiquitous language, domain services, reducers or invariants. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Domain-Driven Design Specialist — PitchMind Engineering Council

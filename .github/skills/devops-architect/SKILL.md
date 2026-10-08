@@ -1,6 +1,6 @@
 ---
 name: devops-architect
-description: "Use for Azure DevOps Pipelines, branch validation, immutable image delivery, environment approvals or release engineering. Specialist for PitchMind's Run observable, gated GitHub-source/Azure-Pipelines-only delivery with immutable artifacts and approval controls."
+description: "Use for Azure DevOps Pipelines, branch validation, immutable image delivery, environment approvals or release engineering. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # DevOps Architect — PitchMind Engineering Council

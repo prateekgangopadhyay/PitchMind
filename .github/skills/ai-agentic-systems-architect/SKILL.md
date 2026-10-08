@@ -1,6 +1,6 @@
 ---
 name: ai-agentic-systems-architect
-description: "Use when implementing Microsoft Foundry model interactions, evidence tools, agent workflows or claims verification. Specialist for PitchMind's Provide useful candidate explanations without giving models authority over score, match state or evidence."
+description: "Use when implementing Microsoft Foundry model interactions, evidence tools, agent workflows or claims verification. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # AI / Agentic Systems Architect — PitchMind Engineering Council

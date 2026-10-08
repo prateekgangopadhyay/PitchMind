@@ -1,6 +1,6 @@
 ---
 name: azure-infrastructure-engineer
-description: "Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monitoring and Azure resource preflight. Specialist for PitchMind's Build repeatable Azure resources without leaking secrets or unintentionally spending/deploying."
+description: "Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monitoring and Azure resource preflight. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Azure Infrastructure Engineer — PitchMind Engineering Council

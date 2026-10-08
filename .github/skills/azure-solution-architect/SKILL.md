@@ -1,6 +1,6 @@
 ---
 name: azure-solution-architect
-description: "Use for selecting Azure PaaS components, reviewing logical/physical deployment or service integration design. Specialist for PitchMind's Translate the target C4 into a feasible least-complex Azure topology with explicit service readiness."
+description: "Use for selecting Azure PaaS components, reviewing logical/physical deployment or service integration design. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Microsoft Azure Solution Architect — PitchMind Engineering Council

@@ -1,6 +1,6 @@
 ---
 name: accessibility-engineer
-description: "Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders, focus, motion or screen-reader workflows. Specialist for PitchMind's Guarantee that match meaning and evidence remain usable without sight, mouse or animation."
+description: "Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders, focus, motion or screen-reader workflows. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Accessibility Engineer — PitchMind Engineering Council

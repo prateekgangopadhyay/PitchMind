@@ -1,6 +1,6 @@
 ---
 name: event-streaming-engineer
-description: "Use when integrating Azure Event Hubs producers/consumers, Service Bus commands, checkpointing and dead-letter handling. Specialist for PitchMind's Make broker adapters faithful to event contracts while maintaining distinct telemetry and work-command channels."
+description: "Use when integrating Azure Event Hubs producers/consumers, Service Bus commands, checkpointing and dead-letter handling. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Event Streaming Engineer — PitchMind Engineering Council

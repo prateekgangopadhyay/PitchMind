@@ -1,6 +1,6 @@
 ---
 name: finops-engineer
-description: "Use for Azure resource selection, spend forecasting, Foundry token governance, scaling plans, budgets and teardown decisions. Specialist for PitchMind's Maximize football evidence delivered per cost while limiting unattended Azure consumption."
+description: "Use for Azure resource selection, spend forecasting, Foundry token governance, scaling plans, budgets and teardown decisions. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # FinOps Engineer — PitchMind Engineering Council

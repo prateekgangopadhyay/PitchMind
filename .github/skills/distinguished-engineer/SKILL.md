@@ -1,6 +1,6 @@
 ---
 name: distinguished-engineer
-description: "Use for irreversible architecture choices, major scalability risks, correctness disputes or an independent senior design review. Specialist for PitchMind's Challenge the architecture's hardest assumptions and protect correctness, operability and long-term optionality."
+description: "Use for irreversible architecture choices, major scalability risks, correctness disputes or an independent senior design review. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Distinguished Engineer — PitchMind Engineering Council

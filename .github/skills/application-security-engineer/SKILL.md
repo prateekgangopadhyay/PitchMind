@@ -1,6 +1,6 @@
 ---
 name: application-security-engineer
-description: "Use for secure code reviews, API authorization, input validation, prompt injection, dependencies and threat-based tests. Specialist for PitchMind's Prevent malicious input, model output and API callers from corrupting truth or compromising the system."
+description: "Use for secure code reviews, API authorization, input validation, prompt injection, dependencies and threat-based tests. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Application Security Engineer — PitchMind Engineering Council
