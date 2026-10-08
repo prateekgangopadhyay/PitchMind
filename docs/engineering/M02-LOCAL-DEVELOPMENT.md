@@ -43,6 +43,14 @@ This stops the Compose services and preserves the named data volumes. To delete 
 - The API command above binds to loopback. Do not bind local development endpoints to `0.0.0.0`.
 - LOCAL containers and adapters must not be used by deployed Azure environments. Local success is not evidence of Azure integration, deployment readiness, or story acceptance.
 
+## CI quality gates
+Azure DevOps validates .NET restore/build/tests, React `npm ci`/build/test/lint, Docker Compose health, repository baseline, and Bicep compile. .NET TRX and frontend JUnit results are published to the pipeline run. No GitHub Actions. Configure GitHub branch protection with Azure Pipelines as a required check. GitHub-hosted PR validation may require explicit Azure DevOps GitHub integration configuration.
+
+## CI limitations
+- The committed frontend package lockfile is required by CI; a missing lockfile fails validation instead of falling back to a non-reproducible install.
+- Existing Bicep baseline was not validated during M01; compilation may reveal errors to resolve before M02 acceptance.
+- No observed Azure DevOps PR run, deliberate failure-gate run, or required-check policy is recorded by this story's local evidence.
+
 ## Current limitations and evidence
 
 - The API and workers do not yet use PostgreSQL or Redis as canonical persistence/cache; these containers provide local infrastructure only.
