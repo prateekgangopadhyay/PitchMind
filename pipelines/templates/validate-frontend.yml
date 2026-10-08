@@ -1,12 +1,18 @@
-parameters:
-- name: workingDirectory
-  type: string
-  default: frontend
 steps:
+- task: NodeTool@0
+  displayName: Install Node 22
+  inputs:
+    versionSpec: 22.x
 - bash: |
     set -euo pipefail
-    npm ci
+    if [[ -f package-lock.json ]]; then
+      npm ci
+    else
+      echo "WARNING: lockfile missing; using npm install. Commit package-lock.json to make CI deterministic."
+      npm install --no-audit --no-fund
+    fi
     npm run build
-    npm test -- --run
-  workingDirectory: ${{ parameters.workingDirectory }}
-  displayName: Frontend install, build and test
+    npm test
+    npm run lint
+  workingDirectory: frontend
+  displayName: Frontend install, build, test and lint

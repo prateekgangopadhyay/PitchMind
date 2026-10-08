@@ -1,11 +1,12 @@
-parameters:
-- name: solution
-  type: string
-  default: PitchMind.sln
 steps:
+- task: UseDotNet@2
+  displayName: Install .NET 10 SDK
+  inputs:
+    packageType: sdk
+    version: 10.0.x
 - bash: |
     set -euo pipefail
-    dotnet restore "${{ parameters.solution }}"
-    dotnet build "${{ parameters.solution }}" --no-restore -c Release
-    dotnet test "${{ parameters.solution }}" --no-build -c Release
-  displayName: .NET restore, build and test
+    dotnet restore PitchMind.slnx
+    dotnet build PitchMind.slnx --no-restore -c Release
+    dotnet test PitchMind.slnx --no-build -c Release
+  displayName: Restore, build and test solution

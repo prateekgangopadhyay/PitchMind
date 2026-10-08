@@ -1,0 +1,45 @@
+name: pitchmind-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pitchmind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-pitchmind}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pitchmind} -d ${POSTGRES_DB:-pitchmind}"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+    networks: [local]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD in docker/.env}"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=${REDIS_PASSWORD} redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    networks: [local]
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  local:
+    driver: bridge
