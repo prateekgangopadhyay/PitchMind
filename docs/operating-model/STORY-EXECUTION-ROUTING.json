@@ -682,7 +682,8 @@
         "product-owner"
       ],
       "dependsOn": [
-        "EP01-S04"
+        "EP01-S04",
+        "EP06-S01"
       ],
       "status": "unverified",
       "assignedHuman": null,
