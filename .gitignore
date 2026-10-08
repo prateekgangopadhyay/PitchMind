@@ -13,3 +13,4 @@ coverage/
 TestResults/
 *.local.json
 *.publishsettings
+*.tsbuildinfo
