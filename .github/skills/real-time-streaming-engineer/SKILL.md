@@ -1,6 +1,6 @@
 ---
 name: real-time-streaming-engineer
-description: "Use for low-latency event-time processing, windowed tactical detection, backpressure or stream throughput. Specialist for PitchMind's Ensure incoming match telemetry forms bounded, observable and correct temporal windows."
+description: "Use for low-latency event-time processing, windowed tactical detection, backpressure or stream throughput. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Real-Time Streaming Engineer — PitchMind Engineering Council

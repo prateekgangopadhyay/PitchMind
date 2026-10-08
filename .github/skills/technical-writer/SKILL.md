@@ -1,6 +1,6 @@
 ---
 name: technical-writer
-description: "Use for C4/ADR/docs maintenance, developer guides, API contracts, release reports and user-facing accuracy review. Specialist for PitchMind's Keep implementation, architecture, instructions and evidence discoverable, precise and mutually consistent."
+description: "Use for C4/ADR/docs maintenance, developer guides, API contracts, release reports and user-facing accuracy review. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Technical Writer — PitchMind Engineering Council

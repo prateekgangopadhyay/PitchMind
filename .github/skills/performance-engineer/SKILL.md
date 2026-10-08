@@ -1,6 +1,6 @@
 ---
 name: performance-engineer
-description: "Use for load planning, profiling, latency budgets, burst handling and capacity/scaling evidence. Specialist for PitchMind's Quantify what PitchMind sustains and where it fails under realistic burst/stream/user workloads."
+description: "Use for load planning, profiling, latency budgets, burst handling and capacity/scaling evidence. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Performance Engineer — PitchMind Engineering Council

@@ -1,6 +1,6 @@
 ---
 name: lead-backend-engineer
-description: "Use when building .NET API/BFF endpoints, application ports, canonical match read APIs or backend contract/error behavior. Specialist for PitchMind's Deliver secure, maintainable ASP.NET and application-layer functions that expose only defensible match state."
+description: "Use when building .NET API/BFF endpoints, application ports, canonical match read APIs or backend contract/error behavior. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Lead Backend Engineer — PitchMind Engineering Council

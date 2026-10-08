@@ -1,6 +1,6 @@
 ---
 name: product-owner
-description: "Use when refining MVP epics, splitting or accepting PitchMind stories, arbitrating scope and approving release intent. Specialist for PitchMind's Own verifiable user value from synthetic match discovery through context, evidence, explanation and replay."
+description: "Use when refining MVP epics, splitting or accepting PitchMind stories, arbitrating scope and approving release intent. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Product Owner — PitchMind Engineering Council

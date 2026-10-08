@@ -1,6 +1,6 @@
 ---
 name: redis-engineer
-description: "Use for match read caching, invalidation, TTLs, bounded cache capacity or Redis outage handling. Specialist for PitchMind's Make Azure Managed Redis a disposable accelerator that can never become match truth."
+description: "Use for match read caching, invalidation, TTLs, bounded cache capacity or Redis outage handling. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Redis Engineer — PitchMind Engineering Council

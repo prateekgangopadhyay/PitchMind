@@ -1,6 +1,6 @@
 ---
 name: ui-ux-engineer
-description: "Use for product information architecture, match screen redesign, visual hierarchy, pitch/timeline interaction and narrative disclosure. Specialist for PitchMind's Design an intuitive evidence-led football experience rather than a wall of charts or agent-debug widgets."
+description: "Use for product information architecture, match screen redesign, visual hierarchy, pitch/timeline interaction and narrative disclosure. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # UI/UX Engineer — PitchMind Engineering Council

@@ -1,6 +1,6 @@
 ---
 name: postgresql-engineer
-description: "Use for canonical ledger design, transactions, schemas, indexing, migrations, database security and restoration. Specialist for PitchMind's Ensure persistent, replayable and verifiable canonical football state with explicit transactional guarantees."
+description: "Use for canonical ledger design, transactions, schemas, indexing, migrations, database security and restoration. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # PostgreSQL Engineer — PitchMind Engineering Council

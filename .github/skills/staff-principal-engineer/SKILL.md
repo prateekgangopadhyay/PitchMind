@@ -1,6 +1,6 @@
 ---
 name: staff-principal-engineer
-description: "Use when decomposing HLD into LLD, coordinating multiple team lanes, reviewing integration dependencies or leading an end-to-end slice. Specialist for PitchMind's Translate cross-team architectural intent into compatible, testable changes without parallel contract drift."
+description: "Use when decomposing HLD into LLD, coordinating multiple team lanes, reviewing integration dependencies or leading an end-to-end slice. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Staff / Principal Engineer — PitchMind Engineering Council

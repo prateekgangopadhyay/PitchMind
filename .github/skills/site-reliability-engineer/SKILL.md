@@ -1,6 +1,6 @@
 ---
 name: site-reliability-engineer
-description: "Use when setting SLOs, monitoring, resilience, incident response, rollback, restoration or readiness gates. Specialist for PitchMind's Ensure users retain deterministic match truth even when streaming, cache, model or UI fan-out fail."
+description: "Use when setting SLOs, monitoring, resilience, incident response, rollback, restoration or readiness gates. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Site Reliability Engineer — PitchMind Engineering Council

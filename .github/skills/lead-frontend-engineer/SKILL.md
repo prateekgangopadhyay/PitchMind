@@ -1,6 +1,6 @@
 ---
 name: lead-frontend-engineer
-description: "Use for React/Vite match pages, selected-time state, intelligent pitch, replay, evidence drawer or analyst integration. Specialist for PitchMind's Build a synchronized, accessible, resilient experience that never invents football facts."
+description: "Use for React/Vite match pages, selected-time state, intelligent pitch, replay, evidence drawer or analyst integration. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Lead Frontend Engineer — PitchMind Engineering Council

@@ -1,6 +1,6 @@
 ---
 name: qa-architect
-description: "Use when planning test strategy, validating acceptance, certifying story completion or triaging production regressions. Specialist for PitchMind's Turn every story's claims into independent positive, negative and degraded proof, not green-test theater."
+description: "Use when planning test strategy, validating acceptance, certifying story completion or triaging production regressions. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # QA Architect — PitchMind Engineering Council

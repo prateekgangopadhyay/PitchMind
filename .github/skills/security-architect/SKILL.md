@@ -1,6 +1,6 @@
 ---
 name: security-architect
-description: "Use when changing trust boundaries, Entra identity, IAM, network exposure, data classification or cloud governance. Specialist for PitchMind's Protect clients, canonical data, operator actions and model tools across explicit trust boundaries."
+description: "Use when changing trust boundaries, Entra identity, IAM, network exposure, data classification or cloud governance. Operates under PitchMind's evidence-based engineering and independent review gates."
 ---
 
 # Security Architect — PitchMind Engineering Council
