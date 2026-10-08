@@ -1,32 +1,35 @@
 # M01 — Repository Scaffold and Clean Architecture
 
-Status: Implemented on feature branch; build/test verification pending runner execution.
+Status: Feature branch implementation; executable verification pending.
 
-## Project dependency graph
-- Domain: no project/package dependencies.
-- Contracts: transport DTOs; no Domain dependency.
-- Application → Domain.
-- Infrastructure → Application (transitively Domain).
-- API → Application, Infrastructure, Contracts.
-- EventWorker / AgentWorker → Application; infrastructure adapters added in later stories.
-- Tests validate domain rules and project dependency direction.
+## Architecture
+- Domain: zero external NuGet dependencies.
+- Contracts: transport DTOs independent of domain.
+- Application → Domain; contains ports and use-case validation.
+- Infrastructure → Application; contains a local in-memory event store only.
+- API → Application, Infrastructure, Contracts; exposes /api/health and /health.
+- EventWorker and AgentWorker: minimal host scaffolds, no Azure integration.
+- Tests: Domain, Application and architecture dependency direction.
 
-## What M01 intentionally does not include
-PostgreSQL canonical adapter, Event Hubs consumer, Azure Foundry integration, SignalR, Docker infrastructure, production authentication, tactical detection or end-to-end match experience. Those belong to M02+.
+## Deliberate exclusions
+Canonical PostgreSQL, Event Hubs, Foundry, SignalR, Docker Compose, authentication, tactical engine, CI/CD integration and real Azure deployment are subsequent backlog items.
 
-## Local validation (requires .NET 10 SDK and Node 22+)
+## Validation commands (requires .NET 10 and Node 22+)
 ```bash
 dotnet restore PitchMind.slnx
 dotnet build PitchMind.slnx --no-restore -c Release
 dotnet test PitchMind.slnx --no-build -c Release
 dotnet run --project src/PitchMind.Api
-cd frontend && npm install && npm run build && npm test && npm run lint
+cd frontend
+npm install
+npm run build
+npm test
+npm run lint
 ```
 
-## Acceptance criteria
-- [x] Project files and dependency boundaries established.
-- [x] API, event worker, agent worker and React shell added.
-- [x] Domain, application and architecture tests authored.
-- [ ] Clean SDK build and test verified by CI or local execution.
-- [ ] Frontend install/build/test/lint verified.
-- [ ] PR reviewed and merged.
+## Acceptance
+- [x] Clean Architecture project structure and dependency references authored.
+- [x] API, workers, frontend and basic tests authored.
+- [ ] Clean SDK build and tests verified.
+- [ ] Frontend build, tests and lint verified.
+- [ ] Pull request reviewed and merged.
