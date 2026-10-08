@@ -16,6 +16,9 @@ class AuditError(ValueError):
     pass
 
 
+EXPECTED_AUDIT_SOURCE = "https://api.nuget.org/v3/index.json"
+
+
 def _find_vulnerable_packages(value: Any, path: str = "report") -> list[str]:
     findings: list[str] = []
     if isinstance(value, dict):
@@ -98,8 +101,8 @@ def validate_report(report: Any, expected_projects: set[str]) -> int:
     if len(actual_projects) != len(projects) or actual_projects != expected_projects:
         raise AuditError("NuGet vulnerability report project coverage differs from the solution")
     if (not isinstance(sources, list) or not sources
-            or any(not isinstance(source, str) or not source.strip()
-                   or urlsplit(source).scheme != "https" or not urlsplit(source).netloc for source in sources)):
+            or any(not isinstance(source, str) or source.strip() != EXPECTED_AUDIT_SOURCE
+                   for source in sources)):
         raise AuditError("NuGet vulnerability report did not identify an advisory source")
     _validate_project_shapes(projects)
     findings = _find_vulnerable_packages(report)

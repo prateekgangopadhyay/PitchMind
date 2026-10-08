@@ -42,6 +42,7 @@ class NugetVulnerabilityAuditTests(unittest.TestCase):
             {"version": 1, "sources": ["https://api.nuget.org/v3/index.json"], "projects": []},
             {"version": 1, "sources": [], "projects": [{"path": "/repo/app.csproj"}]},
             {"version": 1, "sources": ["nuget"], "projects": [{"path": "/repo/app.csproj"}]},
+            {"version": 1, "sources": ["https://untrusted.example/v3/index.json"], "projects": [{"path": "/repo/app.csproj"}]},
             {"version": 2, "sources": ["https://api.nuget.org/v3/index.json"], "projects": [{"path": "/repo/app.csproj"}]},
             {"version": True, "sources": ["https://api.nuget.org/v3/index.json"], "projects": [{"path": "/repo/app.csproj"}]},
             {"version": 1, "sources": ["https://api.nuget.org/v3/index.json"], "projects": [{"path": "/repo/app.csproj"}],
@@ -67,6 +68,14 @@ class NugetVulnerabilityAuditTests(unittest.TestCase):
     @patch.object(audit.subprocess, "run", side_effect=audit.subprocess.TimeoutExpired("dotnet", 120))
     def test_fails_closed_when_live_scan_times_out(self, _run, _projects):
         with self.assertRaisesRegex(audit.AuditError, "timed out after 120 seconds"):
+            audit.audit(Path("/repo/PitchMind.slnx"))
+
+    @patch.object(audit, "solution_projects", return_value={"/repo/app.csproj"})
+    @patch.object(audit.subprocess, "run", return_value=audit.subprocess.CompletedProcess(
+        args=["dotnet"], returncode=0, stdout='{"version":1,"sources":["https://api.nuget.org/v3/index.json"],"projects":[{"path":"/repo/app.csproj"}]}', stderr="warning: audit source unavailable"
+    ))
+    def test_fails_closed_when_cli_reports_success_with_warning(self, _run, _projects):
+        with self.assertRaisesRegex(audit.AuditError, "audit warning"):
             audit.audit(Path("/repo/PitchMind.slnx"))
 
 
