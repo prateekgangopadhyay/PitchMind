@@ -60,3 +60,10 @@ Always include tests proving a forbidden claim or a duplicate input **does not**
 - Post-deploy verification: Azure resource/revision, timestamp, smoke outcomes and exceptions.
 
 **Never pre-check a box or invent an Azure test result.**
+## Source-admission and football realism template (G0 / EP03)
+- Raw source path, SHA256 and documented number of event rows / version and proof of synthetically generated provenance.
+- Redistribution/licensing approval, real-name/team branding approval, privacy/biometric-like field review; separate rejected fields.
+- Source coordinate unit/orientation and pitch size, period/stoppage clock semantics, 1-based source and 0-based canonical sequence mapping.
+- Football plausibility report for unusually frequent shot/foul types, substitutions/reds, score transitions and event-attached tracking sufficiency.
+- Positive/negative fixture goldens with source event IDs, no future leaking, missing-data response and approved case narratives.
+- Data Engineer + Football Analytics + Product Owner named independent sign-offs; no auto-certification based on structural schema passes.

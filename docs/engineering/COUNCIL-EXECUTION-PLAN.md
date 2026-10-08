@@ -63,3 +63,6 @@ G0 source licensed and synthetic; G1 canonical durable replay/ordering/outbox; G
 
 ## Mandatory DEV authorization request after G4
 Provide: exact branch/SHA + container digest, subscription/resource group/region, Bicep what-if diff and deleted/created/modified resource list, database migration/rollback, managed identities, public ingress, expected monthly budget and AI quota, smoke tests and stop conditions. Then ask the owner **"Do you approve deploying this exact change set to Azure DEV?"** No cloud-mutating operation before affirmative approval.
+
+## Execution governance route (2026-10-08)
+This plan has a machine-checkable [59-story dependency DAG](../operating-model/STORY-EXECUTION-ROUTING.json) with work packet, role owner, consulted skill, priority and all-story DEV approval flag. Use the [human-readable implementation roadmap](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) to assign **actual named engineers**; until then `assignedHuman=null` is correct. The 28 skills are advisory expertise rather than autonomous staff. Source live feed [already present](../data/MANU-LIV-SOURCE-PROFILE.md), but license/coordinate/realism/canonical adapter acceptance remains open. No Azure deployment is authorized by the documentation or validation scripts.
