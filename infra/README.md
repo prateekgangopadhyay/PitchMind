@@ -1,13 +1,5 @@
-# Bicep infrastructure
+# PitchMind infrastructure (Bicep)
 
-## Status
-Modular starter skeleton. Not deployed or validated against an Azure subscription. Optional advanced services are intentionally omitted until justified.
+M03 adds a DEV-only network and RBAC Key Vault baseline and tightens storage security. It does **not** deploy resources automatically.
 
-## Workflow
-1. Install Azure CLI and Bicep.
-2. `az bicep build --file infra/main.bicep`
-3. `az deployment group what-if -g <resource-group> -f infra/main.bicep -p infra/environments/dev.bicepparam`
-4. Review network, private DNS, identity, provider registration, pricing and SKU availability before deployment.
-5. Deploy only through protected Azure Pipelines stages.
-
-No credentials belong in parameter files. Network and service private access must be added before production use.
+Run `az bicep build --file infra/main.bicep`, then `az bicep build-params --file infra/environments/dev.bicepparam`. Use `./scripts/azure-dev-whatif.sh --resource-group <existing-dev-resource-group>` to preview changes. See [M03 runbook](../docs/engineering/M03-AZURE-DEV.md) for security exceptions, environment isolation, acceptance gates, and deployment prerequisites.
