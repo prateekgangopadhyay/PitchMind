@@ -6,7 +6,7 @@ Dark charcoal/navy surfaces, quiet emerald accent, restrained blue for compariso
 Information architecture: public `/welcome` → `/sign-in` → accessible app shell `/home`, `/matches/:id`, `/teams/:id`, `/players/:id`, `/insights/:id`, `/analyst?matchId=`; `/replay/:id` deep link as evidence drill-down. Route guards and role permissions remain server-enforced. Every page answers exactly one primary football question; empty data is an honest empty state.
 
 ## Data ownership
-Never include literal club names, player names, scores, tactics, match IDs, timeline events, xG/xT, line breaks, heatmap values or narrative snippets in `*.tsx` (except static UX/test fixture metadata in test assets). Fixture source is approved `data/simulations/` JSON; BFF exposes canonical summaries and evidence. React components receive props derived from network contracts; mockups' numbers are illustrative placeholders only. Components may render static labels and format backend-approved statistics (not recompute raw football intelligence).
+Never include literal club names, player names, scores, tactics, match IDs, timeline events, xG/xT, line breaks, heatmap values or narrative snippets in `*.tsx` (except static UX/test fixture metadata in test assets). Fixture source is supplied under `data/simulations/` but its rights and importer remain **unapproved**; BFF exposes canonical summaries and evidence. React components receive props derived from network contracts; mockups' numbers are illustrative placeholders only. Components may render static labels and format backend-approved statistics (not recompute raw football intelligence).
 
 ## Screens, questions, products, APIs and acceptance
 | Screen | Primary question | Product contract | States + tested actions | Mockup |

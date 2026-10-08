@@ -63,4 +63,4 @@
 | EP12-S02 | Historical tracking and spatial data exploration (M15) | P2 | Advanced Projections | [Open](../engineering/stories/EP12/EP12-S02.md) |
 | EP12-S03 | Model and partner expansion (M16) | P2 | Advanced Projections | [Open](../engineering/stories/EP12/EP12-S03.md) |
 
-**Definition of done:** source and match/evidence provenance; architecture/API/ADR changes in same PR; golden positive/negative/insufficient-data tests; CI security and accessibility gates; traceable revision-specific evidence; PO acceptance. DEV deploy is separately approved by owner. **Feed-specific stories remain blocked pending the requested JSON.**
+**Definition of done:** source and match/evidence provenance; architecture/API/ADR changes in same PR; golden positive/negative/insufficient-data tests; CI security and accessibility gates; traceable revision-specific evidence; PO acceptance. DEV deploy is separately approved by owner. **Feed JSON has arrived on newer main; canonical import and rights/football acceptance remain open. See [source profile](../data/MANU-LIV-SOURCE-PROFILE.md).**
