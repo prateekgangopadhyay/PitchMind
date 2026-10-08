@@ -1,6 +1,8 @@
 # Manchester United–Liverpool source JSON: inspected structural profile
 **Source:** `data/simulations/manu-liv-match-dataset.json` on updated PitchMind `main` commit `b97825416af5eb2e323b577942ae99addfe8727e`; Git blob SHA `9f53613d10dcf2e117e708c1b3e9706a49e1eb7c`. **Inspection date:** 2026-10-08.  
-**Status:** structural profile from parsed source JSON; **not** canonical ingest, a football-approved simulation, a license assessment, a verified Azure feed, or a passing replay integration test.
+**Status:** structural profile from parsed source JSON; **not** canonical ingest, a football-approved simulation, an independent rights assessment, a verified Azure feed, or a passing replay integration test. The repository owner confirmed synthetic provenance and redistribution permission in the Engineering Council execution instruction on 2026-10-08. This owner declaration does not validate football realism, coordinate units, player metrics, or source-to-canonical mappings.
+
+**Reproducibility check (2026-10-08):** `python3 scripts/profile_simulation_feed.py data/simulations/manu-liv-match-dataset.json --output <outside-repository-report>` completed with status `profiled_not_validated`, 28,601,013 bytes and SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`. `git hash-object` returned the blob SHA above. The profiler is metadata-only and deliberately does not validate football semantics or ingest the source.
 
 **Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON itself still has no provenance/rights manifest, and this declaration does not resolve the clock policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
 
@@ -20,7 +22,7 @@
 | Player positions | 48,048 observations across 2,199 event-attached `playerPositions` arrays; 24 distinct `teamName + playerName` identities |
 | Player/ball coordinate min/max | each axis between 2 and 98; pass `endX` spans 0..100. **Units unspecified**; values look normalized, not metres. |
 | Tracking | event-attached frames, most 22 players with population reduced after lineup/card changes. **Not necessarily a dense continuous tracking feed.** |
-| Provenance | no explicit `synthetic` or source-license/coordinate-orientation manifest at the top level |
+| Provenance | no explicit `synthetic` or source-license/coordinate-orientation manifest at the top level; owner separately confirmed synthetic provenance and redistribution permission (2026-10-08) |
 
 ## Top-level fields (actual)
 `eventId,matchId,sequence,clockSeconds,period,eventType,teamId,teamName,playerName,receiverName,pitchX,pitchY,endX,endY,outcome,metadata,playerPositions,ballX,ballY`. `receiverName` is null in 1,601 records; `endX/endY` null in 1,232. `playerName` null in 2. `playerPositions[]` elements contain `playerName,teamName,teamId,jerseyNumber,position,x,y,speed,distanceCovered,heatIndex,passAccuracy,touches,stamina,heartRate`. **The last five numeric attributes are not independently validated biometrics or performance metrics; do not display player-specific heart rates as real.**
@@ -51,7 +53,7 @@
 - `Goal` records' metadata `score` values agree with the displayed 3–3 result, but score remains a projection of six accepted canonical goal events with review of disallowed/own goals, corrections and scorer validity.
 
 ## Rights, synthetic origin, medical-like attributes and realism
-This JSON contains **real club and player names**, location and synthetic-looking speed/stamina/heart-rate values. Owner has confirmed synthetic provenance and redistribution permission; metric units/definitions and privacy implications remain unresolved, so do **not** portray per-player biometrics as measured performance. "Simulated EPL-context match" must be visible on the product.
+This JSON contains **real club and player names**, location and synthetic-looking speed/stamina/heart-rate values. The repository owner confirmed synthetic provenance and redistribution permission; independent rights/privacy review, metric units/definitions, and privacy implications remain unresolved. That confirmation does not establish realistic coordinates or measured player metrics. Do **not** portray player biometrics as actual performance. "Simulated EPL-context match" must be visible on the product.
 
 ## Implementation acceptance items for EP03/04/05/07
 1. Approved `FixtureManifest` in `data/simulations/` describing source SHA-256, `synthetic=true`, rights, pitch dimensions/unit/orientation, clock policy, team IDs, source event vocabulary, substitution/roster policy.
