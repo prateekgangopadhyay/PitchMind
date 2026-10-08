@@ -38,7 +38,7 @@ module eventHubs './modules/event-hubs.bicep' = {
 
 module serviceBus './modules/service-bus.bicep' = {
   name: 'serviceBus'
-  params: { location: location, name: take('${prefix}-${suffix}-sb', 50) }
+  params: { location: location, name: take('${prefix}-${suffix}-sbus', 50) }
 }
 
 module apps './modules/container-apps.bicep' = {
