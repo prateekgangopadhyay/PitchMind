@@ -14,12 +14,12 @@
 
 | Requirement | Command | Observed result |
 |---|---|---|
-| Candidate validator positive and negative cases | `python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | 8 passed, 0 failed. Cases cover source-ledger reproducibility, duplicate IDs, sequence gaps, clock/period regression, manifest drift, non-finite/overflowing coordinates and pinned-candidate reconciliation. |
+| Candidate validator positive and negative cases | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | 11 passed, 0 failed. Cases cover source-ledger reproducibility, duplicate IDs and JSON keys, integer sequence enforcement, sequence gaps, clock/period regression, malformed manifest types, manifest drift, non-finite/overflowing coordinates and pinned-candidate reconciliation. |
 | Full candidate data integrity report | `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation.json` | Exit 0; status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 1 match, 2 teams, 48,048 attached position records; source sequence 1..2199 and source clock 0..5761 seconds. |
 | Repeatability | Run the validator twice against the pinned source and manifest | Both runs produced source event-ID ledger SHA-256 `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539` and ordered event semantics SHA-256 `3c4a3dad03cab8acfdd5dc600b0c8893c402ae2ffe866ef896f86ced437f46d6`. |
-| Full local quality gate | `bash scripts/validate-all.sh` | Exit 0. .NET restore/build succeeded with 0 warnings/errors; solution tests 23 passed, 0 failed, 5 skipped (all PostgreSQL integration tests lacked a test database). Frontend install/build/lint passed and 3 tests passed; npm reported 0 vulnerabilities. Source profiler tests 5 passed; candidate validator tests 8 passed; candidate validation, operating-model validator and dependency self-test passed. |
+| Full local quality gate | `bash scripts/validate-all.sh` | Exit 0. .NET restore/build succeeded with 0 warnings/errors; solution tests 23 passed, 0 failed, 5 skipped (all PostgreSQL integration tests lacked a test database). Frontend install/build/lint passed and 3 tests passed; npm reported 0 vulnerabilities. Source profiler tests 5 passed; candidate validator tests 11 passed; candidate validation, operating-model validator and dependency self-test passed. |
 
-The full local quality log was captured outside the repository at `/private/tmp/ep03-s01-validate-all-2026-10-09.log`. It is not a hosted CI/Azure DevOps run. PostgreSQL integration was skipped by this aggregate command; no canonical database ingest exists in this story branch.
+The full local quality log was observed in the terminal for the 2026-10-09 review-fix run. It is not a hosted CI/Azure DevOps run. PostgreSQL integration was skipped by this aggregate command; no canonical database ingest exists in this story branch.
 
 ## Observed data quality and limits
 

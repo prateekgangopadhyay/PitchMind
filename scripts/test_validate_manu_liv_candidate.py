@@ -90,8 +90,28 @@ class CandidateValidationTests(unittest.TestCase):
             validator.validate_source(payload, test_manifest(invalid_sequence, payload))
         invalid_clock = [self.events[0], {**self.events[1], "clockSeconds": -1}]
         payload = json.dumps(invalid_clock).encode()
+        invalid_clock_manifest = test_manifest(invalid_clock, payload)
+        invalid_clock_manifest["match"]["sourceClockEnd"] = self.events[-1]["clockSeconds"]
         with self.assertRaisesRegex(validator.CandidateValidationError, "clock is not an ordered integer"):
-            validator.validate_source(payload, test_manifest(invalid_clock, payload))
+            validator.validate_source(payload, invalid_clock_manifest)
+
+    def test_rejects_float_sequence_values(self):
+        invalid = [self.events[0], {**self.events[1], "sequence": 2.0}]
+        payload = json.dumps(invalid).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "sequence is not contiguous"):
+            validator.validate_source(payload, test_manifest(invalid, payload))
+
+    def test_rejects_duplicate_json_object_keys(self):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate JSON object key"):
+            validator._strict_json_loads('{"sequence":1,"sequence":2}')
+
+    def test_rejects_malformed_manifest_types_without_leaking_type_errors(self):
+        malformed = {**self.manifest, "match": {**self.manifest["match"], "expectedPeriods": "12"}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "expectedPeriods"):
+            validator.validate_source(self.payload, malformed)
+        malformed_count = {**self.manifest, "source": {**self.manifest["source"], "expectedEventCount": "2"}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "must be integers"):
+            validator.validate_source(self.payload, malformed_count)
 
     def test_rejects_period_regression(self):
         invalid = [

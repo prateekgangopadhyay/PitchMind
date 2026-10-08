@@ -41,6 +41,24 @@ def _reject_constant(value: str) -> None:
     raise CandidateValidationError(f"Non-finite JSON constant {value} is not accepted")
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON properties instead of silently accepting the last value."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise CandidateValidationError(f"Duplicate JSON object key {key!r} is not accepted")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(value: str | bytes) -> Any:
+    return json.loads(value, parse_constant=_reject_constant, object_pairs_hook=_unique_object)
+
+
+def _is_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _number(value: Any) -> bool:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return False
@@ -60,15 +78,44 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     match_policy = manifest.get("match", {})
     if not isinstance(source, dict) or not isinstance(match_policy, dict):
         raise CandidateValidationError("Manifest source and match policies must be objects")
-    required_manifest_values = (
-        source.get("byteSize"), source.get("sha256"), source.get("expectedEventCount"),
-        source.get("sequenceStart"), source.get("sequenceEnd"), match_policy.get("expectedMatchCount"),
-        match_policy.get("expectedTeamCount"), match_policy.get("sourceClockUnit"),
-        match_policy.get("expectedPeriods"), match_policy.get("sourceClockStart"),
-        match_policy.get("sourceClockEnd"),
+    integer_manifest_fields = (
+        (source, "byteSize"), (source, "expectedEventCount"), (source, "sequenceStart"),
+        (source, "sequenceEnd"), (match_policy, "expectedMatchCount"),
+        (match_policy, "expectedTeamCount"), (match_policy, "sourceClockStart"),
+        (match_policy, "sourceClockEnd"),
     )
-    if any(value is None for value in required_manifest_values):
-        raise CandidateValidationError("Manifest is missing required source or match integrity fields")
+    if any(not _is_integer(owner.get(key)) for owner, key in integer_manifest_fields):
+        raise CandidateValidationError("Manifest source counts, sequence bounds, and clock bounds must be integers")
+    if any(owner[key] < 0 for owner, key in integer_manifest_fields):
+        raise CandidateValidationError("Manifest integer bounds and counts must be non-negative")
+    if (source["byteSize"] == 0 or source["expectedEventCount"] == 0
+            or source["sequenceStart"] == 0 or source["sequenceEnd"] < source["sequenceStart"]
+            or match_policy["expectedMatchCount"] == 0 or match_policy["expectedTeamCount"] == 0
+            or match_policy["sourceClockEnd"] < match_policy["sourceClockStart"]):
+        raise CandidateValidationError("Manifest byte, event, match, team and sequence bounds must be positive and ordered")
+    expected_periods = match_policy.get("expectedPeriods")
+    if (not isinstance(expected_periods, list) or not expected_periods
+            or any(not _is_integer(period) or period < 1 for period in expected_periods)
+            or len(set(expected_periods)) != len(expected_periods)):
+        raise CandidateValidationError("Manifest expectedPeriods must be a non-empty list of unique positive integers")
+    if not isinstance(match_policy.get("sourceClockUnit"), str) or not match_policy["sourceClockUnit"].strip():
+        raise CandidateValidationError("Manifest sourceClockUnit must be a non-empty string")
+    if (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in source["sha256"])):
+        raise CandidateValidationError("Manifest source sha256 must be a lowercase 64-character hexadecimal string")
+    for key in ("provenance", "redistributionPermission"):
+        if not isinstance(source.get(key), str) or not source[key].strip():
+            raise CandidateValidationError(f"Manifest source {key} must be a non-empty string")
+    required_event_counts = match_policy.get("requiredEventCounts", {})
+    if (not isinstance(required_event_counts, dict)
+            or any(not isinstance(key, str) or not _is_integer(count) or count < 0
+                   for key, count in required_event_counts.items())):
+        raise CandidateValidationError("Manifest requiredEventCounts must map event names to non-negative integers")
+    source_event_types = manifest.get("canonicalization", {}).get("sourceEventTypes") if isinstance(manifest.get("canonicalization"), dict) else None
+    if (not isinstance(source_event_types, list) or not source_event_types
+            or any(not isinstance(value, str) or not value.strip() for value in source_event_types)
+            or len(set(source_event_types)) != len(source_event_types)):
+        raise CandidateValidationError("Manifest sourceEventTypes must be a non-empty list of unique strings")
     expected_bytes = source.get("byteSize")
     if len(data) == 0 or len(data) > MAX_SOURCE_BYTES:
         raise CandidateValidationError("Source is empty or exceeds the configured size limit")
@@ -97,7 +144,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         raise CandidateValidationError("Canonical event mappings must remain unapproved")
 
     try:
-        events = json.loads(data.decode("utf-8-sig"), parse_constant=_reject_constant)
+        events = _strict_json_loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise CandidateValidationError("Source must be a UTF-8 JSON array of event records") from exc
     if not isinstance(events, list) or not events or len(events) > MAX_EVENTS:
@@ -152,13 +199,13 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         match_ids.add(match_id)
 
         sequence = event["sequence"]
-        if isinstance(sequence, bool) or sequence != index + source.get("sequenceStart", 1):
+        if not _is_integer(sequence) or sequence != index + source["sequenceStart"]:
             raise CandidateValidationError(f"Source sequence is not contiguous at zero-based index {index}")
         clock = event["clockSeconds"]
         period = event["period"]
         if isinstance(clock, bool) or not isinstance(clock, int) or clock < previous_clock:
             raise CandidateValidationError(f"Source clock is not an ordered integer at source index {index}")
-        if isinstance(period, bool) or not isinstance(period, int) or period not in match_policy.get("expectedPeriods", []):
+        if not _is_integer(period) or period not in expected_periods:
             raise CandidateValidationError(f"Unsupported source period at source index {index}")
         if period < previous_period:
             raise CandidateValidationError(f"Source period regressed at source index {index}")
@@ -246,7 +293,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         raise CandidateValidationError("Source clock boundaries differ from manifest")
     if events[0]["sequence"] != source.get("sequenceStart") or events[-1]["sequence"] != source.get("sequenceEnd"):
         raise CandidateValidationError("Source sequence boundaries differ from manifest")
-    declared_types = set(manifest.get("canonicalization", {}).get("sourceEventTypes", []))
+    declared_types = set(source_event_types)
     if set(event_counts) != declared_types:
         raise CandidateValidationError("Observed source event vocabulary differs from manifest")
 
@@ -298,8 +345,8 @@ def validate_file(source_path: Path, manifest_path: Path) -> dict[str, Any]:
     if source_path.stat().st_size > MAX_SOURCE_BYTES:
         raise CandidateValidationError("Source exceeds the configured size limit")
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"), parse_constant=_reject_constant)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        manifest = _strict_json_loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise CandidateValidationError("Manifest must be valid UTF-8 JSON") from exc
     if not isinstance(manifest, dict):
         raise CandidateValidationError("Manifest root must be an object")
