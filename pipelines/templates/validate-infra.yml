@@ -1,5 +1,9 @@
 steps:
 - bash: |
     set -euo pipefail
-    az bicep build --file infra/main.bicep
-  displayName: Bicep compile
+    az bicep version
+    az bicep build --file infra/main.bicep --outfile "$(Agent.TempDirectory)/pitchmind-main.json"
+    for params in infra/environments/*.bicepparam; do
+      az bicep build-params --file "$params" --outfile "$(Agent.TempDirectory)/$(basename "$params").json"
+    done
+  displayName: Compile Bicep and environment parameters (no deployment)
