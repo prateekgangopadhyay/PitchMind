@@ -67,6 +67,7 @@ function check() {
     assert.ok(existsSync(path.join(root,row.workPacket)), 'Missing workpacket '+row.storyId);
     assert.equal(row.status,'unverified','Do not pre-accept stories '+row.storyId);
     assert.equal(row.assignedHuman,null,'Do not fake human assignment '+row.storyId);
+    assert.equal(row.requiresOwnerDevApproval,true,'Every story must require explicit approval if deployed to DEV '+row.storyId);
     assert.ok(row.priority === 'P0'||row.priority === 'P1'||row.priority === 'P2');
   }
   assert.equal(acyclic(plan.stories),59,'Dependency DAG not complete');

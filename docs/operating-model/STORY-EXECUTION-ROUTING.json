@@ -21,7 +21,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP01/EP01-S01.md"
     },
     {
@@ -42,7 +42,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP01/EP01-S02.md"
     },
     {
@@ -63,7 +63,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP01/EP01-S03.md"
     },
     {
@@ -84,7 +84,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP01/EP01-S04.md"
     },
     {
@@ -107,7 +107,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP01/EP01-S05.md"
     },
     {
@@ -236,7 +236,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP03/EP03-S01.md"
     },
     {
@@ -257,7 +257,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP03/EP03-S02.md"
     },
     {
@@ -279,7 +279,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP03/EP03-S03.md"
     },
     {
@@ -300,7 +300,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP03/EP03-S04.md"
     },
     {
@@ -322,7 +322,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP03/EP03-S05.md"
     },
     {
@@ -343,7 +343,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP04/EP04-S01.md"
     },
     {
@@ -364,7 +364,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP04/EP04-S02.md"
     },
     {
@@ -385,7 +385,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP04/EP04-S03.md"
     },
     {
@@ -406,7 +406,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP04/EP04-S04.md"
     },
     {
@@ -427,7 +427,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP04/EP04-S05.md"
     },
     {
@@ -448,7 +448,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S01.md"
     },
     {
@@ -470,7 +470,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S02.md"
     },
     {
@@ -491,7 +491,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S03.md"
     },
     {
@@ -513,7 +513,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S04.md"
     },
     {
@@ -535,7 +535,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S05.md"
     },
     {
@@ -556,7 +556,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP05/EP05-S06.md"
     },
     {
@@ -578,7 +578,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP06/EP06-S01.md"
     },
     {
@@ -600,7 +600,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP06/EP06-S02.md"
     },
     {
@@ -622,7 +622,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP06/EP06-S03.md"
     },
     {
@@ -643,7 +643,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP06/EP06-S04.md"
     },
     {
@@ -665,7 +665,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP06/EP06-S05.md"
     },
     {
@@ -686,7 +686,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S01.md"
     },
     {
@@ -708,7 +708,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S02.md"
     },
     {
@@ -730,7 +730,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S03.md"
     },
     {
@@ -752,7 +752,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S04.md"
     },
     {
@@ -774,7 +774,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S05.md"
     },
     {
@@ -796,7 +796,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP07/EP07-S06.md"
     },
     {
@@ -818,7 +818,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S01.md"
     },
     {
@@ -839,7 +839,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S02.md"
     },
     {
@@ -860,7 +860,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S03.md"
     },
     {
@@ -881,7 +881,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S04.md"
     },
     {
@@ -902,7 +902,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S05.md"
     },
     {
@@ -925,7 +925,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP08/EP08-S06.md"
     },
     {
@@ -946,7 +946,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP09/EP09-S01.md"
     },
     {
@@ -967,7 +967,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP09/EP09-S02.md"
     },
     {
@@ -989,7 +989,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP09/EP09-S03.md"
     },
     {
@@ -1011,7 +1011,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP09/EP09-S04.md"
     },
     {
@@ -1240,7 +1240,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP12/EP12-S01.md"
     },
     {
@@ -1262,7 +1262,7 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP12/EP12-S02.md"
     },
     {
@@ -1284,8 +1284,9 @@
       "status": "unverified",
       "assignedHuman": null,
       "acceptanceEvidence": null,
-      "requiresOwnerDevApproval": false,
+      "requiresOwnerDevApproval": true,
       "workPacket": "docs/engineering/stories/EP12/EP12-S03.md"
     }
-  ]
+  ],
+  "approvalInterpretation": "For every story, any planned deployment or Azure DEV mutation requires explicit owner approval of that exact change; false is never acceptable because some stories are noncloud."
 }
