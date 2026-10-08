@@ -7,9 +7,9 @@ Status: Proposed. Stories are not implemented by virtue of appearing here. Prior
 - [Engineering Council programme and DEV approval gate](../engineering/COUNCIL-EXECUTION-PLAN.md)
 - [59 per-story HLD/LLD work packets](STORY-WORKPACK-INDEX.md)
 - [Azure HLD](../architecture/06-target-azure-hld.md) · [Football LLD](../architecture/07-football-analytics-detailed-lld.md) · [Consolidated APIs](../api/API.md)
-- [JSON feed onboarding — blocked until file is accessible](../data/SIMULATION-FEED-CONTRACT.md) · [QA release gates](../engineering/QA-RELEASE-GATES.md)
+- [JSON feed onboarding and real source profile — mapping pending](../data/SIMULATION-FEED-CONTRACT.md) · [QA release gates](../engineering/QA-RELEASE-GATES.md)
 
-**Governance:** Plans and packets do not indicate completion; `data/simulations` is absent on reviewed main; and DEV deployment is explicitly prohibited without owner approval.
+**Governance:** Plans and packets do not indicate completion; feed source arrived on newer main but needs verified contract, rights and integration; and DEV deployment is explicitly prohibited without owner approval.
 
 ## Hackathon MVP product epics and development stories
 

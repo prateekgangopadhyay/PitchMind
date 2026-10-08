@@ -1,7 +1,7 @@
 # Football Intelligence Detailed LLD — canonical match truth to explainable tactical insight
 **Status:** target LLD; reviewed references: [current core LLD](05-football-lld.md), [legacy football vocabulary](https://github.com/prateekgangopadhyay/PitchMind_Old/blob/main/docs/domain/football-intelligence-ubiquitous-language.md). Legacy source is advisory, not imported.
 **Football truth invariants:** Position ≠ Role; Formation ≠ Shape; Event ≠ Tactical Mechanism; Sequence ≠ Causation; possession ≠ territory; a detector never guesses unobserved speed/pressure.
-**Approved demo prerequisite:** owner-supplied **synthetic** JSON. Not available at review; no source-specific mapping is certified.
+**Approved demo prerequisite:** owner-supplied JSON is now present on newer main, containing 2,199 event records and event-level player positions (see [source profile](../data/MANU-LIV-SOURCE-PROFILE.md)); no source-specific **canonical importer or licensed/provenance certification** exists yet.
 
 ## A. DDD aggregates and typed objects
 ```mermaid
