@@ -70,7 +70,7 @@ The versioned [candidate manifest](../../data/simulations/manu-liv-candidate-man
 
 Executed locally on 2026-10-09:
 
-- `python3 -m unittest scripts.test_validate_manu_liv_candidate -v` — 8 passed, 0 failed.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` — 11 passed, 0 failed, including duplicate JSON keys, float sequence values and malformed manifest types.
 - `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation.json` — completed with status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 48,048 attached positions, source sequence 1..2199, source clock 0..5761 seconds. Repeated validation produced the same source event-ID and ordered-semantics SHA-256 digests.
 - Observed event counts include 124 shots and 254 fouls; the tool requires domain review and does not apply an unapproved professional-match threshold.
 
