@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "scope": "Cross-cutting frontend design tools, separate from 28 council role skills",
+  "councilRoleCount": 28,
+  "sourceOfBrand": "docs/design/PITCHMIND-DESIGN-SYSTEM.md",
+  "sourceOfWorkflow": "docs/design/FRONTEND-DESIGN-DELIVERY.md",
+  "skillCount": 3,
+  "skills": [
+    {
+      "name": "design-taste-frontend",
+      "path": ".github/skills/design-taste-frontend/SKILL.md",
+      "source": {
+        "repo": "girishlade111/taste-skill",
+        "commit": "8399cf57f6faad8c943700cce0dd9873ff2ae296",
+        "path": "skills/taste-skill/SKILL.md",
+        "license": "MIT"
+      },
+      "purpose": "Build and refine the original seven dark-PitchMind React screens; preserve stack and motion restraint",
+      "stage": "generation-and-refinement",
+      "dependencies": []
+    },
+    {
+      "name": "web-design-guidelines",
+      "path": ".github/skills/web-design-guidelines/SKILL.md",
+      "source": {
+        "repo": "vercel-labs/agent-skills",
+        "commit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+        "path": "skills/web-design-guidelines/SKILL.md",
+        "license": "MIT according to upstream README"
+      },
+      "purpose": "Audit frontend TSX/CSS/HTML against current published Web Interface Guidelines and local WCAG baseline",
+      "stage": "accessibility-and-usability-audit",
+      "dependencies": [
+        "design-taste-frontend"
+      ]
+    },
+    {
+      "name": "awesome-design-audit",
+      "path": ".github/skills/awesome-design-audit/SKILL.md",
+      "source": {
+        "repo": "frankxai/awesome-design-agent-skills",
+        "commit": "9a6b8fe9f0ccf8b851863485b76143c54f33df7e",
+        "path": "rubrics/",
+        "license": "CC0-1.0"
+      },
+      "purpose": "Independent visual-quality scoring, anti-slop review, copy-quality check, and reinspection loop",
+      "stage": "independent-visual-quality-audit",
+      "dependencies": [
+        "design-taste-frontend",
+        "web-design-guidelines"
+      ],
+      "rubrics": [
+        "docs/design/vendor/awesome-ai-ui-quality-rubric.md",
+        "docs/design/vendor/awesome-anti-slop-rubric.md",
+        "docs/design/vendor/awesome-premium-generation-gate.md"
+      ],
+      "instrument": "scripts/design-slop-scan.mjs"
+    }
+  ],
+  "designStories": [
+    "EP07-S01",
+    "EP07-S02",
+    "EP07-S03",
+    "EP07-S04",
+    "EP07-S05",
+    "EP07-S06",
+    "EP08-S06"
+  ],
+  "humanReviewRoles": [
+    "ui-ux-engineer",
+    "lead-frontend-engineer",
+    "accessibility-engineer",
+    "qa-architect",
+    "product-owner"
+  ],
+  "qualityGate": "Visual and accessibility findings must be resolved or explicitly waived by accountable reviewer; no agent self-certification",
+  "deploymentRestriction": "No Azure DEV or other deployment without exact owner approval; design skills are design-time only"
+}
