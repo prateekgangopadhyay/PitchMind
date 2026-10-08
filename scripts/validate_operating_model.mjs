@@ -31,6 +31,7 @@ function acyclic(items) {
 
 function check() {
   const reg = parse('docs/operating-model/COUNCIL-SKILL-REGISTRY.json');
+  const design = parse('docs/design/DESIGN-SKILL-REGISTRY.json');
   const plan = parse('docs/operating-model/STORY-EXECUTION-ROUTING.json');
   const backlog = read('docs/backlog/HACKATHON-MVP-EPICS.md');
   const stories = [...backlog.matchAll(story)];
@@ -38,13 +39,22 @@ function check() {
   assert.equal(epics.length, 12, 'Exactly 12 source epics required');
   assert.equal(stories.length, 59, 'Exactly 59 authoritative backlog stories required');
   assert.equal(reg.roles.length, 28, 'Exactly 28 Council roles required');
+  assert.equal(design.councilRoleCount, 28, 'Design skills are not accountable Council roles');
+  assert.equal(design.skillCount, 3, 'Exactly three design skill sources are required');
+  assert.equal(design.skills.length, 3, 'Exactly three design skill entries are required');
+  assert.deepEqual(design.skills.map(x=>x.name).sort(), ['awesome-design-audit','design-taste-frontend','web-design-guidelines'],
+    'All three named design specialties must be registered');
   assert.equal(new Set(reg.roles.map(x => x.name)).size, 28, 'Duplicate role');
   assert.equal(plan.stories.length, 59, 'Story routes missing');
   assert.equal(new Set(plan.stories.map(x => x.storyId)).size, 59, 'Duplicate routed story');
 
   const allSlugs = readdirSync(path.join(root, '.github/skills'), {withFileTypes: true})
     .filter(x => x.isDirectory()).map(x => x.name);
-  assert.deepEqual(allSlugs.sort(), reg.roles.map(x => x.name).sort(), 'Disk skill directories differ from registry');
+  const designSlugs = design.skills.map(x => x.name);
+  const councilSlugs = reg.roles.map(x => x.name);
+  assert.equal(new Set([...councilSlugs,...designSlugs]).size,31,'Skill names must be unique across groups');
+  assert.deepEqual(allSlugs.sort(), [...councilSlugs,...designSlugs].sort(),
+    'Disk skills must match the 28 Council roles plus 3 design skills');
   const seen = new Set();
   for (const role of reg.roles) {
     const file = role.skillFile;
@@ -58,6 +68,35 @@ function check() {
     assert.ok(content.includes('## Role-specific story gate and executable evidence'), 'Role-specific proof missing ' + file);
     assert.ok(content.includes('DEV'), 'Owner approval rule absent ' + file);
     seen.add(role.name);
+  }
+  for (const skill of design.skills) {
+    assert.equal(skill.path, `.github/skills/${skill.name}/SKILL.md`, 'Design skill path mismatch');
+    assert.ok(existsSync(path.join(root,skill.path)), 'Missing design skill '+skill.path);
+    const content=read(skill.path);
+    const meta=content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(meta,'Missing design skill frontmatter '+skill.path);
+    assert.ok(new RegExp(`^name:\\s*["']?${skill.name}["']?\\s*$`, 'm').test(meta[1]),
+      'Design skill frontmatter name mismatch '+skill.path);
+    assert.ok(/^description:\s*.+$/m.test(meta[1]),
+      'Design skill description missing '+skill.name);
+    assert.ok(skill.source?.repo && /^[0-9a-f]{40}$/.test(skill.source.commit),
+      'Pinned upstream version missing '+skill.name);
+    if(skill.rubrics) {
+      assert.equal(skill.rubrics.length,3,'Awesome Design must provide three rubrics');
+      for(const file of skill.rubrics) assert.ok(existsSync(path.join(root,file)), 'Missing design rubric '+file);
+    }
+    if(skill.instrument) assert.ok(existsSync(path.join(root,skill.instrument)),
+      'Missing design audit instrument '+skill.instrument);
+  }
+  for (const file of ['docs/design/PITCHMIND-DESIGN-SYSTEM.md',
+    'docs/design/FRONTEND-DESIGN-DELIVERY.md','docs/design/VENDOR-SOURCES.md',
+    'docs/design/vendor/taste-skill-LICENSE.txt','scripts/test_design_skills.mjs']) {
+    assert.ok(existsSync(path.join(root,file)), 'Missing design governance or test '+file);
+  }
+  for (const role of ['ui-ux-engineer','lead-frontend-engineer','accessibility-engineer','qa-architect']) {
+    const text=read(`.github/skills/${role}/SKILL.md`);
+    for(const name of designSlugs) assert.ok(text.includes(name),
+      'Role '+role+' is missing required design specialist '+name);
   }
   const sourceTitles = new Map(stories.map(x => [x[1], x[2]]));
   for (const row of plan.stories) {
@@ -82,7 +121,7 @@ function check() {
   assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
   assert.equal(counts.P0,49); assert.equal(counts.P1,7); assert.equal(counts.P2,3);
-  return {epics:epics.length,stories:stories.length,skills:reg.roles.length,priority:counts,cycles:0,approvalGates:2};
+  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
 }
 
 if (process.argv.includes('--self-test')) {

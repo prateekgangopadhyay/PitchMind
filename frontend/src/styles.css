@@ -1,1 +1,39 @@
 :root{font-family:Inter,system-ui,-apple-system,sans-serif;background:#07131c;color:#edf6f8;font-synthesis:none}*{box-sizing:border-box}body{margin:0}button,select,input{font:inherit}button,select{color:inherit;background:#102733;border:1px solid #315361;border-radius:20px;padding:10px 16px}button{cursor:pointer}button:hover{border-color:#4aefac}button:disabled{opacity:.5;cursor:wait}:focus-visible{outline:3px solid #4aefac;outline-offset:4px}header{display:flex;justify-content:space-between;align-items:center;padding:20px 4%;border-bottom:1px solid #203743}.brand{font-size:26px;font-weight:800;letter-spacing:-1px}.brand span{color:#4aefac}.tag,.eyebrow{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#64eab4}.tag{padding:8px 12px;border:1px solid #274f42;border-radius:20px}main{max-width:1600px;margin:auto;padding:24px 4%}.intro{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}h1{font-size:25px;margin:0 0 8px}h2{font-size:18px;margin:0 0 6px}h3{font-size:15px;margin:0 0 10px}p{line-height:1.6;color:#b3c6d1;margin:6px 0}.scoreboard{display:flex;align-items:center;justify-content:space-evenly;padding:26px;background:linear-gradient(110deg,#102b38,#0b1c28);border:1px solid #254351;border-radius:12px;gap:20px}.team{font-size:22px;font-weight:700}.score{font-size:46px;font-weight:800}.clock{text-align:center;color:#4aefac;font-size:26px;font-weight:700}.clock small{display:block;font-size:11px;color:#a7bdc9;margin-top:5px}.story{display:flex;justify-content:space-between;align-items:center;margin:14px 0;padding:20px;border:1px solid #274551;background:#10232d;border-radius:10px;gap:20px}.story p{color:#edf6f8;font-weight:600;font-size:19px}.dashboard{align-items:start;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,.85fr) minmax(290px,1fr);gap:14px}.panel{background:#0c1e28;border:1px solid #243e4c;border-radius:10px;padding:18px;min-width:0}.panel-head{margin-bottom:14px}.pitch{width:100%;display:block;background:repeating-linear-gradient(90deg,#164931 0%,#164931 12.5%,#1b5136 12.5%,#1b5136 25%);border-radius:5px}.pitch text{font-family:system-ui;font-size:2.6px;fill:#07131c;font-weight:700}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#afc4ce;margin:14px 0 0}.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}.home{background:#fa697b}.away{background:#6ba5ff}.timeline{max-height:440px;overflow:auto}.event{display:flex;align-items:start;text-align:left;width:100%;border:0;border-top:1px solid #253c49;border-radius:0;background:none;padding:14px 0;gap:12px}.event strong{display:block;font-size:13px}.event small{display:block;line-height:1.5;color:#aac0ce}.minute{color:#4aefac;min-width:37px}.side{display:flex;flex-direction:column;gap:14px}.badge{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#4aefac}.evidence-list{padding-left:20px;font-size:13px;color:#b4c9d4;line-height:1.8}.replay{margin-top:14px}.replay-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.replay input{width:100%;accent-color:#4aefac;margin:22px 0 8px}.bounds{display:flex;justify-content:space-between;font-size:12px;color:#a6bfcd}.active{background:#42edaa;color:#05231b;border-color:#42edaa}.mode{display:flex;gap:8px;margin:14px 0}.mode button{font-size:12px;padding:7px 13px}.notice{padding:24px;border:1px solid #41616e;border-radius:10px;margin-top:24px}.error{border-color:#b46a6a}footer{margin-top:20px;color:#93abb8;font-size:12px}.empty{font-size:13px;color:#9eb8c7;padding:15px 0}@media(max-width:1100px){.dashboard{grid-template-columns:1.5fr 1fr}.side{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr}}@media(max-width:700px){main{padding:18px}.dashboard,.side{display:flex;flex-direction:column}.team{font-size:15px}.score{font-size:32px}.scoreboard{padding:18px 10px;gap:10px}.story,.intro{align-items:start;flex-direction:column}.tag{font-size:9px}.brand{font-size:22px}.clock{font-size:20px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+
+/* Design-skill baseline: accessible dark native UI and inspectable premium tokens.
+   These are progressive additions, not a claim that all seven mockups are built. */
+:root {
+  color-scheme: dark;
+  --pm-bg: #07131c;
+  --pm-surface: #0c1e28;
+  --pm-surface-raised: #102733;
+  --pm-border: #243e4c;
+  --pm-text: #edf6f8;
+  --pm-text-secondary: #b3c6d1;
+  --pm-accent: #4aefac;
+  --pm-home-marker: #fa697b;
+  --pm-away-marker: #6ba5ff;
+}
+.score, .clock, .minute, .bounds { font-variant-numeric: tabular-nums; }
+button, select { min-height: 44px; }
+.skip-link {
+  position: absolute;
+  top: -5rem;
+  left: 1rem;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  color: var(--pm-bg);
+  background: var(--pm-accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+.skip-link:focus-visible { top: 1rem; outline: 3px solid var(--pm-text); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

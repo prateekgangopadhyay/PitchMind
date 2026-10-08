@@ -45,3 +45,6 @@ Use when planning test strategy, validating acceptance, certifying story complet
 **Mandatory deliverable:** Traceable golden, negative, degraded and E2E evidence matrix with real execution results. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
 **Handoff to:** football-analytics-engineer, accessibility-engineer, performance-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+
+## Three-skill frontend release gate
+For UI stories EP07-S01..S06 and EP08-S06, require evidence that [Taste](../design-taste-frontend/SKILL.md) was used for focused code refinement, [Vercel Web Design Guidelines](../web-design-guidelines/SKILL.md) was applied to changed TSX/CSS with `file:line` findings (freshness stated), and [Awesome Design audit](../awesome-design-audit/SKILL.md) scored actual desktop/mobile/error screenshots with completed iteration. Confirm real Node/React test results, selected-time no-lookahead, WCAG keyboard/AT, source-fed facts and no counterfeit EPL media. Record exceptions explicitly in the existing story register. Council role count remains 28; 3 specialty skills add review capabilities only. Do not accept based on screenshot score alone.
