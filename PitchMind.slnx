@@ -13,5 +13,6 @@
     <Project Path="tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj" />
     <Project Path="tests/PitchMind.Architecture.Tests/PitchMind.Architecture.Tests.csproj" />
     <Project Path="tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj" />
+    <Project Path="tests/PitchMind.Contracts.Tests/PitchMind.Contracts.Tests.csproj" />
   </Folder>
 </Solution>

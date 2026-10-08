@@ -1,5 +1,5 @@
 # PitchMind — Consolidated API Contract and Implementation Registry
-**Current baseline:** `main@287d0b5`, 2026-10-08. **Design target:** proposed `v1` extension, **NOT implemented** unless explicitly marked `CURRENT`. Source files: `src/PitchMind.Api/Program.cs`, `frontend/src/api.ts`. No missing API is assumed working because it appears here.
+**Current baseline:** EP01-S04 contract work in progress on 2026-10-08. **Design target:** proposed `v1` extension, **NOT implemented** unless explicitly marked `CURRENT`. Source files: `src/PitchMind.Api/Program.cs`, `src/PitchMind.Contracts/V1/MatchContracts.cs`, `frontend/src/api.ts`. No missing API is assumed working because it appears here.
 
 ## Principles
 Public route prefix `/api/v1`; JSON camelCase; timestamps match selected-time contract, period/added-time explicit when supported; football data exclusively from versioned synthetic JSON/authoritative projections; `X-Correlation-ID` returned in every response. All read responses include `provenance`, `sourceVersion/hash`, `canonicalRevision`, `schemaVersion` and `asOf` **once implemented**. Never leak events later than `atSeconds`. JWT with scoped roles for nonpublic and mutation routes. Bounded queries, stable cursor pagination, ProblemDetails on errors. For prototype current endpoints `atSeconds` integer 0..5400, default 0; do not extrapolate to added-time games. Revisions with `ETag` / `If-None-Match` proposed.
@@ -9,14 +9,16 @@ Public route prefix `/api/v1`; JSON camelCase; timestamps match selected-time co
 |---|---|---|---|
 | GET | `/api/health` | **CURRENT** | Process identification, not readiness of external dependencies |
 | GET | `/health` | **CURRENT** | ASP.NET health, no Azure dependency probe |
-| GET | `/api/v1/matches` | **CURRENT** | One entire offline `SyntheticFixture`; unpaginated; returns events/frames as part of fixture |
+| GET | `/api/v1/matches` | **CURRENT** | One entire offline `FixtureResponse` (`schemaVersion` is not claimed); unpaginated; returns events/frames as part of fixture |
 | GET | `/api/v1/matches/{matchId}/state?atSeconds=N` | **CURRENT** | Read-only projected score and selected sampled frame |
 | GET | `/api/v1/matches/{matchId}/events?atSeconds=N` | **CURRENT** | Time-bounded offline synthetic event wrapper array |
 | GET | `/api/v1/matches/{matchId}/insights?atSeconds=N` | **CURRENT** | One bounded evidence-supported pressure sequence after full outcome |
 | GET | `/api/v1/matches/{matchId}/evidence/{insightId}?atSeconds=N` | **CURRENT** | Selected-time evidence conditions, 7 event IDs, frame IDs and limitations |
 | POST | `/api/v1/matches/{matchId}/analyst` | **CURRENT** | `{insightId,atSeconds,audience:'fan'|'analyst'}`; deterministic-fallback ONLY, 30/IP/min and 4KiB body cap |
 
-These are from the offline fixture, **not** PostgreSQL, Azure Event Hubs, Microsoft Foundry or authenticated SignalR. Errors currently 400 for bad time/audience, 404 for unknown match/evidence, 429 analyst rate-limit; 413 oversized body. Current `atSeconds` 0..5400, clock halftime 2700 and fulltime 5400.
+These are from the offline fixture, **not** PostgreSQL, Azure Event Hubs, Microsoft Foundry or authenticated SignalR. Successful `/api/v1` responses include `X-Contract-Version: 1` and all responses include `X-Correlation-ID`. Error bodies use `application/problem+json` with `type,title,status,code,correlationId` (plus optional `detail,instance`); the analyst limiter/framework body-size rejection retain framework-generated failure bodies until their dedicated API stories. Current `atSeconds` 0..5400, clock halftime 2700 and fulltime 5400. C# DTOs are in `PitchMind.Contracts.V1`; React consumer interfaces are in `frontend/src/api.ts`. No `canonicalRevision` is emitted by this offline API because it has no canonical store or revision.
+
+The current v1 DTO property names and representative JSON types are pinned by `PitchMind.Contracts.Tests`. `MatchContractMappings` is the only API mapping from the current application read models to public football response DTOs. `FixtureResponse.version` retains the source fixture version; API contract version is `X-Contract-Version`. Current offline frame DTOs explicitly identify their generated 105 × 68 metre coordinate convention; this does not certify the supplied candidate feed's units or mappings. The React test fetch stubs are test-only fixtures; production UI data is loaded through `request()` and never falls back to those examples.
 
 ### Target API routes — do not advertise as executable before acceptance
 | Method | Route | Story owner | Request | Response / authorization |
@@ -63,7 +65,7 @@ New required routes are **proposals pending exact JSON schema and actual impleme
 4. Pagination: stable `(matchId,revision,sequence)` cursor; max proposed 100 events per page; endpoint rejects excessive unbounded requests with 400 or 413; complete data not duplicated/omitted across pages.
 
 ## Errors, security and evolution
-`application/problem+json` with `type,title,status,detail,instance,correlationId` and typed `code`: `INVALID_TIME`, `SCHEMA_UNSUPPORTED`, `EVIDENCE_MISSING`, `REVISION_CONFLICT`, `INSUFFICIENT_TRACKING`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMITED`, `DEPENDENCY_UNAVAILABLE`. Use 400 for validation, 401 unauthenticated, 403 denied, 404 inaccessible/unknown, 409 revision/conflict, 413 oversized, 422 semantically invalid envelope, 429 exhausted rate, 503 unavailable. No sensitive provider payload in error detail.
+`application/problem+json` with `type,title,status,detail,instance,correlationId` and typed `code`: `INVALID_TIME`, `SCHEMA_UNSUPPORTED`, `EVIDENCE_MISSING`, `REVISION_CONFLICT`, `INSUFFICIENT_TRACKING`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMITED`, `DEPENDENCY_UNAVAILABLE`. The currently mapped validation and evidence failures use `INVALID_REQUEST` and `EVIDENCE_MISSING`; middleware/framework-generated 413 and 429 responses are not yet normalized. Use 400 for validation, 401 unauthenticated, 403 denied, 404 inaccessible/unknown, 409 revision/conflict, 413 oversized, 422 semantically invalid envelope, 429 exhausted rate, 503 unavailable. No sensitive provider payload in error detail.
 Authentication target: Entra/OIDC auth code+PKCE; strong JWT issuer/audience/expiration signing key validation; scoped roles fan/analyst/admin; anonymous access only an owner-approved synthetic demo profile. Mutations require appropriate role, anti-CSRF where using cookies, replay/export quotas, strict CORS/CSP, no client-side Foundry credentials.
 API version `v1` is additive compatible. Breaking schema/meaning change = `v2` and migration plan. Generated OpenAPI document and typed React/.NET contract tests should be published in CI. Every newly implemented endpoint must update this file and receive positive, negative, historical, authorization, rate-limit, failure and cursor tests **in the same PR**.
 
