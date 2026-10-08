@@ -50,6 +50,14 @@ class NugetVulnerabilityAuditTests(unittest.TestCase):
         ):
             with self.subTest(report=report), self.assertRaises(audit.AuditError):
                 audit.validate_report(report, {"/repo/app.csproj"})
+        clean_app_only = {"version": 1, "sources": ["https://api.nuget.org/v3/index.json"],
+                          "projects": [{"path": "/repo/app.csproj"}]}
+        with self.assertRaisesRegex(audit.AuditError, "coverage differs"):
+            audit.validate_report(clean_app_only, {"/repo/app.csproj", "/repo/tests.csproj"})
+        with self.assertRaisesRegex(audit.AuditError, "coverage differs"):
+            audit.validate_report({**clean_app_only, "projects": [
+                {"path": "/repo/app.csproj"}, {"path": "/repo/extra.csproj"}
+            ]}, {"/repo/app.csproj"})
 
     def test_rejects_malformed_nested_framework_and_package_collections(self):
         clean = {"version": 1, "sources": ["https://api.nuget.org/v3/index.json"],
