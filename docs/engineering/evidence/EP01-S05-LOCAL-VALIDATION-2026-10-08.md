@@ -13,12 +13,15 @@
 | Feed profiler | `python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v` | 5 tests passed. |
 | Council routing/contract validation | `node scripts/validate_operating_model.mjs` and `node scripts/validate_operating_model.mjs --self-test` | Both passed; 12 epics, 59 stories, 28 skills, no dependency cycles, two approval gates. |
 | Shell syntax and Compose file syntax | `bash -n scripts/*.sh` and `docker compose --env-file docker/.env.example -f docker/compose.yml config --quiet` | Both passed. |
+| Local service health and PostgreSQL integration | `bash scripts/dev-health.sh` and `bash scripts/test-postgres.sh` | PostgreSQL and Redis reported healthy; all 5 PostgreSQL integration tests passed, with 0 skipped. The script created and removed its uniquely named test database. Existing local services were reused and left running. |
+| Local API readiness and HTTP smoke | Start with `dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5082 --no-build -c Release`, then run `bash scripts/dev-api-health.sh http://127.0.0.1:5082` and `python3 scripts/api-smoke.py http://127.0.0.1:5082` | Both passed against this worktree's API binary. The smoke covered selected-time score boundary, evidence timing, deterministic fallback, invalid audience/time, unknown match, and final score. The API process was stopped after the check. |
 
 ## Unverified gates and blockers
 
-- `docker info` failed with permission denied on the local Docker socket. PostgreSQL and Redis were not started. The five database integration tests remained skipped, and no live API/service smoke ran.
+- The first Docker check was denied by the default sandbox. After running the authorized local Docker check, existing PostgreSQL/Redis services were healthy and the isolated integration tests passed. They were already running, so a clean-machine first startup path remains unverified.
 - No Azure DevOps run, required GitHub branch check, deliberately failing gate, or hosted clean-runner result was observed.
 - No security scanner, threat model execution, accessibility run, or performance/load test was run in this validation.
+- The API smoke proves the existing offline demo contract only. The current `SyntheticMatchService` still supplies a transitional in-code fixture; it does not prove ingestion of the owner-supplied JSON or canonical PostgreSQL API behavior.
 - This is local evidence at the stated base revision, not a pipeline run or Product Owner acceptance. EP01-S05 remains unaccepted until hosted pipeline evidence and the remaining baseline checks are independently reviewed.
 
 ## Change made
