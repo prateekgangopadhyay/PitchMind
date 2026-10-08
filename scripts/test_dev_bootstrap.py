@@ -117,6 +117,18 @@ if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
         self.assertTrue(link.is_symlink())
         self.assertEqual(target.read_text(), "DO_NOT_CHANGE=1\n")
 
+    def test_bootstrap_refuses_dangling_symlink_before_writing_credentials(self) -> None:
+        target = Path(self.temp.name) / "outside.env"
+        link = self.root / "docker" / ".env"
+        link.symlink_to(target)
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing to use docker/.env symlink", result.stderr)
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(target.exists())
+        self.assertFalse(self.openssl_count.exists())
+
     def test_existing_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
         env_file.write_text("POSTGRES_PASSWORD=kept\nREDIS_PASSWORD=kept-too\n", encoding="utf-8")

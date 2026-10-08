@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+[[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
 command -v docker >/dev/null || { echo "Docker CLI not installed" >&2; exit 1; }
 docker info >/dev/null || { echo "Start Docker Desktop first" >&2; exit 1; }
 if [[ ! -f docker/.env ]]; then
