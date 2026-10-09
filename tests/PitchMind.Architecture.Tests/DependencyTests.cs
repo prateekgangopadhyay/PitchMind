@@ -217,7 +217,7 @@ public sealed class DependencyTests
             var runtimeFrameworkVersion = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Name;
             File.WriteAllText(projectPath,
             "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
-            "<ItemGroup><Reference Include='InfrastructureAlias' /></ItemGroup>" +
+            "<ItemGroup><Reference Include='InfrastructureAlias' /><Reference Include='HarmlessBaselineReference' /></ItemGroup>" +
                 "<Target Name='InjectProjectReference' BeforeTargets='ResolveProjectReferences'><ItemGroup>" +
                 "<ProjectReference Include='Dependency.csproj' />" +
                 "</ItemGroup></Target>" +
@@ -229,6 +229,7 @@ public sealed class DependencyTests
                 "</ItemGroup></Target>" +
             "<Target Name='InjectInternalReference' BeforeTargets='ResolveReferences'><ItemGroup>" +
             "<Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
+            "<Reference Include='PitchMind.Infrastructure' />" +
             "<PackageReference Include='PitchMind.Domain' Version='1.0.0' />" +
             "</ItemGroup></Target></Project>");
             File.WriteAllText(Path.Combine(root.FullName, "Dependency.csproj"),
@@ -243,6 +244,9 @@ public sealed class DependencyTests
 
             Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetReference");
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetReference 'InfrastructureAlias'", StringComparison.Ordinal));
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetReference" &&
+                item.Attribute("Include")?.Value == "PitchMind.Infrastructure");
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetReference 'PitchMind.Infrastructure'", StringComparison.Ordinal));
             Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetResolvedReference" &&
                 item.Attribute("Include")?.Value.EndsWith("InfrastructureAlias.dll", StringComparison.Ordinal) == true);
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetResolvedReference", StringComparison.Ordinal) &&
@@ -569,7 +573,8 @@ public sealed class DependencyTests
             "ModifiedTime", "CreatedTime", "AccessedTime", "DefiningProjectDirectory",
             "DefiningProjectName", "DefiningProjectExtension"
         };
-        return string.Join('\u001f', new[] { itemType }.Concat(item.Attributes()
+        var identity = item.Attribute("Include")?.Value ?? string.Empty;
+        return string.Join('\u001f', new[] { itemType, $"Include={identity}" }.Concat(item.Attributes()
             .Where(attribute => attribute.Name.LocalName != "Include" && !engineMetadata.Contains(attribute.Name.LocalName))
             .OrderBy(attribute => attribute.Name.LocalName, StringComparer.Ordinal)
             .Select(attribute => $"{attribute.Name.LocalName}={attribute.Value}")));
