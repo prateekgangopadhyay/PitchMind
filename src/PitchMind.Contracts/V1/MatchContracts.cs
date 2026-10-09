@@ -99,6 +99,13 @@ public sealed record EvidenceNodeResponse(
 
 public sealed record EvidenceEdgeResponse(string FromNodeId, string ToNodeId, string Relation);
 
+public sealed record KeyMomentResponse(
+    string Id, string MatchId, string SourceVersion, string Provenance, int? CanonicalRevision,
+    int SelectedTimeSeconds, long ThroughSequence, int ClockSeconds, long Sequence,
+    string Kind, string TruthClass, string Title, string Summary, decimal Relevance,
+    string PolicyVersion, string PolicyStatus, bool Publishable,
+    IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds, IReadOnlyList<string> EvidenceClaimNodeIds);
+
 public sealed record EvidenceResponse(
     InsightResponse Insight,
     IReadOnlyList<SimulationEventResponse> Events,

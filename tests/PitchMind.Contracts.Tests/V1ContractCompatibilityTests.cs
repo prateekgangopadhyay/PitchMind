@@ -81,6 +81,20 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void Key_moment_contract_carries_selected_time_relevance_and_why_references()
+    {
+        var service = new PitchMind.Application.Matches.SyntheticMatchService();
+        var moment = service.GetKeyMoments(3309).Single(item => item.Kind == "goal").ToResponse();
+
+        AssertJsonProperties(moment, "id", "matchId", "sourceVersion", "provenance", "canonicalRevision", "selectedTimeSeconds",
+            "throughSequence", "clockSeconds", "sequence", "kind", "truthClass", "title", "summary", "relevance",
+            "policyVersion", "policyStatus", "publishable", "eventIds", "frameIds", "evidenceClaimNodeIds");
+        Assert.Equal(3309, moment.SelectedTimeSeconds);
+        Assert.Single(moment.EventIds);
+        Assert.False(moment.Publishable);
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
         var source = SyntheticFixtureGenerator.Generate();

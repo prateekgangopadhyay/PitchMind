@@ -9,6 +9,13 @@ export interface Snapshot { matchId: string; clockSeconds: number; period: numbe
 export interface TacticalContext { scoreline: string; teamRole: 'home' | 'away'; numericalAdvantage: number; opponentPhase: string; matchPhase: string }
 export interface EvidenceNode { id: string; kind: 'claim' | 'event' | 'frame' | 'metric'; truthClass: 'fact' | 'derivation' | 'pattern' | 'interpretation' | 'hypothesis'; description: string; eventId: string | null; frameId: string | null; clockSeconds: number | null; sequence: number | null; sourceVersion: string; canonicalRevision: number | null; numericValue: number | null; unit: string | null }
 export interface EvidenceEdge { fromNodeId: string; toNodeId: string; relation: 'precedes' | 'derived_from' }
+export interface KeyMoment {
+  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
+  selectedTimeSeconds: number; throughSequence: number; clockSeconds: number; sequence: number;
+  kind: string; truthClass: string; title: string; summary: string; relevance: number;
+  policyVersion: string; policyStatus: string; publishable: boolean;
+  eventIds: string[]; frameIds: string[]; evidenceClaimNodeIds: string[];
+}
 export interface EvidenceGraph { matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; detectorVersion: string; policyStatus: string; publishable: boolean; claimNodeId: string; nodes: EvidenceNode[]; edges: EvidenceEdge[] }
 export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
 export interface Evidence { insight: Insight; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; conditions: string[]; limitations: string[] }
