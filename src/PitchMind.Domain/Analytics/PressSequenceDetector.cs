@@ -136,7 +136,7 @@ public static class PressSequenceDetector
                 $"policy: {policy.Version} ({policy.ReviewStatus}); publication approval is absent"
             });
 
-            detections.Add(new TacticalInsight(
+            var insight = new TacticalInsight(
                 $"press-{trigger.Event.EventId:D}", input.MatchId, goal.Event.ClockSeconds,
                 "Synthetic pressure sequence candidate",
                 $"{pressingTeam}'s observed pressure is followed by a regain, cutback, shot and goal in this synthetic fixture. At selected time the scoreline is {scoreline}; active-player difference for this team is {context.NumericalAdvantage:+#;-#;0}. The sequence describes observed events, not intent, control, or comparative tactical quality.",
@@ -152,7 +152,11 @@ public static class PressSequenceDetector
                 Publishable = policy.Publishable,
                 Conditions = conditions,
                 Context = context
-            });
+            };
+            var graph = TacticalEvidenceGraphBuilder.Build(insight, input.Events, input.Frames);
+            if (insight.Publishable != graph.Publishable)
+                throw new InvalidDataException("The detector claim cannot publish without validated canonical evidence.");
+            detections.Add(insight with { EvidenceGraph = graph });
         }
         return detections.AsReadOnly();
     }

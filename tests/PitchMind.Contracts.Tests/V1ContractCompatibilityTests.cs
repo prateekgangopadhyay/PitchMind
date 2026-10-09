@@ -30,7 +30,7 @@ public sealed class V1ContractCompatibilityTests
         var simulationEvent = new SimulationEventResponse(sourceEvent, "team", "player", "action", "outcome", null);
         var frame = new TrackingFrameResponse("frame", 0, 0, 0, "offline synthetic fixture coordinate convention", new[] { new PitchPositionResponse("player", "team", 0, 0) });
         var insight = new InsightResponse("insight", "match", 0, "title", "summary", "classification", "detector", new[] { Guid.Empty }, new[] { "frame" },
-            "synthetic-v2", null, 0, -1, "unapproved-demo", false, Array.Empty<string>(), null);
+            "synthetic-v2", null, 0, -1, "unapproved-demo", false, Array.Empty<string>(), null, null);
         var evidence = new EvidenceResponse(insight, new[] { simulationEvent }, new[] { frame }, "coordinate convention", Array.Empty<string>(), Array.Empty<string>());
         var explanation = new ExplanationResponse("insight", 0, "fan", "deterministic-fallback", "text", new[] { Guid.Empty }, Array.Empty<string>());
         var problem = new ApiProblemResponse("about:blank", "Bad request", 400, "INVALID_REQUEST", "correlation", Instance: "/api/v1/matches");
@@ -40,9 +40,18 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(frame, "id", "clockSeconds", "ballX", "ballY", "coordinateConvention", "players");
         AssertJsonProperties(frame.Players[0], "playerId", "teamId", "x", "y");
         AssertJsonProperties(insight, "id", "matchId", "clockSeconds", "title", "summary", "classification", "detectorVersion", "eventIds", "frameIds",
-            "sourceVersion", "canonicalRevision", "selectedTimeSeconds", "throughSequence", "policyStatus", "publishable", "conditions", "context");
+            "sourceVersion", "canonicalRevision", "selectedTimeSeconds", "throughSequence", "policyStatus", "publishable", "conditions", "context", "evidenceGraph");
         AssertJsonProperties(new TacticalContextResponse("home 1–0 away", "home", 0, "opponent defending", "SecondHalf"),
             "scoreline", "teamRole", "numericalAdvantage", "opponentPhase", "matchPhase");
+        AssertJsonProperties(new EvidenceGraphResponse("match", "synthetic-v2", "synthetic", null, 0, -1,
+                "press-sequence-v2", "unapproved-demo", false, "claim:demo", Array.Empty<EvidenceNodeResponse>(), Array.Empty<EvidenceEdgeResponse>()),
+            "matchId", "sourceVersion", "provenance", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
+            "detectorVersion", "policyStatus", "publishable", "claimNodeId", "nodes", "edges");
+        AssertJsonProperties(new EvidenceNodeResponse("event:demo", "event", "fact", "Synthetic event", Guid.Empty, null,
+                0, 0, "synthetic-v2", null, null, null),
+            "id", "kind", "truthClass", "description", "eventId", "frameId", "clockSeconds", "sequence", "sourceVersion", "canonicalRevision", "numericValue", "unit");
+        AssertJsonProperties(new EvidenceEdgeResponse("claim:demo", "event:demo", "derived_from"),
+            "fromNodeId", "toNodeId", "relation");
         AssertJsonProperties(evidence, "insight", "events", "frames", "coordinateConvention", "conditions", "limitations");
         AssertJsonProperties(explanation, "insightId", "clockSeconds", "audience", "source", "text", "eventIds", "limitations");
         AssertJsonProperties(problem, "type", "title", "status", "code", "correlationId", "detail", "instance");
