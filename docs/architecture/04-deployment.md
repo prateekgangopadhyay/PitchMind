@@ -4,7 +4,7 @@
 
 For the resource-by-resource current/deferred/blocking reconciliation, see [EP02-S01 IaC reconciliation](../engineering/EP02-S01-IAC-RECONCILIATION.md). Its observed state comes from the dated DEV evidence; private connectivity and the canonical PostgreSQL path remain unverified blockers.
 
-The isolated [`infra/canonical-dev-topology.bicep`](../../infra/canonical-dev-topology.bicep) root is an executable candidate for internal ACA, private PostgreSQL, and conditional Blob/Key Vault/Event Hubs private endpoints. It requires caller-supplied IDs for existing dependency services, is disabled by default, and is not referenced by the normal deployment pipeline. Compilation is not deployment evidence; subnet overlap, target-service policy/DNS ownership, SKU/region capacity, identity, app workloads, and end-to-end connectivity still require review and separately approved verification.
+The isolated [`infra/canonical-dev-topology.bicep`](../../infra/canonical-dev-topology.bicep) root is an executable candidate for internal ACA, private PostgreSQL, and conditional Blob/Key Vault/Event Hubs private endpoints. It requires caller-supplied IDs for existing dependency services, is disabled by default, and is not referenced by the normal deployment pipeline. Because its ACA environment is internal and public network access is disabled, this candidate has no direct public-browser path. A public edge design is a blocking decision; Front Door Premium with a Private Link origin or a reviewed ACA topology change are options, neither implemented or verified here. Compilation is not deployment evidence; subnet overlap, target-service policy/DNS ownership, SKU/region capacity, identity, app workloads, and end-to-end connectivity still require review and separately approved verification.
 
 ## CURRENT — observed DEV prototype (limited)
 ```mermaid
@@ -22,14 +22,12 @@ Previous deployment evidence cites image digest, revision and HTTP smoke. It **d
 
 ```mermaid
 flowchart TB
-  User["Public browser"] --> EDGE{"Edge choice"}
-  EDGE -->|MVP direct option| DIRECT["ACA TLS ingress + authentication / rate limit"]
-  EDGE -->|Feature-gated| WAF["Azure Front Door WAF"]
-  WAF --> API["ACA BFF/API"]
-  DIRECT --> API
+  User["Public browser"] --> EDGE["Public edge decision — blocking for internal ACA candidate"]
+  EDGE --> WAF["Front Door Premium WAF + Private Link origin — not declared / unverified"]
+  WAF --> API["Internal ACA BFF/API — public access disabled in candidate"]
   User -. "OIDC auth code + PKCE" .-> Entra["Entra External ID"]
   subgraph Network["VNet / delegated ACA + PostgreSQL + private-endpoint subnets; private DNS (candidate, unverified)"]
-    API --> PG[("PostgreSQL private endpoint / delegated private access")]
+    API --> PG[("PostgreSQL delegated VNet access")]
     API --> Signal["Azure SignalR authorized groups"]
     Worker["ACA EventWorker managed identity"] --> PG
     Worker --> EH["Event Hubs private link"]
@@ -51,6 +49,8 @@ flowchart TB
 ```
 
 **Actual SKU/network feasibility must be validated:** the diagram is conceptual. ACA environment/subnet delegation, PostgreSQL Flexible Server networking mode, Azure SignalR and Foundry private DNS/region availability, user-assigned identity scopes, Functions network capability and outbound routing require product-specific validation and actual connectivity tests. Do not bypass access restrictions to force an unapproved demo.
+
+The public edge shown above is a target option, not a configured route. The current candidate declares neither Front Door nor a public ACA ingress path. The existing offline demo's observed public ACA ingress does not prove reachability to the private canonical candidate.
 
 ## Separation and approval
 - **LOCAL:** Docker Compose PostgreSQL and Redis with explicit local adapters; no live Azure token required for domain tests.
