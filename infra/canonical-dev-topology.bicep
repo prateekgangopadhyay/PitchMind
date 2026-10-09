@@ -141,7 +141,7 @@ resource postgresDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@
 }
 
 resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
-  // Azure Public DNS suffix for Blob Private Link; keep cloud-specific DNS reviewed before extending this root to sovereign clouds.
+  // Derive the Blob Private Link suffix from the active Azure environment; sovereign-cloud behavior remains unvalidated.
   name: 'privatelink.blob.${az.environment().suffixes.storage}'
   location: 'global'
 }
