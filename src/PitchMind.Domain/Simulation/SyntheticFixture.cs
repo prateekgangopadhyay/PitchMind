@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 
@@ -23,77 +24,269 @@ public sealed record MatchExplanation(string InsightId, int ClockSeconds, string
 
 public static class SyntheticFixtureGenerator
 {
-    public const string Version = "synthetic-v1";
-    public static readonly MatchId FixtureId = new(new Guid("876855d7-86d3-4a34-9b51-2dd8c9799a91"));
+    public const string Version = "synthetic-v2";
+    private const string DefinitionResource = "PitchMind.Domain.Simulation.synthetic-fixture-v2.json";
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public static SyntheticFixture Generate(int seed = 42)
     {
-        var roles = new[] { "GK", "RB", "CB", "CB", "LB", "CM", "CM", "AM", "RW", "ST", "LW" };
-        SyntheticTeam Team(string id, string name) => new(id, name, "4-2-3-1", Array.AsReadOnly(roles.Select((role, i) =>
-            new SyntheticPlayer($"{id}-{i + 1}", $"{name.Split(' ')[0]} Player {i + 1}", id, i + 1, role)).ToArray()));
-        var home = Team("harbour", "Harbour FC");
-        var away = Team("ridge", "Ridge Athletic");
-        var events = new List<SimulationEvent>();
-        void Add(int clock, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
-        {
-            var sequence = events.Count;
-            var id = StableId($"{Version}:{seed}:{clock}:{sequence}:{action}");
-            var evt = MatchEvent.Create(id, FixtureId, sequence, type, clock, clock < 2700 ? 1 : 2,
-                new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(clock));
-            events.Add(new(evt, team, player, action, outcome, related));
-        }
-        Add(0, MatchEventType.KickOff, home.Id, "harbour-10", "kick-off", "complete");
-        for (var clock = 30; clock < 5400; clock += 30)
-        {
-            if (clock is >= 3290 and <= 3330) continue;
-            var isHome = (clock / 30 + seed) % 2 == 0;
-            var team = isHome ? home.Id : away.Id;
-            Add(clock, MatchEventType.Pass, team, $"{team}-6", "circulation", "complete", $"{team}-7");
-        }
-        Add(3290, MatchEventType.Pass, away.Id, "ridge-3", "back-pass", "complete", "ridge-1");
-        Add(3293, MatchEventType.Pressure, home.Id, "harbour-10", "press-arrival", "pressure", "ridge-1");
-        Add(3296, MatchEventType.Pass, away.Id, "ridge-1", "pressured-pass", "incomplete", "ridge-2");
-        Add(3299, MatchEventType.Turnover, home.Id, "harbour-11", "high-regain", "won", "ridge-2");
-        Add(3304, MatchEventType.Pass, home.Id, "harbour-11", "cutback", "complete", "harbour-10");
-        Add(3308, MatchEventType.Shot, home.Id, "harbour-10", "shot", "on-target");
-        Add(3309, MatchEventType.Goal, home.Id, "harbour-10", "goal", "scored");
-        Add(4680, MatchEventType.Goal, away.Id, "ridge-10", "goal", "scored");
-        Add(5400, MatchEventType.FullTime, "", "", "full-time", "complete");
-        // Sequence follows match time, including inserted scenario actions.
-        var ordered = events.OrderBy(e => e.Event.ClockSeconds).ThenBy(e => e.Event.Sequence)
-            .Select((e, i) => e with { Event = e.Event with { Sequence = i } }).ToArray();
-        var times = Enumerable.Range(0, 181).Select(i => i * 30).Concat(new[] {3290,3293,3296,3299,3304,3308,3309}).Distinct().Order().ToArray();
-        var frames = times.Select(clock => Frame(clock, home, away, seed)).ToArray();
-        return new(FixtureId.ToString(), Version, seed, "synthetic", 5400, home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
+        return GenerateFromDefinition(LoadDefinition(), seed);
     }
 
-    private static TrackingFrame Frame(int clock, SyntheticTeam home, SyntheticTeam away, int seed)
+    internal static SyntheticFixture GenerateFromDefinitionJson(string json, int seed = 42)
+    {
+        var definition = JsonSerializer.Deserialize<FixtureDefinition>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
+        return GenerateFromDefinition(definition, seed);
+    }
+
+    private static SyntheticFixture GenerateFromDefinition(FixtureDefinition definition, int seed)
+    {
+        if (!string.Equals(definition.Version, Version, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Fixture definition version '{definition.Version}' does not match generator '{Version}'.");
+        ValidateDefinition(definition);
+
+        var homeDefinition = definition.Teams[0];
+        var awayDefinition = definition.Teams[1];
+        var home = ToTeam(homeDefinition);
+        var away = ToTeam(awayDefinition);
+        var fixtureMatchId = new MatchId(StableId($"{definition.FixtureId}:{definition.Version}:{seed}"));
+        var events = new List<SimulationEvent>();
+
+        void Add(int clock, int period, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
+        {
+            var sequence = events.Count;
+            var id = StableId($"{definition.FixtureId}:{definition.Version}:{seed}:{clock}:{sequence}:{type}:{action}");
+            var occurredAt = definition.StartUtc.AddSeconds(clock);
+            var matchEvent = MatchEvent.Create(id, fixtureMatchId, sequence, type, clock, period, occurredAt);
+            events.Add(new(matchEvent, team, player, action, outcome, related));
+        }
+
+        foreach (var item in definition.ScenarioEvents)
+            Add(item.ClockSeconds, item.Period, ParseEventType(item.Type), ResolveTeam(item.Team, home.Id, away.Id),
+                item.PlayerId, item.Action, item.Outcome, item.RelatedPlayerId);
+
+        for (var clock = definition.CirculationIntervalSeconds; clock < definition.DurationSeconds; clock += definition.CirculationIntervalSeconds)
+        {
+            if (clock == definition.HalfTimeSeconds || definition.SuppressedCirculationWindows.Any(w => clock >= w.StartSeconds && clock <= w.EndSeconds))
+                continue;
+            var teamDefinition = ((clock / definition.CirculationIntervalSeconds + seed) & 1) == 0 ? homeDefinition : awayDefinition;
+            Add(clock, clock < definition.HalfTimeSeconds ? 1 : 2, MatchEventType.Pass, teamDefinition.Id,
+                teamDefinition.CirculationPlayerId, "circulation", "complete", teamDefinition.CirculationReceiverId);
+        }
+
+        var ordered = events.OrderBy(e => e.Event.ClockSeconds).ThenBy(e => e.Event.Sequence)
+            .Select((e, i) => e with { Event = e.Event with { Sequence = i } }).ToArray();
+        var times = Enumerable.Range(0, definition.DurationSeconds / definition.CirculationIntervalSeconds + 1)
+            .Select(i => i * definition.CirculationIntervalSeconds)
+            .Concat(ordered.Select(e => e.Event.ClockSeconds))
+            .Concat(definition.FrameOverrides.Select(f => f.ClockSeconds))
+            .Distinct().Order().ToArray();
+        var frames = times.Select(clock => Frame(clock, homeDefinition, awayDefinition, definition, seed)).ToArray();
+        return new(fixtureMatchId.ToString(), definition.Version, seed, definition.Provenance, definition.DurationSeconds,
+            home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
+    }
+
+    private static FixtureDefinition LoadDefinition()
+    {
+        using var stream = typeof(SyntheticFixtureGenerator).Assembly.GetManifestResourceStream(DefinitionResource)
+            ?? throw new InvalidOperationException($"Embedded fixture definition '{DefinitionResource}' was not found.");
+        return JsonSerializer.Deserialize<FixtureDefinition>(stream, JsonOptions)
+            ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
+    }
+
+    private static void ValidateDefinition(FixtureDefinition definition)
+    {
+        if (definition.Teams is null || definition.ScenarioEvents is null || definition.SuppressedCirculationWindows is null ||
+            definition.FrameOverrides is null || string.IsNullOrWhiteSpace(definition.FixtureId) || definition.Provenance != "synthetic" ||
+            definition.DurationSeconds <= 0 || definition.PitchLengthMetres <= 0 || definition.PitchWidthMetres <= 0 ||
+            definition.StartUtc == default || definition.StartUtc.Offset != TimeSpan.Zero ||
+            definition.HalfTimeSeconds <= 0 || definition.HalfTimeSeconds >= definition.DurationSeconds ||
+            definition.CirculationIntervalSeconds <= 0 || definition.DurationSeconds % definition.CirculationIntervalSeconds != 0 ||
+            definition.Teams.Length != 2)
+            throw new InvalidOperationException("Synthetic fixture definition has invalid match metadata.");
+
+        if (definition.Teams.Any(t => t is null || t.Players is null))
+            throw new InvalidOperationException("Synthetic fixture definition has invalid teams or player lists.");
+
+        var teamIds = definition.Teams.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+        var allPlayers = definition.Teams.SelectMany(t => t.Players).ToArray();
+        if (allPlayers.Any(p => p is null))
+            throw new InvalidOperationException("Synthetic fixture definition contains a null player.");
+        var playerIds = allPlayers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        if (teamIds.Count != 2 || playerIds.Count != allPlayers.Length || definition.Teams.Any(t => string.IsNullOrWhiteSpace(t.Id) ||
+            string.IsNullOrWhiteSpace(t.Name) || string.IsNullOrWhiteSpace(t.Formation) || t.Players.Length < 11 ||
+            !t.Players.Any(p => p.Id == t.CirculationPlayerId) || !t.Players.Any(p => p.Id == t.CirculationReceiverId)) ||
+            allPlayers.Any(p => p is null || string.IsNullOrWhiteSpace(p.Id) || string.IsNullOrWhiteSpace(p.Name) || string.IsNullOrWhiteSpace(p.Role) ||
+                p.ShirtNumber is < 1 or > 99 || p.BaseX < 0 || p.BaseX > definition.PitchLengthMetres ||
+                p.BaseY < 0 || p.BaseY > definition.PitchWidthMetres || p.ActiveFromSeconds < 0 || p.ActiveFromSeconds > definition.DurationSeconds ||
+                (p.ActiveUntilSeconds != int.MaxValue && p.ActiveUntilSeconds > definition.DurationSeconds) ||
+                p.ActiveFromSeconds >= p.ActiveUntilSeconds))
+            throw new InvalidOperationException("Synthetic fixture definition has invalid teams or circulation players.");
+
+        foreach (var item in definition.ScenarioEvents)
+        {
+            if (item is null || item.ClockSeconds < 0 || item.ClockSeconds > definition.DurationSeconds || item.Period is < 1 or > 2 ||
+                string.IsNullOrWhiteSpace(item.Type) || string.IsNullOrWhiteSpace(item.Action) || string.IsNullOrWhiteSpace(item.Outcome))
+                throw new InvalidOperationException("Synthetic fixture definition has an invalid scenario event.");
+
+            var validPeriod = item.ClockSeconds < definition.HalfTimeSeconds
+                ? item.Period == 1
+                : item.ClockSeconds > definition.HalfTimeSeconds
+                    ? item.Period == 2
+                    : (item.Period == 1 && item.Type == nameof(MatchEventType.HalfTime)) ||
+                      (item.Period == 2 && item.Type == nameof(MatchEventType.KickOff));
+            if (!validPeriod)
+                throw new InvalidOperationException("Synthetic fixture event period does not match its match clock.");
+
+            var type = ParseEventType(item.Type);
+            var team = item.Team switch { "home" => definition.Teams[0], "away" => definition.Teams[1], "none" => null,
+                _ => throw new InvalidOperationException("Synthetic fixture event has an unsupported team side.") };
+            if (team is null ? !string.IsNullOrEmpty(item.PlayerId) : !team.Players.Any(p => p.Id == item.PlayerId))
+                throw new InvalidOperationException("Synthetic fixture event references a player outside its team.");
+            if (item.RelatedPlayerId is not null && !playerIds.Contains(item.RelatedPlayerId))
+                throw new InvalidOperationException("Synthetic fixture event references an unknown related player.");
+
+            if (type == MatchEventType.Substitution)
+            {
+                var outgoing = team?.Players.SingleOrDefault(p => p.Id == item.PlayerId);
+                var incoming = team?.Players.SingleOrDefault(p => p.Id == item.RelatedPlayerId);
+                if (outgoing is null || incoming is null || outgoing.ActiveUntilSeconds != item.ClockSeconds ||
+                    incoming.ActiveFromSeconds != item.ClockSeconds)
+                    throw new InvalidOperationException("Synthetic substitution must replace an active player with a same-team player at that time.");
+            }
+        }
+
+        if (definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.KickOff)) != 2 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.HalfTime)) != 1 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.FullTime)) != 1 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.KickOff) && e.ClockSeconds == 0 && e.Period == 1) != 1 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.HalfTime) && e.ClockSeconds == definition.HalfTimeSeconds && e.Period == 1) != 1 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.KickOff) && e.ClockSeconds == definition.HalfTimeSeconds && e.Period == 2) != 1 ||
+            definition.ScenarioEvents.Count(e => e.Type == nameof(MatchEventType.FullTime) && e.ClockSeconds == definition.DurationSeconds && e.Period == 2) != 1 ||
+            definition.ScenarioEvents.Any(e => e.ClockSeconds == definition.DurationSeconds && e.Type != nameof(MatchEventType.FullTime)))
+            throw new InvalidOperationException("Synthetic fixture must have exactly one kickoff per period, one halftime and one terminal full-time event.");
+
+        if (definition.SuppressedCirculationWindows.Any(w => w is null || w.StartSeconds < 0 ||
+                w.StartSeconds > w.EndSeconds || w.EndSeconds > definition.DurationSeconds) ||
+            definition.FrameOverrides.Any(f => f is null || f.PlayerPositions is null) ||
+            definition.FrameOverrides.Select(f => f.ClockSeconds).Distinct().Count() != definition.FrameOverrides.Length ||
+            definition.FrameOverrides.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > definition.DurationSeconds ||
+            f.BallX < 0 || f.BallX > definition.PitchLengthMetres || f.BallY < 0 || f.BallY > definition.PitchWidthMetres ||
+            f.PlayerPositions.Any(p => !playerIds.Contains(p.Key) || p.Value is null || p.Value.Length != 2 || p.Value[0] < 0 ||
+                p.Value[0] > definition.PitchLengthMetres || p.Value[1] < 0 || p.Value[1] > definition.PitchWidthMetres ||
+                allPlayers.Single(player => player.Id == p.Key).ActiveFromSeconds > f.ClockSeconds ||
+                f.ClockSeconds >= allPlayers.Single(player => player.Id == p.Key).ActiveUntilSeconds)))
+            throw new InvalidOperationException("Synthetic fixture definition has an invalid frame override.");
+    }
+
+    private static SyntheticTeam ToTeam(TeamDefinition team) => new(team.Id, team.Name, team.Formation,
+        Array.AsReadOnly(team.Players.Select(p => new SyntheticPlayer(p.Id, p.Name, team.Id, p.ShirtNumber, p.Role)).ToArray()));
+
+    private static TrackingFrame Frame(int clock, TeamDefinition home, TeamDefinition away, FixtureDefinition definition, int seed)
     {
         var positions = new List<PitchPosition>();
         foreach (var team in new[] { home, away })
         foreach (var player in team.Players)
         {
-            var attacksRight = (team.Id == home.Id) == (clock < 2700);
-            var x = player.ShirtNumber == 1 ? 5 : 20 + (player.ShirtNumber / 3) * 16;
-            var y = 8 + ((player.ShirtNumber * 13 + seed) % 52);
-            positions.Add(new(player.Id, team.Id, attacksRight ? x : 105 - x, y));
+            if (clock < player.ActiveFromSeconds || clock >= player.ActiveUntilSeconds) continue;
+            var attacksRight = team.AttacksRightInPeriodOne == (clock < definition.HalfTimeSeconds);
+            var x = attacksRight ? player.BaseX : definition.PitchLengthMetres - player.BaseX;
+            var yJitter = (int)((uint)(seed ^ player.ShirtNumber ^ clock) % 3) - 1;
+            var y = Math.Clamp(player.BaseY + yJitter, 0, definition.PitchWidthMetres);
+            positions.Add(new(player.Id, team.Id, x, y));
         }
-        var tactical = clock is >= 3290 and <= 3309;
-        if (tactical)
+
+        var ballX = definition.PitchLengthMetres / 2;
+        var ballY = definition.PitchWidthMetres / 2;
+        var frameOverride = definition.FrameOverrides.SingleOrDefault(f => f.ClockSeconds == clock);
+        if (frameOverride is not null)
         {
-            // Second half: Harbour attacks left, Ridge goalkeeper defends left.
-            for (var i = 0; i < positions.Count; i++)
-                positions[i] = positions[i].PlayerId switch
-                {
-                    "ridge-1" => positions[i] with { X = 5, Y = 34 },
-                    "ridge-2" => positions[i] with { X = 15, Y = 12 },
-                    "harbour-10" => positions[i] with { X = clock < 3293 ? 10 : 7, Y = 34 },
-                    "harbour-11" => positions[i] with { X = 14, Y = 13 },
-                    _ => positions[i]
-                };
+            ballX = frameOverride.BallX;
+            ballY = frameOverride.BallY;
+            foreach (var (playerId, point) in frameOverride.PlayerPositions)
+            {
+                var index = positions.FindIndex(p => p.PlayerId == playerId);
+                if (index < 0) throw new InvalidOperationException($"Frame override references inactive player '{playerId}'.");
+                positions[index] = positions[index] with { X = point[0], Y = point[1] };
+            }
         }
-        var ballX = tactical ? (clock <= 3296 ? 5 : clock <= 3304 ? 14 : 7) : 52.5;
-        var ballY = tactical && clock is >= 3299 and <= 3304 ? 13 : 34;
-        return new($"frame-{clock}", clock, ballX, ballY, positions.AsReadOnly());
+        var frameId = StableId($"{definition.FixtureId}:{definition.Version}:{seed}:frame:{clock}").ToString("N");
+        return new(frameId, clock, ballX, ballY, positions.AsReadOnly());
     }
+
+    private static string ResolveTeam(string side, string homeId, string awayId) => side switch
+    {
+        "home" => homeId,
+        "away" => awayId,
+        "none" => string.Empty,
+        _ => throw new InvalidOperationException($"Unsupported fixture team side '{side}'.")
+    };
+
+    private static MatchEventType ParseEventType(string type) => Enum.TryParse<MatchEventType>(type, ignoreCase: false, out var value)
+        ? value
+        : throw new InvalidOperationException($"Unsupported fixture event type '{type}'.");
+
     private static Guid StableId(string text) => new(SHA256.HashData(Encoding.UTF8.GetBytes(text)).AsSpan(0, 16));
+
+    private sealed class FixtureDefinition
+    {
+        public string Version { get; set; } = "";
+        public string FixtureId { get; set; } = "";
+        public string Provenance { get; set; } = "";
+        public DateTimeOffset StartUtc { get; set; }
+        public int DurationSeconds { get; set; }
+        public int HalfTimeSeconds { get; set; }
+        public int CirculationIntervalSeconds { get; set; }
+        public double PitchLengthMetres { get; set; }
+        public double PitchWidthMetres { get; set; }
+        public TeamDefinition[] Teams { get; set; } = [];
+        public ScenarioEventDefinition[] ScenarioEvents { get; set; } = [];
+        public SuppressedWindow[] SuppressedCirculationWindows { get; set; } = [];
+        public FrameOverride[] FrameOverrides { get; set; } = [];
+    }
+
+    private sealed class TeamDefinition
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Formation { get; set; } = "";
+        public bool AttacksRightInPeriodOne { get; set; }
+        public string CirculationPlayerId { get; set; } = "";
+        public string CirculationReceiverId { get; set; } = "";
+        public PlayerDefinition[] Players { get; set; } = [];
+    }
+
+    private sealed class PlayerDefinition
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public int ShirtNumber { get; set; }
+        public string Role { get; set; } = "";
+        public double BaseX { get; set; }
+        public double BaseY { get; set; }
+        public int ActiveFromSeconds { get; set; }
+        public int ActiveUntilSeconds { get; set; } = int.MaxValue;
+    }
+
+    private sealed class ScenarioEventDefinition
+    {
+        public int ClockSeconds { get; set; }
+        public int Period { get; set; }
+        public string Type { get; set; } = "";
+        public string Team { get; set; } = "none";
+        public string PlayerId { get; set; } = "";
+        public string Action { get; set; } = "";
+        public string Outcome { get; set; } = "";
+        public string? RelatedPlayerId { get; set; }
+    }
+
+    private sealed class SuppressedWindow { public int StartSeconds { get; set; } public int EndSeconds { get; set; } }
+    private sealed class FrameOverride
+    {
+        public int ClockSeconds { get; set; }
+        public double BallX { get; set; }
+        public double BallY { get; set; }
+        public Dictionary<string, double[]> PlayerPositions { get; set; } = new();
+    }
 }

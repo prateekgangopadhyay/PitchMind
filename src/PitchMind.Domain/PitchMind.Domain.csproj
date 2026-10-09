@@ -1,1 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/simulations/synthetic-fixture-v2.json"
+                      LogicalName="PitchMind.Domain.Simulation.synthetic-fixture-v2.json" />
+    <InternalsVisibleTo Include="PitchMind.Domain.Tests" />
+  </ItemGroup>
+</Project>

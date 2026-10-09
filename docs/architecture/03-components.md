@@ -9,7 +9,7 @@
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
-  Match --> Fixture["SyntheticFixtureGenerator, in-source data"]
+  Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
@@ -18,7 +18,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
