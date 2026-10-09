@@ -104,21 +104,19 @@ match.MapPost("/analyst", async (HttpContext context) =>
     if (!context.Request.HasJsonContentType())
         return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Analyst requests must use application/json");
 
-    AnalystRequest? request;
+    JsonDocument request;
     try
     {
-        request = await context.Request.ReadFromJsonAsync<AnalystRequest>(context.RequestAborted);
+        request = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
     }
     catch (JsonException)
     {
         return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be valid JSON");
     }
-    catch (InvalidOperationException)
-    {
-        return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Analyst requests require application/json");
-    }
-
-    if (request is null || string.IsNullOrWhiteSpace(request.InsightId))
+    using (request)
+    if (request.RootElement.ValueKind != JsonValueKind.Object ||
+        !request.RootElement.TryGetProperty("insightId", out var insightId) ||
+        insightId.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(insightId.GetString()))
         return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires an insightId");
 
     return MatchDataUnavailable(context);
