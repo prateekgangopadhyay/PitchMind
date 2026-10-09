@@ -165,7 +165,10 @@ public sealed class MatchAggregate
                 if (item.TeamId == _homeTeamId) _homeScore++;
                 else if (item.TeamId == _awayTeamId) _awayScore++;
                 else throw new InvalidOperationException("Goal team is not part of this match.");
-                _possessionTeamId = item.TeamId;
+                // A goal ends the scoring team's possession. The feed does not
+                // identify the kickoff restart, so possession remains unknown
+                // until a later event establishes control.
+                _possessionTeamId = null;
                 break;
             case MatchEventType.YellowCard:
                 var cautions = _yellowCards.GetValueOrDefault(item.PlayerId) + 1;
