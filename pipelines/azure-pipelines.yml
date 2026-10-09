@@ -1,5 +1,8 @@
 # Azure DevOps is the only CI/CD orchestrator. DEV delivery activates after service-connection configuration.
 parameters:
+- name: runGateFailureProbe
+  type: boolean
+  default: false
 - name: enableDevDelivery
   type: boolean
   default: false
@@ -58,6 +61,22 @@ stages:
     steps:
     - checkout: self
     - template: templates/validate-dotnet.yml
+  - job: GateFailureProbe
+    displayName: Intentional quality-gate failure probe (manual opt-in)
+    condition: and(succeeded(), ${{ eq(parameters.runGateFailureProbe, true) }})
+    steps:
+    - checkout: self
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: 10.0.x
+    - bash: |
+        set -euo pipefail
+        dotnet test tests/PitchMind.Architecture.Tests/PitchMind.Architecture.Tests.csproj \
+          -c Release --filter FullyQualifiedName~DeliberateGateFailureProbe
+      env:
+        PITCHMIND_GATE_FAILURE_PROBE: '1'
+      displayName: Run the deliberately failing test; its nonzero exit must fail Validate
   - job: Frontend
     displayName: React build, test and lint
     steps:
