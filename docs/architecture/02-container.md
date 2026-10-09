@@ -53,7 +53,7 @@ flowchart LR
 
 ## C# project responsibilities and dependency policy
 
-`tests/PitchMind.Architecture.Tests` enforces this source-project reference map. A source project added without a documented policy, an unexpected reference, or a missing declared dependency fails the architecture test. Internal `PitchMind.*` assemblies and packages must use mapped project references; raw MSBuild `Reference` or internal `PackageReference` items are rejected. `PitchMind.Domain` must have no project, package, framework, raw assembly, COM, or native references.
+`tests/PitchMind.Architecture.Tests` enforces this source-project reference map using evaluated MSBuild items, including imported properties and targets. A source project added without a documented policy, an unexpected reference, or a missing declared dependency fails the architecture test. Internal `PitchMind.*` assemblies must use mapped project references; aliases with `HintPath`, imported references, and package compile/runtime assets are checked as well. `PitchMind.Domain` must have no project, package, framework, raw assembly, COM, or native references.
 
 | Project | Responsibility | Allowed project references |
 |---|---|---|
