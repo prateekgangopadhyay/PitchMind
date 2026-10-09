@@ -143,6 +143,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/MatchId'
         - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
       responses:
         '503':
           description: No persisted canonical key-moment projection exists; demo moments are not substituted.
