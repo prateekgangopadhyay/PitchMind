@@ -37,7 +37,7 @@ function assertGateFailureProbe(pipeline) {
   assert.ok(start >= 0 && end > start, 'Dedicated failure probe job must remain within Validate');
   const job = pipeline.slice(start, end);
   assert.match(job, /condition: and\(succeeded\(\), \$\{\{ eq\(parameters\.runGateFailureProbe, true\) \}\}\)/,
-    'Failure probe must run only when explicitly selected after successful prior jobs');
+    'Failure probe must be opt-in and honor the pipeline succeeded() condition');
   assert.match(job, /--filter FullyQualifiedName~DeliberateGateFailureProbe/,
     'Failure probe must execute its dedicated deliberately failing test');
   assert.match(job, /PITCHMIND_GATE_FAILURE_PROBE:\s*['"]?1['"]?/,
@@ -50,7 +50,7 @@ function gateFailureProbeSelfTest(pipeline) {
   assertGateFailureProbe(pipeline);
   const mutations = [
     [pipeline.replace('  default: false', '  default: true'), /opt-in/],
-    [pipeline.replace('parameters.runGateFailureProbe, true', 'parameters.runGateFailureProbe, false'), /only when explicitly selected/],
+    [pipeline.replace('parameters.runGateFailureProbe, true', 'parameters.runGateFailureProbe, false'), /opt-in/],
     [pipeline.replace('FullyQualifiedName~DeliberateGateFailureProbe', 'FullyQualifiedName~UnrelatedTest'), /dedicated deliberately failing test/],
     [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '0'"), /scoped environment variable/],
     [pipeline.replace('      env:\n        PITCHMIND_GATE_FAILURE_PROBE', '      continueOnError: true\n      env:\n        PITCHMIND_GATE_FAILURE_PROBE'), /propagate/],
