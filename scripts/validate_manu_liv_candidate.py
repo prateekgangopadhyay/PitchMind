@@ -112,10 +112,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                    for key, count in required_event_counts.items())):
         raise CandidateValidationError("Manifest requiredEventCounts must map event names to non-negative integers")
     required_event_markers = match_policy.get("requiredEventMarkers", {})
-    pinned_period_end_markers = {
-        event_type for event_type in ("HalfTime", "FullTime")
-        if required_event_counts.get(event_type, 0) > 0
-    }
+    pinned_period_end_markers = {"HalfTime", "FullTime"} if {1, 2}.issubset(expected_periods) else set()
+    if pinned_period_end_markers and any(required_event_counts.get(event_type) != 1 for event_type in pinned_period_end_markers):
+        raise CandidateValidationError("Two-period manifests must require exactly one HalfTime and FullTime marker")
     allowed_same_clock_period2_types = match_policy.get("allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker", [])
     if (not isinstance(allowed_same_clock_period2_types, list)
             or any(not isinstance(event_type, str) or not event_type for event_type in allowed_same_clock_period2_types)

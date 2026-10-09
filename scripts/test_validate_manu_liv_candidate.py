@@ -132,6 +132,11 @@ class CandidateValidationTests(unittest.TestCase):
         payload = json.dumps(invalid).encode()
         manifest = test_manifest(invalid, payload)
         manifest["match"]["expectedPeriods"] = [1, 2]
+        manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
+        manifest["match"]["requiredEventMarkers"] = {
+            "HalfTime": {"clockSeconds": 20, "period": 1},
+            "FullTime": {"clockSeconds": 20, "period": 2},
+        }
         with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
             validator.validate_source(payload, manifest)
 
@@ -218,6 +223,19 @@ class CandidateValidationTests(unittest.TestCase):
             del incomplete["match"]["requiredEventMarkers"][missing_marker]
             with self.assertRaisesRegex(validator.CandidateValidationError, "must pin clock and period"):
                 validator.validate_source(self.payload, incomplete)
+
+    def test_two_period_manifest_cannot_remove_both_period_end_declarations(self):
+        manifest = test_manifest(self.events, self.payload)
+        manifest["match"]["expectedPeriods"] = [1, 2]
+        manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
+        manifest["match"]["requiredEventMarkers"] = {
+            "HalfTime": {"clockSeconds": 2700, "period": 1},
+            "FullTime": {"clockSeconds": 5761, "period": 2},
+        }
+        del manifest["match"]["requiredEventCounts"]["HalfTime"]
+        del manifest["match"]["requiredEventMarkers"]["HalfTime"]
+        with self.assertRaisesRegex(validator.CandidateValidationError, "must require exactly one HalfTime"):
+            validator.validate_source(self.payload, manifest)
 
     def test_rejects_nonfinite_source_values(self):
         payload = b'[{"x":NaN}]'
