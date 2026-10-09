@@ -115,6 +115,14 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate JSON object key"):
             validator._strict_json_loads('{"sequence":1,"sequence":2}')
 
+    def test_rejects_overflowing_json_number_inside_uninterpreted_metadata(self):
+        payload = json.dumps(self.events).encode().replace(
+            b'"metadata": {}', b'"metadata": {"sourceValue": 1e999}', 1
+        )
+        self.assertIn(b"1e999", payload)
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Non-finite JSON number"):
+            validator.validate_source(payload, test_manifest(self.events, payload))
+
     def test_rejects_malformed_manifest_types_without_leaking_type_errors(self):
         malformed = {**self.manifest, "match": {**self.manifest["match"], "expectedPeriods": "12"}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "expectedPeriods"):

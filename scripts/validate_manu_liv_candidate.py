@@ -41,6 +41,13 @@ def _reject_constant(value: str) -> None:
     raise CandidateValidationError(f"Non-finite JSON constant {value} is not accepted")
 
 
+def _finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise CandidateValidationError("Non-finite JSON number is not accepted")
+    return parsed
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Reject duplicate JSON properties instead of silently accepting the last value."""
     result: dict[str, Any] = {}
@@ -52,7 +59,8 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _strict_json_loads(value: str | bytes) -> Any:
-    return json.loads(value, parse_constant=_reject_constant, object_pairs_hook=_unique_object)
+    return json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float,
+                      object_pairs_hook=_unique_object)
 
 
 def _is_integer(value: Any) -> bool:
