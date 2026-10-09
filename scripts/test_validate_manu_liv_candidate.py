@@ -262,7 +262,7 @@ class CandidateValidationTests(unittest.TestCase):
     def test_rejects_overflowing_raw_coordinates(self):
         invalid = [{**self.events[0], "pitchX": 10 ** 1000}, self.events[1]]
         payload = json.dumps(invalid).encode()
-        with self.assertRaisesRegex(validator.CandidateValidationError, "Non-numeric source coordinate"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "JSON integer exceeds the supported size"):
             validator.validate_source(payload, test_manifest(invalid, payload))
 
     def test_pinned_repository_candidate_has_stable_source_integrity_report(self):

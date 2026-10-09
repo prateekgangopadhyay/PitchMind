@@ -78,6 +78,6 @@ These checks were run locally at `d7c61e7` before the evidence-only documentatio
 
 ## Parser-boundary follow-up — local working tree after `0579f69`
 
-- Independent review confirmed the floating-point overflow fix and identified a second raw parser failure for integers beyond Python's supported conversion length. The parser now converts that `ValueError` to `CandidateValidationError`; a 5,000-digit integer in uninterpreted metadata is covered by a regression test.
+- Independent review confirmed the floating-point overflow fix and identified a second raw parser failure for integers beyond Python's supported conversion length. The parser now enforces a runtime-independent 128-digit cap and converts conversion failures to `CandidateValidationError`; a 5,000-digit integer in uninterpreted metadata is covered by a regression test.
 - Candidate validator suite passed 18/18; feed profiler tests passed 5/5; `git diff --check` passed. Candidate source validation continues to return `structurally_valid_candidate_blocked_for_canonicalization`; source/ledger/ordered-record digests remain unchanged.
-- Independent review of this integer-boundary follow-up, formal GitHub review, and Product Owner acceptance are pending. Prior .NET/frontend/operating-model checks predate these Python-only changes and are not claimed as rerun here.
+- Independent review of the explicit integer cap, formal GitHub review, and Product Owner acceptance are pending. Prior .NET/frontend/operating-model checks predate these Python-only changes and are not claimed as rerun here.

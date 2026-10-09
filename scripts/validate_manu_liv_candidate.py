@@ -20,6 +20,7 @@ import uuid
 MAX_SOURCE_BYTES = 50_000_000
 MAX_EVENTS = 100_000
 MAX_POSITIONS_PER_EVENT = 64
+MAX_JSON_INTEGER_DIGITS = 128
 PLAYER_METRIC_FIELDS = (
     "speed", "distanceCovered", "heatIndex", "passAccuracy", "stamina", "heartRate", "touches"
 )
@@ -49,6 +50,9 @@ def _finite_float(value: str) -> float:
 
 
 def _bounded_int(value: str) -> int:
+    digits = value[1:] if value.startswith("-") else value
+    if len(digits) > MAX_JSON_INTEGER_DIGITS:
+        raise CandidateValidationError("JSON integer exceeds the supported size")
     try:
         return int(value)
     except ValueError as exc:
