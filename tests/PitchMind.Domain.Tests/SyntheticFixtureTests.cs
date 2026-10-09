@@ -84,7 +84,8 @@ public sealed class SyntheticFixtureTests
         var definition = JsonNode.Parse(ReadDefinition())!;
         definition["scenarioEvents"]![0]!["period"] = 2;
 
-        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(definition.ToJsonString()));
+        var error = Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(definition.ToJsonString()));
+        Assert.Equal("Synthetic fixture event period does not match its match clock.", error.Message);
     }
 
     [Fact] public void DefinitionRejectsDuplicateTerminalMarkers()

@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using Xunit;
@@ -54,6 +57,22 @@ public sealed class MatchAggregateTests
         Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
         Assert.Equal(11, state.HomeActivePlayers);
         Assert.Equal(11, state.AwayActivePlayers);
+    }
+
+    [Fact]
+    public void VersionedFixtureReplayProducesStableProjectionFingerprint()
+    {
+        var (first, fixture) = Create();
+        foreach (var item in fixture.Events) first.Apply(item);
+        var (second, secondFixture) = Create();
+        foreach (var item in secondFixture.Events) second.Apply(item);
+
+        Assert.Equal(fixture.Version, secondFixture.Version);
+        Assert.Equal(fixture.Events.Select(item => item.Event.EventId), secondFixture.Events.Select(item => item.Event.EventId));
+        var fingerprint = Fingerprint(first.Snapshot());
+        Assert.Equal(fingerprint, Fingerprint(second.Snapshot()));
+        // Local technical regression baseline only; the Product Owner's approved golden remains a separate gate.
+        Assert.Equal("9d9ee18e1d9baa6cb08f964c8c96f3806dd6e398ca5e2a34394f4e40468e2379", fingerprint);
     }
 
     [Fact]
@@ -181,5 +200,11 @@ public sealed class MatchAggregateTests
 
         Assert.Throws<ArgumentException>(() => new MatchAggregate(aggregate.Id, fixture.Home.Id, fixture.Away.Id,
             allHome, allHome.Select(player => player.Item1), fixture.Provenance));
+    }
+
+    private static string Fingerprint(MatchState state)
+    {
+        var canonicalJson = JsonSerializer.Serialize(state, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson)));
     }
 }
