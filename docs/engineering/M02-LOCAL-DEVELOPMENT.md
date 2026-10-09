@@ -17,7 +17,7 @@ From the repository root:
 ```bash
 ./scripts/dev-up.sh
 ./scripts/dev-health.sh
-DOTNET_ENVIRONMENT=Local ASPNETCORE_ENVIRONMENT=Local dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
 
 In another terminal, verify all three local processes/services:

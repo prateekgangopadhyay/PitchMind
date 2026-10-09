@@ -10,21 +10,23 @@ namespace PitchMind.Contracts.Tests;
 public sealed class V1ContractCompatibilityTests
 {
     [Theory]
-    [InlineData("Local")]
-    [InlineData("local")]
-    public void Offline_synthetic_API_is_allowed_only_in_Local(string environmentName)
+    [InlineData("Development")]
+    [InlineData("development")]
+    public void Offline_synthetic_API_is_allowed_only_in_local_Development(string environmentName)
     {
-        SyntheticFixtureRuntimeGuard.RequireLocalEnvironment(environmentName);
+        SyntheticFixtureRuntimeGuard.RequireLocalDevelopmentEnvironment(environmentName, "local");
     }
 
     [Theory]
-    [InlineData("Development")]
-    [InlineData("Staging")]
-    [InlineData("Production")]
-    [InlineData("")]
-    public void Offline_synthetic_API_fails_closed_outside_Local(string environmentName)
+    [InlineData("Development", null)]
+    [InlineData("Development", "azure")]
+    [InlineData("Local", "local")]
+    [InlineData("Staging", "local")]
+    [InlineData("Production", "local")]
+    [InlineData("", "local")]
+    public void Offline_synthetic_API_fails_closed_without_local_Development_profile(string environmentName, string? runtimeProfile)
     {
-        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureRuntimeGuard.RequireLocalEnvironment(environmentName));
+        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureRuntimeGuard.RequireLocalDevelopmentEnvironment(environmentName, runtimeProfile));
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

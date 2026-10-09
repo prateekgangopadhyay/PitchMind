@@ -17,7 +17,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The event store is a separately exercised adapter; current API paths do **not** consume it. Ordinary match reads fail closed with `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint can return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable the routes. `SyntheticFixtureGenerator` lives in the test-only `PitchMind.TestFixtures` project; it is not reachable from production projects. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but is not yet canonically ingested or served.
+The event store is a separately exercised adapter; current API paths do **not** consume it. Ordinary match reads fail closed with `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint can return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data; registering `SyntheticMatchService` cannot enable the routes. The local API additionally requires .NET `Development` with `Runtime:Profile=local`; this startup guard is not deployment identity validation. `SyntheticFixtureGenerator` lives in the test-only `PitchMind.TestFixtures` project and is not reachable from production projects. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but is not yet canonically ingested or served.
 
 ## Target Ports and Adapters
 
