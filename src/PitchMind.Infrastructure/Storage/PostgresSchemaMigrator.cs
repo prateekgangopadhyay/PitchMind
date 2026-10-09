@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -27,6 +27,8 @@ public static class PostgresSchemaMigrator
         }
         if (currentVersion < 2)
             await ExecuteAsync(connection, transaction, Version2Sql, cancellationToken);
+        if (currentVersion < 3)
+            await ExecuteAsync(connection, transaction, Version3Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -185,5 +187,25 @@ public static class PostgresSchemaMigrator
         CREATE INDEX IF NOT EXISTS ix_outbox_pending ON pitchmind.outbox(next_attempt_at, created_at) WHERE published_at IS NULL;
 
         INSERT INTO pitchmind.schema_versions(version) VALUES (2) ON CONFLICT DO NOTHING;
+        """;
+
+    public const string Version3Sql = """
+        ALTER TABLE pitchmind.outbox ADD CONSTRAINT outbox_projection_revision_fk
+            FOREIGN KEY (match_id, revision) REFERENCES pitchmind.match_projections(match_id, revision);
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS claim_token uuid;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS lease_expires_at timestamptz;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS failed_at timestamptz;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS last_error_code text;
+        CREATE INDEX IF NOT EXISTS ix_outbox_claimable ON pitchmind.outbox(next_attempt_at, created_at)
+            WHERE published_at IS NULL AND failed_at IS NULL;
+
+        CREATE TABLE IF NOT EXISTS pitchmind.consumer_inbox (
+            consumer_id text NOT NULL CHECK (length(consumer_id) BETWEEN 1 AND 128),
+            message_id uuid NOT NULL,
+            processed_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (consumer_id, message_id)
+        );
+
+        INSERT INTO pitchmind.schema_versions(version) VALUES (3) ON CONFLICT DO NOTHING;
         """;
 }
