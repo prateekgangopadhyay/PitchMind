@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
+require_regular_credentials_file() {
+  [[ ! -L docker/.env ]] || {
+    echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2
+    exit 1
+  }
+  if [[ -e docker/.env || -L docker/.env ]]; then
+    [[ -f docker/.env ]] || {
+      echo "Refusing non-regular docker/.env path; keep local credentials in a regular file." >&2
+      exit 1
+    }
+  fi
+}
+
+require_regular_credentials_file
 command -v docker >/dev/null || { echo "Docker CLI not installed" >&2; exit 1; }
 docker info >/dev/null || { echo "Start Docker Desktop first" >&2; exit 1; }
 if [[ ! -f docker/.env ]]; then
@@ -12,7 +25,7 @@ if [[ ! -f docker/.env ]]; then
   printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
-[[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
+require_regular_credentials_file
 chmod 600 docker/.env
 
 read_local_password() {

@@ -66,7 +66,13 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         path.write_text(contents, encoding="utf-8")
         path.chmod(0o700)
 
-    def _run(self, script: str, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        script: str,
+        *args: str,
+        input_text: str | None = None,
+        timeout: float = 5.0,
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", str(self.root / "scripts" / script), *args],
             cwd=self.root,
@@ -75,6 +81,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
 
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
@@ -128,6 +135,18 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertTrue(link.is_symlink())
         self.assertFalse(target.exists())
         self.assertFalse(self.openssl_count.exists())
+
+    def test_bootstrap_refuses_fifo_credentials_without_blocking_or_writing_secrets(self) -> None:
+        credentials = self.root / "docker" / ".env"
+        os.mkfifo(credentials)
+
+        result = self._run("dev-up.sh", timeout=2.0)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-regular docker/.env path", result.stderr)
+        self.assertTrue(credentials.is_fifo())
+        self.assertFalse(self.openssl_count.exists())
+        self.assertFalse(self.docker_log.exists())
 
     def test_existing_strong_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
