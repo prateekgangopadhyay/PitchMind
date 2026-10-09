@@ -14,12 +14,12 @@
 
 | Requirement | Command | Observed result |
 |---|---|---|
-| Candidate validator positive and negative cases | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | 12 passed, 0 failed. Cases cover source-ledger reproducibility, full-record digest sensitivity, duplicate IDs and JSON keys, integer sequence enforcement, sequence gaps, clock/period regression, malformed manifest types, manifest drift, non-finite/overflowing coordinates and pinned-candidate reconciliation. |
-| Full candidate data integrity report | `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation.json` | Exit 0; status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 1 match, 2 teams, 48,048 attached position records; source sequence 1..2199 and source clock 0..5761 seconds. |
+| Candidate validator positive and negative cases | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | 13 passed, 0 failed on code commit `d7c61e7`. Cases cover source-ledger reproducibility, full-record digest sensitivity, duplicate IDs and JSON keys, integer sequence enforcement, sequence gaps, clock/period regression, manifest-pinned halftime/fulltime marker chronology, malformed manifest types, manifest drift, non-finite/overflowing coordinates and pinned-candidate reconciliation. |
+| Full candidate data integrity report | `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation-final.json` | Exit 0 at code commit `d7c61e7`; status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 1 match, 2 teams, 48,048 attached position records; source sequence 1..2199 and source clock 0..5761 seconds. |
 | Repeatability | Run the validator twice against the pinned source and manifest | Both runs produced source event-ID ledger SHA-256 `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539` and complete ordered-record SHA-256 `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`. Object key order is normalized for this digest; the pinned source SHA preserves exact byte-level identity. |
-| Full local quality gate | `bash scripts/validate-all.sh` | Exit 0. .NET restore/build succeeded with 0 warnings/errors; solution tests 23 passed, 0 failed, 5 skipped (all PostgreSQL integration tests lacked a test database). Frontend install/build/lint passed and 3 tests passed; npm reported 0 vulnerabilities. Source profiler tests 5 passed; candidate validator tests 11 passed; candidate validation, operating-model validator and dependency self-test passed. |
+| Previous aggregate quality gate | `bash scripts/validate-all.sh` | Historical pre-rebase evidence only. It is not relied on as verification of code commit `d7c61e7`; the current commit was checked with the individually listed commands below. |
 
-The full local quality log was observed in the terminal for the 2026-10-09 review-fix run. It is not a hosted CI/Azure DevOps run. PostgreSQL integration was skipped by this aggregate command; no canonical database ingest exists in this story branch.
+The historical aggregate run is not a hosted CI/Azure DevOps run. PostgreSQL integration was skipped; no canonical database ingest exists in this story branch.
 
 ## Observed data quality and limits
 
@@ -34,3 +34,37 @@ The full local quality log was observed in the terminal for the 2026-10-09 revie
 ## Rebased-head verification — 2026-10-09
 
 At rebased head `7f1727175606d5c1e497f5ada323de4c467d7aa3`, the candidate validator tests passed 11/11, feed profiler tests passed 5/5, the validator again returned `structurally_valid_candidate_blocked_for_canonicalization` with the pinned source hash and stable ledger digests, and the operating-model validator, DAG self-test, design-skill self-test and `git diff --check` passed. The integrated `bash scripts/validate-all.sh` was attempted on this rebased head but did not emit output or complete during the observed run; it is not counted as a pass. The earlier full-gate result above belongs to the pre-rebase code head.
+
+## Independent re-verification — code commit `d7c61e709f43a113db88eb7bbd2972f1b5e9d8fd`
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| .NET Release build | `dotnet build PitchMind.slnx --no-restore -c Release -m:1 -nr:false --verbosity:minimal -p:NuGetAudit=false` | Succeeded, 0 warnings, 0 errors. |
+| .NET solution tests | `dotnet test PitchMind.slnx -c Release -m:1 -nr:false --verbosity:minimal -p:NuGetAudit=false` | 31 passed, 0 failed, 5 skipped. All five skipped tests require a PostgreSQL test database, which was not configured. |
+| Frontend tests/build/lint | `npm test && npm run build && npm run lint` from `frontend/` | 3 tests passed; TypeScript/Vite production build succeeded; ESLint exited 0. The test uses a non-default 3,600-second fixture with 1,800-second halftime and a 120×80 m pitch, and checks slider/pitch metadata rendering. |
+| Feed profiler tests | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v` | 5 passed, 0 failed. |
+| Operating-model graph validation | `node scripts/validate_operating_model.mjs` | Passed: 12 epics, 59 stories, 28 Council skills, zero routing cycles. |
+| Whitespace/error check | `git diff --check` | Passed. |
+
+These checks were run locally at `d7c61e7` before the evidence-only documentation update. `bash scripts/validate-all.sh`, hosted CI, Product Owner acceptance and independent human review were not observed at this head. The local .NET test command used `NuGetAudit=false` because this environment could not reach NuGet's vulnerability endpoint; this did not alter project or repository settings.
+
+## Follow-up verification — code commit `4acc702`
+
+- Candidate validator tests passed 14/14. Added a manifest type check and a default-deny rule for period-two events sequenced before halftime; the candidate manifest explicitly permits only a same-clock `Pass` to preserve the pinned source sequence. The regression test rejects the ordering without the exception, accepts the observed `Pass`, and rejects a same-clock `Shot`.
+- The source report again returned `structurally_valid_candidate_blocked_for_canonicalization` for 2,199 events and 48,048 attached positions. Byte SHA `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`, source event-ID ledger SHA `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`, and ordered-record SHA `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3` remained unchanged.
+- Full .NET solution tests passed 35, failed 0, skipped 5. Skips are PostgreSQL integration tests requiring an unconfigured test database. Frontend tests passed 3/3; production build and lint exited 0. Feed profiler tests passed 5/5. Operating-model validation passed for 12 epics, 59 stories, 28 Council skills and zero cycles. `git diff --check` passed.
+- The follow-up review requested ball-coordinate validation and field-marking dimension fixes. Those changes were included and verified; a fresh independent code re-review is still pending. No hosted CI, PostgreSQL integration, Product Owner acceptance or Azure validation is claimed.
+
+## Final verification — code commit `66841ef`
+
+- Candidate validator suite passed 15/15. Required halftime/fulltime marker clock+period declarations cannot be omitted; the pinned same-clock period-two exception remains limited to `Pass`.
+- Pinned candidate report exited 0 with status `structurally_valid_candidate_blocked_for_canonicalization`: 2,199 events; 48,048 attached positions; source SHA `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; event-ID ledger SHA `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`; ordered-record SHA `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`. Canonical mappings, coordinate units and player metrics remain unapproved/unverified; football and independent rights/privacy reviews remain pending.
+- Full .NET solution tests passed 43, failed 0, skipped 5 (PostgreSQL integration requires an unconfigured test database); frontend 3/3 tests, production build and lint passed; feed profiler 5/5; operating-model validator passed (12 epics, 59 stories, 28 Council skills, zero cycles); `git diff --check` passed.
+- Independent review of the previous head identified the missing-marker and pitch-range gaps; fixes are included. A fresh review of this final head is in progress. No hosted CI, PostgreSQL integration, Product Owner acceptance or Azure validation is claimed.
+
+## Final verification — code commit `7e21ce5`
+
+- Candidate validator suite passed 16/16. Two-period manifests must declare exactly one HalfTime and FullTime event count and pin each marker clock+period; tests reject omission of either marker and simultaneous removal of the count plus marker. The same-clock exception remains limited to `Pass`.
+- Pinned candidate report exited 0 with status `structurally_valid_candidate_blocked_for_canonicalization`: 2,199 events; 48,048 attached positions; source SHA `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; event-ID ledger SHA `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`; ordered-record SHA `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`. Canonical mappings, coordinate units and player metrics remain unapproved/unverified; football and independent rights/privacy reviews remain pending.
+- Full .NET solution tests passed 43, failed 0, skipped 5 (PostgreSQL integration requires an unconfigured test database); frontend 3/3 tests, production build and lint passed; feed profiler 5/5; operating-model validator passed (12 epics, 59 stories, 28 Council skills, zero cycles); `git diff --check` passed.
+- A fresh independent re-review of this final head is in progress. No hosted CI, PostgreSQL integration, Product Owner acceptance or Azure validation is claimed.

@@ -42,10 +42,10 @@
 **Football quality concern:** 124 shot events and 254 fouls in a single match are not a plausible ordinary professional match profile. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
 
 ## Clock, coordinate and identity conversion — REQUIRED
-- Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.**
+- The fictional `synthetic-v2` definition currently configures a 5400-second match, 0-based sequence, a 105×68 metre pitch and its own event vocabulary; the service now reads its duration, halftime and pitch bounds from that JSON definition. These values and event types still cannot be applied directly to the candidate source.
 - Conversion should map `sourceSequence 1..2199` to canonical 0..2198 or explicitly version a 1-based contract; preserve original sequence separately. Do not mutate source event IDs.
 - Determine pitch axis/attacking-direction convention and whether x/y values are percentages. Only after this is confirmed should `xMetres = xNormalized * pitchLengthMetres / 100` and `yMetres = yNormalized * pitchWidthMetres / 100` be applied, using **manifest-defined pitch dimensions**. Never blindly map `pitchY=98` into 68 metre bounds or calculate a 3-metre presser distance on unitless points.
-- Current `SyntheticMatchService` treats fulltime as exactly 5400 and would reject events after; adapt clock/stoppage semantics to 5761 without using wall-clock to reconstruct game state.
+- The fictional fixture's 5400-second default does not represent this candidate's 5761-second source clock. Build a source-specific adapter before supporting this feed; preserve stoppage-time semantics and never reconstruct match state from wall-clock time.
 - Preserve all 19 source event kinds in a versioned mapping registry. Treat kickoff/restart, half-time/full-time, foul, tackle, carry, ball recovery, pressure, possession loss, card and substitution distinctly; do not coerce carry→pass or recovery→turnover just to satisfy current enum.
 - Generate stable player IDs from source-provided stable identity if available; otherwise use a documented team/player/jersey disambiguation map with correction handling. Treat names/jersey as attributes, not a reliable immutable player key.
 - `Goal` records' metadata `score` values agree with the displayed 3–3 result, but score remains a projection of six accepted canonical goal events with review of disallowed/own goals, corrections and scorer validity.
@@ -70,7 +70,7 @@ The versioned [candidate manifest](../../data/simulations/manu-liv-candidate-man
 
 Executed locally on 2026-10-09:
 
-- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` — 11 passed, 0 failed, including duplicate JSON keys, float sequence values and malformed manifest types.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` — 16 passed, 0 failed at code commit `7e21ce5`, including mandatory halftime/fulltime marker declarations and pinned clock/period checks, default-deny same-clock period-two ordering with a manifest exception for the pinned feed's observed `Pass` only, duplicate JSON keys, float sequence values and malformed manifest types.
 - `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-validation.json` — completed with status `structurally_valid_candidate_blocked_for_canonicalization`; 2,199 events, 48,048 attached positions, source sequence 1..2199, source clock 0..5761 seconds. Repeated validation produced the same source event-ID and complete ordered-record SHA-256 digests.
 - Observed event counts include 124 shots and 254 fouls; the tool requires domain review and does not apply an unapproved professional-match threshold.
 
