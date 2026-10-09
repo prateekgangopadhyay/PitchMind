@@ -45,7 +45,7 @@
     },
     {
       "selectedElapsedSeconds": 3309,
-      "replayOutputSha256": "4049467f01ced410d65ced4fe8d8219cad6d9d6d45445c6c5f81eea9c5565829",
+      "replayOutputSha256": "21bee19cdf39925f1aeaf723fbaa6f5ad14cd4acfdc8ae6c1a26deceab26a3f8",
       "lastSequence": 118,
       "period": 2,
       "phase": "secondhalf",
@@ -58,7 +58,7 @@
     },
     {
       "selectedElapsedSeconds": 3600,
-      "replayOutputSha256": "9f0b3b17f4a6eb9c44e934e6720ecb0c7456a7beb1690ce8b9145a29215fac87",
+      "replayOutputSha256": "9144dcb47430bc1dd41a5df7551a07c755ea2b4ddd3eb9bcc30d4ba779fcbdaf",
       "lastSequence": 128,
       "period": 2,
       "phase": "secondhalf",
@@ -71,7 +71,7 @@
     },
     {
       "selectedElapsedSeconds": 5400,
-      "replayOutputSha256": "e5812d2bbe0e9d64b76035cf976eaf96b4bb9aa8ae7c7a9f6a7fc8842f470168",
+      "replayOutputSha256": "89210459b4b7833c4661d780e999ddc33995cfa514458893739b348f27a9d9b3",
       "lastSequence": 191,
       "period": 2,
       "phase": "fulltime",

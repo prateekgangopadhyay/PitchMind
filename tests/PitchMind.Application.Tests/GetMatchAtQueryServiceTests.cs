@@ -106,6 +106,11 @@ public sealed class GetMatchAtQueryServiceTests
         Assert.Equal("press-sequence-v2", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
         Assert.False(insight.Publishable);
+        Assert.Equal("tactical-context-v1", insight.Context!.SchemaVersion);
+        Assert.Equal("Harbour FC 1–0 Ridge Athletic", insight.Context.Scoreline);
+        Assert.Equal("home", insight.Context.TeamRole);
+        Assert.Equal(0, insight.Context.NumericalAdvantage);
+        Assert.Equal("SecondHalf", insight.Context.MatchPhase);
         Assert.Equal(1L, insight.CanonicalRevision);
         Assert.Equal(atGoal.SelectedSeconds, insight.SelectedTimeSeconds);
         Assert.Equal(atGoal.Projection.AsOfSequence, insight.ThroughSequence);

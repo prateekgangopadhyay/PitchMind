@@ -103,7 +103,10 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             seed.AwayTeamId, context.AwayTeamName, context.CoordinateVersion,
             context.PitchLengthMetres, context.PitchWidthMetres,
             Array.AsReadOnly(replayEvents.ToArray()),
-            Array.AsReadOnly(replayFrames.Select(frame => frame.Frame).ToArray()), projection.SourceSha256);
+            Array.AsReadOnly(replayFrames.Select(frame => frame.Frame).ToArray()), projection.SourceSha256)
+        {
+            SelectedState = replayedState with { ClockSeconds = query.SelectedSeconds }
+        };
         var derived = PressSequenceDetector.Detect(derivedInput);
         var replayInputJson = JsonSerializer.Serialize(new ReplayInput(query.SelectedSeconds, projection.CanonicalRevision,
             projection.AsOfSequence, query.AlgorithmVersion, query.DetectorVersion, context, seed, replayEvents, replayFrames), JsonOptions);

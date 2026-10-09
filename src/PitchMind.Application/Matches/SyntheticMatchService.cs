@@ -55,6 +55,16 @@ public sealed class SyntheticMatchService
     {
         ValidateTime(clockSeconds);
         var events = GetEvents(clockSeconds);
+        var state = ProjectMatchState(clockSeconds, events);
+        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
+        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
+            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
+            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
+            state.CompetitionId, state.CompetitionRulesVersion, state.MaximumSubstituteReentriesPerPlayer);
+    }
+
+    private MatchState ProjectMatchState(int clockSeconds, IReadOnlyList<SimulationEvent> events)
+    {
         var initialPlayers = Fixture.Home.Players.Concat(Fixture.Away.Players)
             .Select(player => (player.Id, player.TeamId)).ToArray();
         var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
@@ -62,12 +72,7 @@ public sealed class SyntheticMatchService
             initialPlayers, activeAtKickoff, Fixture.Provenance,
             new(Fixture.CompetitionId, Fixture.CompetitionRulesVersion, Fixture.MaximumSubstituteReentriesPerPlayer));
         foreach (var item in events) aggregate.Apply(item);
-        var state = aggregate.Snapshot();
-        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
-        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
-            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
-            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
-            state.CompetitionId, state.CompetitionRulesVersion, state.MaximumSubstituteReentriesPerPlayer);
+        return aggregate.Snapshot() with { ClockSeconds = clockSeconds };
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {
@@ -107,7 +112,9 @@ public sealed class SyntheticMatchService
     public IReadOnlyList<TacticalInsight> GetInsights(int clockSeconds)
     {
         ValidateTime(clockSeconds);
-        return PressSequenceDetector.Detect(Fixture, clockSeconds);
+        var events = GetEvents(clockSeconds);
+        var selectedState = ProjectMatchState(clockSeconds, events);
+        return PressSequenceDetector.Detect(Fixture, clockSeconds, selectedState);
     }
     public TacticalEvidence? GetEvidence(string insightId, int clockSeconds)
     {
