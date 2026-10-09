@@ -608,11 +608,29 @@ public sealed class PostgresLedgerTests
         }
 
         var validInsightId = $"valid-{Guid.NewGuid():N}";
+        var validFrameInsightId = $"valid-frame-{Guid.NewGuid():N}";
         var missingInsightId = $"missing-{Guid.NewGuid():N}";
         var metricInsightId = $"metric-{Guid.NewGuid():N}";
+        var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
+        var validFrameId = $"frame-{Guid.NewGuid():N}";
+        var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
+        foreach (var (frameId, sequence) in new[] { (validFrameId, 0L), (futureFrameId, 1L) })
+        {
+            await using var frame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4, '{}'::jsonb)
+                """);
+            frame.Parameters.AddWithValue(matchId.Value);
+            frame.Parameters.AddWithValue(frameId);
+            frame.Parameters.AddWithValue(sequence);
+            frame.Parameters.AddWithValue(new string('d', 64));
+            await frame.ExecuteNonQueryAsync();
+        }
         await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
+        await AddInsight(validFrameInsightId, "derived", "frame", validFrameId);
         await AddInsight(missingInsightId, "derived", "event", Guid.NewGuid().ToString());
         await AddInsight(metricInsightId, "derived", "metric", "unpersisted-metric");
+        await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId);
 
         var projectionReader = new PostgresMatchProjectionReader(source);
         var projection = await projectionReader.GetAtAsync(matchId, 0, null, CancellationToken.None);
@@ -620,12 +638,20 @@ public sealed class PostgresLedgerTests
         var insightReader = new PostgresMatchInsightReader(source);
         var page = await insightReader.ReadAtAsync(matchId, projection.Revision, 0, projection.AsOfSequence,
             null, null, 10, CancellationToken.None);
-        var visible = Assert.Single(page.Insights);
-        Assert.Equal(validInsightId, visible.InsightId);
+        Assert.Equal(new[] { validFrameInsightId, validInsightId }.OrderBy(i => i).ToArray(),
+            page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
+        var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
         Assert.Null(await insightReader.GetAtAsync(matchId, missingInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
+            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+        Assert.Equal(validFrameId, Assert.Single(validFrameEvidence!).Id);
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
     }
 

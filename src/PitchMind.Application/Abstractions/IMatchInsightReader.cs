@@ -20,6 +20,15 @@ public sealed record PersistedMatchInsightPage(
     string? NextAfterInsightId,
     bool HasMore);
 
+public sealed record PersistedCanonicalEvidenceItem(
+    string Kind,
+    string Id,
+    string Relation,
+    long Sequence,
+    int ClockSeconds,
+    int Period,
+    string PayloadJson);
+
 /// <summary>Reads only persisted, revision-bound insights and their immutable evidence references.</summary>
 public interface IMatchInsightReader
 {
@@ -28,4 +37,7 @@ public interface IMatchInsightReader
 
     Task<PersistedMatchInsight?> GetAtAsync(MatchId matchId, string insightId, int maximumRevision, int selectedSeconds,
         long throughSequence, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
+        int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken);
 }
