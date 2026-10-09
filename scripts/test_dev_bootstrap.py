@@ -46,7 +46,7 @@ count=0
 if [ -f \"$PITCHMIND_FAKE_OPENSSL_COUNT\" ]; then count=$(cat \"$PITCHMIND_FAKE_OPENSSL_COUNT\"); fi
 count=$((count + 1))
 printf '%s' \"$count\" > \"$PITCHMIND_FAKE_OPENSSL_COUNT\"
-if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
+if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789abcdef\\n'; else printf 'fedcba9876543210fedcba9876543210fedcba9876543210\\n'; fi
 """,
         )
         self.env = os.environ.copy()
@@ -131,8 +131,10 @@ if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
 
     def test_existing_strong_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
+        postgres_password = "0123456789abcdef0123456789abcdef0123456789abcdef"
+        redis_password = "fedcba9876543210fedcba9876543210fedcba9876543210"
         env_file.write_text(
-            "POSTGRES_PASSWORD=" + "a" * 48 + "\nREDIS_PASSWORD=" + "b" * 48 + "\n",
+            f"POSTGRES_PASSWORD={postgres_password}\nREDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
         env_file.chmod(0o644)
@@ -141,7 +143,7 @@ if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             env_file.read_text(),
-            "POSTGRES_PASSWORD=" + "a" * 48 + "\nREDIS_PASSWORD=" + "b" * 48 + "\n",
+            f"POSTGRES_PASSWORD={postgres_password}\nREDIS_PASSWORD={redis_password}\n",
         )
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         self.assertFalse(self.openssl_count.exists())
@@ -155,17 +157,30 @@ if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
         result = self._run("dev-up.sh")
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must contain distinct, generated 48-character", result.stderr)
+        self.assertIn("must contain distinct 48-character", result.stderr)
         self.assertNotIn("replace-with-random-local-password", result.stderr)
         self.assertNotIn("short", result.stderr)
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
 
-    def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
-        valid = "a" * 48
+    def test_low_diversity_password_is_rejected(self) -> None:
         env_file = self.root / "docker" / ".env"
         env_file.write_text(
-            f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={'b' * 48}\n",
+            f"POSTGRES_PASSWORD={'a' * 48}\nREDIS_PASSWORD={'b' * 48}\n",
+            encoding="utf-8",
+        )
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("at least 12 unique hex digits", result.stderr)
+        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+
+    def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
+        valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
+        distinct = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={distinct}\n",
             encoding="utf-8",
         )
         duplicate = self._run("dev-up.sh")

@@ -16,20 +16,25 @@ fi
 chmod 600 docker/.env
 
 read_local_password() {
-  local key="$1" line count=0 value=""
+  local key="$1" line count=0 value="" unique_chars="" char index
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" == "$key="* ]] || continue
     count=$((count + 1))
     value="${line#*=}"
   done < docker/.env
   [[ "$count" -eq 1 && "$value" =~ ^[0-9a-f]{48}$ ]] || return 1
+  for ((index = 0; index < ${#value}; index++)); do
+    char="${value:index:1}"
+    [[ "$unique_chars" == *"$char"* ]] || unique_chars+="$char"
+  done
+  [[ ${#unique_chars} -ge 12 ]] || return 1
   printf '%s' "$value"
 }
 
 if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
   || ! redis_password="$(read_local_password REDIS_PASSWORD)" \
   || [[ "$postgres_password" == "$redis_password" ]]; then
-  echo "docker/.env must contain distinct, generated 48-character lowercase hexadecimal POSTGRES_PASSWORD and REDIS_PASSWORD values. Replace the local values; secrets were not displayed." >&2
+  echo "docker/.env must contain distinct 48-character lowercase hexadecimal POSTGRES_PASSWORD and REDIS_PASSWORD values with at least 12 unique hex digits each. Replace the local values; secrets were not displayed." >&2
   exit 1
 fi
 
