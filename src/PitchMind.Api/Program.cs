@@ -2,14 +2,12 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Api;
 using PitchMind.Contracts.Health;
 using PitchMind.Infrastructure.Storage;
-using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
-builder.Services.AddSingleton<SyntheticMatchService>();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
 {
@@ -51,22 +49,13 @@ app.Use(async (context, next) =>
 app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
-app.MapGet("/api/v1/matches", (SyntheticMatchService matches) => Results.Ok(new[] { matches.Fixture.ToResponse() }));
+app.MapGet("/api/v1/matches", (HttpContext context) => MatchDataUnavailable(context));
 var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
-match.AddEndpointFilter(async (context, next) =>
-{
-    var matches = context.HttpContext.RequestServices.GetRequiredService<SyntheticMatchService>();
-    var id = Guid.Parse(context.HttpContext.Request.RouteValues["matchId"]!.ToString()!);
-    return id.ToString() == matches.Fixture.MatchId ? await next(context) : ApiProblem(context.HttpContext, StatusCodes.Status404NotFound, "MATCH_NOT_FOUND", "Match not found");
-});
-match.MapGet("/state", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetState(atSeconds ?? 0).ToResponse()));
-match.MapGet("/events", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetEvents(atSeconds ?? 0).Select(item => item.ToResponse())));
-match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetInsights(atSeconds ?? 0).Select(insight => insight.ToResponse())));
-match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
-    matches.GetEvidence(insightId, atSeconds ?? 0) is { } evidence ? Results.Ok(evidence.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"));
-match.MapPost("/analyst", (AnalystRequest request, SyntheticMatchService matches, HttpContext context) =>
-    matches.Explain(request.InsightId, request.AtSeconds, request.Audience ?? "fan") is { } explanation ? Results.Ok(explanation.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"))
-    .RequireRateLimiting("analyst");
+match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
+match.MapGet("/events", (HttpContext context) => MatchDataUnavailable(context));
+match.MapGet("/insights", (HttpContext context) => MatchDataUnavailable(context));
+match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context));
+match.MapPost("/analyst", (HttpContext context) => MatchDataUnavailable(context)).RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();
@@ -75,5 +64,8 @@ static IResult ApiProblem(HttpContext context, int status, string code, string t
     Results.Json(new ApiProblemResponse("about:blank", title, status, code, context.TraceIdentifier, detail, context.Request.Path),
         statusCode: status, contentType: "application/problem+json");
 
+static IResult MatchDataUnavailable(HttpContext context) =>
+    ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "MATCH_DATA_UNAVAILABLE",
+        "No validated canonical match feed is configured");
+
 public partial class Program { }
-public sealed record AnalystRequest(string InsightId, int AtSeconds, string? Audience);

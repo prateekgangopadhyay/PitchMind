@@ -2,7 +2,7 @@
 
 Azure-native football intelligence, rebuilt from an evidence-first architecture.
 
-**Status:** Working offline synthetic match slice: deterministic replay, evidence-backed pressing sequence, match APIs and integrated pitch/timeline/analyst UI. Canonical Azure ingestion, Foundry and production certification remain incomplete. See [execution evidence](docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md) for verified scope and deployment status.
+**Status:** API health and frontend shell are available locally; match routes return 503 until API route composition is replaced with a canonical, revisioned PostgreSQL-backed read port. The prior generated match scenario now exists only in test fixtures. Canonical feed ingestion, PostgreSQL-backed match reads, Foundry and production certification remain incomplete. See [execution evidence](docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md) for the scope of the previously deployed DEV prototype; it was not changed by this local work.
 
 ## Start here
 - [28 Engineering Council skills and G0–G9 operating model](docs/operating-model/README.md)
@@ -52,7 +52,7 @@ docker run --rm -p 127.0.0.1:5081:8080 pitchmind:dev
 python3 scripts/api-smoke.py http://127.0.0.1:5081
 ```
 
-Open `http://127.0.0.1:5081` for the same-origin application. PostgreSQL integration verification is described in [event ledger](docs/data/CANONICAL-EVENT-LEDGER.md); the offline fixture UI does not read that ledger yet.
+Open `http://127.0.0.1:5081` for the same-origin application shell. Until the feed and canonical read path are implemented, the UI reports that match data is unavailable. PostgreSQL integration verification is described in [event ledger](docs/data/CANONICAL-EVENT-LEDGER.md); that ledger is not yet wired into match reads.
 
 ## Engineering constraints
 - Local: Docker Compose and local emulators/adapters; no required Azure account to run domain tests.
@@ -63,7 +63,7 @@ Open `http://127.0.0.1:5081` for the same-origin application. PostgreSQL integra
 - `PitchMind_Old` is read-only reference material; do not bulk-copy code.
 
 ## Engineering Council delivery hold
-The 59 stories have **work packets and a dependency-driven plan**, but are **not all implemented**. The owner-supplied `data/simulations/manu-liv-match-dataset.json` arrived on `main` after the initial review (commit `b978254`). It has 2,199 ordered events and event-attached player positions; see the [source profile](docs/data/MANU-LIV-SOURCE-PROFILE.md). The current C# generated fixture remains a transitional offline demo until the canonical adapter uses the JSON; source rights, units and football realism are awaiting review. Use `python3 scripts/profile_simulation_feed.py data/simulations/<source>.json` to profile the actual file after it is supplied. The profile does not validate football correctness or grant rights. **Do not deploy to Azure DEV without asking and obtaining explicit approval for the exact proposed changes.**
+The 59 stories have **work packets and a dependency-driven plan**, but are **not all implemented**. The owner-confirmed synthetic `data/simulations/manu-liv-match-dataset.json` contains 2,199 ordered events and event-attached player positions; see the [source profile](docs/data/MANU-LIV-SOURCE-PROFILE.md). The source's clock policy, coordinate units/orientation, player metric meaning, canonical event mappings and football realism remain unresolved. The test-only golden generator is no longer part of production C#; ordinary API match reads return 503 until route composition is replaced by a canonical, revisioned PostgreSQL-backed read port (the analyst endpoint can return 429 when rate-limited). **Do not deploy to Azure DEV without asking and obtaining explicit approval for the exact proposed changes.**
 
 ### Source and release truth (Council update)
-The file `data/simulations/manu-liv-match-dataset.json` is committed and structurally profiled (2,199 records), but **not** imported into the offline match API, approved for distribution or proven synthetic. Unitless coordinate values, player names, source realism and biometrics-like attributes require review. Existing C# fixture facts are a transitional implementation and violate the future no-hardcoded-football-data acceptance rule. See the role skill index and Story Execution Routing for implementation owners. **Always ask the repository owner to approve the exact DEV change before deploying; PR merge or pipeline resume is not consent.**
+The file `data/simulations/manu-liv-match-dataset.json` is committed and structurally profiled (2,199 records). The owner confirmed synthetic provenance and redistribution permission. It is **not** imported into the match API: unitless coordinate values, clock semantics, canonical event mapping, player metrics and football realism still require review. Match-specific C# values have been removed from production source and retained only as test golden data. See the role skill index and Story Execution Routing for implementation owners. **Always ask the repository owner to approve the exact DEV change before deploying; PR merge or pipeline resume is not consent.**

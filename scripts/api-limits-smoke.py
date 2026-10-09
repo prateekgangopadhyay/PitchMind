@@ -6,7 +6,16 @@ import urllib.error
 import urllib.request
 
 base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5080"
-fixture = json.load(urllib.request.urlopen(base + "/api/v1/matches", timeout=10))[0]
+try:
+    with urllib.request.urlopen(base + "/api/v1/matches", timeout=10) as response:
+        fixture_payload = json.load(response)
+except urllib.error.HTTPError as error:
+    if error.code == 503:
+        problem = json.load(error)
+        if problem.get("code") == "MATCH_DATA_UNAVAILABLE":
+            raise SystemExit("BLOCKED: analyst rate-limit smoke requires a validated match provider")
+    raise
+fixture = fixture_payload[0]
 route = base + "/api/v1/matches/" + fixture["matchId"]
 insight = json.load(urllib.request.urlopen(route + "/insights?atSeconds=3309", timeout=10))[0]
 body = json.dumps({"insightId": insight["id"], "atSeconds": 3309, "audience": "fan"}).encode()

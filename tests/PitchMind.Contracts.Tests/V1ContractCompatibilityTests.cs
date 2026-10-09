@@ -2,6 +2,7 @@ using System.Text.Json;
 using PitchMind.Api;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Simulation;
+using PitchMind.TestFixtures;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;

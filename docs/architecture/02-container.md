@@ -2,20 +2,19 @@
 
 **Legend:** Solid arrows under **CURRENT** are backed by existing implementation or recorded demo behavior. **TARGET** describes the desired Azure-only deployment and is **not verified as an integrated cloud path**. **OPTIONAL** is feature/cost gated. [Target HLD](06-target-azure-hld.md) | [Observed limitations](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) | [Azure deployment evidence](../engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md).
 
-## CURRENT — offline synthetic demonstration (not canonical Azure ingestion)
+## CURRENT — process health with match routes fail-closed (no canonical ingest)
 
 ```mermaid
 flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
-  A --> S["SyntheticMatchService"]
-  S --> G["C# generated fixture (transitional)"]
-  S --> T["Deterministic pressing rule"]
-  S --> E["Selected-time evidence and fallback"]
+  A --> H["Health endpoints"]
+  A --> R["Match routes: 503 MATCH_DATA_UNAVAILABLE"]
+  T["Deterministic test golden generator"] -. test assemblies only .-> Tests["Automated tests"]
   L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
-  J["JSON file in repository (not wired)"] -. "not imported" .-> S
+  J["Candidate synthetic JSON + manifest"] -. "not canonically imported" .-> P
 ```
 
-The current PostgreSQL adapter persists `MatchEvent` but does **not** provide the fixture-backed API's match frames, projections, evidence or transactional outbox. The earlier Central India ACA prototype serves this offline path only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
+The current PostgreSQL adapter persists `MatchEvent` but does **not** provide match frames, projections, evidence or a transactional outbox. Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE`; the analyst endpoint may return `429` when rate-limited before its handler. Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable these routes. The former generated scenario now exists only in test assemblies. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
 
 ## TARGET — canonical Azure platform
 
@@ -57,7 +56,7 @@ flowchart LR
 
 | Project | Responsibility | Allowed project references |
 |---|---|---|
-| `PitchMind.Domain` | Football concepts and rules, plus a transitional synthetic fixture generator | None; SDK implicit framework baseline only |
+| `PitchMind.Domain` | Football concepts and rules; no scenario data or fixture generation | None; SDK implicit framework baseline only |
 | `PitchMind.Contracts` | Transport contracts | None |
 | `PitchMind.Application` | Use cases and ports | `PitchMind.Domain` |
 | `PitchMind.Infrastructure` | Persistence and external adapters | `PitchMind.Application` |

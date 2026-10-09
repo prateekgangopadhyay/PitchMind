@@ -58,6 +58,22 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionSource_DoesNotGenerateMatchSpecificFixtures()
+    {
+        var root = FindRepositoryRoot();
+        var productionFiles = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories);
+        var violations = productionFiles
+            .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, lineNumber: index + 1)))
+            .Where(item => item.line.Contains("SyntheticFixtureGenerator", StringComparison.Ordinal)
+                || item.line.Contains("Harbour FC", StringComparison.Ordinal)
+                || item.line.Contains("Ridge Athletic", StringComparison.Ordinal))
+            .Select(item => $"{Path.GetRelativePath(root, item.path)}:{item.lineNumber}: {item.line.Trim()}")
+            .ToArray();
+
+        Xunit.Assert.Empty(violations);
+    }
+
+    [Xunit.Fact]
     public void Domain_RejectsForgedImplicitFrameworkReferences()
     {
         var sdkPath = Path.Combine(Path.GetTempPath(), "dotnet", "sdk", "10.0.0", "Sdks");

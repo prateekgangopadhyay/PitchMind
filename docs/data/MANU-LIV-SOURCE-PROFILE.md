@@ -2,6 +2,8 @@
 **Source:** `data/simulations/manu-liv-match-dataset.json` on updated PitchMind `main` commit `b97825416af5eb2e323b577942ae99addfe8727e`; Git blob SHA `9f53613d10dcf2e117e708c1b3e9706a49e1eb7c`. **Inspection date:** 2026-10-08.  
 **Status:** structural profile from parsed source JSON; **not** canonical ingest, a football-approved simulation, a license assessment, a verified Azure feed, or a passing replay integration test.
 
+**Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON itself still has no provenance/rights manifest, and this declaration does not resolve the clock policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
+
 ## Observed source statistics
 | Property | Observed value |
 |---|---|
@@ -49,7 +51,7 @@
 - `Goal` records' metadata `score` values agree with the displayed 3–3 result, but score remains a projection of six accepted canonical goal events with review of disallowed/own goals, corrections and scorer validity.
 
 ## Rights, synthetic origin, medical-like attributes and realism
-This JSON contains **real club and player names**, location and synthetic-looking speed/stamina/heart-rate values. The source alone cannot prove it is fabricated, licensed, or safe to portray as actual player performance. Owner must confirm provenance, use rights, privacy implications and labeling. Do **not** publish the raw event file or per-player biometrics on a public hackathon repo without explicit review. "Simulated EPL-context match" must be visible on the product.
+This JSON contains **real club and player names**, location and synthetic-looking speed/stamina/heart-rate values. Owner has confirmed synthetic provenance and redistribution permission; metric units/definitions and privacy implications remain unresolved, so do **not** portray per-player biometrics as measured performance. "Simulated EPL-context match" must be visible on the product.
 
 ## Implementation acceptance items for EP03/04/05/07
 1. Approved `FixtureManifest` in `data/simulations/` describing source SHA-256, `synthetic=true`, rights, pitch dimensions/unit/orientation, clock policy, team IDs, source event vocabulary, substitution/roster policy.
