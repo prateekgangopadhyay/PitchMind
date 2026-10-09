@@ -21,7 +21,23 @@ These are from the offline fixture, **not** PostgreSQL, Azure Event Hubs, Micros
 
 `key-moments` scores events with configurable, versioned demo weights and exponential time decay. The default policy clusters shots from the same team when consecutive shots are within 45 seconds; goals and cards remain individual moments. A tactical item retains event/frame evidence references and its evidence-graph claim node. The source does not define an approved “major chance” signal, so a recorded shot is not upgraded to one. This is a deterministic prototype contract, not a Product Owner-approved notification policy.
 
-EP04-S04 adds an internal PostgreSQL projection reader for selected-time/revision-bounded snapshots and event windows. It is not mapped to an HTTP route; all current public `/api/v1` match routes remain backed by the offline fixture until the application use case and authorized API contract are implemented.
+### Canonical BFF routes (EP06-S01 implementation; acceptance pending)
+
+These separately namespaced routes read PostgreSQL canonical projections and persisted evidence. They never fall back to the offline fixture. If a PostgreSQL read adapter is not configured or the database is unavailable, the route returns a sanitized `503 DEPENDENCY_UNAVAILABLE`. The routes are not authenticated yet; cloud exposure is blocked pending EP06-S04 or an explicitly approved synthetic public-read boundary.
+
+| Method | Route | State | Reality and notes |
+|---|---|---|---|
+| GET | `/api/v1/canonical/fixtures?afterMatchId&limit` | **IMPLEMENTED / UNVERIFIED** | Latest persisted projection cards; `limit` 1..100. |
+| GET | `/api/v1/canonical/matches/{matchId}/summary?atSeconds&revision` | **IMPLEMENTED / UNVERIFIED** | Selected-time persisted state, source/state hashes and revision. `atSeconds` 0..5400. |
+| GET | `/api/v1/canonical/matches/{matchId}/events?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | Ledger events ordered by original sequence, bounded by selected time and projection sequence; cursor bound to match, time and revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | Persisted insight records only when every evidence reference resolves to a selected-time event/frame. Other evidence kinds are suppressed until their source is resolvable. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | **IMPLEMENTED / UNVERIFIED** | Same evidence and selected-time constraints as the insight list. |
+| GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | One selected-time snapshot plus a bounded page of ordered ledger events. |
+| GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | **IMPLEMENTED / UNVERIFIED** | Deliberately returns `503 CANONICAL_KEY_MOMENTS_UNAVAILABLE`; the canonical database has no persisted key-moment projection. The fixture demo endpoint is not used as fallback. |
+
+The machine-readable contract is [openapi-canonical-bff-v1.yaml](openapi-canonical-bff-v1.yaml). The canonical route DTOs are distinct from the fixture demo DTOs. This implementation is not accepted until PostgreSQL contract/integration tests, negative HTTP checks, independent review and Product Owner acceptance are recorded.
+
+EP04-S04 provides the internal PostgreSQL projection reader for selected-time/revision-bounded snapshots and event windows. EP06-S01 maps separate canonical-prefixed routes to those read ports; the existing `/api/v1/matches` routes continue to serve the offline fixture only.
 
 The current v1 DTO property names and representative JSON types are pinned by `PitchMind.Contracts.Tests`. `MatchContractMappings` is the only API mapping from the current application read models to public football response DTOs. `FixtureResponse.version` retains the source fixture version; API contract version is `X-Contract-Version`. `MatchStateResponse` adds phase, possession, active-player counts, and player active/dismissed/yellow-card state. It preserves the existing `status` values (`replay` and `full-time`) and adds `phase` values `notstarted`, `firsthalf`, `halftime`, `secondhalf`, and `fulltime`; same-clock events are applied in source sequence order and later events are excluded. Current offline frame DTOs explicitly identify their generated 105 × 68 metre coordinate convention; this does not certify the supplied candidate feed's units or mappings. The React test fetch stubs are test-only fixtures; production UI data is loaded through `request()` and never falls back to those examples.
 
