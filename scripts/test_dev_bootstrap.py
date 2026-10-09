@@ -35,6 +35,13 @@ class DevBootstrapTests(unittest.TestCase):
 set -eu
 printf '%s\\n' \"$*\" >> \"$PITCHMIND_FAKE_DOCKER_LOG\"
 if [ \"${1:-}\" = info ]; then exit \"${PITCHMIND_FAKE_DOCKER_INFO_STATUS:-0}\"; fi
+if [ \"${1:-}\" = compose ]; then
+  if [ \"${PITCHMIND_FAKE_ASSERT_COMPOSE_CREDENTIALS_UNSET:-0}\" = 1 ] \\
+    && { [ \"${POSTGRES_PASSWORD+x}\" = x ] || [ \"${REDIS_PASSWORD+x}\" = x ]; }; then
+    exit 73
+  fi
+  exit \"${PITCHMIND_FAKE_COMPOSE_STATUS:-0}\"
+fi
 exit 0
 """,
         )
@@ -166,6 +173,41 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         self.assertFalse(self.openssl_count.exists())
+
+    def test_exported_passwords_cannot_override_validated_env_file(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+        self.env["POSTGRES_PASSWORD"] = "weak-shell-override"
+        self.env["REDIS_PASSWORD"] = "reused-shell-override"
+        self.env["PITCHMIND_FAKE_ASSERT_COMPOSE_CREDENTIALS_UNSET"] = "1"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compose --env-file docker/.env", self.docker_log.read_text())
+
+    def test_compose_readiness_failure_explains_safe_local_recovery(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+        self.env["PITCHMIND_FAKE_COMPOSE_STATUS"] = "1"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Inspect Docker logs", result.stderr)
+        self.assertIn("./scripts/dev-down.sh", result.stderr)
+        self.assertIn("volumes are preserved", result.stderr)
+        self.assertEqual(self.docker_log.read_text().splitlines(), [
+            "info", "compose --env-file docker/.env -f docker/compose.yml up -d --wait"
+        ])
 
     def test_placeholder_or_short_existing_password_is_rejected_without_disclosure(self) -> None:
         env_file = self.root / "docker" / ".env"

@@ -51,5 +51,9 @@ if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
   exit 1
 fi
 
-docker compose --env-file docker/.env -f docker/compose.yml up -d --wait
+if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
+  docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
+  echo "Local services did not become healthy. Inspect Docker logs, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
+  exit 1
+fi
 echo "Local PostgreSQL and Redis are healthy."
