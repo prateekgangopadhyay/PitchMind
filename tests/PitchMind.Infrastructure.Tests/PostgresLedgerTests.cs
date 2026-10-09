@@ -1,4 +1,5 @@
 using Npgsql;
+using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Infrastructure.Storage;
@@ -46,7 +47,10 @@ public sealed class PostgresLedgerTests
         var store = new PostgresMatchEventStore(source); var matchId = MatchId.New(); var evt = Event(matchId);
         await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => store.AppendAsync(evt, CancellationToken.None)));
         Assert.Single(await Read(store, matchId));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AppendAsync(evt with { ClockSeconds = 42 }, CancellationToken.None));
+        var conflict = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(evt with { ClockSeconds = 42 }, CancellationToken.None));
+        Assert.Equal("EVENT_ID_PAYLOAD_CONFLICT", conflict.Code);
+        Assert.Equal(MatchEventIngestionDisposition.Quarantine, conflict.Disposition);
         Assert.Equal(evt, Assert.Single(await Read(store, matchId)));
     }
     [PostgresIntegrationFact]
@@ -54,13 +58,75 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var store = new PostgresMatchEventStore(source); var matchId = MatchId.New(); var first = Event(matchId);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AppendAsync(Event(matchId, 2), CancellationToken.None));
+        var gap = await Assert.ThrowsAsync<MatchEventIngestionException>(() => store.AppendAsync(Event(matchId, 2), CancellationToken.None));
+        Assert.Equal("SEQUENCE_GAP", gap.Code);
+        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, gap.Disposition);
         Assert.Empty(await Read(store, matchId));
         await store.AppendAsync(first, CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AppendAsync(Event(matchId), CancellationToken.None));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.AppendAsync(Event(matchId, 2), CancellationToken.None));
+        var usedSequence = await Assert.ThrowsAsync<MatchEventIngestionException>(() => store.AppendAsync(Event(matchId), CancellationToken.None));
+        Assert.Equal("SEQUENCE_ALREADY_USED", usedSequence.Code);
+        Assert.Equal(MatchEventIngestionDisposition.Quarantine, usedSequence.Disposition);
+        gap = await Assert.ThrowsAsync<MatchEventIngestionException>(() => store.AppendAsync(Event(matchId, 2), CancellationToken.None));
+        Assert.Equal("SEQUENCE_GAP", gap.Code);
+        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, gap.Disposition);
         var next = Event(matchId, 1); await store.AppendAsync(next, CancellationToken.None);
         Assert.Equal(new[] { first, next }, await Read(store, matchId));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task EventIdConflictAcrossMatchesIsSerializedAndNeverMutatesTheSecondLedger()
+    {
+        await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresMatchEventStore(source);
+        var eventId = Guid.NewGuid();
+        var first = Event(MatchId.New()) with { EventId = eventId };
+        var second = Event(MatchId.New()) with { EventId = eventId };
+
+        async Task<MatchEventIngestionException?> TryAppend(MatchEvent matchEvent)
+        {
+            try { await store.AppendAsync(matchEvent, CancellationToken.None); return null; }
+            catch (MatchEventIngestionException exception) { return exception; }
+        }
+
+        var results = await Task.WhenAll(TryAppend(first), TryAppend(second));
+        var rejected = Assert.Single(results, result => result is not null)!;
+        Assert.Equal("EVENT_ID_PAYLOAD_CONFLICT", rejected.Code);
+        Assert.Equal(MatchEventIngestionDisposition.Quarantine, rejected.Disposition);
+        Assert.Single(await Read(store, first.MatchId));
+        Assert.Empty(await Read(store, second.MatchId));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task OffsetDistinctTimestampForSameInstantIsRejectedWithoutChangingLedger()
+    {
+        await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresMatchEventStore(source);
+        var original = MatchEvent.Create(Guid.NewGuid(), MatchId.New(), 0, MatchEventType.KickOff, 0, 1,
+            new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        await store.AppendAsync(original, CancellationToken.None);
+        var offsetDistinct = original with { OccurredAt = original.OccurredAt.ToOffset(TimeSpan.FromHours(1)) };
+
+        var conflict = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(offsetDistinct, CancellationToken.None));
+
+        Assert.Equal("EVENT_ID_PAYLOAD_CONFLICT", conflict.Code);
+        var persisted = Assert.Single(await Read(store, original.MatchId));
+        Assert.True(persisted.OccurredAt.EqualsExact(original.OccurredAt));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task InvalidEventGetsStableQuarantineClassificationBeforePersistence()
+    {
+        await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresMatchEventStore(source);
+        var invalid = Event(MatchId.New()) with { Type = (MatchEventType)999 };
+
+        var exception = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(invalid, CancellationToken.None));
+
+        Assert.Equal("INVALID_EVENT_PAYLOAD", exception.Code);
+        Assert.Equal(MatchEventIngestionDisposition.Quarantine, exception.Disposition);
+        Assert.Empty(await Read(store, invalid.MatchId));
     }
     [PostgresIntegrationFact]
     public async Task CancellationCannotCommitAnEvent()
