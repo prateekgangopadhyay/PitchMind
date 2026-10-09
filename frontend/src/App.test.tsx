@@ -39,6 +39,10 @@ it('loads API state and clears historical insight when replay moves before evide
     const slider = container.querySelector('input')!;
     expect(slider.max).toBe('3600');
     expect(container.querySelector('svg.pitch')?.getAttribute('viewBox')).toBe('-3 -3 126 86');
+    expect(container.querySelectorAll('.pitch rect')[1].getAttribute('width')).toBe('16.5');
+    expect(container.querySelectorAll('.pitch rect')[1].getAttribute('height')).toBe('40.32');
+    expect(container.querySelectorAll('.pitch rect')[3].getAttribute('width')).toBe('5.5');
+    expect(container.querySelectorAll('.pitch rect')[3].getAttribute('height')).toBe('18.32');
     expect(container.textContent).toContain('120 × 80 m');
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '3309');

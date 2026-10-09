@@ -21,6 +21,7 @@
     "expectedTeamCount": 2,
     "sourceClockUnit": "seconds",
     "preserveSourceClockWithoutNormalization": true,
+    "allowSameClockPeriod2EventsBeforeHalfTimeMarker": true,
     "expectedPeriods": [1, 2],
     "requiredEventCounts": {
       "HalfTime": 1,

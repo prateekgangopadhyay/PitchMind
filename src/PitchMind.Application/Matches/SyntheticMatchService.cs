@@ -27,7 +27,9 @@ public sealed class SyntheticMatchService
                     e.Event.Type == MatchEventType.HalfTime && e.Event.Period == 1
                     || e.Event.Type == MatchEventType.KickOff && e.Event.Period == 2)))
             throw new ArgumentException("Ordered contiguous match events are required.", nameof(fixture));
-        if (fixture.Frames.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > fixture.DurationSeconds || f.Players.Any(p =>
+        if (fixture.Frames.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > fixture.DurationSeconds ||
+                !double.IsFinite(f.BallX) || f.BallX < 0 || f.BallX > fixture.PitchLengthMetres ||
+                !double.IsFinite(f.BallY) || f.BallY < 0 || f.BallY > fixture.PitchWidthMetres || f.Players.Any(p =>
                 !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > fixture.PitchLengthMetres ||
                 p.Y < 0 || p.Y > fixture.PitchWidthMetres)))
             throw new ArgumentException("Tracking must use finite in-pitch coordinates.", nameof(fixture));

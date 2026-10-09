@@ -112,6 +112,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                    for key, count in required_event_counts.items())):
         raise CandidateValidationError("Manifest requiredEventCounts must map event names to non-negative integers")
     required_event_markers = match_policy.get("requiredEventMarkers", {})
+    allow_same_clock_period2_before_half_time = match_policy.get("allowSameClockPeriod2EventsBeforeHalfTimeMarker", False)
+    if not isinstance(allow_same_clock_period2_before_half_time, bool):
+        raise CandidateValidationError("Manifest same-clock half-time ordering policy must be boolean")
     if (not isinstance(required_event_markers, dict)
             or any(not isinstance(event_type, str) or not isinstance(marker, dict)
                    or not _is_integer(marker.get("clockSeconds"))
@@ -311,7 +314,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         if half_index >= full_index or half_event["clockSeconds"] > full_event["clockSeconds"]:
             raise CandidateValidationError("Half-time must precede full-time in source sequence and clock")
         if any((event["period"] == 1 and index > half_index)
-               or (event["period"] == 2 and index < half_index and event["clockSeconds"] < half_event["clockSeconds"])
+               or (event["period"] == 2 and index < half_index and
+                   (event["clockSeconds"] < half_event["clockSeconds"] or
+                    event["clockSeconds"] == half_event["clockSeconds"] and not allow_same_clock_period2_before_half_time))
                for index, event in enumerate(events)):
             raise CandidateValidationError("Source event periods cross the half-time marker")
         if not any(event["eventType"] == "KickOff" and event["period"] == 2

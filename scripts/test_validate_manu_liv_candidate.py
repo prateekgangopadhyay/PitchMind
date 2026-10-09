@@ -156,6 +156,32 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "marker clock or period"):
             validator.validate_source(payload, manifest)
 
+    def test_requires_explicit_policy_for_same_clock_period_two_event_before_half_time(self):
+        events = [
+            event("11111111-1111-4111-8111-111111111111", 1, 0, "KickOff"),
+            event("22222222-2222-4222-8222-222222222222", 2, 10, "Pass"),
+            event("33333333-3333-4333-8333-333333333333", 3, 10, "HalfTime"),
+            event("44444444-4444-4444-8444-444444444444", 4, 10, "KickOff"),
+            event("55555555-5555-4555-8555-555555555555", 5, 12, "FullTime"),
+        ]
+        events[1]["period"] = 2
+        events[2]["period"] = 2
+        events[3]["period"] = 2
+        events[4]["period"] = 2
+        payload = json.dumps(events, separators=(",", ":")).encode()
+        manifest = test_manifest(events, payload)
+        manifest["match"]["expectedPeriods"] = [1, 2]
+        manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
+        manifest["match"]["requiredEventMarkers"] = {
+            "HalfTime": {"clockSeconds": 10, "period": 2},
+            "FullTime": {"clockSeconds": 12, "period": 2},
+        }
+        with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
+            validator.validate_source(payload, manifest)
+        manifest["match"]["allowSameClockPeriod2EventsBeforeHalfTimeMarker"] = True
+        self.assertEqual(validator.validate_source(payload, manifest)["status"],
+                         "structurally_valid_candidate_blocked_for_canonicalization")
+
     def test_rejects_manifest_drift_and_unapproved_truth_changes(self):
         wrong_hash = {**self.manifest, "source": {**self.manifest["source"], "sha256": "0" * 64}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "SHA-256"):

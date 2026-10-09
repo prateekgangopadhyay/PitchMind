@@ -102,6 +102,17 @@ public sealed class SyntheticMatchTests
         var frames = fixture.Frames.Select(f => f with { Players = f.Players.Select(p => p with { X = double.NaN }).ToArray() }).ToArray();
         Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
     }
+    [Theory]
+    [InlineData(double.NaN, 0)]
+    [InlineData(121, 0)]
+    [InlineData(0, double.PositiveInfinity)]
+    [InlineData(0, 81)]
+    public void InvalidBallCoordinatesAreRejected(double ballX, double ballY)
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Select((frame, index) => index == 0 ? frame with { BallX = ballX, BallY = ballY } : frame).ToArray();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+    }
     [Fact] public void ExplanationsUseEvidenceTeamNames()
     {
         var fixture = SyntheticFixtureGenerator.Generate();

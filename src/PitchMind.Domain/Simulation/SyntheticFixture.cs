@@ -105,7 +105,8 @@ public static class SyntheticFixtureGenerator
     {
         if (definition.Teams is null || definition.ScenarioEvents is null || definition.SuppressedCirculationWindows is null ||
             definition.FrameOverrides is null || string.IsNullOrWhiteSpace(definition.FixtureId) || definition.Provenance != "synthetic" ||
-            definition.DurationSeconds <= 0 || definition.PitchLengthMetres <= 0 || definition.PitchWidthMetres <= 0 ||
+            definition.DurationSeconds <= 0 || !double.IsFinite(definition.PitchLengthMetres) || definition.PitchLengthMetres <= 0 ||
+            !double.IsFinite(definition.PitchWidthMetres) || definition.PitchWidthMetres <= 0 ||
             definition.StartUtc == default || definition.StartUtc.Offset != TimeSpan.Zero ||
             definition.HalfTimeSeconds <= 0 || definition.HalfTimeSeconds >= definition.DurationSeconds ||
             definition.CirculationIntervalSeconds <= 0 || definition.DurationSeconds % definition.CirculationIntervalSeconds != 0 ||
@@ -124,8 +125,8 @@ public static class SyntheticFixtureGenerator
             string.IsNullOrWhiteSpace(t.Name) || string.IsNullOrWhiteSpace(t.Formation) || t.Players.Length < 11 ||
             !t.Players.Any(p => p.Id == t.CirculationPlayerId) || !t.Players.Any(p => p.Id == t.CirculationReceiverId)) ||
             allPlayers.Any(p => p is null || string.IsNullOrWhiteSpace(p.Id) || string.IsNullOrWhiteSpace(p.Name) || string.IsNullOrWhiteSpace(p.Role) ||
-                p.ShirtNumber is < 1 or > 99 || p.BaseX < 0 || p.BaseX > definition.PitchLengthMetres ||
-                p.BaseY < 0 || p.BaseY > definition.PitchWidthMetres || p.ActiveFromSeconds < 0 || p.ActiveFromSeconds > definition.DurationSeconds ||
+                p.ShirtNumber is < 1 or > 99 || !double.IsFinite(p.BaseX) || p.BaseX < 0 || p.BaseX > definition.PitchLengthMetres ||
+                !double.IsFinite(p.BaseY) || p.BaseY < 0 || p.BaseY > definition.PitchWidthMetres || p.ActiveFromSeconds < 0 || p.ActiveFromSeconds > definition.DurationSeconds ||
                 (p.ActiveUntilSeconds != int.MaxValue && p.ActiveUntilSeconds > definition.DurationSeconds) ||
                 p.ActiveFromSeconds >= p.ActiveUntilSeconds))
             throw new InvalidOperationException("Synthetic fixture definition has invalid teams or circulation players.");
@@ -178,9 +179,10 @@ public static class SyntheticFixtureGenerator
             definition.FrameOverrides.Any(f => f is null || f.PlayerPositions is null) ||
             definition.FrameOverrides.Select(f => f.ClockSeconds).Distinct().Count() != definition.FrameOverrides.Length ||
             definition.FrameOverrides.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > definition.DurationSeconds ||
-            f.BallX < 0 || f.BallX > definition.PitchLengthMetres || f.BallY < 0 || f.BallY > definition.PitchWidthMetres ||
-            f.PlayerPositions.Any(p => !playerIds.Contains(p.Key) || p.Value is null || p.Value.Length != 2 || p.Value[0] < 0 ||
-                p.Value[0] > definition.PitchLengthMetres || p.Value[1] < 0 || p.Value[1] > definition.PitchWidthMetres ||
+            !double.IsFinite(f.BallX) || f.BallX < 0 || f.BallX > definition.PitchLengthMetres ||
+            !double.IsFinite(f.BallY) || f.BallY < 0 || f.BallY > definition.PitchWidthMetres ||
+            f.PlayerPositions.Any(p => !playerIds.Contains(p.Key) || p.Value is null || p.Value.Length != 2 || !double.IsFinite(p.Value[0]) || p.Value[0] < 0 ||
+                p.Value[0] > definition.PitchLengthMetres || !double.IsFinite(p.Value[1]) || p.Value[1] < 0 || p.Value[1] > definition.PitchWidthMetres ||
                 allPlayers.Single(player => player.Id == p.Key).ActiveFromSeconds > f.ClockSeconds ||
                 f.ClockSeconds >= allPlayers.Single(player => player.Id == p.Key).ActiveUntilSeconds)))
             throw new InvalidOperationException("Synthetic fixture definition has an invalid frame override.");
