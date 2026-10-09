@@ -78,6 +78,39 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void Domain_RejectsTargetInjectedExternalAssemblyInputs()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-domain-external-input-");
+        try
+        {
+            var externalAssembly = Path.Combine(root.FullName, "System.Text.Json.dll");
+            File.Copy(typeof(JsonDocument).Assembly.Location, externalAssembly);
+            var definingProject = Path.Combine(root.FullName, "Directory.Build.targets");
+            var domain = new XDocument(new XElement("Project",
+                new XElement("TargetResolvedReference",
+                    new XAttribute("Include", externalAssembly),
+                    new XAttribute("FullPath", externalAssembly),
+                    new XAttribute("AssemblyName", "System.Text.Json"),
+                    new XAttribute("DefiningProjectFullPath", definingProject)),
+                new XElement("TargetCompilerReference",
+                    new XAttribute("Include", externalAssembly),
+                    new XAttribute("FullPath", externalAssembly),
+                    new XAttribute("ReferenceAssembly", externalAssembly),
+                    new XAttribute("AssemblyName", "System.Text.Json"),
+                    new XAttribute("DefiningProjectFullPath", definingProject))));
+
+            var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(domain);
+
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetResolvedReference '" + externalAssembly, StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetCompilerReference '" + externalAssembly, StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ForbiddenDomainReference_IsRejectedByTheArchitecturePolicy()
     {
         var invalid = AllowedProjectReferences.ToDictionary(
@@ -307,8 +340,8 @@ public sealed class DependencyTests
             File.WriteAllText(sdkFrameworkTargets, "");
             File.WriteAllText(transitiveProjectTargets, "");
 
-            Xunit.Assert.True(IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, Path.Combine(frameworkPack, "System.Runtime.dll"), sdkPath));
-            Xunit.Assert.False(IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, internalAlias, sdkPath));
+            Xunit.Assert.True(ArchitectureDependencyPolicy.IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, Path.Combine(frameworkPack, "System.Runtime.dll"), sdkPath));
+            Xunit.Assert.False(ArchitectureDependencyPolicy.IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, internalAlias, sdkPath));
             var restoredProjects = new HashSet<(string PackageId, string Version, string ProjectPath)>
             {
                 ("PitchMind.Domain", "1.0.0", Path.Combine(root.FullName, "src", "PitchMind.Domain.csproj"))
@@ -542,7 +575,7 @@ public sealed class DependencyTests
                     continue;
                 }
 
-                if (itemType == "Reference" && IsTrustedSdkFrameworkAssembly(definingProject, fullPath, sdkPath))
+                if (itemType == "Reference" && ArchitectureDependencyPolicy.IsTrustedSdkFrameworkAssembly(definingProject, fullPath, sdkPath))
                 {
                     continue;
                 }
@@ -647,37 +680,6 @@ public sealed class DependencyTests
         var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         return !string.IsNullOrWhiteSpace(definingProject) && Path.GetFullPath(definingProject).Equals(expected, pathComparison) &&
                restoredProjectReferences.Contains((packageId, packageVersion, Path.GetFullPath(fullPath)));
-    }
-
-    private static bool IsTrustedSdkFrameworkAssembly(string? definingProject, string? fullPath, string? sdkPath)
-    {
-        if (string.IsNullOrWhiteSpace(sdkPath) || string.IsNullOrWhiteSpace(definingProject) || string.IsNullOrWhiteSpace(fullPath))
-        {
-            return false;
-        }
-
-        var sdkRoot = Directory.GetParent(sdkPath);
-        var sdkRootPath = sdkRoot?.Parent;
-        var dotnetRoot = sdkRootPath?.Parent?.FullName;
-        if (dotnetRoot is null || !IsWithinDirectory(definingProject, sdkRoot?.FullName))
-        {
-            return false;
-        }
-
-        var frameworkPackRoot = Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref");
-        if (!IsWithinDirectory(fullPath, frameworkPackRoot) || !File.Exists(fullPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            return AssemblyName.GetAssemblyName(fullPath).Name?.StartsWith("PitchMind.", StringComparison.Ordinal) != true;
-        }
-        catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
-        {
-            return false;
-        }
     }
 
     private static void RestoreFixture(string projectPath)
@@ -792,15 +794,69 @@ internal static class ArchitectureDependencyPolicy
     public static IReadOnlyList<string> ValidateDomainReferences(XDocument domain)
     {
         var violations = new List<string>();
-        foreach (var item in domain.Descendants().Where(element =>
-                     element.Name.LocalName is "PackageReference" or "TargetPackageReference" or "Reference" or "TargetReference" or
-                         "TargetFrameworkReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference" ||
-                     element.Name.LocalName == "FrameworkReference" && !IsSdkImplicitFrameworkReference(domain, element)))
+        foreach (var item in domain.Descendants())
         {
+            var itemType = item.Name.LocalName;
+            var forbiddenResolvedInput = (itemType is "TargetResolvedReference" or "TargetCompilerReference") &&
+                                         !IsTrustedSdkFrameworkInput(domain, item);
+            var forbidden = itemType is "PackageReference" or "TargetPackageReference" or "Reference" or "TargetReference" or
+                "TargetFrameworkReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference" ||
+                itemType == "FrameworkReference" && !IsSdkImplicitFrameworkReference(domain, item);
+            if (!forbidden && !forbiddenResolvedInput)
+            {
+                continue;
+            }
+
             violations.Add($"Domain project has forbidden {item.Name.LocalName} '{item.Attribute("Include")?.Value}'.");
         }
 
         return violations;
+    }
+
+    private static bool IsTrustedSdkFrameworkInput(XDocument project, XElement item)
+    {
+        var sdkPath = project.Root?.Attribute("MSBuildSDKsPath")?.Value;
+        var definingProject = item.Attribute("DefiningProjectFullPath")?.Value;
+        var fullPath = item.Attribute("FullPath")?.Value ?? item.Attribute("Include")?.Value;
+        if (!IsTrustedSdkFrameworkAssembly(definingProject, fullPath, sdkPath))
+        {
+            return false;
+        }
+
+        var referenceAssembly = item.Attribute("ReferenceAssembly")?.Value;
+        return string.IsNullOrWhiteSpace(referenceAssembly) ||
+               IsTrustedSdkFrameworkAssembly(definingProject, referenceAssembly, sdkPath);
+    }
+
+    public static bool IsTrustedSdkFrameworkAssembly(string? definingProject, string? fullPath, string? sdkPath)
+    {
+        if (string.IsNullOrWhiteSpace(sdkPath) || string.IsNullOrWhiteSpace(definingProject) || string.IsNullOrWhiteSpace(fullPath))
+        {
+            return false;
+        }
+
+        var sdkRoot = Directory.GetParent(sdkPath);
+        var dotnetRoot = sdkRoot?.Parent?.Parent?.FullName;
+        if (dotnetRoot is null || string.IsNullOrWhiteSpace(sdkRoot?.FullName) ||
+            !IsPathWithinDirectory(definingProject, sdkRoot.FullName))
+        {
+            return false;
+        }
+
+        var frameworkPackRoot = Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref");
+        if (!IsPathWithinDirectory(fullPath, frameworkPackRoot) || !File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return AssemblyName.GetAssemblyName(fullPath).Name?.StartsWith("PitchMind.", StringComparison.Ordinal) != true;
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
+        {
+            return false;
+        }
     }
 
     private static bool IsSdkImplicitFrameworkReference(XDocument project, XElement item)
