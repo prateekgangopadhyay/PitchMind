@@ -53,7 +53,8 @@ public sealed class DependencyTests
         var root = FindRepositoryRoot();
         var domain = ReadEvaluatedProjectDocuments(root)["PitchMind.Domain"];
 
-        Xunit.Assert.Empty(ArchitectureDependencyPolicy.ValidateDomainReferences(domain));
+        var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(domain);
+        Xunit.Assert.Empty(violations);
     }
 
     [Xunit.Fact]
@@ -133,6 +134,43 @@ public sealed class DependencyTests
                 item.Attribute("FullPath")?.Value == injectedAssembly);
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetFinalCompilerReference", StringComparison.Ordinal) &&
                 violation.Contains(injectedAssembly, StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void Domain_RejectsCompilerReferenceMetadataMutatedImmediatelyBeforeCoreCompile()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-late-compiler-metadata-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            var dotnetRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
+            var runtimeReference = Directory.GetFiles(
+                    Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref"), "System.Runtime.dll", SearchOption.AllDirectories)
+                .First(path => path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}net10.0{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+            var injectedAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<Target Name='MutateLateCompilerReferenceMetadata' BeforeTargets='CoreCompile'><ItemGroup>" +
+                "<ReferencePathWithRefAssemblies Update='@(ReferencePathWithRefAssemblies)' " +
+                "Condition=\"'%(ReferencePathWithRefAssemblies.FullPath)' == '" + runtimeReference + "'\">" +
+                "<ReferenceAssembly>" + injectedAssembly + "</ReferenceAssembly>" +
+                "</ReferencePathWithRefAssemblies></ItemGroup></Target></Project>");
+            File.WriteAllText(Path.Combine(root.FullName, "Fixture.cs"), "public sealed class Fixture { }");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetFinalCompilerReference" &&
+                item.Attribute("FullPath")?.Value == runtimeReference &&
+                item.Attribute("ReferenceAssembly")?.Value == injectedAssembly);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetFinalCompilerReference", StringComparison.Ordinal) &&
+                violation.Contains(runtimeReference, StringComparison.Ordinal));
         }
         finally
         {
@@ -639,9 +677,8 @@ public sealed class DependencyTests
             var outputPath = Path.Combine(captureDirectory.FullName, "compiler-inputs.txt");
             File.WriteAllText(targetPath,
                 "<Project><Target Name='PitchMindCaptureFinalCompilerInputs' DependsOnTargets='ResolveReferences;CoreCompile'>" +
-                "<ItemGroup><_PitchMindCompilerInput Include='@(ReferencePathWithRefAssemblies)' /></ItemGroup>" +
                 "<WriteLinesToFile File=\"$(PitchMindCompilerInputOutput)\" " +
-                "Lines=\"@(_PitchMindCompilerInput-&gt;'%(Identity)|%(FullPath)|%(ReferenceAssembly)|%(AssemblyName)|%(OriginalProjectReferenceItemSpec)|%(DefiningProjectFullPath)')\" " +
+                "Lines=\"@(ReferencePathWithRefAssemblies-&gt;'%(Identity)|%(FullPath)|%(ReferenceAssembly)|%(AssemblyName)|%(OriginalProjectReferenceItemSpec)|%(DefiningProjectFullPath)')\" " +
                 "Overwrite=\"true\" /></Target></Project>");
 
             var startInfo = new ProcessStartInfo("dotnet")
@@ -684,13 +721,19 @@ public sealed class DependencyTests
 
             var previouslyCapturedCompilerInputs = project.Descendants()
                 .Where(item => item.Name.LocalName == "TargetCompilerReference")
-                .Select(item => item.Attribute("FullPath")?.Value ?? item.Attribute("Include")?.Value)
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                .Select(item => CompilerInputSignature(
+                    item.Attribute("Include")?.Value,
+                    item.Attribute("FullPath")?.Value,
+                    item.Attribute("ReferenceAssembly")?.Value,
+                    item.Attribute("AssemblyName")?.Value,
+                    item.Attribute("OriginalProjectReferenceItemSpec")?.Value,
+                    item.Attribute("DefiningProjectFullPath")?.Value))
+                .ToHashSet(StringComparer.Ordinal);
             foreach (var line in File.ReadAllLines(outputPath))
             {
                 var metadata = line.Split('|');
-                if (previouslyCapturedCompilerInputs.Contains(metadata[1]))
+                var signature = CompilerInputSignature(metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5]);
+                if (previouslyCapturedCompilerInputs.Contains(signature))
                 {
                     continue;
                 }
@@ -723,6 +766,20 @@ public sealed class DependencyTests
         {
             captureDirectory.Delete(recursive: true);
         }
+    }
+
+    private static string CompilerInputSignature(params string?[] fields)
+    {
+        var normalized = fields.Select(field => field ?? string.Empty).ToArray();
+        for (var index = 0; index < normalized.Length; index++)
+        {
+            if (index is 1 or 2 && !string.IsNullOrWhiteSpace(normalized[index]))
+            {
+                normalized[index] = Path.GetFullPath(normalized[index]);
+            }
+        }
+
+        return string.Join('\u001f', normalized);
     }
 
     private static string TargetItemSignature(string itemType, XElement item)
