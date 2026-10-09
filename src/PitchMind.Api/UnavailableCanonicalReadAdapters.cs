@@ -24,4 +24,8 @@ internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader,
 
     public Task<PersistedMatchInsight?> GetAtAsync(MatchId matchId, string insightId, int maximumRevision, int selectedSeconds,
         long throughSequence, CancellationToken cancellationToken) => throw new CanonicalReadUnavailableException();
+
+    public Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
+        int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken) =>
+        throw new CanonicalReadUnavailableException();
 }

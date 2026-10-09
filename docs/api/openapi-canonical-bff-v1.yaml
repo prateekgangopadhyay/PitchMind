@@ -87,7 +87,7 @@ paths:
         - name: insightId
           in: path
           required: true
-          schema: { type: string, minLength: 1, maxLength: 200 }
+          schema: { type: string, minLength: 1, maxLength: 256 }
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
@@ -96,6 +96,26 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalInsight' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/evidence/{insightId}:
+    get:
+      operationId: getCanonicalInsightEvidence
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - name: insightId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: Persisted insight with complete event/frame evidence visible at the selected time and sequence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalEvidence' }
         '400': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
@@ -274,6 +294,23 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/CanonicalInsight' } }
         nextCursor: { type: [string, 'null'] }
         hasMore: { type: boolean }
+    CanonicalEvidencePayload:
+      type: object
+      required: [kind, id, relation, sequence, clockSeconds, period, payload]
+      properties:
+        kind: { type: string, enum: [event, frame] }
+        id: { type: string }
+        relation: { type: string }
+        sequence: { type: integer }
+        clockSeconds: { type: integer }
+        period: { type: integer }
+        payload: { type: object, additionalProperties: true }
+    CanonicalEvidence:
+      type: object
+      required: [insight, items]
+      properties:
+        insight: { $ref: '#/components/schemas/CanonicalInsight' }
+        items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidencePayload' } }
     CanonicalReplay:
       type: object
       required: [snapshot, events]

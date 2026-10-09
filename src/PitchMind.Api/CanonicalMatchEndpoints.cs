@@ -30,95 +30,136 @@ internal static class CanonicalMatchEndpoints
                 hasMore ? items[^1].MatchId : null, hasMore));
         });
 
-        var match = app.MapGroup("/api/v1/canonical/matches/{matchId:guid}");
+        var match = app.MapGroup("/api/v1/canonical/matches/{matchId}");
         match.MapGet("/summary", async (
-            Guid matchId, int? atSeconds, int? revision, IMatchProjectionReader projections,
+            string matchId, int? atSeconds, int? revision, IMatchProjectionReader projections,
             HttpContext context, CancellationToken cancellationToken) =>
         {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
             var selectedTime = atSeconds ?? 0;
-            var projection = await projections.GetAtAsync(new MatchId(matchId), selectedTime, revision, cancellationToken);
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, revision, cancellationToken);
             return projection is null
                 ? Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.")
                 : Results.Ok(ToSnapshot(projection, selectedTime));
         });
 
         match.MapGet("/events", async (
-            Guid matchId, int? atSeconds, int? revision, string? cursor, int? limit,
+            string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
             IMatchProjectionReader projections, HttpContext context, CancellationToken cancellationToken) =>
         {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 100.");
-            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeEvent(cursor, matchId, selectedTime, revision);
+            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeEvent(cursor, canonicalMatchId, selectedTime, revision);
             var maximumRevision = decodedCursor?.CanonicalRevision ?? revision;
-            var projection = await projections.GetAtAsync(new MatchId(matchId), selectedTime, maximumRevision, cancellationToken);
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, maximumRevision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, decodedCursor?.AfterSequence ?? -1, pageSize, cancellationToken);
-            return Results.Ok(ToEventPage(projection, selectedTime, page, matchId));
+            return Results.Ok(ToEventPage(projection, selectedTime, page, canonicalMatchId));
         });
 
         match.MapGet("/insights", async (
-            Guid matchId, int? atSeconds, int? revision, string? cursor, int? limit,
+            string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
             IMatchProjectionReader projections, IMatchInsightReader insights, HttpContext context,
             CancellationToken cancellationToken) =>
         {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 100.");
-            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeInsight(cursor, matchId, selectedTime, revision);
+            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeInsight(cursor, canonicalMatchId, selectedTime, revision);
             var maximumRevision = decodedCursor?.CanonicalRevision ?? revision;
-            var projection = await projections.GetAtAsync(new MatchId(matchId), selectedTime, maximumRevision, cancellationToken);
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, maximumRevision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var page = await insights.ReadAtAsync(new MatchId(matchId), projection.Revision, selectedTime, projection.AsOfSequence,
+            var page = await insights.ReadAtAsync(new MatchId(canonicalMatchId), projection.Revision, selectedTime, projection.AsOfSequence,
                 decodedCursor?.AfterSequence, decodedCursor?.AfterInsightId, pageSize, cancellationToken);
             var nextCursor = page.HasMore && page.NextAfterSequence is { } afterSequence && page.NextAfterInsightId is { } afterInsightId
-                ? CanonicalCursorCodec.EncodeInsight(matchId, selectedTime, projection.Revision, afterSequence, afterInsightId)
+                ? CanonicalCursorCodec.EncodeInsight(canonicalMatchId, selectedTime, projection.Revision, afterSequence, afterInsightId)
                 : null;
-            return Results.Ok(new CanonicalInsightPageResponse(matchId.ToString("D"), projection.Revision,
+            return Results.Ok(new CanonicalInsightPageResponse(canonicalMatchId.ToString("D"), projection.Revision,
                 selectedTime, projection.AsOfSequence, Array.AsReadOnly(page.Insights.Select(i => ToInsight(i, selectedTime)).ToArray()),
                 nextCursor, page.HasMore));
         });
 
         match.MapGet("/insights/{insightId}", async (
-            Guid matchId, string insightId, int? atSeconds, int? revision,
+            string matchId, string insightId, int? atSeconds, int? revision,
             IMatchProjectionReader projections, IMatchInsightReader insights, HttpContext context,
             CancellationToken cancellationToken) =>
         {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (ValidateInsightId(context, insightId) is { } invalidInsightId) return invalidInsightId;
             var selectedTime = atSeconds ?? 0;
-            var projection = await projections.GetAtAsync(new MatchId(matchId), selectedTime, revision, cancellationToken);
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, revision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var insight = await insights.GetAtAsync(new MatchId(matchId), insightId, projection.Revision, selectedTime,
+            var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
                 projection.AsOfSequence, cancellationToken);
             return insight is null
                 ? Problem(context, StatusCodes.Status404NotFound, "INSIGHT_UNAVAILABLE", "No persisted insight is available at the selected time.")
                 : Results.Ok(ToInsight(insight, selectedTime));
         });
 
+        match.MapGet("/evidence/{insightId}", async (
+            string matchId, string insightId, int? atSeconds, int? revision,
+            IMatchProjectionReader projections, IMatchInsightReader insights, HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (ValidateInsightId(context, insightId) is { } invalidInsightId) return invalidInsightId;
+            var selectedTime = atSeconds ?? 0;
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, revision, cancellationToken);
+            if (projection is null)
+                return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
+            var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
+                projection.AsOfSequence, cancellationToken);
+            if (insight is null)
+                return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No persisted evidence is available at the selected time.");
+            var evidence = await insights.ReadEvidenceAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
+                projection.AsOfSequence, cancellationToken);
+            if (evidence is null)
+                return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No complete persisted evidence is available at the selected time.");
+            var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,
+                item.Sequence, item.ClockSeconds, item.Period, ParsePayload(item.PayloadJson))).ToArray();
+            return Results.Ok(new CanonicalEvidenceResponse(ToInsight(insight, selectedTime), Array.AsReadOnly(items)));
+        });
+
         match.MapGet("/replay", async (
-            Guid matchId, int? atSeconds, int? revision, string? cursor, int? limit,
+            string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
             IMatchProjectionReader projections, HttpContext context, CancellationToken cancellationToken) =>
         {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 100.");
-            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeEvent(cursor, matchId, selectedTime, revision);
+            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeEvent(cursor, canonicalMatchId, selectedTime, revision);
             var maximumRevision = decodedCursor?.CanonicalRevision ?? revision;
-            var projection = await projections.GetAtAsync(new MatchId(matchId), selectedTime, maximumRevision, cancellationToken);
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, maximumRevision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, decodedCursor?.AfterSequence ?? -1, pageSize, cancellationToken);
-            return Results.Ok(new CanonicalReplayResponse(ToSnapshot(projection, selectedTime), ToEventPage(projection, selectedTime, page, matchId)));
+            return Results.Ok(new CanonicalReplayResponse(ToSnapshot(projection, selectedTime), ToEventPage(projection, selectedTime, page, canonicalMatchId)));
         });
 
-        match.MapGet("/key-moments", (HttpContext context) =>
+        match.MapGet("/key-moments", (string matchId, int? atSeconds, int? revision, HttpContext context) =>
+        {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out _) is { } invalidMatchId) return invalidMatchId;
+            return
             Problem(context, StatusCodes.Status503ServiceUnavailable, "CANONICAL_KEY_MOMENTS_UNAVAILABLE",
-                "No canonical key-moment projection is available; synthetic demo key moments are served separately."));
+                "No canonical key-moment projection is available; synthetic demo key moments are served separately.");
+        });
 
         return app;
     }
@@ -154,4 +195,33 @@ internal static class CanonicalMatchEndpoints
     private static IResult Problem(HttpContext context, int status, string code, string title) =>
         Results.Json(new ApiProblemResponse("about:blank", title, status, code, context.TraceIdentifier,
                 Instance: context.Request.Path), statusCode: status, contentType: "application/problem+json");
+
+    private static System.Text.Json.JsonElement ParsePayload(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    private static IResult? ValidateSelection(HttpContext context, int? selectedTime, int? revision)
+    {
+        if (selectedTime is < 0 or > 5400)
+            return Problem(context, StatusCodes.Status400BadRequest, "INVALID_TIME", "atSeconds must be between 0 and 5400.");
+        if (revision is <= 0)
+            return Problem(context, StatusCodes.Status400BadRequest, "INVALID_REVISION", "revision must be a positive integer.");
+        return null;
+    }
+
+    private static IResult? ValidateMatchId(HttpContext context, string value, out Guid matchId)
+    {
+        if (!Guid.TryParse(value, out matchId) || matchId == Guid.Empty)
+            return Problem(context, StatusCodes.Status400BadRequest, "INVALID_MATCH_ID", "matchId must be a non-empty UUID.");
+        return null;
+    }
+
+    private static IResult? ValidateInsightId(HttpContext context, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 256)
+            return Problem(context, StatusCodes.Status400BadRequest, "INVALID_INSIGHT_ID", "insightId must contain 1 to 256 characters.");
+        return null;
+    }
 }

@@ -35,7 +35,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR valid.evidence_kind = 'frame' AND EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = valid.evidence_id
-                            AND tf.clock_seconds <= $6))
+                            AND tf.sequence <= $3 AND tf.clock_seconds <= $6))
               )
               AND NOT EXISTS (
                   SELECT 1 FROM pitchmind.insight_evidence unsupported
@@ -48,7 +48,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR unsupported.evidence_kind = 'frame' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
-                            AND tf.clock_seconds <= $6))
+                            AND tf.sequence <= $3 AND tf.clock_seconds <= $6))
               )
             GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
             ORDER BY i.as_of_sequence, i.insight_id
@@ -98,7 +98,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR valid.evidence_kind = 'frame' AND EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = valid.evidence_id
-                            AND tf.clock_seconds <= $5))
+                            AND tf.sequence <= $4 AND tf.clock_seconds <= $5))
               )
               AND NOT EXISTS (
                   SELECT 1 FROM pitchmind.insight_evidence unsupported
@@ -111,7 +111,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR unsupported.evidence_kind = 'frame' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
-                            AND tf.clock_seconds <= $5))
+                            AND tf.sequence <= $4 AND tf.clock_seconds <= $5))
               )
             GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
             """);
@@ -122,6 +122,56 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         command.Parameters.AddWithValue(selectedSeconds);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadInsight(reader) : null;
+    }
+
+    public async Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
+        int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(insightId) || insightId.Length > 256)
+            throw new ArgumentException("Insight ID must contain 1 to 256 characters.", nameof(insightId));
+        Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
+        await using var command = dataSource.CreateCommand("""
+            WITH refs AS (
+                SELECT i.insight_id, e.evidence_kind, e.evidence_id, e.relation,
+                       (SELECT count(*) FROM pitchmind.insight_evidence all_refs
+                        WHERE all_refs.insight_id = i.insight_id) AS total_count
+                FROM pitchmind.insights i
+                JOIN pitchmind.insight_evidence e ON e.insight_id = i.insight_id
+                WHERE i.match_id = $1 AND i.insight_id = $2 AND i.revision <= $3 AND i.as_of_sequence <= $4
+            )
+            SELECT refs.evidence_kind, refs.evidence_id, refs.relation, refs.total_count,
+                   COALESCE(me.sequence, tf.sequence) AS evidence_sequence,
+                   COALESCE(me.clock_seconds, tf.clock_seconds) AS evidence_clock,
+                   COALESCE(me.period, tf.period) AS evidence_period,
+                   COALESCE(me.payload::text, tf.payload::text) AS payload
+            FROM refs
+            LEFT JOIN pitchmind.match_events me ON refs.evidence_kind = 'event'
+                AND me.match_id = $1 AND me.event_id::text = refs.evidence_id
+            LEFT JOIN pitchmind.tracking_frames tf ON refs.evidence_kind = 'frame'
+                AND tf.match_id = $1 AND tf.frame_id = refs.evidence_id
+            WHERE (refs.evidence_kind = 'event' AND me.event_id IS NOT NULL
+                       AND me.sequence <= $4 AND me.clock_seconds <= $5
+                   OR refs.evidence_kind = 'frame' AND tf.frame_id IS NOT NULL
+                       AND tf.sequence <= $4 AND tf.clock_seconds <= $5)
+            ORDER BY refs.evidence_kind, refs.evidence_id
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(insightId);
+        command.Parameters.AddWithValue(maximumRevision);
+        command.Parameters.AddWithValue(throughSequence);
+        command.Parameters.AddWithValue(selectedSeconds);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<PersistedCanonicalEvidenceItem>();
+        long? totalCount = null;
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            totalCount = reader.GetInt64(3);
+            items.Add(new PersistedCanonicalEvidenceItem(reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                reader.GetInt64(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetString(7)));
+        }
+        if (items.Count == 0 || totalCount != items.Count) return null;
+        return Array.AsReadOnly(items.ToArray());
     }
 
     private static PersistedMatchInsight ReadInsight(NpgsqlDataReader reader)

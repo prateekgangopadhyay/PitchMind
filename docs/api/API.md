@@ -32,6 +32,7 @@ These separately namespaced routes read PostgreSQL canonical projections and per
 | GET | `/api/v1/canonical/matches/{matchId}/events?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | Ledger events ordered by original sequence, bounded by selected time and projection sequence; cursor bound to match, time and revision. |
 | GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | Persisted insight records only when every evidence reference resolves to a selected-time event/frame. Other evidence kinds are suppressed until their source is resolvable. |
 | GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | **IMPLEMENTED / UNVERIFIED** | Same evidence and selected-time constraints as the insight list. |
+| GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | **IMPLEMENTED / UNVERIFIED** | Persisted insight plus complete event/frame payloads, each bounded by selected time and projection sequence; incomplete evidence returns 404. |
 | GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | **IMPLEMENTED / UNVERIFIED** | One selected-time snapshot plus a bounded page of ordered ledger events. |
 | GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | **IMPLEMENTED / UNVERIFIED** | Deliberately returns `503 CANONICAL_KEY_MOMENTS_UNAVAILABLE`; the canonical database has no persisted key-moment projection. The fixture demo endpoint is not used as fallback. |
 

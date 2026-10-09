@@ -199,6 +199,19 @@ public sealed record CanonicalInsightPageResponse(
     string? NextCursor,
     bool HasMore);
 
+public sealed record CanonicalEvidencePayloadResponse(
+    string Kind,
+    string Id,
+    string Relation,
+    long Sequence,
+    int ClockSeconds,
+    int Period,
+    System.Text.Json.JsonElement Payload);
+
+public sealed record CanonicalEvidenceResponse(
+    CanonicalInsightResponse Insight,
+    IReadOnlyList<CanonicalEvidencePayloadResponse> Items);
+
 public sealed record CanonicalReplayResponse(
     CanonicalMatchSnapshotResponse Snapshot,
     CanonicalEventPageResponse Events);

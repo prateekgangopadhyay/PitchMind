@@ -109,6 +109,9 @@ public sealed class V1ContractCompatibilityTests
         var insight = new CanonicalInsightResponse("insight", "match", 4, 3308, 42, "detector-v1",
             "derived", "Persisted summary", new[] { evidence });
         var insightPage = new CanonicalInsightPageResponse("match", 4, 3308, 42, new[] { insight }, "cursor", true);
+        var evidencePayload = new CanonicalEvidencePayloadResponse("event", evt.EventId.ToString(), "supports", 42,
+            3000, 2, JsonSerializer.Deserialize<JsonElement>("{\"eventId\":\"sample\"}"));
+        var canonicalEvidence = new CanonicalEvidenceResponse(insight, new[] { evidencePayload });
         var replay = new CanonicalReplayResponse(snapshot, eventPage);
 
         AssertJsonProperties(card, "matchId", "canonicalRevision", "asOfSeconds", "throughSequence", "phase",
@@ -124,6 +127,8 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(evidence, "kind", "id", "relation");
         AssertJsonProperties(insightPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
             "items", "nextCursor", "hasMore");
+        AssertJsonProperties(evidencePayload, "kind", "id", "relation", "sequence", "clockSeconds", "period", "payload");
+        AssertJsonProperties(canonicalEvidence, "insight", "items");
         AssertJsonProperties(replay, "snapshot", "events");
     }
 

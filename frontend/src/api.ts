@@ -54,6 +54,11 @@ export interface CanonicalInsightPage {
   matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalInsight[]; nextCursor: string | null; hasMore: boolean;
 }
+export interface CanonicalEvidencePayload {
+  kind: 'event' | 'frame'; id: string; relation: string; sequence: number;
+  clockSeconds: number; period: number; payload: Record<string, unknown>;
+}
+export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }
 export interface CanonicalReplay { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage }
 export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
