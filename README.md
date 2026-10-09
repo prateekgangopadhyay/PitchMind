@@ -31,7 +31,7 @@ Requires .NET 10 and Node 22+. No Azure credentials are required for the offline
 ```bash
 ./scripts/dev-up.sh
 ./scripts/dev-health.sh
-dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+DOTNET_ENVIRONMENT=Local ASPNETCORE_ENVIRONMENT=Local dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 # In a second terminal
 cd frontend
 npm ci

@@ -19,7 +19,7 @@ Canonical PostgreSQL, Event Hubs, Foundry, SignalR, Docker Compose, authenticati
 dotnet restore PitchMind.slnx
 dotnet build PitchMind.slnx --no-restore -c Release
 dotnet test PitchMind.slnx --no-build -c Release
-dotnet run --project src/PitchMind.Api
+DOTNET_ENVIRONMENT=Local ASPNETCORE_ENVIRONMENT=Local dotnet run --project src/PitchMind.Api
 cd frontend
 npm install
 npm run build

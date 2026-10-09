@@ -9,6 +9,24 @@ namespace PitchMind.Contracts.Tests;
 
 public sealed class V1ContractCompatibilityTests
 {
+    [Theory]
+    [InlineData("Local")]
+    [InlineData("local")]
+    public void Offline_synthetic_API_is_allowed_only_in_Local(string environmentName)
+    {
+        SyntheticFixtureRuntimeGuard.RequireLocalEnvironment(environmentName);
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    [InlineData("")]
+    public void Offline_synthetic_API_fails_closed_outside_Local(string environmentName)
+    {
+        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureRuntimeGuard.RequireLocalEnvironment(environmentName));
+    }
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]

@@ -6,6 +6,7 @@ using PitchMind.Contracts.V1;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+SyntheticFixtureRuntimeGuard.RequireLocalEnvironment(builder.Environment.EnvironmentName);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
