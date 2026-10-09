@@ -48,6 +48,13 @@ def _finite_float(value: str) -> float:
     return parsed
 
 
+def _bounded_int(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise CandidateValidationError("JSON integer is invalid or exceeds the supported size") from exc
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Reject duplicate JSON properties instead of silently accepting the last value."""
     result: dict[str, Any] = {}
@@ -59,7 +66,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _strict_json_loads(value: str | bytes) -> Any:
-    return json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float,
+    return json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float, parse_int=_bounded_int,
                       object_pairs_hook=_unique_object)
 
 

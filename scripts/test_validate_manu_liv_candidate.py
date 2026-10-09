@@ -123,6 +123,13 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "Non-finite JSON number"):
             validator.validate_source(payload, test_manifest(self.events, payload))
 
+    def test_rejects_oversized_json_integer_inside_uninterpreted_metadata(self):
+        payload = json.dumps(self.events).encode().replace(
+            b'"metadata": {}', b'"metadata": {"sourceValue": ' + (b"9" * 5000) + b"}", 1
+        )
+        with self.assertRaisesRegex(validator.CandidateValidationError, "JSON integer.*supported size"):
+            validator.validate_source(payload, test_manifest(self.events, payload))
+
     def test_rejects_malformed_manifest_types_without_leaking_type_errors(self):
         malformed = {**self.manifest, "match": {**self.manifest["match"], "expectedPeriods": "12"}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "expectedPeriods"):

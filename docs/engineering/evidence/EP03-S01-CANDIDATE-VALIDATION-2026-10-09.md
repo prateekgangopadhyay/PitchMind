@@ -75,3 +75,9 @@ These checks were run locally at `d7c61e7` before the evidence-only documentatio
 - Candidate validator suite passed 17/17; feed profiler tests passed 5/5. The full .NET suite (43 passed, 0 failed, 5 skipped), frontend (3/3 tests, build, lint), and operating-model validation were previously run against `112fd06`; this follow-up only changes the Python validator, its Python tests, and evidence documents, so those prior results are not represented as rerun at the follow-up working tree.
 - The pinned candidate report remains `structurally_valid_candidate_blocked_for_canonicalization` with 2,199 events and 48,048 positions. Source, event-ID ledger, and ordered-record digests are unchanged from the report above. Coordinate units, player-metric semantics, canonical mappings, football realism, and independent rights/privacy approval remain outstanding.
 - The new hardening has not yet received an independent review or formal GitHub review. Product Owner acceptance, PostgreSQL-backed integration, and Azure validation/deployment are not claimed.
+
+## Parser-boundary follow-up — local working tree after `0579f69`
+
+- Independent review confirmed the floating-point overflow fix and identified a second raw parser failure for integers beyond Python's supported conversion length. The parser now converts that `ValueError` to `CandidateValidationError`; a 5,000-digit integer in uninterpreted metadata is covered by a regression test.
+- Candidate validator suite passed 18/18; feed profiler tests passed 5/5; `git diff --check` passed. Candidate source validation continues to return `structurally_valid_candidate_blocked_for_canonicalization`; source/ledger/ordered-record digests remain unchanged.
+- Independent review of this integer-boundary follow-up, formal GitHub review, and Product Owner acceptance are pending. Prior .NET/frontend/operating-model checks predate these Python-only changes and are not claimed as rerun here.
