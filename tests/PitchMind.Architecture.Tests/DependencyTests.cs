@@ -118,8 +118,9 @@ public sealed class DependencyTests
             File.WriteAllText(projectPath,
                 "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.targets"),
-                "<Project><ItemGroup><Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
-                "<PackageReference Include='Contoso.Football' Version='1.0.0' /></ItemGroup></Project>");
+                "<Project><ItemGroup><PackageReference Include='Contoso.Football' Version='1.0.0' />" +
+                "<Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
+                "</ItemGroup></Project>");
             var packageFolder = Path.Combine(root.FullName, "packages");
             var packageLibrary = Path.Combine(packageFolder, "contoso.football", "1.0.0", "lib", "net10.0");
             var hintPath = Path.Combine(root.FullName, "lib");
@@ -151,6 +152,65 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void TargetCreatedInternalReferences_AreCheckedAfterResolveReferences()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-target-reference-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            var libraryDirectory = Path.Combine(root.FullName, "lib");
+            Directory.CreateDirectory(libraryDirectory);
+            var infrastructureAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.Copy(infrastructureAssembly, Path.Combine(libraryDirectory, "InfrastructureAlias.dll"));
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<ItemGroup><Reference Include='InfrastructureAlias' /></ItemGroup>" +
+                "<Target Name='InjectProjectReference' BeforeTargets='ResolveProjectReferences'><ItemGroup>" +
+                "<ProjectReference Include='Dependency.csproj' />" +
+                "</ItemGroup></Target>" +
+                "<Target Name='InjectDomainFrameworkReference' BeforeTargets='ResolveFrameworkReferences'><ItemGroup>" +
+                "<FrameworkReference Include='Microsoft.NETCore.App' IsImplicitlyDefined='true' />" +
+                "</ItemGroup></Target>" +
+                "<Target Name='InjectInternalReference' BeforeTargets='ResolveReferences'><ItemGroup>" +
+                "<Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
+                "<PackageReference Include='PitchMind.Domain' Version='1.0.0' />" +
+                "</ItemGroup></Target></Project>");
+            File.WriteAllText(Path.Combine(root.FullName, "Dependency.csproj"),
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateInternalReferences(
+                new Dictionary<string, XDocument>(StringComparer.Ordinal) { ["Fixture"] = evaluated });
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetReference");
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetReference 'InfrastructureAlias'", StringComparison.Ordinal));
+            var domainViolations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
+            Xunit.Assert.Contains(domainViolations, violation => violation.Contains("TargetFrameworkReference 'Microsoft.NETCore.App'", StringComparison.Ordinal));
+            Xunit.Assert.Contains(domainViolations, violation => violation.Contains("TargetPackageReference 'PitchMind.Domain'", StringComparison.Ordinal));
+            var injectedProject = evaluated.Descendants().Single(item => item.Name.LocalName == "TargetProjectReference");
+            var unexpectedProject = Path.GetFileNameWithoutExtension(injectedProject.Attribute("FullPath")?.Value);
+            var graphViolations = ArchitectureDependencyPolicy.Validate(
+                new Dictionary<string, string[]>(StringComparer.Ordinal)
+                {
+                    ["Fixture"] = [],
+                    ["Dependency"] = []
+                },
+                new Dictionary<string, string[]>(StringComparer.Ordinal)
+                {
+                    ["Fixture"] = [unexpectedProject!],
+                    ["Dependency"] = []
+                });
+
+            Xunit.Assert.Contains(graphViolations, violation => violation.Contains("forbidden project reference 'Dependency'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
@@ -173,7 +233,7 @@ public sealed class DependencyTests
         return ReadEvaluatedProjectDocuments(root).ToDictionary(
             project => project.Key,
             project => project.Value.Descendants()
-                .Where(element => element.Name.LocalName == "ProjectReference")
+                .Where(element => element.Name.LocalName is "ProjectReference" or "TargetProjectReference")
                 .Select(element =>
                 {
                     var include = element.Attribute("FullPath")?.Value ?? element.Attribute("Include")?.Value;
@@ -203,7 +263,7 @@ public sealed class DependencyTests
                 project => Path.GetFileNameWithoutExtension(project),
                 project =>
                 {
-                    var evaluated = EvaluateProjectItems(project);
+                    var evaluated = EvaluateProjectItems(project, includeTargetReferences: true);
                     AddPackageCompileAssets(evaluated, project);
                     return evaluated;
                 },
@@ -211,7 +271,7 @@ public sealed class DependencyTests
         }, LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
 
-    private static XDocument EvaluateProjectItems(string projectPath)
+    private static XDocument EvaluateProjectItems(string projectPath, bool includeTargetReferences = false)
     {
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -226,6 +286,8 @@ public sealed class DependencyTests
         startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+        startInfo.ArgumentList.Add("-maxcpucount:1");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start dotnet msbuild.");
         var outputTask = process.StandardOutput.ReadToEndAsync();
@@ -273,7 +335,177 @@ public sealed class DependencyTests
             }
         }
 
+        if (includeTargetReferences)
+        {
+            AddTargetCreatedReferences(evaluated);
+        }
+
         return evaluated;
+    }
+
+    private static void AddTargetCreatedReferences(XDocument project)
+    {
+        var projectPath = project.Root?.Attribute("ProjectPath")?.Value ??
+            throw new InvalidOperationException("Evaluated project is missing its path.");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add(projectPath);
+        startInfo.ArgumentList.Add("-target:ResolveReferences");
+        startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-nologo");
+        startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+        startInfo.ArgumentList.Add("-maxcpucount:1");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start target-time MSBuild evaluation.");
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"Target-time MSBuild evaluation timed out for '{projectPath}'.");
+        }
+
+        var output = outputTask.GetAwaiter().GetResult();
+        var error = errorTask.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Target-time MSBuild evaluation failed for '{projectPath}': {error}");
+        }
+
+        using var json = JsonDocument.Parse(output);
+        var sdkPath = json.RootElement.GetProperty("Properties").GetProperty("MSBuildSDKsPath").GetString();
+        var sdkRoot = string.IsNullOrWhiteSpace(sdkPath) ? null : Directory.GetParent(sdkPath)?.FullName;
+        var existingItems = project.Descendants()
+            .Where(item => item.Name.LocalName is "ProjectReference" or "Reference" or "PackageReference" or
+                "FrameworkReference" or "COMReference" or "NativeReference")
+            .Select(item => TargetItemSignature(item.Name.LocalName, item))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var items = json.RootElement.GetProperty("Items");
+        AddTargetItems("ProjectReference", "TargetProjectReference");
+        AddTargetItems("Reference", "TargetReference");
+        AddTargetItems("PackageReference", "TargetPackageReference");
+        AddTargetItems("FrameworkReference", "TargetFrameworkReference");
+        AddTargetItems("COMReference", "TargetCOMReference");
+        AddTargetItems("NativeReference", "TargetNativeReference");
+
+        void AddTargetItems(string itemType, string capturedItemType)
+        {
+            if (!items.TryGetProperty(itemType, out var references))
+            {
+                return;
+            }
+
+            foreach (var reference in references.EnumerateArray())
+            {
+                if (!reference.TryGetProperty("Identity", out var identity))
+                {
+                    continue;
+                }
+
+                var include = identity.GetString() ?? string.Empty;
+                var definingProject = reference.TryGetProperty("DefiningProjectFullPath", out var defining) ? defining.GetString() : null;
+                if ((itemType is "ProjectReference" or "Reference") && IsWithinDirectory(definingProject, sdkRoot))
+                {
+                    continue;
+                }
+
+                var item = new XElement(itemType, new XAttribute("Include", include));
+                foreach (var metadata in reference.EnumerateObject().Where(property =>
+                             property.Name != "Identity" && property.Value.ValueKind == JsonValueKind.String))
+                {
+                    item.SetAttributeValue(metadata.Name, metadata.Value.GetString());
+                }
+
+                if (existingItems.Contains(TargetItemSignature(itemType, item)))
+                {
+                    continue;
+                }
+
+                item.Name = capturedItemType;
+                project.Root!.Add(item);
+            }
+        }
+    }
+
+    private static string TargetItemSignature(string itemType, XElement item)
+    {
+        var fields = new List<string?> { itemType, item.Attribute("Include")?.Value };
+        switch (itemType)
+        {
+            case "ProjectReference":
+                fields.Add(item.Attribute("FullPath")?.Value);
+                break;
+            case "Reference":
+            case "NativeReference":
+                fields.Add(item.Attribute("HintPath")?.Value);
+                break;
+            case "PackageReference":
+                fields.Add(item.Attribute("Version")?.Value);
+                break;
+            case "FrameworkReference":
+                fields.Add(item.Attribute("IsImplicitlyDefined")?.Value);
+                break;
+            case "COMReference":
+                fields.Add(item.Attribute("Guid")?.Value);
+                fields.Add(item.Attribute("VersionMajor")?.Value);
+                fields.Add(item.Attribute("VersionMinor")?.Value);
+                break;
+        }
+
+        fields.Add(item.Attribute("DefiningProjectFullPath")?.Value);
+        return string.Join('\u001f', fields);
+    }
+
+    private static bool IsWithinDirectory(string? path, string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
+        return relative != ".." && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+               !Path.IsPathRooted(relative);
+    }
+
+    private static void RestoreFixture(string projectPath)
+    {
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("restore");
+        startInfo.ArgumentList.Add(projectPath);
+        startInfo.ArgumentList.Add("--ignore-failed-sources");
+        startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not restore the target-reference fixture.");
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"Fixture restore timed out for '{projectPath}'.");
+        }
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Fixture restore failed for '{projectPath}': {errorTask.GetAwaiter().GetResult()}");
+        }
+
+        _ = outputTask.GetAwaiter().GetResult();
     }
 
     private static void AddPackageCompileAssets(XDocument project, string projectPath)
@@ -358,7 +590,8 @@ internal static class ArchitectureDependencyPolicy
     {
         var violations = new List<string>();
         foreach (var item in domain.Descendants().Where(element =>
-                     element.Name.LocalName is "PackageReference" or "Reference" or "COMReference" or "NativeReference" ||
+                     element.Name.LocalName is "PackageReference" or "TargetPackageReference" or "Reference" or "TargetReference" or
+                         "TargetFrameworkReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference" ||
                      element.Name.LocalName == "FrameworkReference" && !IsSdkImplicitFrameworkReference(domain, element)))
         {
             violations.Add($"Domain project has forbidden {item.Name.LocalName} '{item.Attribute("Include")?.Value}'.");
@@ -397,8 +630,8 @@ internal static class ArchitectureDependencyPolicy
             var projectPath = document.Root?.Attribute("ProjectPath")?.Value;
             var projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? null : Path.GetDirectoryName(projectPath);
             foreach (var item in document.Descendants().Where(element =>
-                         element.Name.LocalName is "Reference" or "PackageReference" or "PackageAssembly" or
-                             "COMReference" or "NativeReference"))
+                         element.Name.LocalName is "Reference" or "TargetReference" or "PackageReference" or "PackageAssembly" or
+                             "TargetPackageReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference"))
             {
                 var include = item.Attribute("Include")?.Value;
                 var candidates = new[]
