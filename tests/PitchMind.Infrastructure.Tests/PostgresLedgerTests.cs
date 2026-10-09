@@ -536,6 +536,14 @@ public sealed class PostgresLedgerTests
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
         Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
+        var firstPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, -1, 1, CancellationToken.None);
+        Assert.True(firstPage.HasMore);
+        Assert.Equal(0, Assert.Single(firstPage.Events).Sequence);
+        Assert.Equal(0, firstPage.NextAfterSequence);
+        var secondPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, firstPage.NextAfterSequence!.Value, 1, CancellationToken.None);
+        Assert.False(secondPage.HasMore);
+        Assert.Equal(1, Assert.Single(secondPage.Events).Sequence);
+        Assert.DoesNotContain(secondPage.Events, e => e.Type == MatchEventType.Goal);
 
         var atGoal = await reader.GetAtAsync(matchId, 3309, null, CancellationToken.None);
         Assert.NotNull(atGoal);
@@ -562,6 +570,63 @@ public sealed class PostgresLedgerTests
         var reader = new PostgresMatchProjectionReader(source);
         Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, null, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, null, CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task InsightReadsRequireResolvableEvidenceVisibleAtTheSelectedTime()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        var update = Update(matchId);
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+
+        async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId)
+        {
+            await using (var command = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json)
+                VALUES ($1, $2, 1, 0, 'test-v1', $3, $4, '{}'::jsonb)
+                """))
+            {
+                command.Parameters.AddWithValue(insightId);
+                command.Parameters.AddWithValue(matchId.Value);
+                command.Parameters.AddWithValue(truthClass);
+                command.Parameters.AddWithValue(insightId);
+                await command.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id, revision, relation)
+                VALUES ($1, $2, $3, $4, 1, 'supports')
+                """))
+            {
+                evidence.Parameters.AddWithValue(insightId);
+                evidence.Parameters.AddWithValue(evidenceKind);
+                evidence.Parameters.AddWithValue(evidenceId);
+                evidence.Parameters.AddWithValue(matchId.Value);
+                await evidence.ExecuteNonQueryAsync();
+            }
+        }
+
+        var validInsightId = $"valid-{Guid.NewGuid():N}";
+        var missingInsightId = $"missing-{Guid.NewGuid():N}";
+        var metricInsightId = $"metric-{Guid.NewGuid():N}";
+        await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
+        await AddInsight(missingInsightId, "derived", "event", Guid.NewGuid().ToString());
+        await AddInsight(metricInsightId, "derived", "metric", "unpersisted-metric");
+
+        var projectionReader = new PostgresMatchProjectionReader(source);
+        var projection = await projectionReader.GetAtAsync(matchId, 0, null, CancellationToken.None);
+        Assert.NotNull(projection);
+        var insightReader = new PostgresMatchInsightReader(source);
+        var page = await insightReader.ReadAtAsync(matchId, projection.Revision, 0, projection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        var visible = Assert.Single(page.Insights);
+        Assert.Equal(validInsightId, visible.InsightId);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
+        Assert.Null(await insightReader.GetAtAsync(matchId, missingInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
     }
 
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,

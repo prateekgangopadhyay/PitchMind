@@ -119,6 +119,39 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void Canonical_BFF_contracts_carry_revision_time_provenance_and_stable_cursors()
+    {
+        var card = new CanonicalMatchCardResponse("match", 4, 3000, 42, "secondhalf", 1, 0,
+            "synthetic", "aggregate-v1", new string('a', 64));
+        var matchPage = new CanonicalMatchPageResponse(new[] { card }, "next-match", true);
+        var player = new MatchPlayerStateResponse("player", "team", true, false, 0);
+        var snapshot = new CanonicalMatchSnapshotResponse("match", 4, 3308, 3000, 42, "aggregate-v1",
+            new string('a', 64), new string('b', 64), "synthetic", 2, "secondhalf", 1, 0, "team", 11, 11, new[] { player });
+        var evt = new MatchEventResponse(Guid.NewGuid(), "match", 42, "Pass", 3000, 2, DateTimeOffset.UnixEpoch);
+        var eventPage = new CanonicalEventPageResponse("match", 4, 3308, 42, new[] { evt }, "cursor", true);
+        var evidence = new CanonicalEvidenceReferenceResponse("event", evt.EventId.ToString(), "supports");
+        var insight = new CanonicalInsightResponse("insight", "match", 4, 3308, 42, "detector-v1",
+            "derived", "Persisted summary", new[] { evidence });
+        var insightPage = new CanonicalInsightPageResponse("match", 4, 3308, 42, new[] { insight }, "cursor", true);
+        var replay = new CanonicalReplayResponse(snapshot, eventPage);
+
+        AssertJsonProperties(card, "matchId", "canonicalRevision", "asOfSeconds", "throughSequence", "phase",
+            "homeScore", "awayScore", "provenance", "algorithmVersion", "sourceSha256");
+        AssertJsonProperties(matchPage, "items", "nextMatchId", "hasMore");
+        AssertJsonProperties(snapshot, "matchId", "canonicalRevision", "selectedTimeSeconds", "asOfSeconds",
+            "throughSequence", "algorithmVersion", "sourceSha256", "stateSha256", "provenance", "period", "phase",
+            "homeScore", "awayScore", "possessionTeamId", "homeActivePlayers", "awayActivePlayers", "players");
+        AssertJsonProperties(eventPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
+            "items", "nextCursor", "hasMore");
+        AssertJsonProperties(insight, "insightId", "matchId", "canonicalRevision", "selectedTimeSeconds",
+            "throughSequence", "detectorVersion", "truthClass", "summary", "evidence");
+        AssertJsonProperties(evidence, "kind", "id", "relation");
+        AssertJsonProperties(insightPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
+            "items", "nextCursor", "hasMore");
+        AssertJsonProperties(replay, "snapshot", "events");
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
         var source = SyntheticFixtureGenerator.Generate();
