@@ -35,4 +35,18 @@ public sealed class PressSequenceDetectorTests
 
         Assert.Throws<ArgumentException>(() => PressSequenceDetector.Detect(input));
     }
+
+    [Fact]
+    public void RejectsPublishingGraphWithoutApprovedRevisionedCanonicalEvidence()
+    {
+        var claim = new TacticalEvidenceNode("claim:one", "claim", "pattern", "claim", null, null,
+            10, 1, "synthetic-v2", null, null, null);
+        var source = new TacticalEvidenceNode("event:one", "event", "fact", "source", Guid.NewGuid(), null,
+            9, 1, "synthetic-v2", null, null, null);
+        var graph = new TacticalEvidenceGraph("match", "synthetic-v2", "synthetic", null, 10, 1,
+            "press-sequence-v2", "unapproved-demo", true, claim.Id,
+            new[] { claim, source }, new[] { new TacticalEvidenceEdge(claim.Id, source.Id, "derived_from") });
+
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(graph));
+    }
 }

@@ -1,3 +1,4 @@
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Api;
@@ -57,7 +58,18 @@ public static class MatchContractMappings
         Array.AsReadOnly(insight.Conditions.ToArray()),
         insight.Context is null ? null : new TacticalContextResponse(
             insight.Context.Scoreline, insight.Context.TeamRole, insight.Context.NumericalAdvantage,
-            insight.Context.OpponentPhase, insight.Context.MatchPhase));
+            insight.Context.OpponentPhase, insight.Context.MatchPhase),
+        insight.EvidenceGraph is null ? null : Map(insight.EvidenceGraph));
+
+    private static EvidenceGraphResponse Map(TacticalEvidenceGraph graph) => new(
+        graph.MatchId, graph.SourceVersion, graph.Provenance, graph.CanonicalRevision,
+        graph.SelectedTimeSeconds, graph.ThroughSequence, graph.DetectorVersion,
+        graph.PolicyStatus, graph.Publishable, graph.ClaimNodeId,
+        Array.AsReadOnly(graph.Nodes.Select(node => new EvidenceNodeResponse(
+            node.Id, node.Kind, node.TruthClass, node.Description, node.EventId, node.FrameId,
+            node.ClockSeconds, node.Sequence, node.SourceVersion, node.CanonicalRevision, node.NumericValue, node.Unit)).ToArray()),
+        Array.AsReadOnly(graph.Edges.Select(edge => new EvidenceEdgeResponse(
+            edge.FromNodeId, edge.ToNodeId, edge.Relation)).ToArray()));
 
     public static EvidenceResponse ToResponse(this TacticalEvidence evidence) => new(
         evidence.Insight.ToResponse(),

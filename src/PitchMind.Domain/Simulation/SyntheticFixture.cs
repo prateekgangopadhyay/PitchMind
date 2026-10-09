@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 
@@ -32,6 +33,7 @@ public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds
     public bool Publishable { get; init; }
     public IReadOnlyList<string> Conditions { get; init; } = Array.Empty<string>();
     public TacticalContext? Context { get; init; }
+    public TacticalEvidenceGraph? EvidenceGraph { get; init; }
 }
 public sealed record TacticalContext(string Scoreline, string TeamRole, int NumericalAdvantage,
     string OpponentPhase, string MatchPhase);

@@ -24,6 +24,25 @@ public sealed class SyntheticMatchTests
         Assert.Equal(190, insight.ThroughSequence);
         Assert.Equal("synthetic-v2", insight.SourceVersion);
         Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        var graph = insight.EvidenceGraph!;
+        Assert.Equal(insight.MatchId, graph.MatchId);
+        Assert.Equal(insight.SourceVersion, graph.SourceVersion);
+        Assert.Null(graph.CanonicalRevision);
+        Assert.False(graph.Publishable);
+        Assert.Equal("synthetic", graph.Provenance);
+        Assert.Equal("pattern", graph.Nodes.Single(node => node.Id == graph.ClaimNodeId).TruthClass);
+        Assert.All(insight.EventIds, eventId => Assert.Contains(graph.Nodes, node => node.EventId == eventId));
+        Assert.Equal(insight.FrameIds.Order(), graph.Nodes.Where(node => node.FrameId is not null).Select(node => node.FrameId!).Order());
+        var contextNode = Assert.Single(graph.Nodes, node => node.Kind == "metric");
+        Assert.Equal("derivation", contextNode.TruthClass);
+        Assert.Equal(0m, contextNode.NumericValue);
+        Assert.Equal("active-players", contextNode.Unit);
+        Assert.Contains(graph.Edges, edge => edge.FromNodeId == graph.ClaimNodeId && edge.ToNodeId == contextNode.Id && edge.Relation == "derived_from");
+        Assert.All(graph.Edges, edge => Assert.Contains(edge.FromNodeId, graph.Nodes.Select(node => node.Id)));
+        Assert.All(graph.Edges, edge => Assert.Contains(edge.ToNodeId, graph.Nodes.Select(node => node.Id)));
+        Assert.Equal(graph.Nodes.Count(node => node.Kind == "event") - 1, graph.Edges.Count(edge => edge.Relation == "precedes"));
+        Assert.Equal(insight.EventIds.Count + insight.FrameIds.Count + 1 + graph.Edges.Count(edge => edge.FromNodeId == contextNode.Id),
+            graph.Edges.Count(edge => edge.Relation == "derived_from"));
         Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }

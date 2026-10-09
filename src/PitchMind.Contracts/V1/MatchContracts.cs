@@ -62,7 +62,8 @@ public sealed record InsightResponse(
     string PolicyStatus,
     bool Publishable,
     IReadOnlyList<string> Conditions,
-    TacticalContextResponse? Context);
+    TacticalContextResponse? Context,
+    EvidenceGraphResponse? EvidenceGraph);
 
 public sealed record TacticalContextResponse(
     string Scoreline,
@@ -70,6 +71,36 @@ public sealed record TacticalContextResponse(
     int NumericalAdvantage,
     string OpponentPhase,
     string MatchPhase);
+
+public sealed record EvidenceGraphResponse(
+    string MatchId,
+    string SourceVersion,
+    string Provenance,
+    int? CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    string DetectorVersion,
+    string PolicyStatus,
+    bool Publishable,
+    string ClaimNodeId,
+    IReadOnlyList<EvidenceNodeResponse> Nodes,
+    IReadOnlyList<EvidenceEdgeResponse> Edges);
+
+public sealed record EvidenceNodeResponse(
+    string Id,
+    string Kind,
+    string TruthClass,
+    string Description,
+    Guid? EventId,
+    string? FrameId,
+    int? ClockSeconds,
+    long? Sequence,
+    string SourceVersion,
+    int? CanonicalRevision,
+    decimal? NumericValue,
+    string? Unit);
+
+public sealed record EvidenceEdgeResponse(string FromNodeId, string ToNodeId, string Relation);
 
 public sealed record EvidenceResponse(
     InsightResponse Insight,
