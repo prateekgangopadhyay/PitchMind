@@ -118,7 +118,7 @@ public sealed class DependencyTests
             File.WriteAllText(projectPath,
                 "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.targets"),
-                "<Project><ItemGroup><Reference Include='InfrastructureAlias'><HintPath>$(MSBuildThisFileDirectory)lib/InfrastructureAlias.dll</HintPath></Reference>" +
+                "<Project><ItemGroup><Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
                 "<PackageReference Include='Contoso.Football' Version='1.0.0' /></ItemGroup></Project>");
             var packageFolder = Path.Combine(root.FullName, "packages");
             var packageLibrary = Path.Combine(packageFolder, "contoso.football", "1.0.0", "lib", "net10.0");
@@ -394,6 +394,8 @@ internal static class ArchitectureDependencyPolicy
 
         foreach (var (project, document) in projects)
         {
+            var projectPath = document.Root?.Attribute("ProjectPath")?.Value;
+            var projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? null : Path.GetDirectoryName(projectPath);
             foreach (var item in document.Descendants().Where(element =>
                          element.Name.LocalName is "Reference" or "PackageReference" or "PackageAssembly" or
                              "COMReference" or "NativeReference"))
@@ -405,7 +407,11 @@ internal static class ArchitectureDependencyPolicy
                         item.Attribute("HintPath")?.Value,
                         item.Attribute("FullPath")?.Value,
                         item.Attribute("ResolvedPath")?.Value,
-                        item.Element("HintPath")?.Value
+                        item.Element("HintPath")?.Value,
+                        ResolveProjectRelativePath(item.Attribute("HintPath")?.Value, projectDirectory),
+                        ResolveProjectRelativePath(item.Attribute("FullPath")?.Value, projectDirectory),
+                        ResolveProjectRelativePath(item.Attribute("ResolvedPath")?.Value, projectDirectory),
+                        ResolveProjectRelativePath(item.Element("HintPath")?.Value, projectDirectory)
                     };
                 if (!candidates.Any(IsInternalAssemblyReference))
                 {
@@ -418,6 +424,23 @@ internal static class ArchitectureDependencyPolicy
         }
 
         return violations;
+    }
+
+    private static string? ResolveProjectRelativePath(string? value, string? projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(projectDirectory))
+        {
+            return value;
+        }
+
+        try
+        {
+            return Path.GetFullPath(value, projectDirectory);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return value;
+        }
     }
 
     private static bool IsInternalAssemblyReference(string? value)
