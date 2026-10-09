@@ -97,6 +97,15 @@ public sealed class SyntheticMatchService
         };
         return PressSequenceDetector.Detect(input);
     }
+    public IReadOnlyList<KeyMoment> GetKeyMoments(int clockSeconds, KeyMomentPolicy? policy = null)
+    {
+        ValidateTime(clockSeconds);
+        var events = GetEvents(clockSeconds);
+        var throughSequence = events.Count == 0 ? -1 : events[^1].Event.Sequence;
+        return KeyMomentGenerator.Generate(Fixture.MatchId, Fixture.Version, Fixture.Provenance, null,
+            clockSeconds, throughSequence, Fixture.Home.Id, Fixture.Home.Name, Fixture.Away.Id, Fixture.Away.Name,
+            events, GetInsights(clockSeconds), policy);
+    }
     public TacticalEvidence? GetEvidence(string insightId, int clockSeconds)
     {
         var insight = GetInsights(clockSeconds).SingleOrDefault(i => i.Id == insightId);
