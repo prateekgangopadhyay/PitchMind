@@ -31,7 +31,10 @@ public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds
     public string PolicyStatus { get; init; } = "unknown";
     public bool Publishable { get; init; }
     public IReadOnlyList<string> Conditions { get; init; } = Array.Empty<string>();
+    public TacticalContext? Context { get; init; }
 }
+public sealed record TacticalContext(string Scoreline, string TeamRole, int NumericalAdvantage,
+    string OpponentPhase, string MatchPhase);
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,
     string CoordinateConvention, IReadOnlyList<string> Conditions, IReadOnlyList<string> Limitations);
 public sealed record MatchExplanation(string InsightId, int ClockSeconds, string Audience, string Source, string Text,

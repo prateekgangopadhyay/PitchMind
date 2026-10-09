@@ -1,4 +1,5 @@
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Domain.Analytics;
@@ -35,7 +36,10 @@ public sealed record PressSequenceInput(
     double PitchLengthMetres,
     double PitchWidthMetres,
     IReadOnlyList<SimulationEvent> Events,
-    IReadOnlyList<TrackingFrame> Frames);
+    IReadOnlyList<TrackingFrame> Frames)
+{
+    public MatchState? SelectedState { get; init; }
+}
 
 /// <summary>
 /// Detects one specific synthetic press sequence. The unapproved demo policy and its result
@@ -108,6 +112,16 @@ public static class PressSequenceDetector
 
             var frameIds = requiredFrameClocks.Select(clock => framesByClock[clock].Id).ToArray();
             var pressingTeam = pressure.TeamId == input.HomeTeamId ? input.HomeTeamName : input.AwayTeamName;
+            var isHomePressingTeam = pressure.TeamId == input.HomeTeamId;
+            var teamActivePlayers = isHomePressingTeam
+                ? input.SelectedState!.HomeActivePlayers : input.SelectedState!.AwayActivePlayers;
+            var opponentActivePlayers = isHomePressingTeam
+                ? input.SelectedState!.AwayActivePlayers : input.SelectedState!.HomeActivePlayers;
+            var scoreline = $"{input.HomeTeamName} {input.SelectedState!.HomeScore}–{input.SelectedState.AwayScore} {input.AwayTeamName}";
+            var context = new TacticalContext(scoreline, isHomePressingTeam ? "home" : "away",
+                teamActivePlayers - opponentActivePlayers,
+                "opponent in possession at trigger; defending after observed regain",
+                input.SelectedState.Phase.ToString());
             var conditions = Array.AsReadOnly(new[]
             {
                 $"trigger: completed back-pass event {trigger.Event.EventId:D} (sequence {trigger.Event.Sequence})",
@@ -118,13 +132,14 @@ public static class PressSequenceDetector
                 $"outcome: goal event {goal.Event.EventId:D} at {goal.Event.ClockSeconds}s; sequence ends {goal.Event.ClockSeconds - trigger.Event.ClockSeconds}s after trigger",
                 $"coverage: {requiredFrameClocks.Length} distinct event-time frames include the pressure participants",
                 $"selected-time: all evidence is at or before {input.SelectedTimeSeconds}s; through sequence {input.ThroughSequence}",
+                $"context: {scoreline}; pressing team role {context.TeamRole}; numerical advantage {context.NumericalAdvantage}; match phase {context.MatchPhase}; opponent goes from in-possession to defending after observed regain",
                 $"policy: {policy.Version} ({policy.ReviewStatus}); publication approval is absent"
             });
 
             detections.Add(new TacticalInsight(
                 $"press-{trigger.Event.EventId:D}", input.MatchId, goal.Event.ClockSeconds,
                 "Synthetic pressure sequence candidate",
-                $"{pressingTeam}'s observed pressure is followed by a regain, cutback, shot and goal in this synthetic fixture; the sequence does not establish causality or tactical intent.",
+                $"{pressingTeam}'s observed pressure is followed by a regain, cutback, shot and goal in this synthetic fixture. At selected time the scoreline is {scoreline}; active-player difference for this team is {context.NumericalAdvantage:+#;-#;0}. The sequence describes observed events, not intent, control, or comparative tactical quality.",
                 "simulated", policy.Version,
                 Array.AsReadOnly(events.Select(item => item.Event.EventId).ToArray()),
                 Array.AsReadOnly(frameIds))
@@ -135,7 +150,8 @@ public static class PressSequenceDetector
                 ThroughSequence = input.ThroughSequence,
                 PolicyStatus = policy.ReviewStatus,
                 Publishable = policy.Publishable,
-                Conditions = conditions
+                Conditions = conditions,
+                Context = context
             });
         }
         return detections.AsReadOnly();
@@ -159,6 +175,11 @@ public static class PressSequenceDetector
             !double.IsFinite(input.PitchLengthMetres) || !double.IsFinite(input.PitchWidthMetres) ||
             input.PitchLengthMetres <= 0 || input.PitchWidthMetres <= 0 || input.Events is null || input.Frames is null)
             throw new ArgumentException("Tactical sequence input metadata is invalid.", nameof(input));
+        if (input.SelectedState is null || input.SelectedState.MatchId != input.MatchId ||
+            input.SelectedState.ClockSeconds != input.SelectedTimeSeconds || input.SelectedState.Provenance != input.Provenance ||
+            input.SelectedState.HomeScore < 0 || input.SelectedState.AwayScore < 0 ||
+            input.SelectedState.HomeActivePlayers is < 0 or > 11 || input.SelectedState.AwayActivePlayers is < 0 or > 11)
+            throw new ArgumentException("Selected match context must match the selected time and source metadata.", nameof(input));
         if (policy.Publishable || policy.ReviewStatus != "unapproved-demo")
             throw new ArgumentException("This detector only accepts the unapproved demonstration policy.", nameof(policy));
 
