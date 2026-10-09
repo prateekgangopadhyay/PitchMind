@@ -9,6 +9,8 @@
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
+  Match --> Aggregate["MatchAggregate deterministic ordered-event reducer"]
+  Aggregate --> State["score, phase, possession, active roster, cautions"]
   Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
@@ -18,7 +20,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` now folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. Two cautions or an explicit red-card event dismisses the player in this in-memory projection. This is an offline deterministic projection only: the event store is a separately exercised adapter; current API paths do **not** consume it, persist projections, or retain correction revisions. The current PostgreSQL type constraint also does not admit the new red-card enum value. Competition linkage and durable revision/correction semantics remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 

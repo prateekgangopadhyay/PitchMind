@@ -2,7 +2,7 @@ using PitchMind.Domain.Match;
 
 namespace PitchMind.Domain.Events;
 
-public enum MatchEventType { KickOff, HalfTime, Pass, Shot, Goal, Foul, YellowCard, Substitution, Turnover, FullTime, Pressure }
+public enum MatchEventType { KickOff, HalfTime, Pass, Shot, Goal, Foul, YellowCard, Substitution, Turnover, FullTime, Pressure, RedCard }
 
 public sealed record MatchEvent(
     Guid EventId,
