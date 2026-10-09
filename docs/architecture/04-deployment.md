@@ -4,6 +4,8 @@
 
 For the resource-by-resource current/deferred/blocking reconciliation, see [EP02-S01 IaC reconciliation](../engineering/EP02-S01-IAC-RECONCILIATION.md). Its observed state comes from the dated DEV evidence; private connectivity and the canonical PostgreSQL path remain unverified blockers.
 
+The isolated [`infra/canonical-dev-topology.bicep`](../../infra/canonical-dev-topology.bicep) root is an executable candidate for internal ACA + private PostgreSQL networking. It is disabled by default and is not referenced by the normal deployment pipeline. Compilation is not deployment evidence; subnet overlap, SKU/region capacity, identity, app workloads, private dependency paths, and end-to-end connectivity still require review and separately approved verification.
+
 ## CURRENT — observed DEV prototype (limited)
 ```mermaid
 flowchart LR
@@ -26,7 +28,7 @@ flowchart TB
   WAF --> API["ACA BFF/API"]
   DIRECT --> API
   User -. "OIDC auth code + PKCE" .-> Entra["Entra External ID"]
-  subgraph Network["VNet / delegated ACA subnet + private DNS (target, unverified)"]
+  subgraph Network["VNet / delegated workload-profile ACA subnet + private DNS (target, unverified)"]
     API --> PG[("PostgreSQL private endpoint / delegated private access")]
     API --> Signal["Azure SignalR authorized groups"]
     Worker["ACA EventWorker managed identity"] --> PG
