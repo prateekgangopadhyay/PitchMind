@@ -501,6 +501,74 @@ public sealed class PostgresLedgerTests
         Assert.Equal(1, recoveredPublisher.Publications);
     }
 
+    [PostgresIntegrationFact]
+    public async Task PointInTimeProjectionAndEventWindowExcludeLaterGoal()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var aggregate = new MatchAggregate(matchId, "home", "away", players,
+            players.Select(p => p.Item1), "approved-synthetic-test");
+        var updates = new PostgresCanonicalUpdateStore(source);
+
+        async Task Apply(long sequence, int clock, MatchEventType type, string playerId, int revision)
+        {
+            var evt = MatchEvent.Create(Guid.NewGuid(), matchId, sequence, type, clock, 1, DateTimeOffset.UtcNow);
+            aggregate.Apply(new SimulationEvent(evt, "home", playerId, type.ToString(), type == MatchEventType.Goal ? "scored" : "complete"));
+            var update = CanonicalUpdate.FromAppliedAggregate(aggregate, evt, revision, "aggregate-v1", new string('c', 64));
+            await updates.CommitAsync(update, CancellationToken.None);
+        }
+
+        await Apply(0, 0, MatchEventType.KickOff, "home-1", 1);
+        await Apply(1, 3308, MatchEventType.Pass, "home-2", 2);
+        await Apply(2, 3309, MatchEventType.Goal, "home-3", 3);
+
+        var reader = new PostgresMatchProjectionReader(source);
+        var beforeGoal = await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None);
+        Assert.NotNull(beforeGoal);
+        Assert.Equal(2, beforeGoal.Revision);
+        Assert.Equal(0, beforeGoal.State.HomeScore);
+        Assert.Equal(3308, beforeGoal.AsOfClockSeconds);
+        var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
+        Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
+        Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
+
+        var atGoal = await reader.GetAtAsync(matchId, 3309, null, CancellationToken.None);
+        Assert.NotNull(atGoal);
+        Assert.Equal(1, atGoal.State.HomeScore);
+        Assert.Equal(3, (await ReadSelected(reader, atGoal, 3309)).Count);
+
+        var pinned = await reader.GetAtAsync(matchId, 3309, 2, CancellationToken.None);
+        Assert.NotNull(pinned);
+        Assert.Equal(2, pinned.Revision);
+        Assert.Equal(0, pinned.State.HomeScore);
+        await Assert.ThrowsAsync<InvalidDataException>(() => ReadSelected(reader,
+            beforeGoal with { AsOfSequence = beforeGoal.AsOfSequence + 1 }, 3309));
+        Assert.Equal(beforeGoal.StateSha256,
+            (await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None))!.StateSha256);
+        var drainer = new PostgresOutboxDispatcher(source, new CountingPublisher());
+        for (var i = 0; i < 3; i++) Assert.Equal(OutboxDispatchResult.Published, await drainer.DispatchOneAsync(CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task PointInTimeProjectionIsMissingForUnknownMatchAndBoundsInvalidTime()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var reader = new PostgresMatchProjectionReader(source);
+        Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, null, CancellationToken.None));
+    }
+
+    private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,
+        PersistedMatchProjection projection, int selectedSeconds)
+    {
+        var events = new List<MatchEvent>();
+        await foreach (var item in reader.ReadEventsAtAsync(projection, selectedSeconds, CancellationToken.None)) events.Add(item);
+        return events;
+    }
+
     private sealed class DeliverThenLoseAckPublisher(PostgresConsumerInbox inbox, Guid eventId) : IOutboxPublisher
     {
         public int DeliveryAttempts { get; private set; }
