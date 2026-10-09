@@ -142,7 +142,7 @@ resource postgresDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@
 
 resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
   // Azure Public DNS suffix for Blob Private Link; keep cloud-specific DNS reviewed before extending this root to sovereign clouds.
-  name: 'privatelink.blob.core.windows.net'
+  name: 'privatelink.blob.${az.environment().suffixes.storage}'
   location: 'global'
 }
 
@@ -361,7 +361,7 @@ resource canonicalContainerAppsEnvironment 'Microsoft.App/managedEnvironments@20
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
         customerId: logAnalytics.properties.customerId
-        sharedKey: listKeys(logAnalytics.id, '2022-10-01').primarySharedKey
+        sharedKey: logAnalytics.listKeys().primarySharedKey
       }
     }
     vnetConfiguration: {
