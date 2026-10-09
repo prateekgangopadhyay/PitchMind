@@ -9,6 +9,7 @@
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
+  API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Match --> Fixture["SyntheticFixtureGenerator, in-source data"]
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
