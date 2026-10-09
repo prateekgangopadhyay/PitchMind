@@ -14,33 +14,51 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
 {
     public async Task AppendAsync(MatchEvent matchEvent, CancellationToken cancellationToken)
     {
-        MatchEventValidator.Validate(matchEvent);
+        ValidateForIngestion(matchEvent);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        // Transaction-scoped lock serializes writers for a match across processes.
-        // Hash collisions only serialize unrelated matches; they do not affect correctness.
-        await using (var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction))
-        {
-            command.Parameters.AddWithValue(matchEvent.MatchId.ToString());
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
+        // Lock event ID first, then match. This serializes a global ID retry across matches
+        // and a match sequence across event IDs without creating a lock-order cycle.
+        await AcquireLockAsync(connection, transaction, $"event:{matchEvent.EventId:N}", cancellationToken);
+        await AcquireLockAsync(connection, transaction, $"match:{matchEvent.MatchId}", cancellationToken);
         await using (var command = new NpgsqlCommand("SELECT payload::text FROM pitchmind.match_events WHERE event_id = $1", connection, transaction))
         {
             command.Parameters.AddWithValue(matchEvent.EventId);
             var existing = await command.ExecuteScalarAsync(cancellationToken) as string;
             if (existing is not null)
             {
-                if (Deserialize(existing) != matchEvent) throw new InvalidOperationException("Conflicting payload for existing event ID.");
+                if (!MatchEventPayloadEquality.AreEqual(Deserialize(existing), matchEvent))
+                {
+                    var expected = await GetExpectedSequenceAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
+                    throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                        MatchEventIngestionFailure.EventIdPayloadConflict, expected, matchEvent.Sequence);
+                }
                 await transaction.CommitAsync(cancellationToken);
                 return;
+            }
+        }
+        await using (var command = new NpgsqlCommand("SELECT event_id FROM pitchmind.match_events WHERE match_id = $1 AND sequence = $2", connection, transaction))
+        {
+            command.Parameters.AddWithValue(matchEvent.MatchId.Value);
+            command.Parameters.AddWithValue(matchEvent.Sequence);
+            var sequenceOwner = await command.ExecuteScalarAsync(cancellationToken);
+            if (sequenceOwner is Guid)
+            {
+                var expected = await GetExpectedSequenceAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
+                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                    MatchEventIngestionFailure.SequenceAlreadyUsed, expected, matchEvent.Sequence);
             }
         }
         await using (var command = new NpgsqlCommand("SELECT COALESCE(MAX(sequence), -1) + 1 FROM pitchmind.match_events WHERE match_id = $1", connection, transaction))
         {
             command.Parameters.AddWithValue(matchEvent.MatchId.Value);
             var expected = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
-            if (matchEvent.Sequence != expected)
-                throw new InvalidOperationException("Sequence conflict, gap or out-of-order event; reconciliation required.");
+            if (matchEvent.Sequence > expected)
+                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                    MatchEventIngestionFailure.SequenceGap, expected, matchEvent.Sequence);
+            if (matchEvent.Sequence < expected)
+                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                    MatchEventIngestionFailure.OutOfOrder, expected, matchEvent.Sequence);
         }
         await using (var command = new NpgsqlCommand("""
             INSERT INTO pitchmind.match_events(event_id, match_id, sequence, event_type, clock_seconds, period, occurred_at, payload)
@@ -58,7 +76,17 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
             command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, JsonSerializer.Serialize(matchEvent));
             try { await command.ExecuteNonQueryAsync(cancellationToken); }
             catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
-            { throw new InvalidOperationException("Event ID or sequence conflict; reconciliation required.", exception); }
+            {
+                var failure = exception.ConstraintName switch
+                {
+                    "match_events_pkey" => MatchEventIngestionFailure.EventIdPayloadConflict,
+                    "match_events_match_id_sequence_key" => MatchEventIngestionFailure.SequenceAlreadyUsed,
+                    _ => (MatchEventIngestionFailure?)null
+                };
+                if (failure is null) throw;
+                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId, failure.Value,
+                    null, matchEvent.Sequence);
+            }
         }
         await transaction.CommitAsync(cancellationToken);
     }
@@ -83,4 +111,31 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
     }
     private static MatchEvent Deserialize(string payload) => JsonSerializer.Deserialize<MatchEvent>(payload)
         ?? throw new InvalidDataException("Canonical ledger payload is empty.");
+
+    private static void ValidateForIngestion(MatchEvent matchEvent)
+    {
+        ArgumentNullException.ThrowIfNull(matchEvent);
+        try { MatchEventValidator.Validate(matchEvent); }
+        catch (ArgumentException exception)
+        {
+            throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                MatchEventIngestionFailure.InvalidEventPayload, null, matchEvent.Sequence, exception);
+        }
+    }
+
+    private static async Task AcquireLockAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        string lockKey, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction);
+        command.Parameters.AddWithValue(lockKey);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<long> GetExpectedSequenceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        MatchId matchId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT COALESCE(MAX(sequence), -1) + 1 FROM pitchmind.match_events WHERE match_id = $1", connection, transaction);
+        command.Parameters.AddWithValue(matchId.Value);
+        return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
 }
