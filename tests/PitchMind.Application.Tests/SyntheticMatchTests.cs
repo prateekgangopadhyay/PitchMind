@@ -31,6 +31,58 @@ public sealed class SyntheticMatchTests
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
     }
     [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService().GetState(clock));
+    [Fact] public void ReplayUsesDurationHalfTimeAndPitchFromTheFixtureDefinition()
+    {
+        var source = SyntheticFixtureGenerator.Generate();
+        const int duration = 3600;
+        const int halfTime = 1800;
+        const double pitchLength = 120;
+        const double pitchWidth = 80;
+        int ScaleClock(int seconds) => (int)Math.Round(seconds * (double)duration / source.DurationSeconds, MidpointRounding.AwayFromZero);
+        var events = source.Events.Select(item =>
+        {
+            var newClock = ScaleClock(item.Event.ClockSeconds);
+            return item with { Event = item.Event with
+            {
+                ClockSeconds = newClock,
+                Period = item.Event.Type == PitchMind.Domain.Events.MatchEventType.HalfTime || newClock < halfTime ? 1 : 2,
+                OccurredAt = item.Event.OccurredAt.AddSeconds(newClock - item.Event.ClockSeconds)
+            } };
+        }).ToArray();
+        var frames = source.Frames.Select(frame => frame with
+        {
+            ClockSeconds = ScaleClock(frame.ClockSeconds),
+            BallX = frame.BallX * pitchLength / source.PitchLengthMetres,
+            BallY = frame.BallY * pitchWidth / source.PitchWidthMetres,
+            Players = frame.Players.Select(player => player with
+            {
+                X = player.X * pitchLength / source.PitchLengthMetres,
+                Y = player.Y * pitchWidth / source.PitchWidthMetres
+            }).ToArray()
+        }).ToArray();
+        var fixture = source with
+        {
+            DurationSeconds = duration,
+            HalfTimeSeconds = halfTime,
+            PitchLengthMetres = pitchLength,
+            PitchWidthMetres = pitchWidth,
+            Events = events,
+            Frames = frames
+        };
+
+        var service = new SyntheticMatchService(fixture);
+        var fullTime = service.GetState(duration);
+        Assert.Equal("full-time", fullTime.Status);
+        Assert.Equal(2, service.GetState(halfTime).Period);
+        Assert.Contains("x=0..120", fullTime.CoordinateConvention);
+        Assert.Contains("y=0..80", fullTime.CoordinateConvention);
+        Assert.Contains("1800 seconds", fullTime.CoordinateConvention);
+        Assert.Throws<ArgumentOutOfRangeException>(() => service.GetState(duration + 1));
+        var outOfPitch = fixture.Frames.Select(frame => frame.ClockSeconds == duration
+            ? frame with { Players = frame.Players.Select(player => player with { X = pitchLength + 1 }).ToArray() }
+            : frame).ToArray();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = outOfPitch }));
+    }
     [Fact] public void AudienceChangesCopyWithoutChangingEvidence()
     {
         var service = new SyntheticMatchService(); var id = service.GetInsights(5400).Single().Id;

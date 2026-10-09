@@ -111,6 +111,13 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             or any(not isinstance(key, str) or not _is_integer(count) or count < 0
                    for key, count in required_event_counts.items())):
         raise CandidateValidationError("Manifest requiredEventCounts must map event names to non-negative integers")
+    required_event_markers = match_policy.get("requiredEventMarkers", {})
+    if (not isinstance(required_event_markers, dict)
+            or any(not isinstance(event_type, str) or not isinstance(marker, dict)
+                   or not _is_integer(marker.get("clockSeconds"))
+                   or not _is_integer(marker.get("period")) or marker["period"] not in expected_periods
+                   for event_type, marker in required_event_markers.items())):
+        raise CandidateValidationError("Manifest requiredEventMarkers must map event names to integer clock and period")
     source_event_types = manifest.get("canonicalization", {}).get("sourceEventTypes") if isinstance(manifest.get("canonicalization"), dict) else None
     if (not isinstance(source_event_types, list) or not source_event_types
             or any(not isinstance(value, str) or not value.strip() for value in source_event_types)
@@ -289,6 +296,28 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     expected_markers = manifest.get("match", {}).get("requiredEventCounts", {})
     if any(event_counts.get(event_type, 0) != count for event_type, count in expected_markers.items()):
         raise CandidateValidationError("Required period-end source markers differ from manifest")
+    marker_positions: dict[str, tuple[int, dict[str, Any]]] = {}
+    for event_type, expected in required_event_markers.items():
+        observed = [(index, event) for index, event in enumerate(events) if event["eventType"] == event_type]
+        if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockSeconds"]
+                or observed[0][1]["period"] != expected["period"]):
+            raise CandidateValidationError(f"Required source marker clock or period differs from manifest: {event_type}")
+        marker_positions[event_type] = observed[0]
+    half_time = marker_positions.get("HalfTime")
+    full_time = marker_positions.get("FullTime")
+    if half_time is not None and full_time is not None:
+        half_index, half_event = half_time
+        full_index, full_event = full_time
+        if half_index >= full_index or half_event["clockSeconds"] > full_event["clockSeconds"]:
+            raise CandidateValidationError("Half-time must precede full-time in source sequence and clock")
+        if any((event["period"] == 1 and index > half_index)
+               or (event["period"] == 2 and index < half_index and event["clockSeconds"] < half_event["clockSeconds"])
+               for index, event in enumerate(events)):
+            raise CandidateValidationError("Source event periods cross the half-time marker")
+        if not any(event["eventType"] == "KickOff" and event["period"] == 2
+                   and index > half_index and event["clockSeconds"] >= half_event["clockSeconds"]
+                   for index, event in enumerate(events)):
+            raise CandidateValidationError("Second-period kickoff must follow the half-time marker")
     if events[-1]["eventType"] != "FullTime":
         raise CandidateValidationError("Final source record must retain the full-time marker")
     if events[0]["clockSeconds"] != match_policy.get("sourceClockStart") or events[-1]["clockSeconds"] != match_policy.get("sourceClockEnd"):

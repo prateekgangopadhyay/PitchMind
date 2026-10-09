@@ -13,10 +13,13 @@ public static class MatchContractMappings
         fixture.Seed,
         fixture.Provenance,
         fixture.DurationSeconds,
+        fixture.HalfTimeSeconds,
+        fixture.PitchLengthMetres,
+        fixture.PitchWidthMetres,
         fixture.Home.ToResponse(),
         fixture.Away.ToResponse(),
         Array.AsReadOnly(fixture.Events.Select(ToResponse).ToArray()),
-        Array.AsReadOnly(fixture.Frames.Select(ToResponse).ToArray()));
+        Array.AsReadOnly(fixture.Frames.Select(frame => frame.ToResponse(fixture.CoordinateConvention)).ToArray()));
 
     public static MatchStateResponse ToResponse(this MatchSnapshot snapshot) => new(
         snapshot.MatchId,
@@ -26,7 +29,7 @@ public static class MatchContractMappings
         snapshot.HomeScore,
         snapshot.AwayScore,
         snapshot.Provenance,
-        snapshot.Frame.ToResponse(),
+        snapshot.Frame.ToResponse(snapshot.CoordinateConvention),
         snapshot.LastSequence);
 
     public static InsightResponse ToResponse(this TacticalInsight insight) => new(
@@ -43,7 +46,7 @@ public static class MatchContractMappings
     public static EvidenceResponse ToResponse(this TacticalEvidence evidence) => new(
         evidence.Insight.ToResponse(),
         Array.AsReadOnly(evidence.Events.Select(ToResponse).ToArray()),
-        Array.AsReadOnly(evidence.Frames.Select(ToResponse).ToArray()),
+        Array.AsReadOnly(evidence.Frames.Select(frame => frame.ToResponse(evidence.CoordinateConvention)).ToArray()),
         evidence.CoordinateConvention,
         Array.AsReadOnly(evidence.Conditions.ToArray()),
         Array.AsReadOnly(evidence.Limitations.ToArray()));
@@ -61,9 +64,9 @@ public static class MatchContractMappings
         team.Id, team.Name, team.Formation,
         Array.AsReadOnly(team.Players.Select(player => new PlayerResponse(player.Id, player.Name, player.TeamId, player.ShirtNumber, player.Role)).ToArray()));
 
-    private static TrackingFrameResponse ToResponse(this TrackingFrame frame) => new(
+    private static TrackingFrameResponse ToResponse(this TrackingFrame frame, string coordinateConvention) => new(
         frame.Id, frame.ClockSeconds, frame.BallX, frame.BallY,
-        "offline synthetic fixture; metres; fixed 105 x 68 metre pitch; attack direction changes at halftime",
+        coordinateConvention,
         Array.AsReadOnly(frame.Players.Select(player => new PitchPositionResponse(player.PlayerId, player.TeamId, player.X, player.Y)).ToArray()));
 
     public static SimulationEventResponse ToResponse(this SimulationEvent simulationEvent) => new(

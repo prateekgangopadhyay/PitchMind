@@ -3,7 +3,7 @@ export interface Team { id: string; name: string; formation: string; players: Pl
 export interface PitchPosition { playerId: string; teamId: string; x: number; y: number }
 export interface Frame { id: string; clockSeconds: number; ballX: number; ballY: number; coordinateConvention: string; players: PitchPosition[] }
 export interface MatchEvent { event: {eventId: string; matchId: string; sequence: number; type: string; clockSeconds: number; period: number; occurredAt: string}; teamId: string; playerId: string; action: string; outcome: string; relatedPlayerId: string | null }
-export interface Fixture { matchId: string; version: string; seed: number; provenance: string; durationSeconds: number; home: Team; away: Team; events: MatchEvent[]; frames: Frame[] }
+export interface Fixture { matchId: string; version: string; seed: number; provenance: string; durationSeconds: number; halfTimeSeconds: number; pitchLengthMetres: number; pitchWidthMetres: number; home: Team; away: Team; events: MatchEvent[]; frames: Frame[] }
 export interface Snapshot { matchId: string; clockSeconds: number; period: number; status: string; homeScore: number; awayScore: number; provenance: string; frame: Frame; lastSequence: number }
 export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[] }
 export interface Evidence { insight: Insight; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; conditions: string[]; limitations: string[] }

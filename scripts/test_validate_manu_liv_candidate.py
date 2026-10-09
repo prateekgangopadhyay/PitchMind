@@ -135,6 +135,27 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
             validator.validate_source(payload, manifest)
 
+    def test_rejects_half_time_marker_with_implausible_clock_and_period_crossing(self):
+        invalid = [
+            event("11111111-1111-4111-8111-111111111111", 1, 0, "KickOff"),
+            event("22222222-2222-4222-8222-222222222222", 2, 1, "HalfTime"),
+            event("33333333-3333-4333-8333-333333333333", 3, 2, "KickOff"),
+            event("44444444-4444-4444-8444-444444444444", 4, 12, "FullTime"),
+        ]
+        invalid[1]["period"] = 2
+        invalid[2]["period"] = 2
+        invalid[3]["period"] = 2
+        payload = json.dumps(invalid, separators=(",", ":")).encode()
+        manifest = test_manifest(invalid, payload)
+        manifest["match"]["expectedPeriods"] = [1, 2]
+        manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
+        manifest["match"]["requiredEventMarkers"] = {
+            "HalfTime": {"clockSeconds": 2700, "period": 2},
+            "FullTime": {"clockSeconds": 12, "period": 2},
+        }
+        with self.assertRaisesRegex(validator.CandidateValidationError, "marker clock or period"):
+            validator.validate_source(payload, manifest)
+
     def test_rejects_manifest_drift_and_unapproved_truth_changes(self):
         wrong_hash = {**self.manifest, "source": {**self.manifest["source"], "sha256": "0" * 64}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "SHA-256"):

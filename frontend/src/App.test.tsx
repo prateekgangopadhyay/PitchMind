@@ -24,7 +24,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { vi } from 'vitest';
 it('loads API state and clears historical insight when replay moves before evidence', async () => {
-  const fixture = {matchId: 'fixture', version: 'v1', seed: 42, durationSeconds: 5400, home: {id: 'h', name: 'Harbour FC', formation: '4-2-3-1', players: []}, away: {id: 'a', name: 'Ridge Athletic', formation: '4-2-3-1', players: []}};
+  const fixture = {matchId: 'fixture', version: 'v1', seed: 42, durationSeconds: 3600, halfTimeSeconds: 1800, pitchLengthMetres: 120, pitchWidthMetres: 80, home: {id: 'h', name: 'Harbour FC', formation: '4-2-3-1', players: []}, away: {id: 'a', name: 'Ridge Athletic', formation: '4-2-3-1', players: []}};
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const seconds = Number(new URL(url, 'http://localhost').searchParams.get('atSeconds') ?? 0);
@@ -37,6 +37,9 @@ it('loads API state and clears historical insight when replay moves before evide
     await act(async () => {root.render(createElement(App));});
     expect(container.textContent).toContain('Harbour FC');
     const slider = container.querySelector('input')!;
+    expect(slider.max).toBe('3600');
+    expect(container.querySelector('svg.pitch')?.getAttribute('viewBox')).toBe('-3 -3 126 86');
+    expect(container.textContent).toContain('120 × 80 m');
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '3309');
       slider.dispatchEvent(new Event('input', {bubbles: true}));

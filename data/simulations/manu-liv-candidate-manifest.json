@@ -26,6 +26,10 @@
       "HalfTime": 1,
       "FullTime": 1
     },
+    "requiredEventMarkers": {
+      "HalfTime": { "clockSeconds": 2700, "period": 2 },
+      "FullTime": { "clockSeconds": 5761, "period": 2 }
+    },
     "sourceClockStart": 0,
     "sourceClockEnd": 5761
   },

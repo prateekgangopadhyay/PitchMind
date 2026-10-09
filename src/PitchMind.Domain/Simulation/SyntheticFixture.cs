@@ -12,9 +12,14 @@ public sealed record PitchPosition(string PlayerId, string TeamId, double X, dou
 public sealed record TrackingFrame(string Id, int ClockSeconds, double BallX, double BallY, IReadOnlyList<PitchPosition> Players);
 public sealed record SimulationEvent(MatchEvent Event, string TeamId, string PlayerId, string Action, string Outcome, string? RelatedPlayerId = null);
 public sealed record SyntheticFixture(string MatchId, string Version, int Seed, string Provenance, int DurationSeconds,
-    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames);
+    int HalfTimeSeconds, double PitchLengthMetres, double PitchWidthMetres,
+    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames)
+{
+    public string CoordinateConvention =>
+        $"Offline synthetic fixture; metre coordinates, x=0..{PitchLengthMetres:R}, y=0..{PitchWidthMetres:R}; fixed stadium axes; attacking direction changes at {HalfTimeSeconds} seconds.";
+}
 public sealed record MatchSnapshot(string MatchId, int ClockSeconds, int Period, string Status, int HomeScore, int AwayScore,
-    string Provenance, TrackingFrame Frame, long LastSequence);
+    string Provenance, TrackingFrame Frame, long LastSequence, string CoordinateConvention);
 public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds, string Title, string Summary,
     string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds);
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,
@@ -84,6 +89,7 @@ public static class SyntheticFixtureGenerator
             .Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, homeDefinition, awayDefinition, definition, seed)).ToArray();
         return new(fixtureMatchId.ToString(), definition.Version, seed, definition.Provenance, definition.DurationSeconds,
+            definition.HalfTimeSeconds, definition.PitchLengthMetres, definition.PitchWidthMetres,
             home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
     }
 
