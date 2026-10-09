@@ -48,9 +48,12 @@ function assertGateFailureProbe(pipeline) {
 
 function gateFailureProbeSelfTest(pipeline) {
   assertGateFailureProbe(pipeline);
+  const bypassedSuccessCondition = pipeline.replace('condition: and(succeeded(),', 'condition: and(always(),');
+  assert.notEqual(bypassedSuccessCondition, pipeline, 'Mutation must target the failure-probe job condition');
   const mutations = [
     [pipeline.replace('  default: false', '  default: true'), /opt-in/],
     [pipeline.replace('parameters.runGateFailureProbe, true', 'parameters.runGateFailureProbe, false'), /opt-in/],
+    [bypassedSuccessCondition, /pipeline succeeded/],
     [pipeline.replace('FullyQualifiedName~DeliberateGateFailureProbe', 'FullyQualifiedName~UnrelatedTest'), /dedicated deliberately failing test/],
     [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '0'"), /scoped environment variable/],
     [pipeline.replace('      env:\n        PITCHMIND_GATE_FAILURE_PROBE', '      continueOnError: true\n      env:\n        PITCHMIND_GATE_FAILURE_PROBE'), /propagate/],
