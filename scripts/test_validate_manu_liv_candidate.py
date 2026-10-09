@@ -71,11 +71,21 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["sourceClock"]["last"], 12)
         self.assertTrue(first["sourceClock"]["preservedWithoutNormalization"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
-        self.assertEqual(first["orderedEventSemanticsSha256"], second["orderedEventSemanticsSha256"])
+        self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
         self.assertEqual(first["status"], "structurally_valid_candidate_blocked_for_canonicalization")
         self.assertFalse(first["canonicalMappingsApproved"])
         self.assertFalse(first["coordinateUnitsVerified"])
         self.assertFalse(first["playerMetricsValidated"])
+
+    def test_ordered_record_digest_covers_fields_beyond_identity_and_time(self):
+        baseline = validator.validate_source(self.payload, self.manifest)
+        changed_events = [{**self.events[0], "outcome": "incomplete"}, self.events[1]]
+        changed_payload = json.dumps(changed_events, separators=(",", ":")).encode()
+        changed_manifest = test_manifest(changed_events, changed_payload)
+        changed = validator.validate_source(changed_payload, changed_manifest)
+
+        self.assertEqual(baseline["sourceEventIdLedgerSha256"], changed["sourceEventIdLedgerSha256"])
+        self.assertNotEqual(baseline["orderedEventRecordsSha256"], changed["orderedEventRecordsSha256"])
 
     def test_rejects_duplicate_source_event_ids(self):
         invalid = [self.events[0], {**self.events[1], "eventId": self.events[0]["eventId"]}]
@@ -160,7 +170,7 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["sourceClock"]["last"], 5761)
         self.assertEqual(first["eventCounts"], second["eventCounts"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
-        self.assertEqual(first["orderedEventSemanticsSha256"], second["orderedEventSemanticsSha256"])
+        self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
         self.assertEqual(first["eventCounts"]["Shot"], 124)
         self.assertEqual(first["eventCounts"]["Foul"], 254)
         self.assertTrue(first["footballReviewRequired"])

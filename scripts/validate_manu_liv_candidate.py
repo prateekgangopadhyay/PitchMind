@@ -165,7 +165,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     position_count = 0
     previous_clock = -1
     previous_period = 0
-    canonical_ledger = bytearray()
+    ordered_records_ledger = bytearray()
     source_ids_ledger = bytearray()
 
     def record_coordinate(name: str, value: Any) -> None:
@@ -216,8 +216,10 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             raise CandidateValidationError(f"Missing source event kind at source index {index}")
         event_counts[event_type] += 1
         periods[period] += 1
-        canonical_ledger.extend(_stable_json({"eventId": event_id, "sequence": sequence, "clockSeconds": clock,
-                                              "period": period, "eventType": event_type}))
+        # Hash each complete source record in source order. Sorting object keys
+        # makes the digest independent of JSON property order; the pinned source
+        # SHA separately covers the exact original bytes.
+        ordered_records_ledger.extend(_stable_json(event) + b"\n")
         source_ids_ledger.extend(event_id.encode("utf-8") + b"\n")
 
         team_id, team_name = event["teamId"], event["teamName"]
@@ -316,7 +318,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "sourceClock": {"unit": match_policy["sourceClockUnit"], "first": events[0]["clockSeconds"],
                         "last": events[-1]["clockSeconds"], "preservedWithoutNormalization": True},
         "sourceEventIdLedgerSha256": sha256(bytes(source_ids_ledger)).hexdigest(),
-        "orderedEventSemanticsSha256": sha256(bytes(canonical_ledger)).hexdigest(),
+        "orderedEventRecordsSha256": sha256(bytes(ordered_records_ledger)).hexdigest(),
         "eventCounts": dict(sorted(event_counts.items())),
         "periodCounts": {str(key): periods[key] for key in sorted(periods)},
         "attachedPositionCount": position_count,
