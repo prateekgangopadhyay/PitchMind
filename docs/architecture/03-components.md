@@ -15,12 +15,15 @@ flowchart TB
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
+  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (transport adapter not registered)"]
+  Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` now folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. Two cautions or an explicit red-card event dismisses the player in this in-memory projection. The version 2 schema migration defines metadata, frames, revisioned projection, evidence, quarantine, checkpoint and outbox tables, but the application does not yet write/read those tables transactionally. The current offline API still does not consume the event store. Competition linkage and persisted correction/read-model behavior remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The PostgreSQL v3 schema adds lease/retry/dead-letter state, a projection FK for outbox records, and a consumer inbox. `PostgresCanonicalUpdateStore` commits event, revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` uses stable IDs, leases and bounded retries, and emits local .NET metrics; `PostgresConsumerInbox` couples a same-database effect to its dedupe receipt. These infrastructure primitives are not yet registered in the API/EventWorker runtime, and there is no Azure broker publisher, metrics exporter/alert, or projection API read path. Competition linkage, source import and persisted correction workflows remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
@@ -38,7 +41,7 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
-    Ports["IEventLedger / IFrameStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    Ports["IMatchEventStore / ICanonicalUpdateStore / IOutboxPublisher / inbox transaction / model + realtime ports"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -60,7 +63,10 @@ flowchart TB
   Detect --> Evidence
   Query --> Ports
   Explain --> Ports
-  Pg -. "implements" .-> Ports
+  Pg -. "implements event and canonical update ports" .-> Ports
+  Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
+  OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
+  Pg -. "implements consumer inbox" .-> Ports
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports

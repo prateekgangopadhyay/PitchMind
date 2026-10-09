@@ -1,6 +1,8 @@
 using Npgsql;
+using PitchMind.Application.Abstractions;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
 using PitchMind.Infrastructure.Storage;
 using Xunit;
 
@@ -35,8 +37,8 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2 }, (int[])(await versions.ExecuteScalarAsync())!);
-        foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox" })
+            Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+        foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
             command.Parameters.AddWithValue($"pitchmind.{table}");
@@ -64,6 +66,259 @@ public sealed class PostgresLedgerTests
         var store = new PostgresMatchEventStore(source);
         await store.AppendAsync(redCard, CancellationToken.None);
         Assert.Equal(redCard, Assert.Single(await Read(store, matchId)));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ExistingVersionTwoDatabaseUpgradesToThreeRepeatably()
+    {
+        await using var source = Source();
+        await using (var connection = await source.OpenConnectionAsync())
+        await using (var transaction = await connection.BeginTransactionAsync())
+        await using (var legacy = new NpgsqlCommand(PostgresSchemaMigrator.SchemaSql + PostgresSchemaMigrator.Version2Sql, connection, transaction))
+        {
+            await legacy.ExecuteNonQueryAsync();
+            await transaction.CommitAsync();
+        }
+
+        var existingEvent = Event(MatchId.New());
+        await new PostgresMatchEventStore(source).AppendAsync(existingEvent, CancellationToken.None);
+
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
+        Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+        await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
+        Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
+        Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
+    }
+
+    private static (CanonicalUpdate Update, MatchAggregate Aggregate) BuildUpdate(MatchId matchId, int revision = 1)
+    {
+        var evt = MatchEvent.Create(Guid.NewGuid(), matchId, 0, MatchEventType.KickOff, 0, 1, DateTimeOffset.UtcNow);
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var aggregate = new MatchAggregate(matchId, "home", "away", players,
+            players.Select(p => p.Item1), "approved-synthetic-test");
+        aggregate.Apply(new SimulationEvent(evt, "home", "home-1", "kickoff", "started"));
+        var update = CanonicalUpdate.FromAppliedAggregate(aggregate, evt, revision, "aggregate-v1", new string('a', 64));
+        return (update, aggregate);
+    }
+
+    private static CanonicalUpdate Update(MatchId matchId) => BuildUpdate(matchId).Update;
+
+    [PostgresIntegrationFact]
+    public async Task CanonicalEventProjectionAndOutboxCommitTogetherAndExactRetryIsIdempotent()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var (update, aggregate) = BuildUpdate(MatchId.New());
+        var store = new PostgresCanonicalUpdateStore(source);
+
+        Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(update, CancellationToken.None));
+        Assert.Equal(CanonicalUpdateCommitResult.AlreadyCommitted, await store.CommitAsync(update, CancellationToken.None));
+        await using var counts = source.CreateCommand("""
+            SELECT (SELECT count(*) FROM pitchmind.match_events WHERE match_id = $1),
+                   (SELECT count(*) FROM pitchmind.match_projections WHERE match_id = $1),
+                   (SELECT count(*) FROM pitchmind.outbox WHERE match_id = $1)
+            """);
+        counts.Parameters.AddWithValue(update.Event.MatchId.Value);
+        await using var reader = await counts.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.Equal(1L, reader.GetInt64(1));
+        Assert.Equal(1L, reader.GetInt64(2));
+        await reader.DisposeAsync();
+
+        var fabricatedGoal = update.Event with { Type = MatchEventType.Goal };
+        Assert.Throws<InvalidOperationException>(() => CanonicalUpdate.FromAppliedAggregate(
+            aggregate, fabricatedGoal, 1, "aggregate-v1", new string('a', 64)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.CommitAsync(
+            CanonicalUpdate.FromAppliedAggregate(aggregate, update.Event, 1, "aggregate-v1", new string('b', 64)),
+            CancellationToken.None));
+        Assert.Equal(OutboxDispatchResult.Published, await new PostgresOutboxDispatcher(source, new CountingPublisher())
+            .DispatchOneAsync(CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task OutboxRecoversAfterPublishFailureAndInboxAppliesEffectOnce()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var update = Update(MatchId.New());
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+
+        await using (var prepare = source.CreateCommand("CREATE TABLE pitchmind.consumer_effect_test (message_id uuid PRIMARY KEY, count integer NOT NULL)"))
+            await prepare.ExecuteNonQueryAsync();
+        var inbox = new PostgresConsumerInbox(source);
+        var publisher = new DeliverThenLoseAckPublisher(inbox, update.Event.EventId);
+        var dispatcher = new PostgresOutboxDispatcher(source, publisher);
+        Assert.Equal(OutboxDispatchResult.RetryScheduled, await dispatcher.DispatchOneAsync(CancellationToken.None));
+        await using (var makeDue = source.CreateCommand("UPDATE pitchmind.outbox SET next_attempt_at = now() - interval '1 second' WHERE message_id = $1"))
+        {
+            makeDue.Parameters.AddWithValue(update.Event.EventId);
+            await makeDue.ExecuteNonQueryAsync();
+        }
+        // A new dispatcher instance simulates process restart. The first publish reached the consumer,
+        // but its acknowledgement was lost, so the stable message is delivered again after retry.
+        Assert.Equal(OutboxDispatchResult.Published, await new PostgresOutboxDispatcher(source, publisher).DispatchOneAsync(CancellationToken.None));
+        Assert.Equal(2, publisher.DeliveryAttempts);
+        Assert.Equal(OutboxDispatchResult.NoMessage, await dispatcher.DispatchOneAsync(CancellationToken.None));
+        await using var effect = source.CreateCommand("SELECT count FROM pitchmind.consumer_effect_test WHERE message_id = $1");
+        effect.Parameters.AddWithValue(update.Event.EventId);
+        Assert.Equal(1, (int)(await effect.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task FailedOutboxInsertRollsBackEventAndProjection()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var update = Update(MatchId.New());
+        var triggerSuffix = Guid.NewGuid().ToString("N");
+        var functionName = $"reject_outbox_{triggerSuffix}";
+        var triggerName = $"reject_outbox_{triggerSuffix}";
+        await using (var trigger = source.CreateCommand($"""
+            CREATE FUNCTION pitchmind.{functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.message_id = '{update.Event.EventId:D}'::uuid THEN
+                    RAISE EXCEPTION 'simulated outbox insert failure' USING ERRCODE = 'P0001';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+            CREATE TRIGGER {triggerName} BEFORE INSERT ON pitchmind.outbox
+            FOR EACH ROW EXECUTE FUNCTION pitchmind.{functionName}();
+            """))
+        {
+            await trigger.ExecuteNonQueryAsync();
+        }
+
+        var error = await Assert.ThrowsAsync<PostgresException>(() => new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None));
+        Assert.Equal("P0001", error.SqlState);
+        await using var counts = source.CreateCommand("""
+            SELECT (SELECT count(*) FROM pitchmind.match_events WHERE match_id = $1),
+                   (SELECT count(*) FROM pitchmind.match_projections WHERE match_id = $1)
+            """);
+        counts.Parameters.AddWithValue(update.Event.MatchId.Value);
+        await using var reader = await counts.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0L, reader.GetInt64(0));
+        Assert.Equal(0L, reader.GetInt64(1));
+        await reader.DisposeAsync();
+        await using var cleanup = source.CreateCommand($"DROP TRIGGER {triggerName} ON pitchmind.outbox; DROP FUNCTION pitchmind.{functionName}();");
+        await cleanup.ExecuteNonQueryAsync();
+    }
+
+    [PostgresIntegrationFact]
+    public async Task OutboxRetriesAreBoundedAndDeadLetterAfterConfiguredLimit()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var update = Update(MatchId.New());
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+        var dispatcher = new PostgresOutboxDispatcher(source, new AlwaysFailPublisher(), maxAttempts: 2);
+
+        Assert.Equal(OutboxDispatchResult.RetryScheduled, await dispatcher.DispatchOneAsync(CancellationToken.None));
+        await using (var due = source.CreateCommand("UPDATE pitchmind.outbox SET next_attempt_at = now() - interval '1 second' WHERE message_id = $1"))
+        {
+            due.Parameters.AddWithValue(update.Event.EventId);
+            await due.ExecuteNonQueryAsync();
+        }
+        Assert.Equal(OutboxDispatchResult.DeadLettered, await dispatcher.DispatchOneAsync(CancellationToken.None));
+        Assert.Equal(OutboxDispatchResult.NoMessage, await dispatcher.DispatchOneAsync(CancellationToken.None));
+        await using var state = source.CreateCommand("SELECT attempt_count, failed_at IS NOT NULL, last_error_code FROM pitchmind.outbox WHERE message_id = $1");
+        state.Parameters.AddWithValue(update.Event.EventId);
+        await using var reader = await state.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(2, reader.GetInt32(0));
+        Assert.True(reader.GetBoolean(1));
+        Assert.Equal("publisher-failure", reader.GetString(2));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ConcurrentDispatchersDoNotClaimTheSameLiveLease()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var update = Update(MatchId.New());
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+        var publisher = new BlockingPublisher();
+        var firstDispatcher = new PostgresOutboxDispatcher(source, publisher, leaseDuration: TimeSpan.FromMinutes(1));
+        var firstDispatch = firstDispatcher.DispatchOneAsync(CancellationToken.None);
+        await publisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondResult = await new PostgresOutboxDispatcher(source, new AlwaysFailPublisher())
+            .DispatchOneAsync(CancellationToken.None);
+        Assert.Equal(OutboxDispatchResult.NoMessage, secondResult);
+
+        publisher.Release.TrySetResult();
+        Assert.Equal(OutboxDispatchResult.Published, await firstDispatch);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ExpiredLeaseCanBeClaimedAfterWorkerCancellation()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var update = Update(MatchId.New());
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+        var blockedPublisher = new BlockingPublisher();
+        using var cancellation = new CancellationTokenSource();
+        var abandonedDispatch = new PostgresOutboxDispatcher(source, blockedPublisher, leaseDuration: TimeSpan.FromMilliseconds(50))
+            .DispatchOneAsync(cancellation.Token);
+        await blockedPublisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => abandonedDispatch);
+        await Task.Delay(75);
+
+        var recoveredPublisher = new CountingPublisher();
+        Assert.Equal(OutboxDispatchResult.Published,
+            await new PostgresOutboxDispatcher(source, recoveredPublisher).DispatchOneAsync(CancellationToken.None));
+        Assert.Equal(1, recoveredPublisher.Publications);
+    }
+
+    private sealed class DeliverThenLoseAckPublisher(PostgresConsumerInbox inbox, Guid eventId) : IOutboxPublisher
+    {
+        public int DeliveryAttempts { get; private set; }
+        public async Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            DeliveryAttempts++;
+            async Task Apply(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken token)
+            {
+                await using var command = new NpgsqlCommand("INSERT INTO pitchmind.consumer_effect_test(message_id, count) VALUES ($1, 1) ON CONFLICT (message_id) DO UPDATE SET count = pitchmind.consumer_effect_test.count + 1", connection, transaction);
+                command.Parameters.AddWithValue(eventId);
+                await command.ExecuteNonQueryAsync(token);
+            }
+            Assert.Equal(eventId, messageId);
+            await inbox.ExecuteOnceAsync("projection-consumer-v1", messageId, Apply, cancellationToken);
+            if (DeliveryAttempts == 1) throw new InvalidOperationException("Simulated lost acknowledgement after consumer commit.");
+        }
+    }
+
+    private sealed class AlwaysFailPublisher : IOutboxPublisher
+    {
+        public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Simulated persistent transport outage.");
+    }
+
+    private sealed class BlockingPublisher : IOutboxPublisher
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class CountingPublisher : IOutboxPublisher
+    {
+        public int Publications { get; private set; }
+        public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            Publications++;
+            return Task.CompletedTask;
+        }
     }
 
     [PostgresIntegrationFact]
