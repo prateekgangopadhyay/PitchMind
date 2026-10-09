@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -6,6 +8,9 @@ namespace PitchMind.Architecture.Tests;
 
 public sealed class DependencyTests
 {
+    private static readonly ConcurrentDictionary<string, Lazy<IReadOnlyDictionary<string, XDocument>>> EvaluatedProjectsCache = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private static readonly IReadOnlyDictionary<string, string[]> AllowedProjectReferences =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -42,10 +47,28 @@ public sealed class DependencyTests
         var root = FindRepositoryRoot();
         var domain = ReadEvaluatedProjectDocuments(root)["PitchMind.Domain"];
 
-        Xunit.Assert.DoesNotContain(domain.Descendants(), element =>
-            element.Name.LocalName is "PackageReference" or "Reference" or "COMReference" or "NativeReference" ||
-            element.Name.LocalName == "FrameworkReference" &&
-            !string.Equals(element.Attribute("IsImplicitlyDefined")?.Value, "true", StringComparison.OrdinalIgnoreCase));
+        Xunit.Assert.Empty(ArchitectureDependencyPolicy.ValidateDomainReferences(domain));
+    }
+
+    [Xunit.Fact]
+    public void Domain_RejectsForgedImplicitFrameworkReferences()
+    {
+        var sdkPath = Path.Combine(Path.GetTempPath(), "dotnet", "sdk", "10.0.0", "Sdks");
+        var explicitFramework = new XDocument(new XElement("Project",
+            new XAttribute("MSBuildSDKsPath", sdkPath),
+            new XElement("FrameworkReference",
+                new XAttribute("Include", "Contoso.Framework"),
+                new XAttribute("IsImplicitlyDefined", "true"),
+                new XAttribute("DefiningProjectFullPath", Path.Combine(Path.GetTempPath(), "Directory.Build.targets")))));
+        var forgedSdkFramework = new XDocument(new XElement("Project",
+            new XAttribute("MSBuildSDKsPath", sdkPath),
+            new XElement("FrameworkReference",
+                new XAttribute("Include", "Microsoft.NETCore.App"),
+                new XAttribute("IsImplicitlyDefined", "true"),
+                new XAttribute("DefiningProjectFullPath", Path.Combine(Path.GetTempPath(), "Directory.Build.targets")))));
+
+        Xunit.Assert.NotEmpty(ArchitectureDependencyPolicy.ValidateDomainReferences(explicitFramework));
+        Xunit.Assert.NotEmpty(ArchitectureDependencyPolicy.ValidateDomainReferences(forgedSdkFramework));
     }
 
     [Xunit.Fact]
@@ -95,13 +118,22 @@ public sealed class DependencyTests
             File.WriteAllText(projectPath,
                 "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.targets"),
-                "<Project><ItemGroup><Reference Include='InfrastructureAlias'><HintPath>$(MSBuildThisFileDirectory)lib/PitchMind.Infrastructure.dll</HintPath></Reference>" +
+                "<Project><ItemGroup><Reference Include='InfrastructureAlias'><HintPath>$(MSBuildThisFileDirectory)lib/InfrastructureAlias.dll</HintPath></Reference>" +
                 "<PackageReference Include='Contoso.Football' Version='1.0.0' /></ItemGroup></Project>");
+            var packageFolder = Path.Combine(root.FullName, "packages");
+            var packageLibrary = Path.Combine(packageFolder, "contoso.football", "1.0.0", "lib", "net10.0");
+            var hintPath = Path.Combine(root.FullName, "lib");
+            Directory.CreateDirectory(packageLibrary);
+            Directory.CreateDirectory(hintPath);
+            var infrastructureAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.Copy(infrastructureAssembly, Path.Combine(hintPath, "InfrastructureAlias.dll"));
+            File.Copy(infrastructureAssembly, Path.Combine(packageLibrary, "Contoso.Football.Core.dll"));
             Directory.CreateDirectory(Path.Combine(root.FullName, "obj"));
+            var packageFolderJson = JsonSerializer.Serialize(packageFolder + Path.DirectorySeparatorChar);
             File.WriteAllText(Path.Combine(root.FullName, "obj", "project.assets.json"),
-                """
-                {"version":4,"targets":{"net10.0":{"Contoso.Football/1.0.0":{"type":"package","compile":{"lib/net10.0/PitchMind.Domain.dll":{}}}}}}
-                """);
+                "{\"version\":4,\"targets\":{\"net10.0\":{\"Contoso.Football/1.0.0\":{\"type\":\"package\",\"compile\":{\"lib/net10.0/Contoso.Football.Core.dll\":{}}}}}," +
+                "\"libraries\":{\"Contoso.Football/1.0.0\":{\"type\":\"package\",\"path\":\"contoso.football/1.0.0\"}}," +
+                "\"packageFolders\":{" + packageFolderJson + ":{}}}");
 
             var evaluated = EvaluateProjectItems(projectPath);
             AddPackageCompileAssets(evaluated, projectPath);
@@ -111,7 +143,7 @@ public sealed class DependencyTests
                 new Dictionary<string, XDocument>(StringComparer.Ordinal) { ["Fixture"] = evaluated });
 
             Xunit.Assert.Contains(violations, violation => violation.Contains("InfrastructureAlias", StringComparison.Ordinal));
-            Xunit.Assert.Contains(violations, violation => violation.Contains("PitchMind.Domain.dll", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, violation => violation.Contains("PackageAssembly 'lib/net10.0/Contoso.Football.Core.dll", StringComparison.Ordinal));
         }
         finally
         {
@@ -163,16 +195,20 @@ public sealed class DependencyTests
 
     private static IReadOnlyDictionary<string, XDocument> ReadEvaluatedProjectDocuments(string root)
     {
-        var projects = Directory.GetFiles(Path.Combine(root, "src"), "*.csproj", SearchOption.AllDirectories);
-        return projects.ToDictionary(
-            project => Path.GetFileNameWithoutExtension(project),
-            project =>
-            {
-                var evaluated = EvaluateProjectItems(project);
-                AddPackageCompileAssets(evaluated, project);
-                return evaluated;
-            },
-            StringComparer.Ordinal);
+        var fullRoot = Path.GetFullPath(root);
+        return EvaluatedProjectsCache.GetOrAdd(fullRoot, repositoryRoot => new Lazy<IReadOnlyDictionary<string, XDocument>>(() =>
+        {
+            var projects = Directory.GetFiles(Path.Combine(repositoryRoot, "src"), "*.csproj", SearchOption.AllDirectories);
+            return projects.ToDictionary(
+                project => Path.GetFileNameWithoutExtension(project),
+                project =>
+                {
+                    var evaluated = EvaluateProjectItems(project);
+                    AddPackageCompileAssets(evaluated, project);
+                    return evaluated;
+                },
+                StringComparer.Ordinal);
+        }, LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
 
     private static XDocument EvaluateProjectItems(string projectPath)
@@ -187,6 +223,7 @@ public sealed class DependencyTests
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(projectPath);
         startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
 
@@ -207,7 +244,10 @@ public sealed class DependencyTests
         }
 
         using var json = JsonDocument.Parse(output);
-        var evaluated = new XDocument(new XElement("Project", new XAttribute("ProjectPath", Path.GetFullPath(projectPath))));
+        var sdkPath = json.RootElement.GetProperty("Properties").GetProperty("MSBuildSDKsPath").GetString();
+        var evaluated = new XDocument(new XElement("Project",
+            new XAttribute("ProjectPath", Path.GetFullPath(projectPath)),
+            new XAttribute("MSBuildSDKsPath", sdkPath ?? string.Empty)));
         var itemRoot = json.RootElement.GetProperty("Items");
         foreach (var itemType in new[] { "ProjectReference", "Reference", "PackageReference", "FrameworkReference", "COMReference", "NativeReference" })
         {
@@ -250,6 +290,9 @@ public sealed class DependencyTests
             return;
         }
 
+        assets.RootElement.TryGetProperty("libraries", out var libraries);
+        assets.RootElement.TryGetProperty("packageFolders", out var packageFolders);
+
         foreach (var target in targets.EnumerateObject())
         {
             foreach (var library in target.Value.EnumerateObject())
@@ -259,11 +302,17 @@ public sealed class DependencyTests
                     continue;
                 }
 
+                var packagePath = libraries.ValueKind == JsonValueKind.Object &&
+                                  libraries.TryGetProperty(library.Name, out var package) &&
+                                  package.TryGetProperty("path", out var path)
+                    ? path.GetString()
+                    : null;
+
                 if (library.Value.TryGetProperty("compile", out var compile) && compile.ValueKind == JsonValueKind.Object)
                 {
                     foreach (var assembly in compile.EnumerateObject())
                     {
-                        project.Root!.Add(new XElement("PackageAssembly", new XAttribute("Include", assembly.Name)));
+                        project.Root!.Add(CreatePackageAssembly(assembly.Name, packagePath, packageFolders));
                     }
                 }
 
@@ -274,16 +323,70 @@ public sealed class DependencyTests
                     foreach (var assembly in runtimeGroup.Value.EnumerateObject().Where(asset =>
                                  asset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
                     {
-                        project.Root!.Add(new XElement("PackageAssembly", new XAttribute("Include", assembly.Name)));
+                        project.Root!.Add(CreatePackageAssembly(assembly.Name, packagePath, packageFolders));
                     }
                 }
             }
         }
     }
+
+    private static XElement CreatePackageAssembly(string assetPath, string? packagePath, JsonElement packageFolders)
+    {
+        var element = new XElement("PackageAssembly", new XAttribute("Include", assetPath));
+        if (packagePath is null || packageFolders.ValueKind != JsonValueKind.Object)
+        {
+            return element;
+        }
+
+        foreach (var folder in packageFolders.EnumerateObject())
+        {
+            var resolvedPath = Path.GetFullPath(Path.Combine(folder.Name, packagePath, assetPath));
+            if (File.Exists(resolvedPath))
+            {
+                element.SetAttributeValue("ResolvedPath", resolvedPath);
+                break;
+            }
+        }
+
+        return element;
+    }
 }
 
 internal static class ArchitectureDependencyPolicy
 {
+    public static IReadOnlyList<string> ValidateDomainReferences(XDocument domain)
+    {
+        var violations = new List<string>();
+        foreach (var item in domain.Descendants().Where(element =>
+                     element.Name.LocalName is "PackageReference" or "Reference" or "COMReference" or "NativeReference" ||
+                     element.Name.LocalName == "FrameworkReference" && !IsSdkImplicitFrameworkReference(domain, element)))
+        {
+            violations.Add($"Domain project has forbidden {item.Name.LocalName} '{item.Attribute("Include")?.Value}'.");
+        }
+
+        return violations;
+    }
+
+    private static bool IsSdkImplicitFrameworkReference(XDocument project, XElement item)
+    {
+        if (!string.Equals(item.Attribute("Include")?.Value, "Microsoft.NETCore.App", StringComparison.Ordinal) ||
+            !string.Equals(item.Attribute("IsImplicitlyDefined")?.Value, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var sdkPath = project.Root?.Attribute("MSBuildSDKsPath")?.Value;
+        var definingProject = item.Attribute("DefiningProjectFullPath")?.Value;
+        if (string.IsNullOrWhiteSpace(sdkPath) || string.IsNullOrWhiteSpace(definingProject))
+        {
+            return false;
+        }
+
+        var expected = Path.GetFullPath(Path.Combine(sdkPath, "Microsoft.NET.Sdk", "targets", "Microsoft.NET.Sdk.DefaultItems.props"));
+        return Path.GetFullPath(definingProject).Equals(expected,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    }
+
     public static IReadOnlyList<string> ValidateInternalReferences(
         IReadOnlyDictionary<string, XDocument> projects)
     {
@@ -301,6 +404,7 @@ internal static class ArchitectureDependencyPolicy
                         include,
                         item.Attribute("HintPath")?.Value,
                         item.Attribute("FullPath")?.Value,
+                        item.Attribute("ResolvedPath")?.Value,
                         item.Element("HintPath")?.Value
                     };
                 if (!candidates.Any(IsInternalAssemblyReference))
@@ -323,7 +427,23 @@ internal static class ArchitectureDependencyPolicy
             return false;
         }
 
-        var identity = value.Split(',', 2)[0].Trim().Replace('\\', '/');
+        var rawValue = value.Trim();
+        if (File.Exists(rawValue))
+        {
+            try
+            {
+                if (AssemblyName.GetAssemblyName(rawValue).Name?.StartsWith("PitchMind.", StringComparison.Ordinal) == true)
+                {
+                    return true;
+                }
+            }
+            catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
+            {
+                // Not every HintPath or package asset points to a managed assembly.
+            }
+        }
+
+        var identity = rawValue.Split(',', 2)[0].Trim().Replace('\\', '/');
         var assemblyName = identity[(identity.LastIndexOf('/') + 1)..];
         if (assemblyName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
         {
