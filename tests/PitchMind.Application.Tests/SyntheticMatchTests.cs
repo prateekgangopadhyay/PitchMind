@@ -13,6 +13,25 @@ public sealed class SyntheticMatchTests
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
+    [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
+    {
+        var service = new SyntheticMatchService();
+        var beforeSubstitution = service.GetState(3599);
+        var afterSubstitution = service.GetState(3600);
+        var firstHalf = service.GetState(2699);
+        var secondHalf = service.GetState(2700);
+
+        Assert.Equal("replay", firstHalf.Status);
+        Assert.Equal("replay", secondHalf.Status);
+        Assert.Equal("FirstHalf", firstHalf.Phase.ToString());
+        Assert.Equal("SecondHalf", secondHalf.Phase.ToString());
+        Assert.Equal(1, beforeSubstitution.Players.Single(player => player.PlayerId == "ridge-4").YellowCards);
+        Assert.False(beforeSubstitution.Players.Single(player => player.PlayerId == "harbour-12").Active);
+        Assert.False(afterSubstitution.Players.Single(player => player.PlayerId == "harbour-7").Active);
+        Assert.True(afterSubstitution.Players.Single(player => player.PlayerId == "harbour-12").Active);
+        Assert.Equal(11, afterSubstitution.HomeActivePlayers);
+        Assert.NotNull(afterSubstitution.PossessionTeamId);
+    }
     [Fact] public void MissingTrackingSuppressesSpatialClaim()
     {
         var fixture = SyntheticFixtureGenerator.Generate();

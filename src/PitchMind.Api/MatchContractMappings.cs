@@ -23,11 +23,17 @@ public static class MatchContractMappings
         snapshot.ClockSeconds,
         snapshot.Period,
         snapshot.Status,
+        snapshot.Phase.ToString().ToLowerInvariant(),
         snapshot.HomeScore,
         snapshot.AwayScore,
         snapshot.Provenance,
         snapshot.Frame.ToResponse(),
-        snapshot.LastSequence);
+        snapshot.LastSequence,
+        snapshot.PossessionTeamId,
+        snapshot.HomeActivePlayers,
+        snapshot.AwayActivePlayers,
+        Array.AsReadOnly(snapshot.Players.Select(player => new MatchPlayerStateResponse(
+            player.PlayerId, player.TeamId, player.Active, player.Dismissed, player.YellowCards)).ToArray()));
 
     public static InsightResponse ToResponse(this TacticalInsight insight) => new(
         insight.Id,

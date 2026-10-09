@@ -1,4 +1,5 @@
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Application.Matches;
@@ -34,10 +35,18 @@ public sealed class SyntheticMatchService
     {
         ValidateTime(clockSeconds);
         var events = GetEvents(clockSeconds);
-        return new(Fixture.MatchId, clockSeconds, clockSeconds < 2700 ? 1 : 2,
-            clockSeconds == 5400 ? "full-time" : "replay", events.Count(e => e.Event.Type == MatchEventType.Goal && e.TeamId == Fixture.Home.Id),
-            events.Count(e => e.Event.Type == MatchEventType.Goal && e.TeamId == Fixture.Away.Id), Fixture.Provenance,
-            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), events.Last().Event.Sequence);
+        var initialPlayers = Fixture.Home.Players.Concat(Fixture.Away.Players)
+            .Select(player => (player.Id, player.TeamId)).ToArray();
+        var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
+        var aggregate = new MatchAggregate(new(Guid.Parse(Fixture.MatchId)), Fixture.Home.Id, Fixture.Away.Id,
+            initialPlayers, activeAtKickoff, Fixture.Provenance);
+        foreach (var item in events) aggregate.Apply(item);
+        var state = aggregate.Snapshot();
+        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
+        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.Phase,
+            state.HomeScore, state.AwayScore, state.Provenance,
+            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
+            state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players);
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {

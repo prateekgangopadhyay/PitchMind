@@ -55,6 +55,19 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void State_response_exposes_selected_time_projection_fields()
+    {
+        var state = new PitchMind.Application.Matches.SyntheticMatchService().GetState(3600).ToResponse();
+        AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
+            "provenance", "frame", "lastSequence", "possessionTeamId",
+            "homeActivePlayers", "awayActivePlayers", "players");
+        Assert.Equal("replay", state.Status);
+        Assert.Equal("secondhalf", state.Phase);
+        Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
+        Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
         var source = SyntheticFixtureGenerator.Generate();
