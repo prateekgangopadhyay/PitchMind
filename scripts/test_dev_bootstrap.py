@@ -129,16 +129,54 @@ if [ \"$count\" -eq 1 ]; then printf '%048d\\n' 1; else printf '%048d\\n' 2; fi
         self.assertFalse(target.exists())
         self.assertFalse(self.openssl_count.exists())
 
-    def test_existing_credentials_are_restricted_before_compose_start(self) -> None:
+    def test_existing_strong_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
-        env_file.write_text("POSTGRES_PASSWORD=kept\nREDIS_PASSWORD=kept-too\n", encoding="utf-8")
+        env_file.write_text(
+            "POSTGRES_PASSWORD=" + "a" * 48 + "\nREDIS_PASSWORD=" + "b" * 48 + "\n",
+            encoding="utf-8",
+        )
         env_file.chmod(0o644)
         result = self._run("dev-up.sh")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(env_file.read_text(), "POSTGRES_PASSWORD=kept\nREDIS_PASSWORD=kept-too\n")
+        self.assertEqual(
+            env_file.read_text(),
+            "POSTGRES_PASSWORD=" + "a" * 48 + "\nREDIS_PASSWORD=" + "b" * 48 + "\n",
+        )
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         self.assertFalse(self.openssl_count.exists())
+
+    def test_placeholder_or_short_existing_password_is_rejected_without_disclosure(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_PASSWORD=replace-with-random-local-password\nREDIS_PASSWORD=short\n",
+            encoding="utf-8",
+        )
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must contain distinct, generated 48-character", result.stderr)
+        self.assertNotIn("replace-with-random-local-password", result.stderr)
+        self.assertNotIn("short", result.stderr)
+        self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
+        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+
+    def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
+        valid = "a" * 48
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={'b' * 48}\n",
+            encoding="utf-8",
+        )
+        duplicate = self._run("dev-up.sh")
+        self.assertNotEqual(duplicate.returncode, 0)
+        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+
+        self.docker_log.write_text("")
+        env_file.write_text(f"POSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={valid}\n", encoding="utf-8")
+        reused = self._run("dev-up.sh")
+        self.assertNotEqual(reused.returncode, 0)
+        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
 
     def test_stop_keeps_volumes_and_reset_requires_explicit_force_in_noninteractive_mode(self) -> None:
         (self.root / "docker" / ".env").write_text("POSTGRES_PASSWORD=x\nREDIS_PASSWORD=y\n")

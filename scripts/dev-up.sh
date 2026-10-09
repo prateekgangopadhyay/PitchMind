@@ -14,5 +14,24 @@ if [[ ! -f docker/.env ]]; then
 fi
 [[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
 chmod 600 docker/.env
+
+read_local_password() {
+  local key="$1" line count=0 value=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "$key="* ]] || continue
+    count=$((count + 1))
+    value="${line#*=}"
+  done < docker/.env
+  [[ "$count" -eq 1 && "$value" =~ ^[0-9a-f]{48}$ ]] || return 1
+  printf '%s' "$value"
+}
+
+if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
+  || ! redis_password="$(read_local_password REDIS_PASSWORD)" \
+  || [[ "$postgres_password" == "$redis_password" ]]; then
+  echo "docker/.env must contain distinct, generated 48-character lowercase hexadecimal POSTGRES_PASSWORD and REDIS_PASSWORD values. Replace the local values; secrets were not displayed." >&2
+  exit 1
+fi
+
 docker compose --env-file docker/.env -f docker/compose.yml up -d --wait
 echo "Local PostgreSQL and Redis are healthy."
