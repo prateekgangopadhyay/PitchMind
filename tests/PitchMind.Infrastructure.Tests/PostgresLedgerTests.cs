@@ -28,6 +28,45 @@ public sealed class PostgresLedgerTests
     private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!);
 
     [PostgresIntegrationFact]
+    public async Task SchemaMigrationsAreVersionedRepeatableAndAdmitRedCards()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
+            Assert.Equal(new[] { 1, 2 }, (int[])(await versions.ExecuteScalarAsync())!);
+        foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox" })
+        {
+            await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
+            command.Parameters.AddWithValue($"pitchmind.{table}");
+            Assert.True((bool)(await command.ExecuteScalarAsync())!);
+        }
+
+        var insightId = $"insight-{Guid.NewGuid():N}";
+        var insightMatchId = MatchId.New().Value;
+        await using (var insight = source.CreateCommand("INSERT INTO pitchmind.insights (insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json) VALUES ($1, $2, 1, 3, 'test-v1', 'derived', 'test insight', '{}'::jsonb)"))
+        {
+            insight.Parameters.AddWithValue(insightId);
+            insight.Parameters.AddWithValue(insightMatchId);
+            await insight.ExecuteNonQueryAsync();
+        }
+        await using (var mismatchedEvidence = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, revision, relation) VALUES ($1, 'event', 'event-1', $2, 1, 'supports')"))
+        {
+            mismatchedEvidence.Parameters.AddWithValue(insightId);
+            mismatchedEvidence.Parameters.AddWithValue(MatchId.New().Value);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => mismatchedEvidence.ExecuteNonQueryAsync());
+            Assert.Equal("23503", exception.SqlState);
+        }
+
+        var matchId = MatchId.New();
+        var redCard = MatchEvent.Create(Guid.NewGuid(), matchId, 0, MatchEventType.RedCard, 1, 1, DateTimeOffset.UtcNow);
+        var store = new PostgresMatchEventStore(source);
+        await store.AppendAsync(redCard, CancellationToken.None);
+        Assert.Equal(redCard, Assert.Single(await Read(store, matchId)));
+    }
+
+    [PostgresIntegrationFact]
     public async Task CommittedEventsSurviveNewDataSourceAndKeepTimestampPrecision()
     {
         var matchId = MatchId.New(); var evt = Event(matchId);
@@ -79,7 +118,7 @@ public sealed class PostgresLedgerTests
         var role = "ledger_test_" + Guid.NewGuid().ToString("N");
         var password = Guid.NewGuid().ToString("N");
         // Identifiers and password are internally generated lowercase hexadecimal values, never user input.
-        await using (var setup = migrationSource.CreateCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT ON pitchmind.match_events TO {role};"))
+            await using (var setup = migrationSource.CreateCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT ON pitchmind.match_events TO {role};"))
             await setup.ExecuteNonQueryAsync();
         try
         {
@@ -89,7 +128,7 @@ public sealed class PostgresLedgerTests
             var store = new PostgresMatchEventStore(runtimeSource); var matchId = MatchId.New();
             var evt = Event(matchId); await store.AppendAsync(evt, CancellationToken.None);
             Assert.Equal(evt, Assert.Single(await Read(store, matchId)));
-            foreach (var sql in new[] { "UPDATE pitchmind.match_events SET clock_seconds = 0", "DELETE FROM pitchmind.match_events", "CREATE TABLE pitchmind.runtime_forbidden(id int)" })
+            foreach (var sql in new[] { "UPDATE pitchmind.match_events SET clock_seconds = 0", "DELETE FROM pitchmind.match_events", "CREATE TABLE pitchmind.runtime_forbidden(id int)", "SELECT * FROM pitchmind.match_projections" })
             {
                 await using var denied = runtimeSource.CreateCommand(sql);
                 var exception = await Assert.ThrowsAsync<PostgresException>(() => denied.ExecuteNonQueryAsync());

@@ -16,14 +16,16 @@ Npgsql is pinned to **10.0.3**, verified against the [official release](https://
 
 ## Migration and runtime identities
 
-`PostgresSchemaMigrator.ApplyAsync(migrationDataSource, cancellationToken)` is an **explicit separate migration operation**. Runtime constructors never execute DDL. Version 1 creates `pitchmind.match_events` and the migration version ledger inside an advisory-locked transaction. The embedded schema is the authoritative SQL for this version; future migrations must use new versions rather than editing deployed v1 semantics.
+`PostgresSchemaMigrator.ApplyAsync(migrationDataSource, cancellationToken)` is an **explicit separate migration operation**. Runtime constructors never execute DDL. Version 1 creates the event ledger and schema-version table. Version 2 upgrades the event-type constraint to match the stable enum range and creates source/match metadata, tracking-frame, revisioned projection, insight/evidence, quarantine, checkpoint and outbox tables with selected-time indexes. Each migration runs under an advisory lock in a transaction and records its version. Version 1 SQL remains immutable; future changes must use new versions rather than editing deployed migration semantics. The version 2 tables are schema only: no source importer, projection writer, insight store or transactional event+projection+outbox use case is wired yet.
 
-Run migrations with a dedicated migration identity authorized to create schema/tables. Grant runtime only:
+Run migrations with a dedicated migration identity authorized to create schema/tables. The current event API runtime is granted only:
 
 ```sql
 GRANT USAGE ON SCHEMA pitchmind TO pitchmind_runtime;
 GRANT SELECT, INSERT ON pitchmind.match_events TO pitchmind_runtime;
 ```
+
+Projection readers/writers must receive table-specific grants only when their use cases are implemented; the version 2 migration does not grant broad access to the new tables.
 
 Do not grant table ownership, schema CREATE, UPDATE, DELETE, TRUNCATE, or the migration identity to deployed runtime. Azure managed identity/token authentication and private networking are separate integration gates. Local owner-role tests do not prove Azure RBAC or network deployment.
 
@@ -43,4 +45,4 @@ dotnet test tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.
 
 Without that environment variable, tests explicitly skip and must not be reported as verified. Test setup runs the migration; the privilege test needs local role-creation permission. Tests create fresh match IDs and never truncate existing history. The role test grants an ephemeral runtime role, verifies append/read, denies UPDATE/DELETE/CREATE TABLE, and removes its grants/role afterward.
 
-Actual local run: existing Compose PostgreSQL 17 container, isolated `pitchmind_ledger_test` database. Evidence covers persistence after opening a new data source, twelve concurrent identical appends, conflicting payloads, sequence gaps/conflicts, cancellation, and runtime write restrictions. Database restart, backup restore, telemetry metadata durability, migration upgrade/rollback, Azure identity and Azure deployment still require separate evidence.
+Historical evidence on the base branch covered a Compose PostgreSQL 17 container and isolated `pitchmind_ledger_test` database for version 1. On the EP04-S02 branch, `./scripts/test-postgres.sh` executed all six PostgreSQL integration tests against a uniquely named local database: 6 passed, 0 failed, 0 skipped. This includes fresh/repeated migration, RedCard storage, restart/readback, duplicate and sequence behavior, cancellation, and runtime privilege denial for both ledger writes and projection-table reads. Full projection/event/outbox transaction wiring, backup restore, Azure identity and Azure deployment still require separate evidence.
