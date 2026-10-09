@@ -44,7 +44,14 @@ public static class MatchContractMappings
         insight.Classification,
         insight.DetectorVersion,
         Array.AsReadOnly(insight.EventIds.ToArray()),
-        Array.AsReadOnly(insight.FrameIds.ToArray()));
+        Array.AsReadOnly(insight.FrameIds.ToArray()),
+        insight.SourceVersion,
+        insight.CanonicalRevision,
+        insight.SelectedTimeSeconds,
+        insight.ThroughSequence,
+        insight.PolicyStatus,
+        insight.Publishable,
+        Array.AsReadOnly(insight.Conditions.ToArray()));
 
     public static EvidenceResponse ToResponse(this TacticalEvidence evidence) => new(
         evidence.Insight.ToResponse(),

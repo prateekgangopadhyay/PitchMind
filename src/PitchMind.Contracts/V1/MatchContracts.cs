@@ -51,7 +51,14 @@ public sealed record InsightResponse(
     string Classification,
     string DetectorVersion,
     IReadOnlyList<Guid> EventIds,
-    IReadOnlyList<string> FrameIds);
+    IReadOnlyList<string> FrameIds,
+    string SourceVersion,
+    int? CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    string PolicyStatus,
+    bool Publishable,
+    IReadOnlyList<string> Conditions);
 
 public sealed record EvidenceResponse(
     InsightResponse Insight,

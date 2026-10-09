@@ -12,12 +12,25 @@ public sealed record PitchPosition(string PlayerId, string TeamId, double X, dou
 public sealed record TrackingFrame(string Id, int ClockSeconds, double BallX, double BallY, IReadOnlyList<PitchPosition> Players);
 public sealed record SimulationEvent(MatchEvent Event, string TeamId, string PlayerId, string Action, string Outcome, string? RelatedPlayerId = null);
 public sealed record SyntheticFixture(string MatchId, string Version, int Seed, string Provenance, int DurationSeconds,
-    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames);
+    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames)
+{
+    public double PitchLengthMetres { get; init; }
+    public double PitchWidthMetres { get; init; }
+}
 public sealed record MatchSnapshot(string MatchId, int ClockSeconds, int Period, string Status, MatchPhase Phase, int HomeScore, int AwayScore,
     string Provenance, TrackingFrame Frame, long LastSequence, string? PossessionTeamId,
     int HomeActivePlayers, int AwayActivePlayers, IReadOnlyList<MatchPlayerState> Players);
 public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds, string Title, string Summary,
-    string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds);
+    string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds)
+{
+    public string SourceVersion { get; init; } = "unknown";
+    public int? CanonicalRevision { get; init; }
+    public int SelectedTimeSeconds { get; init; }
+    public long ThroughSequence { get; init; } = -1;
+    public string PolicyStatus { get; init; } = "unknown";
+    public bool Publishable { get; init; }
+    public IReadOnlyList<string> Conditions { get; init; } = Array.Empty<string>();
+}
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,
     string CoordinateConvention, IReadOnlyList<string> Conditions, IReadOnlyList<string> Limitations);
 public sealed record MatchExplanation(string InsightId, int ClockSeconds, string Audience, string Source, string Text,
@@ -85,7 +98,11 @@ public static class SyntheticFixtureGenerator
             .Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, homeDefinition, awayDefinition, definition, seed)).ToArray();
         return new(fixtureMatchId.ToString(), definition.Version, seed, definition.Provenance, definition.DurationSeconds,
-            home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
+            home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames))
+        {
+            PitchLengthMetres = definition.PitchLengthMetres,
+            PitchWidthMetres = definition.PitchWidthMetres
+        };
     }
 
     private static FixtureDefinition LoadDefinition()
