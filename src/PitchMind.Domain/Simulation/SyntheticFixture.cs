@@ -27,6 +27,18 @@ public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<Sim
 public sealed record MatchExplanation(string InsightId, int ClockSeconds, string Audience, string Source, string Text,
     IReadOnlyList<Guid> EventIds, IReadOnlyList<string> Limitations);
 
+public static class FootballPitchDimensions
+{
+    public const double MinimumLengthMetres = 90;
+    public const double MaximumLengthMetres = 120;
+    public const double MinimumWidthMetres = 45;
+    public const double MaximumWidthMetres = 90;
+
+    public static bool AreValid(double lengthMetres, double widthMetres) =>
+        double.IsFinite(lengthMetres) && lengthMetres is >= MinimumLengthMetres and <= MaximumLengthMetres &&
+        double.IsFinite(widthMetres) && widthMetres is >= MinimumWidthMetres and <= MaximumWidthMetres;
+}
+
 public static class SyntheticFixtureGenerator
 {
     public const string Version = "synthetic-v2";
@@ -105,8 +117,7 @@ public static class SyntheticFixtureGenerator
     {
         if (definition.Teams is null || definition.ScenarioEvents is null || definition.SuppressedCirculationWindows is null ||
             definition.FrameOverrides is null || string.IsNullOrWhiteSpace(definition.FixtureId) || definition.Provenance != "synthetic" ||
-            definition.DurationSeconds <= 0 || !double.IsFinite(definition.PitchLengthMetres) || definition.PitchLengthMetres <= 0 ||
-            !double.IsFinite(definition.PitchWidthMetres) || definition.PitchWidthMetres <= 0 ||
+            definition.DurationSeconds <= 0 || !FootballPitchDimensions.AreValid(definition.PitchLengthMetres, definition.PitchWidthMetres) ||
             definition.StartUtc == default || definition.StartUtc.Offset != TimeSpan.Zero ||
             definition.HalfTimeSeconds <= 0 || definition.HalfTimeSeconds >= definition.DurationSeconds ||
             definition.CirculationIntervalSeconds <= 0 || definition.DurationSeconds % definition.CirculationIntervalSeconds != 0 ||

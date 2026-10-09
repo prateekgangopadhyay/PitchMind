@@ -205,6 +205,20 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "Coordinate semantics must remain explicitly unverified"):
             validator.validate_source(self.payload, assumed_units)
 
+    def test_requires_clock_and_period_for_each_required_period_end_marker(self):
+        manifest = test_manifest(self.events, self.payload)
+        manifest["match"]["expectedPeriods"] = [1, 2]
+        manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
+        manifest["match"]["requiredEventMarkers"] = {
+            "HalfTime": {"clockSeconds": 2700, "period": 1},
+            "FullTime": {"clockSeconds": 5761, "period": 2},
+        }
+        for missing_marker in ("HalfTime", "FullTime"):
+            incomplete = json.loads(json.dumps(manifest))
+            del incomplete["match"]["requiredEventMarkers"][missing_marker]
+            with self.assertRaisesRegex(validator.CandidateValidationError, "must pin clock and period"):
+                validator.validate_source(self.payload, incomplete)
+
     def test_rejects_nonfinite_source_values(self):
         payload = b'[{"x":NaN}]'
         manifest = test_manifest(self.events, self.payload)

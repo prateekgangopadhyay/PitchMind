@@ -12,8 +12,7 @@ public sealed class SyntheticMatchService
     {
         ArgumentNullException.ThrowIfNull(fixture);
         if (fixture.DurationSeconds <= 0 || fixture.HalfTimeSeconds <= 0 || fixture.HalfTimeSeconds >= fixture.DurationSeconds ||
-            !double.IsFinite(fixture.PitchLengthMetres) || fixture.PitchLengthMetres <= 0 ||
-            !double.IsFinite(fixture.PitchWidthMetres) || fixture.PitchWidthMetres <= 0 ||
+            !FootballPitchDimensions.AreValid(fixture.PitchLengthMetres, fixture.PitchWidthMetres) ||
             fixture.Provenance != "synthetic" || fixture.Frames.Count == 0)
             throw new ArgumentException("A complete synthetic fixture with tracking is required.", nameof(fixture));
         if (fixture.Events.Count == 0 || fixture.Events.Select(e => e.Event.EventId).Distinct().Count() != fixture.Events.Count)

@@ -113,6 +113,20 @@ public sealed class SyntheticMatchTests
         var frames = fixture.Frames.Select((frame, index) => index == 0 ? frame with { BallX = ballX, BallY = ballY } : frame).ToArray();
         Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
     }
+    [Theory]
+    [InlineData(89, 68)]
+    [InlineData(105, 44)]
+    [InlineData(121, 68)]
+    [InlineData(105, 91)]
+    public void UnsupportedFootballPitchDimensionsAreRejected(double pitchLength, double pitchWidth)
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with
+        {
+            PitchLengthMetres = pitchLength,
+            PitchWidthMetres = pitchWidth
+        }));
+    }
     [Fact] public void ExplanationsUseEvidenceTeamNames()
     {
         var fixture = SyntheticFixtureGenerator.Generate();

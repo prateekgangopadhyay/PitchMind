@@ -121,6 +121,18 @@ public sealed class SyntheticFixtureTests
         Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(nullPlayer.ToJsonString()));
     }
 
+    [Theory]
+    [InlineData("pitchLengthMetres", 89)]
+    [InlineData("pitchLengthMetres", 121)]
+    [InlineData("pitchWidthMetres", 44)]
+    [InlineData("pitchWidthMetres", 91)]
+    public void DefinitionRejectsDimensionsOutsideFootballPitchRanges(string property, double value)
+    {
+        var definition = JsonNode.Parse(ReadDefinition())!;
+        definition[property] = value;
+        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(definition.ToJsonString()));
+    }
+
     [Fact] public void DefinitionRejectsFrameOverrideForInactivePlayer()
     {
         var definition = JsonNode.Parse(ReadDefinition())!;

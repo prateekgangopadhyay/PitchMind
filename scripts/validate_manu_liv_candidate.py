@@ -112,6 +112,10 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                    for key, count in required_event_counts.items())):
         raise CandidateValidationError("Manifest requiredEventCounts must map event names to non-negative integers")
     required_event_markers = match_policy.get("requiredEventMarkers", {})
+    pinned_period_end_markers = {
+        event_type for event_type in ("HalfTime", "FullTime")
+        if required_event_counts.get(event_type, 0) > 0
+    }
     allowed_same_clock_period2_types = match_policy.get("allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker", [])
     if (not isinstance(allowed_same_clock_period2_types, list)
             or any(not isinstance(event_type, str) or not event_type for event_type in allowed_same_clock_period2_types)
@@ -124,6 +128,8 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                    or not _is_integer(marker.get("period")) or marker["period"] not in expected_periods
                    for event_type, marker in required_event_markers.items())):
         raise CandidateValidationError("Manifest requiredEventMarkers must map event names to integer clock and period")
+    if not pinned_period_end_markers.issubset(required_event_markers):
+        raise CandidateValidationError("Manifest must pin clock and period for each required halftime/fulltime marker")
     source_event_types = manifest.get("canonicalization", {}).get("sourceEventTypes") if isinstance(manifest.get("canonicalization"), dict) else None
     if (not isinstance(source_event_types, list) or not source_event_types
             or any(not isinstance(value, str) or not value.strip() for value in source_event_types)
