@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "dictionaryId": "pitchmind-football-concepts",
+  "policyVersion": "football-concepts-v1-proposal",
+  "reviewStatus": "proposed",
+  "sourceProfile": {
+    "candidateManifest": "data/simulations/manu-liv-candidate-manifest.json",
+    "candidateSourceSha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "canonicalMappingStatus": "not-approved",
+    "coordinateSemanticsStatus": "unverified",
+    "playerMetricStatus": "unvalidated",
+    "footballReviewStatus": "required"
+  },
+  "approvals": {
+    "productOwner": null,
+    "footballAnalyst": null,
+    "qaReviewer": null
+  },
+  "concepts": [
+    {
+      "id": "press",
+      "term": "Press",
+      "definition": "A coordinated defensive action in which one or more defenders apply observable pressure to an opponent in possession, with the evidence sufficient to describe the exposure and the opponent's response.",
+      "nonDefinition": "A back-pass, a pressure event label, a tackle count, or a later regain alone is not proof that a press occurred.",
+      "phases": ["trigger-eligibility", "pressure-exposure", "opponent-response", "regain", "exploitation", "outcome"],
+      "minimumEvidence": ["canonical ordered source events", "same-match and same-period identity", "opponent/team relationship", "timestamped spatial samples adequate for the claimed geometry", "explicit missingness and coverage"],
+      "insufficientEvidence": ["trigger without observed pressure", "sparse frames used to infer movement or closing speed", "missing presser, carrier or relevant event", "unresolved coordinate units or attacking direction"],
+      "prohibitedClaims": ["managerial intent", "pressure caused a later goal", "league-calibrated intensity from this proposal"],
+      "thresholdStatus": "unapproved; no universal distance or time threshold is defined"
+    },
+    {
+      "id": "trap",
+      "term": "Pressing trap",
+      "definition": "A pressing pattern in which observable defender positioning or movement limits credible opponent outlets toward a governed channel and the opponent responds within a reviewed window.",
+      "nonDefinition": "A press followed by a turnover or a failed pass does not by itself prove that the opponent was channelled or trapped.",
+      "phases": ["trigger-eligibility", "channel-availability", "pressure-exposure", "opponent-response", "regain"],
+      "minimumEvidence": ["press evidence", "synchronized positions for relevant defenders, carrier and outlets", "declared pitch transform and attacking direction", "response event and possession outcome", "coverage and exclusion reasons"],
+      "insufficientEvidence": ["event-only pressure", "one defender-carrier distance without outlet geometry", "a regain without channel evidence", "incomplete or unsynchronized tracking"],
+      "prohibitedClaims": ["deliberate coaching plan", "forced response without evidence linking the pressure and action"],
+      "thresholdStatus": "unapproved; channel, coverage and time thresholds require football review"
+    },
+    {
+      "id": "response",
+      "term": "Opponent response",
+      "definition": "A timestamped, observed opponent action during or after a declared pressure exposure, reported as sequence evidence without asserting that pressure caused it.",
+      "nonDefinition": "A temporally subsequent pass, clearance or turnover is not automatically a reaction to pressure.",
+      "phases": ["pressure-exposure", "response-window", "possession-result"],
+      "minimumEvidence": ["pressure interval or event reference", "opponent action event with original ID and sequence", "same match and period", "declared time-window policy", "possession result where claimed"],
+      "insufficientEvidence": ["ordering inferred from wall-clock timestamps", "ambiguous team or actor", "event after the selected replay time", "missing action outcome"],
+      "prohibitedClaims": ["causal wording such as forced unless separately reviewed", "intent inferred from action label"],
+      "thresholdStatus": "unapproved; response window is unset"
+    },
+    {
+      "id": "danger",
+      "term": "Threatening situation",
+      "definition": "A source-observed shot or governed attacking event that may be summarized by its recorded outcome; any derived threat score requires a separately validated metric definition.",
+      "nonDefinition": "Possession share, raw shot count, a goal, or an uncalibrated player metric is not a probability of scoring or a general danger rating.",
+      "phases": ["attacking-event", "source-outcome", "optional-validated-metric"],
+      "minimumEvidence": ["canonical event ID and source label", "period and match clock", "explicit shot/event outcome", "metric version and calibration evidence if a numeric score is shown"],
+      "insufficientEvidence": ["unmapped source event", "missing shot context", "uncalibrated coordinate or player metrics", "goal metadata without reconciled canonical goal event"],
+      "prohibitedClaims": ["xG or scoring probability without a rights-cleared calibrated model", "tactical superiority from possession or shot volume alone"],
+      "thresholdStatus": "unapproved; no numeric danger threshold or score is defined"
+    },
+    {
+      "id": "overload",
+      "term": "Numerical overload",
+      "definition": "A time-bounded local numerical advantage for one team in an explicitly defined pitch region and phase, measured from eligible synchronized player locations.",
+      "nonDefinition": "Formation labels, nominal roles, or a static count of listed players do not establish a local overload.",
+      "phases": ["phase-selection", "region-selection", "eligible-player-count", "coverage-check"],
+      "minimumEvidence": ["declared region and time window", "all relevant active players at selected time", "coordinate units, pitch dimensions and direction", "roster/substitution state", "coverage and missingness"],
+      "insufficientEvidence": ["partial lineup frame", "unknown coordinates or units", "nominal formation only", "players outside the defined time/region"],
+      "prohibitedClaims": ["quantitative overload from sparse or incomplete frames", "advantage without declaring which players and region count"],
+      "thresholdStatus": "unapproved; region, time and count thresholds are unset"
+    },
+    {
+      "id": "line-break",
+      "term": "Line-breaking action",
+      "definition": "A completed action that moves the ball beyond an explicitly observed opponent defensive line, where the relevant line geometry is available before and after the action.",
+      "nonDefinition": "A provider label such as LineBreakingPass or forward ball movement alone does not prove that an actual defensive line was broken.",
+      "phases": ["pre-action-line-observation", "completed-action", "post-action-line-observation", "coverage-check"],
+      "minimumEvidence": ["completed pass or carry event", "synchronized opponent positions sufficient to identify the line", "declared coordinate transform", "ball or receiver location before and after", "coverage and missingness"],
+      "insufficientEvidence": ["sparse snapshots without line continuity", "source label without mapped semantics", "incomplete action", "unknown pitch coordinates"],
+      "prohibitedClaims": ["line break inferred from provider taxonomy alone", "formation treated as observed defensive-line geometry"],
+      "thresholdStatus": "unapproved; line-identification and coverage thresholds are unset"
+    },
+    {
+      "id": "counterpress",
+      "term": "Counterpress",
+      "definition": "An immediate, observable attempt by the team that has just lost possession to regain it, evaluated within a football-reviewed time window and with possession continuity evidence.",
+      "nonDefinition": "A pressure event near a turnover, or a later regain by either team, is not sufficient by itself.",
+      "phases": ["possession-loss", "post-loss-pressure", "opponent-control-or-contest", "regain-or-abandonment"],
+      "minimumEvidence": ["governed possession-loss event", "team identities before and after loss", "ordered pressure/action events", "reviewed time window", "explicit regain or no-regain outcome"],
+      "insufficientEvidence": ["ambiguous possession transition", "isolated pressure without preceding loss", "event gap or cross-period boundary", "unresolved source event mapping"],
+      "prohibitedClaims": ["successful counterpress without regain evidence", "team intention inferred from temporal proximity alone"],
+      "thresholdStatus": "unapproved; immediacy threshold is unset"
+    },
+    {
+      "id": "rest-defence",
+      "term": "Rest defence",
+      "definition": "The observable positioning and coverage of a team's players behind or around its attacking action, assessed for the declared opponent transition risk and selected phase.",
+      "nonDefinition": "Nominal formation, player roles, or a static snapshot alone does not establish effective rest defence.",
+      "phases": ["attacking-possession", "ball-loss-or-transition", "coverage-assessment"],
+      "minimumEvidence": ["selected-time attacking and transition context", "synchronized positions for relevant players and opponents", "declared pitch transform and active roster", "coverage and missingness", "explicit assessment criteria"],
+      "insufficientEvidence": ["no transition context", "missing opponents or ball location", "nominal lineup only", "sparse samples used to infer movement"],
+      "prohibitedClaims": ["effective protection or tactical intent without reviewed criteria", "player velocity reconstructed from sparse frames"],
+      "thresholdStatus": "unapproved; protection criteria and thresholds are unset"
+    }
+  ]
+}
