@@ -19,6 +19,16 @@ param containerAppsSubnetCidr string
 param postgresSubnetCidr string
 param privateEndpointsSubnetCidr string
 
+@description('Resource ID of the private Storage account to connect for Blob feed artifacts. Its public network access must be disabled before this candidate is used.')
+@minLength(1)
+param storageAccountResourceId string
+@description('Resource ID of the private Key Vault used by the canonical workload.')
+@minLength(1)
+param keyVaultResourceId string
+@description('Resource ID of the private Event Hubs namespace used by the telemetry workload.')
+@minLength(1)
+param eventHubsNamespaceResourceId string
+
 @description('Existing Log Analytics workspace created by infra/main.bicep.')
 param logAnalyticsWorkspaceName string = 'pm-dev-logs'
 
@@ -91,6 +101,7 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = if (dep
         name: 'private-endpoints'
         properties: {
           addressPrefix: privateEndpointsSubnetCidr
+          privateEndpointNetworkPolicies: 'Disabled'
         }
       }
     ]
@@ -107,6 +118,11 @@ resource containerAppsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-
   name: 'container-apps'
 }
 
+resource privateEndpointsSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = if (deployCanonicalTopology) {
+  parent: virtualNetwork
+  name: 'private-endpoints'
+}
+
 resource postgresDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
   name: postgresDnsZoneName
   location: 'global'
@@ -121,6 +137,160 @@ resource postgresDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@
     virtualNetwork: {
       id: virtualNetwork.id
     }
+  }
+}
+
+resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
+  // Azure Public DNS suffix for Blob Private Link; keep cloud-specific DNS reviewed before extending this root to sovereign clouds.
+  name: 'privatelink.blob.core.windows.net'
+  location: 'global'
+}
+
+resource blobPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (deployCanonicalTopology) {
+  parent: blobPrivateDnsZone
+  name: '${resourcePrefix}-vnet-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: { id: virtualNetwork.id }
+  }
+}
+
+resource keyVaultPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
+  name: 'privatelink.vaultcore.azure.net'
+  location: 'global'
+}
+
+resource keyVaultPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (deployCanonicalTopology) {
+  parent: keyVaultPrivateDnsZone
+  name: '${resourcePrefix}-vnet-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: { id: virtualNetwork.id }
+  }
+}
+
+resource eventHubsPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (deployCanonicalTopology) {
+  name: 'privatelink.servicebus.windows.net'
+  location: 'global'
+}
+
+resource eventHubsPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (deployCanonicalTopology) {
+  parent: eventHubsPrivateDnsZone
+  name: '${resourcePrefix}-vnet-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: { id: virtualNetwork.id }
+  }
+}
+
+resource storagePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = if (deployCanonicalTopology) {
+  name: '${resourcePrefix}-blob-pe'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointsSubnet.id }
+    privateLinkServiceConnections: [
+      {
+        name: 'storage-blob'
+        properties: {
+          privateLinkServiceId: storageAccountResourceId
+          groupIds: ['blob']
+        }
+      }
+    ]
+  }
+  tags: {
+    application: 'PitchMind'
+    environment: environment
+    story: 'EP02-S01'
+    service: 'storage-blob'
+  }
+}
+
+resource storagePrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-09-01' = if (deployCanonicalTopology) {
+  parent: storagePrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'blob'
+        properties: { privateDnsZoneId: blobPrivateDnsZone.id }
+      }
+    ]
+  }
+}
+
+resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = if (deployCanonicalTopology) {
+  name: '${resourcePrefix}-key-vault-pe'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointsSubnet.id }
+    privateLinkServiceConnections: [
+      {
+        name: 'key-vault'
+        properties: {
+          privateLinkServiceId: keyVaultResourceId
+          groupIds: ['vault']
+        }
+      }
+    ]
+  }
+  tags: {
+    application: 'PitchMind'
+    environment: environment
+    story: 'EP02-S01'
+    service: 'key-vault'
+  }
+}
+
+resource keyVaultPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-09-01' = if (deployCanonicalTopology) {
+  parent: keyVaultPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'key-vault'
+        properties: { privateDnsZoneId: keyVaultPrivateDnsZone.id }
+      }
+    ]
+  }
+}
+
+resource eventHubsPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = if (deployCanonicalTopology) {
+  name: '${resourcePrefix}-event-hubs-pe'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointsSubnet.id }
+    privateLinkServiceConnections: [
+      {
+        name: 'event-hubs'
+        properties: {
+          privateLinkServiceId: eventHubsNamespaceResourceId
+          groupIds: ['namespace']
+        }
+      }
+    ]
+  }
+  tags: {
+    application: 'PitchMind'
+    environment: environment
+    story: 'EP02-S01'
+    service: 'event-hubs'
+  }
+}
+
+resource eventHubsPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-09-01' = if (deployCanonicalTopology) {
+  parent: eventHubsPrivateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'namespace'
+        properties: { privateDnsZoneId: eventHubsPrivateDnsZone.id }
+      }
+    ]
   }
 }
 
@@ -183,7 +353,7 @@ resource pitchMindDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@
   }
 }
 
-resource canonicalContainerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = if (deployCanonicalTopology) {
+resource canonicalContainerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-07-01' = if (deployCanonicalTopology) {
   name: containerAppsEnvironmentName
   location: location
   properties: {
@@ -198,6 +368,13 @@ resource canonicalContainerAppsEnvironment 'Microsoft.App/managedEnvironments@20
       infrastructureSubnetId: containerAppsSubnet.id
       internal: true
     }
+    publicNetworkAccess: 'Disabled'
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
   }
   tags: {
     application: 'PitchMind'
@@ -212,3 +389,6 @@ output postgresServerId string = deployCanonicalTopology ? postgres!.id : ''
 output postgresServerName string = deployCanonicalTopology ? postgres!.name : ''
 output postgresFqdn string = deployCanonicalTopology ? postgres!.properties.fullyQualifiedDomainName : ''
 output containerAppsEnvironmentId string = deployCanonicalTopology ? canonicalContainerAppsEnvironment!.id : ''
+output storagePrivateEndpointId string = deployCanonicalTopology ? storagePrivateEndpoint!.id : ''
+output keyVaultPrivateEndpointId string = deployCanonicalTopology ? keyVaultPrivateEndpoint!.id : ''
+output eventHubsPrivateEndpointId string = deployCanonicalTopology ? eventHubsPrivateEndpoint!.id : ''

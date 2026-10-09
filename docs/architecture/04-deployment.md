@@ -4,7 +4,7 @@
 
 For the resource-by-resource current/deferred/blocking reconciliation, see [EP02-S01 IaC reconciliation](../engineering/EP02-S01-IAC-RECONCILIATION.md). Its observed state comes from the dated DEV evidence; private connectivity and the canonical PostgreSQL path remain unverified blockers.
 
-The isolated [`infra/canonical-dev-topology.bicep`](../../infra/canonical-dev-topology.bicep) root is an executable candidate for internal ACA + private PostgreSQL networking. It is disabled by default and is not referenced by the normal deployment pipeline. Compilation is not deployment evidence; subnet overlap, SKU/region capacity, identity, app workloads, private dependency paths, and end-to-end connectivity still require review and separately approved verification.
+The isolated [`infra/canonical-dev-topology.bicep`](../../infra/canonical-dev-topology.bicep) root is an executable candidate for internal ACA, private PostgreSQL, and conditional Blob/Key Vault/Event Hubs private endpoints. It requires caller-supplied IDs for existing dependency services, is disabled by default, and is not referenced by the normal deployment pipeline. Compilation is not deployment evidence; subnet overlap, target-service policy/DNS ownership, SKU/region capacity, identity, app workloads, and end-to-end connectivity still require review and separately approved verification.
 
 ## CURRENT — observed DEV prototype (limited)
 ```mermaid
@@ -28,7 +28,7 @@ flowchart TB
   WAF --> API["ACA BFF/API"]
   DIRECT --> API
   User -. "OIDC auth code + PKCE" .-> Entra["Entra External ID"]
-  subgraph Network["VNet / delegated workload-profile ACA subnet + private DNS (target, unverified)"]
+  subgraph Network["VNet / delegated ACA + PostgreSQL + private-endpoint subnets; private DNS (candidate, unverified)"]
     API --> PG[("PostgreSQL private endpoint / delegated private access")]
     API --> Signal["Azure SignalR authorized groups"]
     Worker["ACA EventWorker managed identity"] --> PG
@@ -38,6 +38,9 @@ flowchart TB
     Agent --> Foundry["Foundry approved model / private network as supported"]
     Worker -. "optional" .-> Redis["Azure Managed Redis private link"]
     Agent --> KV["Key Vault / managed identities"]
+    Feeder -. "Blob private endpoint + DNS (candidate)" .-> FEED
+    Agent -. "Key Vault private endpoint + DNS (candidate)" .-> KV
+    Worker -. "Event Hubs private endpoint + DNS (candidate)" .-> EH
   end
   FEED["Approved synthetic Blob file + manifest"] --> Feeder["ACA simulation feeder identity"]
   Feeder --> EH
