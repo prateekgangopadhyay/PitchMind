@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -38,7 +39,12 @@ public sealed class DependencyTests
         var root = FindRepositoryRoot();
         var projects = ReadEvaluatedProjectDocuments(root);
 
-        Xunit.Assert.Empty(ArchitectureDependencyPolicy.ValidateInternalReferences(projects));
+        Xunit.Assert.Contains(projects.Values.SelectMany(document => document.Descendants()),
+            item => item.Name.LocalName == "TargetResolvedReference");
+        Xunit.Assert.Contains(projects.Values.SelectMany(document => document.Descendants()),
+            item => item.Name.LocalName == "TargetCompilerReference");
+        var violations = ArchitectureDependencyPolicy.ValidateInternalReferences(projects, AllowedProjectReferences);
+        Xunit.Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations.Take(8)));
     }
 
     [Xunit.Fact]
@@ -109,6 +115,51 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ResolvedReferenceMetadata_CannotMasqueradeAsAnAllowedProjectOutput()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-resolved-reference-identity-");
+        try
+        {
+            var agentWorkerDirectory = Path.Combine(root.FullName, "src", "PitchMind.AgentWorker");
+            var applicationDirectory = Path.Combine(root.FullName, "src", "PitchMind.Application");
+            var applicationOutput = Path.Combine(applicationDirectory, "bin", "Debug", "net10.0");
+            Directory.CreateDirectory(agentWorkerDirectory);
+            Directory.CreateDirectory(applicationOutput);
+            var applicationPath = Path.Combine(applicationOutput, "PitchMind.Application.dll");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "PitchMind.Application.dll"), applicationPath);
+            var forgedPath = Path.Combine(applicationOutput, "PitchMind.Infrastructure.dll");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll"), forgedPath);
+            var agentWorkerProject = Path.Combine(agentWorkerDirectory, "PitchMind.AgentWorker.csproj");
+            var applicationProject = Path.Combine(applicationDirectory, "PitchMind.Application.csproj");
+            var document = new XDocument(new XElement("Project",
+                new XAttribute("ProjectPath", agentWorkerProject),
+                new XElement("ProjectReference", new XAttribute("Include", "../PitchMind.Application/PitchMind.Application.csproj"),
+                    new XAttribute("FullPath", applicationProject)),
+                new XElement("TargetResolvedReference", new XAttribute("Include", applicationPath),
+                    new XAttribute("FullPath", applicationPath),
+                    new XAttribute("ReferenceAssembly", forgedPath),
+                    new XAttribute("AssemblyName", "PitchMind.Application"),
+                    new XAttribute("OriginalProjectReferenceItemSpec", "../PitchMind.Application/PitchMind.Application.csproj"))));
+            var allowed = new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["PitchMind.AgentWorker"] = ["PitchMind.Application"],
+                ["PitchMind.Application"] = ["PitchMind.Domain"],
+                ["PitchMind.Domain"] = []
+            };
+
+            var violations = ArchitectureDependencyPolicy.ValidateInternalReferences(
+                new Dictionary<string, XDocument>(StringComparer.Ordinal) { ["PitchMind.AgentWorker"] = document }, allowed);
+
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetResolvedReference", StringComparison.Ordinal) &&
+                violation.Contains("PitchMind.Application.dll", StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void EvaluatedImportsHintPathsAndPackageAssets_AreChecked()
     {
         var root = Directory.CreateTempSubdirectory("pitchmind-architecture-");
@@ -163,33 +214,45 @@ public sealed class DependencyTests
             Directory.CreateDirectory(libraryDirectory);
             var infrastructureAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
             File.Copy(infrastructureAssembly, Path.Combine(libraryDirectory, "InfrastructureAlias.dll"));
+            var runtimeFrameworkVersion = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Name;
             File.WriteAllText(projectPath,
-                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
-                "<ItemGroup><Reference Include='InfrastructureAlias' /></ItemGroup>" +
+            "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+            "<ItemGroup><Reference Include='InfrastructureAlias' /></ItemGroup>" +
                 "<Target Name='InjectProjectReference' BeforeTargets='ResolveProjectReferences'><ItemGroup>" +
                 "<ProjectReference Include='Dependency.csproj' />" +
                 "</ItemGroup></Target>" +
-                "<Target Name='InjectDomainFrameworkReference' BeforeTargets='ResolveFrameworkReferences'><ItemGroup>" +
-                "<FrameworkReference Include='Microsoft.NETCore.App' IsImplicitlyDefined='true' />" +
+                "<Target Name='InjectForgedTransitiveProjectReference' BeforeTargets='IncludeTransitiveProjectReferences'><ItemGroup>" +
+                "<_TransitiveProjectReferences Include='Dependency.csproj' NuGetPackageId='Contoso.Forged' NuGetPackageVersion='1.0.0' />" +
                 "</ItemGroup></Target>" +
-                "<Target Name='InjectInternalReference' BeforeTargets='ResolveReferences'><ItemGroup>" +
-                "<Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
-                "<PackageReference Include='PitchMind.Domain' Version='1.0.0' />" +
-                "</ItemGroup></Target></Project>");
+                "<Target Name='InjectDomainFrameworkReference' BeforeTargets='ResolveFrameworkReferences'><ItemGroup>" +
+                "<FrameworkReference Update='Microsoft.NETCore.App'><RuntimeFrameworkVersion>" + runtimeFrameworkVersion + "</RuntimeFrameworkVersion></FrameworkReference>" +
+                "</ItemGroup></Target>" +
+            "<Target Name='InjectInternalReference' BeforeTargets='ResolveReferences'><ItemGroup>" +
+            "<Reference Include='InfrastructureAlias'><HintPath>lib/InfrastructureAlias.dll</HintPath></Reference>" +
+            "<PackageReference Include='PitchMind.Domain' Version='1.0.0' />" +
+            "</ItemGroup></Target></Project>");
             File.WriteAllText(Path.Combine(root.FullName, "Dependency.csproj"),
                 "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             RestoreFixture(projectPath);
 
             var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            evaluated.Root!.Add(new XElement("TargetResolvedReference",
+                new XAttribute("Include", Path.Combine(libraryDirectory, "InfrastructureAlias.dll"))));
             var violations = ArchitectureDependencyPolicy.ValidateInternalReferences(
                 new Dictionary<string, XDocument>(StringComparer.Ordinal) { ["Fixture"] = evaluated });
 
             Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetReference");
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetReference 'InfrastructureAlias'", StringComparison.Ordinal));
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetResolvedReference" &&
+                item.Attribute("Include")?.Value.EndsWith("InfrastructureAlias.dll", StringComparison.Ordinal) == true);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetResolvedReference", StringComparison.Ordinal) &&
+                violation.Contains("InfrastructureAlias.dll", StringComparison.Ordinal));
             var domainViolations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
             Xunit.Assert.Contains(domainViolations, violation => violation.Contains("TargetFrameworkReference 'Microsoft.NETCore.App'", StringComparison.Ordinal));
             Xunit.Assert.Contains(domainViolations, violation => violation.Contains("TargetPackageReference 'PitchMind.Domain'", StringComparison.Ordinal));
-            var injectedProject = evaluated.Descendants().Single(item => item.Name.LocalName == "TargetProjectReference");
+            var injectedProject = evaluated.Descendants().Single(item => item.Name.LocalName == "TargetProjectReference" &&
+                item.Attribute("DefiningProjectFullPath")?.Value == projectPath &&
+                item.Attribute("FullPath")?.Value.EndsWith("Dependency.csproj", StringComparison.Ordinal) == true);
             var unexpectedProject = Path.GetFileNameWithoutExtension(injectedProject.Attribute("FullPath")?.Value);
             var graphViolations = ArchitectureDependencyPolicy.Validate(
                 new Dictionary<string, string[]>(StringComparer.Ordinal)
@@ -204,6 +267,54 @@ public sealed class DependencyTests
                 });
 
             Xunit.Assert.Contains(graphViolations, violation => violation.Contains("forbidden project reference 'Dependency'", StringComparison.Ordinal));
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetProjectReference" &&
+                item.Attribute("DefiningProjectFullPath")?.Value.EndsWith("Microsoft.PackageDependencyResolution.targets", StringComparison.Ordinal) == true &&
+                item.Attribute("FullPath")?.Value.EndsWith("Dependency.csproj", StringComparison.Ordinal) == true);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void SdkReferenceExemptions_AreLimitedToFrameworkPackAndTransitiveProjectItems()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-sdk-reference-filter-");
+        try
+        {
+            var sdkPath = Path.Combine(root.FullName, "sdk", "10.0.0", "Sdks");
+            var sdkTargets = Path.Combine(sdkPath, "Microsoft.NET.Sdk", "targets");
+            var frameworkPack = Path.Combine(root.FullName, "packs", "Microsoft.NETCore.App.Ref", "10.0.0", "ref", "net10.0");
+            Directory.CreateDirectory(sdkTargets);
+            Directory.CreateDirectory(frameworkPack);
+            var runtimeDirectory = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory());
+            var installedDotnetRoot = runtimeDirectory.Parent!.Parent!.Parent!.FullName;
+            var systemReference = Directory.GetFiles(
+                    Path.Combine(installedDotnetRoot, "packs", "Microsoft.NETCore.App.Ref"),
+                    "System.Runtime.dll", SearchOption.AllDirectories)
+                .First();
+
+            File.Copy(systemReference, Path.Combine(frameworkPack, "System.Runtime.dll"));
+            var internalAlias = Path.Combine(frameworkPack, "System.Collections.dll");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll"), internalAlias);
+            var sdkFrameworkTargets = Path.Combine(sdkTargets, "Framework.targets");
+            var transitiveProjectTargets = Path.Combine(sdkTargets, "Microsoft.PackageDependencyResolution.targets");
+            File.WriteAllText(sdkFrameworkTargets, "");
+            File.WriteAllText(transitiveProjectTargets, "");
+
+            Xunit.Assert.True(IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, Path.Combine(frameworkPack, "System.Runtime.dll"), sdkPath));
+            Xunit.Assert.False(IsTrustedSdkFrameworkAssembly(sdkFrameworkTargets, internalAlias, sdkPath));
+            var restoredProjects = new HashSet<(string PackageId, string Version, string ProjectPath)>
+            {
+                ("PitchMind.Domain", "1.0.0", Path.Combine(root.FullName, "src", "PitchMind.Domain.csproj"))
+            };
+            Xunit.Assert.True(IsSdkTransitiveProjectReference(transitiveProjectTargets, Path.Combine(root.FullName, "src", "PitchMind.Domain.csproj"),
+                "PitchMind.Domain", "1.0.0", sdkPath, restoredProjects));
+            Xunit.Assert.False(IsSdkTransitiveProjectReference(transitiveProjectTargets, Path.Combine(root.FullName, "src", "PitchMind.Other.csproj"),
+                "Contoso.Forged", "1.0.0", sdkPath, restoredProjects));
+            Xunit.Assert.False(IsSdkTransitiveProjectReference(sdkFrameworkTargets, Path.Combine(root.FullName, "src", "PitchMind.Domain.csproj"),
+                "PitchMind.Domain", "1.0.0", sdkPath, restoredProjects));
         }
         finally
         {
@@ -282,7 +393,7 @@ public sealed class DependencyTests
         };
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(projectPath);
-        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,PackageReference,FrameworkReference,COMReference,NativeReference");
         startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
@@ -356,9 +467,9 @@ public sealed class DependencyTests
         };
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(projectPath);
-        startInfo.ArgumentList.Add("-target:ResolveReferences");
+        startInfo.ArgumentList.Add("-getTargetResult:FindReferenceAssembliesForReferences");
         startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
-        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,ReferencePathWithRefAssemblies,PackageReference,FrameworkReference,COMReference,NativeReference");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
         startInfo.ArgumentList.Add("-maxcpucount:1");
@@ -382,7 +493,7 @@ public sealed class DependencyTests
 
         using var json = JsonDocument.Parse(output);
         var sdkPath = json.RootElement.GetProperty("Properties").GetProperty("MSBuildSDKsPath").GetString();
-        var sdkRoot = string.IsNullOrWhiteSpace(sdkPath) ? null : Directory.GetParent(sdkPath)?.FullName;
+        var restoredProjectReferences = ReadRestoredProjectReferences(projectPath);
         var existingItems = project.Descendants()
             .Where(item => item.Name.LocalName is "ProjectReference" or "Reference" or "PackageReference" or
                 "FrameworkReference" or "COMReference" or "NativeReference")
@@ -392,6 +503,8 @@ public sealed class DependencyTests
         var items = json.RootElement.GetProperty("Items");
         AddTargetItems("ProjectReference", "TargetProjectReference");
         AddTargetItems("Reference", "TargetReference");
+        AddTargetItems("ReferencePath", "TargetResolvedReference");
+        AddTargetItems("ReferencePathWithRefAssemblies", "TargetCompilerReference");
         AddTargetItems("PackageReference", "TargetPackageReference");
         AddTargetItems("FrameworkReference", "TargetFrameworkReference");
         AddTargetItems("COMReference", "TargetCOMReference");
@@ -413,7 +526,19 @@ public sealed class DependencyTests
 
                 var include = identity.GetString() ?? string.Empty;
                 var definingProject = reference.TryGetProperty("DefiningProjectFullPath", out var defining) ? defining.GetString() : null;
-                if ((itemType is "ProjectReference" or "Reference") && IsWithinDirectory(definingProject, sdkRoot))
+                var fullPath = reference.TryGetProperty("FullPath", out var fullPathProperty) &&
+                               fullPathProperty.ValueKind == JsonValueKind.String
+                    ? fullPathProperty.GetString()
+                    : null;
+                var nuGetPackageId = reference.TryGetProperty("NuGetPackageId", out var packageId) ? packageId.GetString() : null;
+                var nuGetPackageVersion = reference.TryGetProperty("NuGetPackageVersion", out var packageVersion) ? packageVersion.GetString() : null;
+                if (itemType == "ProjectReference" && IsSdkTransitiveProjectReference(definingProject, fullPath,
+                        nuGetPackageId, nuGetPackageVersion, sdkPath, restoredProjectReferences))
+                {
+                    continue;
+                }
+
+                if (itemType == "Reference" && IsTrustedSdkFrameworkAssembly(definingProject, fullPath, sdkPath))
                 {
                     continue;
                 }
@@ -438,31 +563,16 @@ public sealed class DependencyTests
 
     private static string TargetItemSignature(string itemType, XElement item)
     {
-        var fields = new List<string?> { itemType, item.Attribute("Include")?.Value };
-        switch (itemType)
+        var engineMetadata = new HashSet<string>(StringComparer.Ordinal)
         {
-            case "ProjectReference":
-                fields.Add(item.Attribute("FullPath")?.Value);
-                break;
-            case "Reference":
-            case "NativeReference":
-                fields.Add(item.Attribute("HintPath")?.Value);
-                break;
-            case "PackageReference":
-                fields.Add(item.Attribute("Version")?.Value);
-                break;
-            case "FrameworkReference":
-                fields.Add(item.Attribute("IsImplicitlyDefined")?.Value);
-                break;
-            case "COMReference":
-                fields.Add(item.Attribute("Guid")?.Value);
-                fields.Add(item.Attribute("VersionMajor")?.Value);
-                fields.Add(item.Attribute("VersionMinor")?.Value);
-                break;
-        }
-
-        fields.Add(item.Attribute("DefiningProjectFullPath")?.Value);
-        return string.Join('\u001f', fields);
+            "RootDir", "Filename", "Extension", "RelativeDir", "Directory", "RecursiveDir",
+            "ModifiedTime", "CreatedTime", "AccessedTime", "DefiningProjectDirectory",
+            "DefiningProjectName", "DefiningProjectExtension"
+        };
+        return string.Join('\u001f', new[] { itemType }.Concat(item.Attributes()
+            .Where(attribute => attribute.Name.LocalName != "Include" && !engineMetadata.Contains(attribute.Name.LocalName))
+            .OrderBy(attribute => attribute.Name.LocalName, StringComparer.Ordinal)
+            .Select(attribute => $"{attribute.Name.LocalName}={attribute.Value}")));
     }
 
     private static bool IsWithinDirectory(string? path, string? directory)
@@ -475,6 +585,94 @@ public sealed class DependencyTests
         var relative = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
         return relative != ".." && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
                !Path.IsPathRooted(relative);
+    }
+
+    private static HashSet<(string PackageId, string Version, string ProjectPath)> ReadRestoredProjectReferences(string projectPath)
+    {
+        var result = new HashSet<(string PackageId, string Version, string ProjectPath)>();
+        var assetsPath = Path.Combine(Path.GetDirectoryName(projectPath)!, "obj", "project.assets.json");
+        if (!File.Exists(assetsPath))
+        {
+            return result;
+        }
+
+        using var assets = JsonDocument.Parse(File.ReadAllText(assetsPath));
+        if (!assets.RootElement.TryGetProperty("libraries", out var libraries) || libraries.ValueKind != JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var library in libraries.EnumerateObject())
+        {
+            if (!library.Value.TryGetProperty("type", out var type) || type.GetString() != "project" ||
+                !library.Value.TryGetProperty("msbuildProject", out var project) || project.GetString() is not { } projectReference)
+            {
+                continue;
+            }
+
+            var separator = library.Name.LastIndexOf('/');
+            if (separator <= 0 || separator == library.Name.Length - 1)
+            {
+                continue;
+            }
+
+            result.Add((library.Name[..separator], library.Name[(separator + 1)..],
+                Path.GetFullPath(projectReference, Path.GetDirectoryName(projectPath)!)));
+        }
+
+        return result;
+    }
+
+    private static bool IsSdkTransitiveProjectReference(
+        string? definingProject,
+        string? fullPath,
+        string? packageId,
+        string? packageVersion,
+        string? sdkPath,
+        HashSet<(string PackageId, string Version, string ProjectPath)> restoredProjectReferences)
+    {
+        if (string.IsNullOrWhiteSpace(sdkPath) || string.IsNullOrWhiteSpace(fullPath) ||
+            string.IsNullOrWhiteSpace(packageId) || string.IsNullOrWhiteSpace(packageVersion) ||
+            !string.Equals(Path.GetExtension(fullPath), ".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var expected = Path.GetFullPath(Path.Combine(sdkPath, "Microsoft.NET.Sdk", "targets", "Microsoft.PackageDependencyResolution.targets"));
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return !string.IsNullOrWhiteSpace(definingProject) && Path.GetFullPath(definingProject).Equals(expected, pathComparison) &&
+               restoredProjectReferences.Contains((packageId, packageVersion, Path.GetFullPath(fullPath)));
+    }
+
+    private static bool IsTrustedSdkFrameworkAssembly(string? definingProject, string? fullPath, string? sdkPath)
+    {
+        if (string.IsNullOrWhiteSpace(sdkPath) || string.IsNullOrWhiteSpace(definingProject) || string.IsNullOrWhiteSpace(fullPath))
+        {
+            return false;
+        }
+
+        var sdkRoot = Directory.GetParent(sdkPath);
+        var sdkRootPath = sdkRoot?.Parent;
+        var dotnetRoot = sdkRootPath?.Parent?.FullName;
+        if (dotnetRoot is null || !IsWithinDirectory(definingProject, sdkRoot?.FullName))
+        {
+            return false;
+        }
+
+        var frameworkPackRoot = Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref");
+        if (!IsWithinDirectory(fullPath, frameworkPackRoot) || !File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            return AssemblyName.GetAssemblyName(fullPath).Name?.StartsWith("PitchMind.", StringComparison.Ordinal) != true;
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
+        {
+            return false;
+        }
     }
 
     private static void RestoreFixture(string projectPath)
@@ -621,7 +819,8 @@ internal static class ArchitectureDependencyPolicy
     }
 
     public static IReadOnlyList<string> ValidateInternalReferences(
-        IReadOnlyDictionary<string, XDocument> projects)
+        IReadOnlyDictionary<string, XDocument> projects,
+        IReadOnlyDictionary<string, string[]>? allowedProjectReferences = null)
     {
         var violations = new List<string>();
 
@@ -630,9 +829,15 @@ internal static class ArchitectureDependencyPolicy
             var projectPath = document.Root?.Attribute("ProjectPath")?.Value;
             var projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? null : Path.GetDirectoryName(projectPath);
             foreach (var item in document.Descendants().Where(element =>
-                         element.Name.LocalName is "Reference" or "TargetReference" or "PackageReference" or "PackageAssembly" or
+                         element.Name.LocalName is "Reference" or "TargetReference" or "TargetResolvedReference" or "TargetCompilerReference" or "PackageReference" or "PackageAssembly" or
                              "TargetPackageReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference"))
             {
+                if ((item.Name.LocalName is "TargetResolvedReference" or "TargetCompilerReference") &&
+                    IsMappedProjectAssembly(project, item, document, projectDirectory, allowedProjectReferences))
+                {
+                    continue;
+                }
+
                 var include = item.Attribute("Include")?.Value;
                 var candidates = new[]
                     {
@@ -640,10 +845,12 @@ internal static class ArchitectureDependencyPolicy
                         item.Attribute("HintPath")?.Value,
                         item.Attribute("FullPath")?.Value,
                         item.Attribute("ResolvedPath")?.Value,
+                        item.Attribute("ReferenceAssembly")?.Value,
                         item.Element("HintPath")?.Value,
                         ResolveProjectRelativePath(item.Attribute("HintPath")?.Value, projectDirectory),
                         ResolveProjectRelativePath(item.Attribute("FullPath")?.Value, projectDirectory),
                         ResolveProjectRelativePath(item.Attribute("ResolvedPath")?.Value, projectDirectory),
+                        ResolveProjectRelativePath(item.Attribute("ReferenceAssembly")?.Value, projectDirectory),
                         ResolveProjectRelativePath(item.Element("HintPath")?.Value, projectDirectory)
                     };
                 if (!candidates.Any(IsInternalAssemblyReference))
@@ -657,6 +864,98 @@ internal static class ArchitectureDependencyPolicy
         }
 
         return violations;
+    }
+
+    private static bool IsMappedProjectAssembly(
+        string sourceProject,
+        XElement item,
+        XDocument document,
+        string? projectDirectory,
+        IReadOnlyDictionary<string, string[]>? allowedProjectReferences)
+    {
+        var assemblyPath = item.Attribute("FullPath")?.Value ?? item.Attribute("Include")?.Value;
+        var assemblyName = item.Attribute("AssemblyName")?.Value ??
+            (string.IsNullOrWhiteSpace(assemblyPath) ? null : Path.GetFileNameWithoutExtension(assemblyPath));
+        var projectReference = item.Attribute("OriginalProjectReferenceItemSpec")?.Value;
+        if (string.IsNullOrWhiteSpace(assemblyName) || string.IsNullOrWhiteSpace(projectReference) ||
+            !string.Equals(Path.GetFileNameWithoutExtension(projectReference), assemblyName, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (allowedProjectReferences is null || !allowedProjectReferences.ContainsKey(sourceProject))
+        {
+            return false;
+        }
+
+        var reachable = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>(allowedProjectReferences[sourceProject]);
+        while (pending.TryPop(out var projectName))
+        {
+            if (!reachable.Add(projectName) || !allowedProjectReferences.TryGetValue(projectName, out var dependencies))
+            {
+                continue;
+            }
+
+            foreach (var dependency in dependencies)
+            {
+                pending.Push(dependency);
+            }
+        }
+
+        if (!reachable.Contains(assemblyName))
+        {
+            return false;
+        }
+
+        var sourcePath = assemblyPath;
+        var sourceDocumentDirectory = projectDirectory;
+        var sourceProjectRoot = sourceDocumentDirectory is null ? null : Path.GetDirectoryName(sourceDocumentDirectory);
+        var repositoryRoot = sourceProjectRoot is null ? null : Path.GetDirectoryName(sourceProjectRoot);
+        if (repositoryRoot is null || string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return false;
+        }
+
+        var expectedProjectDirectory = Path.Combine(repositoryRoot, "src", assemblyName);
+        var expectedProjectPath = Path.Combine(expectedProjectDirectory, $"{assemblyName}.csproj");
+        var resolvedProjectReference = ResolveProjectRelativePath(projectReference, projectDirectory);
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var allowedOutputDirectory = item.Name.LocalName == "TargetCompilerReference" ? "obj" : "bin";
+        if (resolvedProjectReference is null || !Path.GetFullPath(resolvedProjectReference).Equals(Path.GetFullPath(expectedProjectPath), pathComparison) ||
+            !IsPathWithinDirectory(sourcePath, Path.Combine(expectedProjectDirectory, allowedOutputDirectory)))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!string.Equals(AssemblyName.GetAssemblyName(sourcePath).Name, assemblyName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var referenceAssembly = item.Attribute("ReferenceAssembly")?.Value;
+            return string.IsNullOrWhiteSpace(referenceAssembly) ||
+                   (IsPathWithinDirectory(referenceAssembly, Path.Combine(expectedProjectDirectory, "obj")) &&
+                    string.Equals(AssemblyName.GetAssemblyName(referenceAssembly).Name, assemblyName, StringComparison.Ordinal));
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsPathWithinDirectory(string? path, string directory)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(Path.GetFullPath(directory), Path.GetFullPath(path));
+        return relative != ".." && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+               !Path.IsPathRooted(relative);
     }
 
     private static string? ResolveProjectRelativePath(string? value, string? projectDirectory)
