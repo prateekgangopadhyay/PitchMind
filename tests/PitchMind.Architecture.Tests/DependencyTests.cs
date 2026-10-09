@@ -111,6 +111,36 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void Domain_RejectsCompilerReferenceAddedImmediatelyBeforeCoreCompile()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-late-compiler-input-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            var injectedAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<Target Name='InjectLateCompilerReference' BeforeTargets='CoreCompile'><ItemGroup>" +
+                "<ReferencePathWithRefAssemblies Include='" + injectedAssembly + "' />" +
+                "</ItemGroup></Target></Project>");
+            File.WriteAllText(Path.Combine(root.FullName, "Fixture.cs"), "public sealed class Fixture { }");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetFinalCompilerReference" &&
+                item.Attribute("FullPath")?.Value == injectedAssembly);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetFinalCompilerReference", StringComparison.Ordinal) &&
+                violation.Contains(injectedAssembly, StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ForbiddenDomainReference_IsRejectedByTheArchitecturePolicy()
     {
         var invalid = AllowedProjectReferences.ToDictionary(
@@ -596,6 +626,103 @@ public sealed class DependencyTests
                 project.Root!.Add(item);
             }
         }
+
+        AddFinalCompilerInputs(projectPath, project);
+    }
+
+    private static void AddFinalCompilerInputs(string projectPath, XDocument project)
+    {
+        var captureDirectory = Directory.CreateTempSubdirectory("pitchmind-compiler-input-capture-");
+        try
+        {
+            var targetPath = Path.Combine(captureDirectory.FullName, "CaptureCompilerInputs.targets");
+            var outputPath = Path.Combine(captureDirectory.FullName, "compiler-inputs.txt");
+            File.WriteAllText(targetPath,
+                "<Project><Target Name='PitchMindCaptureFinalCompilerInputs' DependsOnTargets='ResolveReferences;CoreCompile'>" +
+                "<ItemGroup><_PitchMindCompilerInput Include='@(ReferencePathWithRefAssemblies)' /></ItemGroup>" +
+                "<WriteLinesToFile File=\"$(PitchMindCompilerInputOutput)\" " +
+                "Lines=\"@(_PitchMindCompilerInput-&gt;'%(Identity)|%(FullPath)|%(ReferenceAssembly)|%(AssemblyName)|%(OriginalProjectReferenceItemSpec)|%(DefiningProjectFullPath)')\" " +
+                "Overwrite=\"true\" /></Target></Project>");
+
+            var startInfo = new ProcessStartInfo("dotnet")
+            {
+                WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add("msbuild");
+            startInfo.ArgumentList.Add(projectPath);
+            startInfo.ArgumentList.Add("-target:PitchMindCaptureFinalCompilerInputs");
+            startInfo.ArgumentList.Add("-property:CustomAfterMicrosoftCommonTargets=" + targetPath);
+            startInfo.ArgumentList.Add("-property:PitchMindCompilerInputOutput=" + outputPath);
+            startInfo.ArgumentList.Add("-nologo");
+            startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+            startInfo.ArgumentList.Add("-maxcpucount:1");
+            startInfo.ArgumentList.Add("-nodeReuse:false");
+
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start final compiler-input capture.");
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(60_000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException($"Final compiler-input capture timed out for '{projectPath}'.");
+            }
+
+            var output = outputTask.GetAwaiter().GetResult();
+            var error = errorTask.GetAwaiter().GetResult();
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Final compiler-input capture failed for '{projectPath}': {error}{output}");
+            }
+
+            if (!File.Exists(outputPath))
+            {
+                throw new InvalidOperationException($"Final compiler-input capture did not produce '{outputPath}'.");
+            }
+
+            var previouslyCapturedCompilerInputs = project.Descendants()
+                .Where(item => item.Name.LocalName == "TargetCompilerReference")
+                .Select(item => item.Attribute("FullPath")?.Value ?? item.Attribute("Include")?.Value)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (var line in File.ReadAllLines(outputPath))
+            {
+                var metadata = line.Split('|');
+                if (previouslyCapturedCompilerInputs.Contains(metadata[1]))
+                {
+                    continue;
+                }
+
+                var item = new XElement("TargetFinalCompilerReference", new XAttribute("Include", metadata[0]));
+                var names = new[] { "FullPath", "ReferenceAssembly", "AssemblyName", "OriginalProjectReferenceItemSpec", "DefiningProjectFullPath" };
+                for (var index = 1; index < metadata.Length && index <= names.Length; index++)
+                {
+                    if (!string.IsNullOrWhiteSpace(metadata[index]))
+                    {
+                        item.SetAttributeValue(names[index - 1], metadata[index]);
+                    }
+                }
+
+                var projectReference = project.Descendants().FirstOrDefault(existing =>
+                    existing.Name.LocalName == "TargetCompilerReference" &&
+                    !string.IsNullOrWhiteSpace(metadata[3]) &&
+                    string.Equals(existing.Attribute("AssemblyName")?.Value, metadata[3], StringComparison.Ordinal));
+                if (projectReference is not null &&
+                    string.IsNullOrWhiteSpace(item.Attribute("OriginalProjectReferenceItemSpec")?.Value) &&
+                    !string.IsNullOrWhiteSpace(projectReference.Attribute("OriginalProjectReferenceItemSpec")?.Value))
+                {
+                    item.SetAttributeValue("OriginalProjectReferenceItemSpec", projectReference.Attribute("OriginalProjectReferenceItemSpec")!.Value);
+                }
+
+                project.Root!.Add(item);
+            }
+        }
+        finally
+        {
+            captureDirectory.Delete(recursive: true);
+        }
     }
 
     private static string TargetItemSignature(string itemType, XElement item)
@@ -797,7 +924,7 @@ internal static class ArchitectureDependencyPolicy
         foreach (var item in domain.Descendants())
         {
             var itemType = item.Name.LocalName;
-            var forbiddenResolvedInput = (itemType is "TargetResolvedReference" or "TargetCompilerReference") &&
+            var forbiddenResolvedInput = (itemType is "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference") &&
                                          !IsTrustedSdkFrameworkInput(domain, item);
             var forbidden = itemType is "PackageReference" or "TargetPackageReference" or "Reference" or "TargetReference" or
                 "TargetFrameworkReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference" ||
@@ -890,10 +1017,10 @@ internal static class ArchitectureDependencyPolicy
             var projectPath = document.Root?.Attribute("ProjectPath")?.Value;
             var projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? null : Path.GetDirectoryName(projectPath);
             foreach (var item in document.Descendants().Where(element =>
-                         element.Name.LocalName is "Reference" or "TargetReference" or "TargetResolvedReference" or "TargetCompilerReference" or "PackageReference" or "PackageAssembly" or
+                         element.Name.LocalName is "Reference" or "TargetReference" or "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference" or "PackageReference" or "PackageAssembly" or
                              "TargetPackageReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference"))
             {
-                if ((item.Name.LocalName is "TargetResolvedReference" or "TargetCompilerReference") &&
+                if ((item.Name.LocalName is "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference") &&
                     IsMappedProjectAssembly(project, item, document, projectDirectory, allowedProjectReferences))
                 {
                     continue;

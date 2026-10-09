@@ -53,11 +53,11 @@ flowchart LR
 
 ## C# project responsibilities and dependency policy
 
-`tests/PitchMind.Architecture.Tests` enforces this source-project reference map using evaluated MSBuild items, including imported properties and targets. A source project added without a documented policy, an unexpected reference, or a missing declared dependency fails the architecture test. Internal `PitchMind.*` assemblies must use mapped project references; aliases with `HintPath`, imported references, and package compile/runtime assets are checked as well. `PitchMind.Domain` must have no project, package, framework, raw assembly, COM, or native references.
+`tests/PitchMind.Architecture.Tests` enforces this source-project reference map using evaluated MSBuild items, including imported properties and targets. It also captures the final compiler references after `CoreCompile` target hooks have run. A source project added without a documented policy, an unexpected reference, or a missing declared dependency fails the architecture test. Internal `PitchMind.*` assemblies must use mapped project references; aliases with `HintPath`, imported references, package compile/runtime assets, and late compiler inputs are checked as well. `PitchMind.Domain` must have no project, package, explicit framework, raw assembly, COM, or native references; the SDK's implicit `Microsoft.NETCore.App` reference is allowed.
 
 | Project | Responsibility | Allowed project references |
 |---|---|---|
-| `PitchMind.Domain` | Pure football concepts and rules | None |
+| `PitchMind.Domain` | Football concepts and rules, plus a transitional synthetic fixture generator | None; SDK implicit framework baseline only |
 | `PitchMind.Contracts` | Transport contracts | None |
 | `PitchMind.Application` | Use cases and ports | `PitchMind.Domain` |
 | `PitchMind.Infrastructure` | Persistence and external adapters | `PitchMind.Application` |
