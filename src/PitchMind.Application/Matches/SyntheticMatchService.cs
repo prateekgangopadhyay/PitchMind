@@ -40,18 +40,23 @@ public sealed class SyntheticMatchService
         if (Fixture.Frames.Count == 0)
             throw new InvalidOperationException("Match state projection requires at least one tracking frame.");
         var events = GetEvents(clockSeconds);
+        var state = ProjectMatchState(clockSeconds, events);
+        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
+        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.Phase,
+            state.HomeScore, state.AwayScore, state.Provenance,
+            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
+            state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players);
+    }
+
+    private MatchState ProjectMatchState(int clockSeconds, IReadOnlyList<SimulationEvent> events)
+    {
         var initialPlayers = Fixture.Home.Players.Concat(Fixture.Away.Players)
             .Select(player => (player.Id, player.TeamId)).ToArray();
         var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
         var aggregate = new MatchAggregate(new(Guid.Parse(Fixture.MatchId)), Fixture.Home.Id, Fixture.Away.Id,
             initialPlayers, activeAtKickoff, Fixture.Provenance);
         foreach (var item in events) aggregate.Apply(item);
-        var state = aggregate.Snapshot();
-        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
-        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.Phase,
-            state.HomeScore, state.AwayScore, state.Provenance,
-            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
-            state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players);
+        return aggregate.Snapshot() with { ClockSeconds = clockSeconds };
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {
@@ -61,6 +66,7 @@ public sealed class SyntheticMatchService
     public IReadOnlyList<TacticalInsight> GetInsights(int clockSeconds)
     {
         ValidateTime(clockSeconds);
+        if (Fixture.Frames.Count == 0) return Array.Empty<TacticalInsight>();
         var events = GetEvents(clockSeconds);
         var input = new PressSequenceInput(
             Fixture.MatchId,
@@ -77,7 +83,10 @@ public sealed class SyntheticMatchService
             Fixture.PitchLengthMetres,
             Fixture.PitchWidthMetres,
             events,
-            Array.AsReadOnly(Fixture.Frames.Where(frame => frame.ClockSeconds <= clockSeconds).ToArray()));
+            Array.AsReadOnly(Fixture.Frames.Where(frame => frame.ClockSeconds <= clockSeconds).ToArray()))
+        {
+            SelectedState = ProjectMatchState(clockSeconds, events)
+        };
         return PressSequenceDetector.Detect(input);
     }
     public TacticalEvidence? GetEvidence(string insightId, int clockSeconds)

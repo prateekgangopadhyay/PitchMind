@@ -51,7 +51,10 @@ public static class MatchContractMappings
         insight.ThroughSequence,
         insight.PolicyStatus,
         insight.Publishable,
-        Array.AsReadOnly(insight.Conditions.ToArray()));
+        Array.AsReadOnly(insight.Conditions.ToArray()),
+        insight.Context is null ? null : new TacticalContextResponse(
+            insight.Context.Scoreline, insight.Context.TeamRole, insight.Context.NumericalAdvantage,
+            insight.Context.OpponentPhase, insight.Context.MatchPhase));
 
     public static EvidenceResponse ToResponse(this TacticalEvidence evidence) => new(
         evidence.Insight.ToResponse(),

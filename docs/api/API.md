@@ -24,6 +24,8 @@ The current v1 DTO property names and representative JSON types are pinned by `P
 
 Current insight DTOs include `sourceVersion`, nullable `canonicalRevision`, `selectedTimeSeconds`, `throughSequence`, `policyStatus`, `publishable`, and the detector's `conditions`. The offline demo returns `classification: "simulated"`, `policyStatus: "unapproved-demo"`, `publishable: false`, and `canonicalRevision: null`; this is not a canonical football fact, football approval, or an implementation of the candidate Manu–Liverpool feed. The detector only evaluates the selected-time prefix and reports the highest included event sequence. Do not relabel this response as evidence-supported, approved, or production-ready.
 
+The current candidate insight also includes `context`: selected-time scoreline, pressing team's `home`/`away` role, signed active-player difference for that team, reducer match phase, and the observed opponent transition from in-possession at the trigger to defending after the regain. This uses the same selected-time event prefix as the score projection. It does not infer a low block, a decision to concede possession, intent, control, or comparative tactical quality. Context is null if absent; consumers must not substitute inferred values.
+
 ### Target API routes — do not advertise as executable before acceptance
 | Method | Route | Story owner | Request | Response / authorization |
 |---|---|---|---|---|

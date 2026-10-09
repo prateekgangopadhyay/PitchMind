@@ -58,7 +58,15 @@ public sealed record InsightResponse(
     long ThroughSequence,
     string PolicyStatus,
     bool Publishable,
-    IReadOnlyList<string> Conditions);
+    IReadOnlyList<string> Conditions,
+    TacticalContextResponse? Context);
+
+public sealed record TacticalContextResponse(
+    string Scoreline,
+    string TeamRole,
+    int NumericalAdvantage,
+    string OpponentPhase,
+    string MatchPhase);
 
 public sealed record EvidenceResponse(
     InsightResponse Insight,

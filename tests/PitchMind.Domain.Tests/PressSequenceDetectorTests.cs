@@ -1,4 +1,5 @@
 using PitchMind.Domain.Analytics;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using Xunit;
 
@@ -26,7 +27,11 @@ public sealed class PressSequenceDetectorTests
             fixture.PitchLengthMetres,
             fixture.PitchWidthMetres,
             events,
-            fixture.Frames);
+            fixture.Frames)
+        {
+            SelectedState = new MatchState(fixture.MatchId, 5400, 2, MatchPhase.SecondHalf,
+                0, 0, null, 11, 11, Array.Empty<MatchPlayerState>(), events[^1].Event.Sequence, "live-provider")
+        };
 
         Assert.Throws<ArgumentException>(() => PressSequenceDetector.Detect(input));
     }
