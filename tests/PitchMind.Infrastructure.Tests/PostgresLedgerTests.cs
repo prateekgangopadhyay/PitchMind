@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using PitchMind.Application.Abstractions;
+using NpgsqlTypes;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Analytics;
@@ -1710,6 +1711,41 @@ public sealed class PostgresLedgerTests
         Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, gap.Disposition);
         var next = Event(matchId, 1); await store.AppendAsync(next, CancellationToken.None);
         Assert.Equal(new[] { first, next }, await Read(store, matchId));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task OutOfOrderEventAgainstLedgerGapIsHeldForReconciliation()
+    {
+        await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresMatchEventStore(source); var matchId = MatchId.New();
+        await store.AppendAsync(Event(matchId), CancellationToken.None);
+        var later = Event(matchId, 2);
+        await using (var command = source.CreateCommand("""
+            INSERT INTO pitchmind.match_events(event_id, match_id, sequence, event_type, clock_seconds, period, occurred_at, payload)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """))
+        {
+            command.Parameters.AddWithValue(later.EventId);
+            command.Parameters.AddWithValue(matchId.Value);
+            command.Parameters.AddWithValue(later.Sequence);
+            command.Parameters.AddWithValue((int)later.Type);
+            command.Parameters.AddWithValue(later.ClockSeconds);
+            command.Parameters.AddWithValue(later.Period);
+            command.Parameters.AddWithValue(later.OccurredAt.ToUniversalTime());
+            command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, JsonSerializer.Serialize(later));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var outOfOrder = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(Event(matchId, 1), CancellationToken.None));
+
+        Assert.Equal("OUT_OF_ORDER_EVENT", outOfOrder.Code);
+        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, outOfOrder.Disposition);
+        Assert.Equal<long?>(3, outOfOrder.ExpectedSequence);
+        Assert.Equal(1L, outOfOrder.ReceivedSequence);
+        await using var countCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_events WHERE match_id = $1");
+        countCommand.Parameters.AddWithValue(matchId.Value);
+        Assert.Equal(2L, (long)(await countCommand.ExecuteScalarAsync())!);
     }
 
     [PostgresIntegrationFact]
