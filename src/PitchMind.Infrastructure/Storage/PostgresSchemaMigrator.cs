@@ -70,6 +70,7 @@ public static class PostgresSchemaMigrator
         ALTER TABLE pitchmind.match_events ADD CONSTRAINT match_events_event_type_check CHECK (event_type BETWEEN 0 AND 11) NOT VALID;
         ALTER TABLE pitchmind.match_events VALIDATE CONSTRAINT match_events_event_type_check;
         CREATE INDEX IF NOT EXISTS ix_match_events_match_clock_sequence ON pitchmind.match_events(match_id, clock_seconds, sequence);
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_match_events_match_event ON pitchmind.match_events(match_id, event_id);
 
         CREATE TABLE IF NOT EXISTS pitchmind.matches (
             match_id uuid PRIMARY KEY CHECK (match_id <> '00000000-0000-0000-0000-000000000000'),
@@ -80,7 +81,8 @@ public static class PostgresSchemaMigrator
             provenance text NOT NULL,
             pitch_length_metres numeric(7,3) NOT NULL CHECK (pitch_length_metres > 0),
             pitch_width_metres numeric(7,3) NOT NULL CHECK (pitch_width_metres > 0),
-            created_at timestamptz NOT NULL DEFAULT now()
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (match_id, source_sha256)
         );
 
         CREATE TABLE IF NOT EXISTS pitchmind.tracking_frames (
@@ -93,7 +95,8 @@ public static class PostgresSchemaMigrator
             quality jsonb NOT NULL,
             source_sha256 char(64) NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
             payload jsonb NOT NULL,
-            PRIMARY KEY (match_id, frame_id)
+            PRIMARY KEY (match_id, frame_id),
+            FOREIGN KEY (match_id, source_sha256) REFERENCES pitchmind.matches(match_id, source_sha256)
         );
         CREATE INDEX IF NOT EXISTS ix_tracking_frames_match_clock ON pitchmind.tracking_frames(match_id, clock_seconds, sequence);
 
@@ -122,7 +125,8 @@ public static class PostgresSchemaMigrator
             conditions_json jsonb NOT NULL,
             created_at timestamptz NOT NULL DEFAULT now(),
             UNIQUE (match_id, insight_id),
-            UNIQUE (insight_id, match_id, revision)
+            UNIQUE (insight_id, match_id, revision),
+            FOREIGN KEY (match_id, revision) REFERENCES pitchmind.match_projections(match_id, revision)
         );
         CREATE INDEX IF NOT EXISTS ix_insights_match_revision ON pitchmind.insights(match_id, revision, as_of_sequence);
 
@@ -133,9 +137,18 @@ public static class PostgresSchemaMigrator
             match_id uuid NOT NULL,
             revision integer NOT NULL CHECK (revision > 0),
             relation text NOT NULL,
+            event_id uuid,
+            frame_id text,
             PRIMARY KEY (insight_id, evidence_kind, evidence_id),
+            CHECK ((evidence_kind = 'event' AND event_id IS NOT NULL AND frame_id IS NULL)
+                OR (evidence_kind = 'frame' AND frame_id IS NOT NULL AND event_id IS NULL)
+                OR (evidence_kind IN ('metric', 'condition') AND event_id IS NULL AND frame_id IS NULL)),
+            CHECK ((event_id IS NULL OR event_id::text = evidence_id)
+                AND (frame_id IS NULL OR frame_id = evidence_id)),
             FOREIGN KEY (insight_id, match_id, revision)
-                REFERENCES pitchmind.insights(insight_id, match_id, revision)
+                REFERENCES pitchmind.insights(insight_id, match_id, revision),
+            FOREIGN KEY (match_id, event_id) REFERENCES pitchmind.match_events(match_id, event_id),
+            FOREIGN KEY (match_id, frame_id) REFERENCES pitchmind.tracking_frames(match_id, frame_id)
         );
         CREATE INDEX IF NOT EXISTS ix_insight_evidence_match_revision ON pitchmind.insight_evidence(match_id, revision, insight_id);
 
