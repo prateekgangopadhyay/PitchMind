@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, provenanceLabel, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
+import { CanonicalEvidenceDisclosure } from './CanonicalEvidenceDisclosure';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
 type MatchView = {
@@ -199,6 +200,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                 : <ul className="canonical-insights">{view.insights.items.map(insight => <li key={insight.insightId}>
                   <span className="badge">{insight.truthClass}</span><p>{insight.summary}</p>
                   <small>{insight.evidence.length} evidence reference(s)</small>
+                  <CanonicalEvidenceDisclosure matchId={matchId} selectedSeconds={selectedSeconds}
+                    revision={snapshot.canonicalRevision} throughSequence={snapshot.throughSequence} insight={insight} />
                   <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>Inspect evidence</a>
                 </li>)}</ul>}
               <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.canonicalRevision)}>View insights</a>

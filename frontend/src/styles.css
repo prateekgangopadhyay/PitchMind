@@ -132,6 +132,12 @@ button, select { min-height: 44px; }
 .canonical-insights { margin:0; padding-left:1.25rem; }
 .canonical-insights > li { display:grid; gap:.45rem; padding:.75rem 0; border-top:1px solid var(--pm-border); }
 .canonical-insights a { justify-self:start; color:var(--pm-text); text-underline-offset:.2em; }
+.canonical-evidence-disclosure { min-width:0; border:1px solid var(--pm-border); border-radius:8px; background:var(--pm-surface-raised); }
+.canonical-evidence-disclosure summary { min-height:44px; display:flex; align-items:center; padding:.55rem .75rem; cursor:pointer; color:var(--pm-text); text-underline-offset:.2em; }
+.canonical-evidence-content { padding:0 .75rem .75rem; overflow-wrap:anywhere; }
+.canonical-evidence-content p { margin:.5rem 0; }
+.canonical-evidence-provenance { font-size:.78rem; }
+.canonical-evidence-content .evidence-list { margin:.5rem 0 0; }
 .event-marker { grid-column:2; justify-self:start; padding:.2rem .45rem; border:1px solid var(--pm-border); border-radius:999px; color:var(--pm-text-secondary); font-size:.7rem; }
 .match-context-controls { grid-template-columns:auto minmax(0,1fr) auto auto; }
 .pitch-dashboard { grid-template-columns:minmax(0,1.25fr) minmax(18rem,.9fr); }
