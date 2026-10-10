@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using PitchMind.Api;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
@@ -63,6 +65,22 @@ public sealed class ApiErrorContractTests : IAsyncLifetime
         }
 
         throw new TimeoutException($"Local API did not become healthy. Output: {Output}");
+    }
+
+    [Fact]
+    public void Argument_exception_details_are_not_exposed_in_the_problem_response()
+    {
+        const string sensitiveMessage = "provider payload with private input";
+        var context = new DefaultHttpContext();
+        context.TraceIdentifier = "correlation-id";
+        context.Request.Path = "/api/v1/matches";
+
+        var problem = ApiArgumentErrorResponse.Create(context, new ArgumentException(sensitiveMessage));
+        var json = JsonSerializer.Serialize(problem, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Equal("INVALID_REQUEST", problem.Code);
+        Assert.Null(problem.Detail);
+        Assert.DoesNotContain(sensitiveMessage, json, StringComparison.Ordinal);
     }
 
     [Fact]

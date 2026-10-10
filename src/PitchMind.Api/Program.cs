@@ -71,7 +71,8 @@ app.Use(async (context, next) =>
     }
     catch (ArgumentException exception)
     {
-        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request", exception.Message).ExecuteAsync(context);
+        var problem = ApiArgumentErrorResponse.Create(context, exception);
+        await Results.Json(problem, statusCode: problem.Status, contentType: "application/problem+json").ExecuteAsync(context);
     }
     catch (KeyNotFoundException)
     {
