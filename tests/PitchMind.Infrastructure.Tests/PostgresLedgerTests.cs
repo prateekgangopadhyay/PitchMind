@@ -1,4 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Npgsql;
+using PitchMind.Application.Abstractions;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Infrastructure.Storage;
@@ -45,16 +49,27 @@ public sealed class PostgresLedgerTests
 
         var insightId = $"insight-{Guid.NewGuid():N}";
         var insightMatchId = MatchId.New().Value;
+        var sourceHash = new string('a', 64);
+        await using (var projection = source.CreateCommand("INSERT INTO pitchmind.match_projections (match_id, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256) VALUES ($1, 1, 3, 90, 'test-v1', $2, '{}'::jsonb, $3)"))
+        {
+            projection.Parameters.AddWithValue(insightMatchId);
+            projection.Parameters.AddWithValue(sourceHash);
+            projection.Parameters.AddWithValue(new string('b', 64));
+            await projection.ExecuteNonQueryAsync();
+        }
         await using (var insight = source.CreateCommand("INSERT INTO pitchmind.insights (insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json) VALUES ($1, $2, 1, 3, 'test-v1', 'derived', 'test insight', '{}'::jsonb)"))
         {
             insight.Parameters.AddWithValue(insightId);
             insight.Parameters.AddWithValue(insightMatchId);
             await insight.ExecuteNonQueryAsync();
         }
-        await using (var mismatchedEvidence = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, revision, relation) VALUES ($1, 'event', 'event-1', $2, 1, 'supports')"))
+        await using (var mismatchedEvidence = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, revision, relation, event_id) VALUES ($1, 'event', $2, $3, 1, 'supports', $4)"))
         {
             mismatchedEvidence.Parameters.AddWithValue(insightId);
+            var eventId = Guid.NewGuid();
+            mismatchedEvidence.Parameters.AddWithValue(eventId.ToString("D"));
             mismatchedEvidence.Parameters.AddWithValue(MatchId.New().Value);
+            mismatchedEvidence.Parameters.AddWithValue(eventId);
             var exception = await Assert.ThrowsAsync<PostgresException>(() => mismatchedEvidence.ExecuteNonQueryAsync());
             Assert.Equal("23503", exception.SqlState);
         }
@@ -64,6 +79,169 @@ public sealed class PostgresLedgerTests
         var store = new PostgresMatchEventStore(source);
         await store.AppendAsync(redCard, CancellationToken.None);
         Assert.Equal(redCard, Assert.Single(await Read(store, matchId)));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ProjectionAndInsightProvenanceSurviveDataSourceReopen()
+    {
+        var matchId = Guid.NewGuid();
+        var sourceHash = new string('a', 64);
+        var metadata = new MatchSourceMetadata(matchId, "fixture-v1", "source-v1", sourceHash,
+            "synthetic", 105m, 68m);
+        var state = new MatchState(matchId.ToString("D"), 0, 1, MatchPhase.FirstHalf, 0, 0,
+            "home", 11, 11, Array.Empty<MatchPlayerState>(), 0, "synthetic");
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var stateJson = JsonSerializer.Serialize(state, jsonOptions);
+        var stateHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson))).ToLowerInvariant();
+        var eventId = Guid.NewGuid();
+        var insightId = $"insight-{Guid.NewGuid():N}";
+        var futureInsightId = $"insight-{Guid.NewGuid():N}";
+        var futureFrameInsightId = $"insight-{Guid.NewGuid():N}";
+
+        await using (var source = Source())
+        {
+            await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+            var store = new PostgresMatchProjectionStore(source);
+            await store.SaveMatchMetadataAsync(metadata, CancellationToken.None);
+            await store.SaveMatchMetadataAsync(metadata, CancellationToken.None);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveMatchMetadataAsync(
+                metadata with { SourceVersion = "conflicting-source" }, CancellationToken.None));
+
+            var sourceEvent = MatchEvent.Create(eventId, new MatchId(matchId), 0,
+                MatchEventType.KickOff, 0, 1, DateTimeOffset.UnixEpoch);
+            await new PostgresMatchEventStore(source).AppendAsync(sourceEvent, CancellationToken.None);
+            await using (var frame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds,
+                    coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, 'frame-kickoff', 0, 1, 0, 'metres-v1', '{}'::jsonb, $2, '{}'::jsonb)
+                """))
+            {
+                frame.Parameters.AddWithValue(matchId);
+                frame.Parameters.AddWithValue(sourceHash);
+                await frame.ExecuteNonQueryAsync();
+            }
+            await using (var projection = source.CreateCommand("""
+                INSERT INTO pitchmind.match_projections(match_id, revision, as_of_sequence, as_of_clock_seconds,
+                    algorithm_version, source_sha256, state_json, state_sha256)
+                VALUES ($1, 1, 0, 0, 'aggregate-v1', $2, $3, $4)
+                """))
+            {
+                projection.Parameters.AddWithValue(matchId);
+                projection.Parameters.AddWithValue(sourceHash);
+                projection.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, stateJson);
+                projection.Parameters.AddWithValue(stateHash);
+                await projection.ExecuteNonQueryAsync();
+            }
+            await using (var insight = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence,
+                    detector_version, truth_class, summary, conditions_json)
+                VALUES ($1, $2, 1, 0, 'detector-v1', 'derived', 'Persisted evidence', '{"selected":true}'::jsonb)
+                """))
+            {
+                insight.Parameters.AddWithValue(insightId);
+                insight.Parameters.AddWithValue(matchId);
+                await insight.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                    revision, relation, event_id)
+                VALUES ($1, 'event', $2, $3, 1, 'supports', $4)
+                """))
+            {
+                evidence.Parameters.AddWithValue(insightId);
+                evidence.Parameters.AddWithValue(eventId.ToString("D"));
+                evidence.Parameters.AddWithValue(matchId);
+                evidence.Parameters.AddWithValue(eventId);
+                await evidence.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                    revision, relation, frame_id)
+                VALUES ($1, 'frame', 'frame-kickoff', $2, 1, 'supports', 'frame-kickoff')
+                """))
+            {
+                evidence.Parameters.AddWithValue(insightId);
+                evidence.Parameters.AddWithValue(matchId);
+                await evidence.ExecuteNonQueryAsync();
+            }
+
+            var futureEventId = Guid.NewGuid();
+            await new PostgresMatchEventStore(source).AppendAsync(
+                MatchEvent.Create(futureEventId, new MatchId(matchId), 1, MatchEventType.KickOff, 1, 1, DateTimeOffset.UnixEpoch.AddSeconds(1)),
+                CancellationToken.None);
+            await using (var insight = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence,
+                    detector_version, truth_class, summary, conditions_json)
+                VALUES ($1, $2, 1, 0, 'detector-v1', 'derived', 'Future evidence must be rejected', '{}'::jsonb)
+                """))
+            {
+                insight.Parameters.AddWithValue(futureInsightId);
+                insight.Parameters.AddWithValue(matchId);
+                await insight.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                    revision, relation, event_id)
+                VALUES ($1, 'event', $2, $3, 1, 'supports', $4)
+                """))
+            {
+                evidence.Parameters.AddWithValue(futureInsightId);
+                evidence.Parameters.AddWithValue(futureEventId.ToString("D"));
+                evidence.Parameters.AddWithValue(matchId);
+                evidence.Parameters.AddWithValue(futureEventId);
+                await evidence.ExecuteNonQueryAsync();
+            }
+            await using (var frame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds,
+                    coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, 'frame-future', 1, 1, 1, 'metres-v1', '{}'::jsonb, $2, '{}'::jsonb)
+                """))
+            {
+                frame.Parameters.AddWithValue(matchId);
+                frame.Parameters.AddWithValue(sourceHash);
+                await frame.ExecuteNonQueryAsync();
+            }
+            await using (var insight = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence,
+                    detector_version, truth_class, summary, conditions_json)
+                VALUES ($1, $2, 1, 0, 'detector-v1', 'derived', 'Future frame must be rejected', '{}'::jsonb)
+                """))
+            {
+                insight.Parameters.AddWithValue(futureFrameInsightId);
+                insight.Parameters.AddWithValue(matchId);
+                await insight.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                    revision, relation, frame_id)
+                VALUES ($1, 'frame', 'frame-future', $2, 1, 'supports', 'frame-future')
+                """))
+            {
+                evidence.Parameters.AddWithValue(futureFrameInsightId);
+                evidence.Parameters.AddWithValue(matchId);
+                await evidence.ExecuteNonQueryAsync();
+            }
+        }
+
+        await using var reopened = Source();
+        var readStore = new PostgresMatchProjectionStore(reopened);
+        var restoredProjection = await readStore.ReadProjectionAsync(matchId, 1, CancellationToken.None);
+        Assert.NotNull(restoredProjection);
+        Assert.Equal(stateJson, JsonSerializer.Serialize(restoredProjection.State, jsonOptions));
+        Assert.Equal(sourceHash, restoredProjection.SourceSha256);
+
+        var provenance = await readStore.ReadInsightProvenanceAsync(insightId, CancellationToken.None);
+        Assert.NotNull(provenance);
+        Assert.Equal(matchId, provenance.Source.MatchId);
+        Assert.Equal("source-v1", provenance.Source.SourceVersion);
+        Assert.Equal(sourceHash, provenance.Source.SourceSha256);
+        Assert.Equal(1, provenance.Insight.Revision);
+        Assert.Equal(0, provenance.Insight.AsOfSequence);
+        Assert.Contains(provenance.Insight.Evidence, item => item.Kind == "event" && item.Id == eventId.ToString("D"));
+        Assert.Contains(provenance.Insight.Evidence, item => item.Kind == "frame" && item.Id == "frame-kickoff");
+        Assert.Equal(stateHash, provenance.StateSha256);
+        await Assert.ThrowsAsync<InvalidDataException>(() => readStore.ReadInsightProvenanceAsync(futureInsightId, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => readStore.ReadInsightProvenanceAsync(futureFrameInsightId, CancellationToken.None));
     }
 
     [PostgresIntegrationFact]
