@@ -47,6 +47,47 @@ public sealed class PostgresLedgerTests
         Assert.Equal(evt, Assert.Single(await Read(new(reopened), matchId)));
     }
     [PostgresIntegrationFact]
+    public async Task QuarantineEvidenceSurvivesReopenAndMigrationCanBeReapplied()
+    {
+        var record = new QuarantineRecord(Guid.NewGuid(), null, "fixture/events/17", new string('a', 64),
+            "INVALID_EVENT_PAYLOAD", new DateTimeOffset(2026, 10, 11, 12, 30, 0, TimeSpan.FromHours(5.5)));
+        await using (var source = Source())
+        {
+            await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+            await new PostgresQuarantineRecordStore(source).AppendAsync(record, CancellationToken.None);
+            await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        }
+
+        await using var reopened = Source();
+        var store = new PostgresQuarantineRecordStore(reopened);
+        Assert.Equal(record with { ObservedAt = record.ObservedAt.ToUniversalTime() },
+            await store.ReadAsync(record.RecordId, CancellationToken.None));
+        await using var metadata = reopened.CreateCommand("""
+            SELECT (SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 3),
+                   (SELECT retry_status IS NULL FROM pitchmind.quarantine WHERE record_id = $1)
+            """);
+        metadata.Parameters.AddWithValue(record.RecordId);
+        await using var reader = await metadata.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.True(reader.GetBoolean(1));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task QuarantineRejectsMalformedHashAndReasonWithoutWritingEvidence()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresQuarantineRecordStore(source);
+        var record = new QuarantineRecord(Guid.NewGuid(), Guid.NewGuid(), "source/item/1", "not-a-hash",
+            "invalid reason", DateTimeOffset.UtcNow);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.AppendAsync(record, CancellationToken.None));
+        await using var count = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.quarantine WHERE record_id = $1");
+        count.Parameters.AddWithValue(record.RecordId);
+        Assert.Equal(0L, (long)(await count.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
     public async Task DuplicateConcurrentAppendCommitsOnceAndConflictingPayloadIsRejected()
     {
         await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
@@ -143,8 +184,8 @@ public sealed class PostgresLedgerTests
             await store.AppendAsync(Event(matchId, sequence) with { Type = currentTypes[sequence] }, CancellationToken.None);
 
         Assert.Equal(currentTypes, (await Read(store, matchId)).Select(item => item.Type));
-        await using var versionCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 2");
-        Assert.Equal(1L, (long)(await versionCommand.ExecuteScalarAsync())!);
+        await using var versionCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version IN (2, 3)");
+        Assert.Equal(2L, (long)(await versionCommand.ExecuteScalarAsync())!);
     }
 
     [PostgresIntegrationFact]

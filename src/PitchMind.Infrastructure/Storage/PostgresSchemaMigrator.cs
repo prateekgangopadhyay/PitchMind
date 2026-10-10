@@ -15,6 +15,8 @@ public static class PostgresSchemaMigrator
         await command.ExecuteNonQueryAsync(cancellationToken);
         await using var migration = new NpgsqlCommand(EventTypeRangeV2Sql, connection, transaction);
         await migration.ExecuteNonQueryAsync(cancellationToken);
+        await using var quarantineMigration = new NpgsqlCommand(QuarantineV3Sql, connection, transaction);
+        await quarantineMigration.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
     public const string SchemaSql = """
@@ -49,6 +51,29 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE pitchmind.match_events
                     ADD CONSTRAINT match_events_event_type_check CHECK (event_type BETWEEN 0 AND 10);
                 INSERT INTO pitchmind.schema_versions(version) VALUES (2);
+            END IF;
+        END
+        $migration$;
+        """;
+
+    /// <summary>Creates append-only quarantine evidence without defining retry or reconciliation behavior.</summary>
+    public const string QuarantineV3Sql = """
+        DO $migration$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pitchmind.schema_versions WHERE version = 3) THEN
+                CREATE TABLE IF NOT EXISTS pitchmind.quarantine (
+                    record_id uuid PRIMARY KEY,
+                    match_id uuid NULL CHECK (match_id IS NULL OR match_id <> '00000000-0000-0000-0000-000000000000'),
+                    source_ptr text NOT NULL CHECK (length(source_ptr) BETWEEN 1 AND 2048),
+                    payload_hash char(64) NULL CHECK (payload_hash IS NULL OR payload_hash ~ '^[0-9A-Fa-f]{64}$'),
+                    reason text NOT NULL CHECK (reason ~ '^[A-Z][A-Z0-9_]{0,99}$'),
+                    observed_at timestamptz NOT NULL,
+                    retry_status text NULL
+                );
+                CREATE INDEX IF NOT EXISTS quarantine_match_observed_idx
+                    ON pitchmind.quarantine(match_id, observed_at)
+                    WHERE match_id IS NOT NULL;
+                INSERT INTO pitchmind.schema_versions(version) VALUES (3);
             END IF;
         END
         $migration$;

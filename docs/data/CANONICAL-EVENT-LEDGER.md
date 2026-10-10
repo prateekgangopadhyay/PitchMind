@@ -48,3 +48,8 @@ Without that environment variable, database integration tests explicitly skip an
 Actual local run: existing Compose PostgreSQL 17 container, isolated `pitchmind_ledger_test` database. Evidence covers persistence after opening a new data source, twelve concurrent identical appends, conflicting payloads, sequence gaps/conflicts, cancellation, and runtime write restrictions. Database restart, backup restore, telemetry metadata durability, migration upgrade/rollback, Azure identity and Azure deployment still require separate evidence.
 
 Current EP03-S04 restack verification on exact PR #24 base `fd164f76a963e3157189115b69f0b824009d8a98` passed the Release solution suite (91/91, 0 failed/skipped; 18 PostgreSQL integration facts executed) and focused Infrastructure PostgreSQL suite (18/18, 0 failed/skipped). Tests used a fresh local `pitchmind_test_<32-hex>` database on the existing Compose service and dropped only that database; the existing Postgres volume was preserved. This verifies local adapter and test-target safeguards, not durable quarantine, reconciliation, feed/broker integration or Azure deployment.
+
+
+## EP03-S04 quarantine evidence (local slice)
+
+Migration V3 adds `pitchmind.quarantine` for append-only evidence through the current adapter, with a caller-created record UUID, nullable match UUID, opaque sensitive source pointer, optional SHA-256 hash, stable reason code, observation timestamp, and nullable reserved `retry_status`. See [the EP03-S04 quarantine design note](../engineering/stories/EP03/EP03-S04-QUARANTINE-RECORD-DESIGN.md) for exact semantics. This storage API is not yet called by `PostgresMatchEventStore`; no retry, replay, or reconciliation behavior is implemented.
