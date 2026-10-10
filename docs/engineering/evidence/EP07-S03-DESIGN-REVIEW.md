@@ -1,6 +1,6 @@
 # EP07-S03 Match story and Key Moments review
 
-**Review scope:** Selected-time Match page on `codex/ep07-s03-match-story-moments`
+**Review scope:** Selected-time Match page, original browser preview on `codex/ep07-s03-match-story-moments`; local restack verification on `codex/ep07-s03-restack-current`
 
 **Review date:** 2026-10-10
 
@@ -64,6 +64,13 @@ No score can waive the missing Key Moments contract/projection, full mobile/cont
 - Match browser preview — rendered summary, selected 55:09, revision 4, one persisted insight and explicit Key Moments unavailable state from the disposable API fixture.
 - Negative-time test — a future sequence/event and an insight beyond the projection watermark cause the response to be rejected without rendering their content.
 - Independent UX/Accessibility review, Product Owner acceptance, mobile/tablet/contrast/axe/screen-reader checks and live PostgreSQL verification — not performed.
+
+## Current-parent restack verification
+
+- The existing PR head `95083fc6a467723de5b999c08b479b767ee584b8` descended from an older EP07-S02 candidate (`3d5cc6499aaf72356653f279a9314687c8aba69c`). The current PR #54 base is `c144b4fe45f2388e6c8f78ff443967728a1cd234`; GitHub reported PR #55 `mergeable=false` / `dirty`, with dependency changes across 71 files. The story-only delta was reapplied onto the exact current parent in an isolated local clone.
+- Restacked code commit: `8e3b398f24eaf490fbfde23d76867fd608238c2e`, parent `c144b4fe45f2388e6c8f78ff443967728a1cd234`.
+- On that code tree, `npm ci --offline` installed 224 packages and reported 0 vulnerabilities; `npm test` passed 13/13; `npm run build`, `npm run lint`, operating-model validation, design-skill self-test, S03 copy scan, and `git diff --check` passed.
+- The browser preview described above was performed before restacking and is historical; no browser or screenshot inspection was repeated on the current-parent tree. Accessibility/contrast/axe/screen-reader and mobile evidence remain unverified.
 
 ## Pending owners and blockers
 
