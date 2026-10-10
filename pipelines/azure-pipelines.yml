@@ -26,6 +26,7 @@ pr:
   branches:
     include:
       - main
+      - codex/*
 
 pool:
   vmImage: ubuntu-latest

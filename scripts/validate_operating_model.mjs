@@ -40,22 +40,33 @@ function assertGateFailureProbe(pipeline) {
     'Failure probe must be opt-in and honor the pipeline succeeded() condition');
   assert.match(job, /--filter FullyQualifiedName~DeliberateGateFailureProbe/,
     'Failure probe must execute its dedicated deliberately failing test');
-  assert.match(job, /PITCHMIND_GATE_FAILURE_PROBE:\s*['"]?1['"]?/,
+  assert.match(job, /PITCHMIND_GATE_FAILURE_PROBE:\s*'1'\s*(?:#.*)?$/m,
     'Failure probe must activate the test through its scoped environment variable');
   assert.doesNotMatch(job, /continueOnError:\s*true/i,
     'Failure probe must propagate the failing test exit code');
 }
 
+function assertStackedPrTrigger(pipeline) {
+  assert.match(pipeline, /pr:\s*\n\s+branches:\s*\n\s+include:\s*\n\s+- main\s*\n\s+- codex\/\*/,
+    'PR validation must include main and stacked codex/* target branches');
+}
+
 function gateFailureProbeSelfTest(pipeline) {
   assertGateFailureProbe(pipeline);
+  assertStackedPrTrigger(pipeline);
   const bypassedSuccessCondition = pipeline.replace('condition: and(succeeded(),', 'condition: and(always(),');
   assert.notEqual(bypassedSuccessCondition, pipeline, 'Mutation must target the failure-probe job condition');
+  const prMutations = [
+    [pipeline.replace('      - codex/*', '      - feature/*'), /stacked codex/],
+  ];
+  for (const [mutated, expected] of prMutations) assert.throws(() => assertStackedPrTrigger(mutated), expected);
   const mutations = [
     [pipeline.replace('  default: false', '  default: true'), /opt-in/],
     [pipeline.replace('parameters.runGateFailureProbe, true', 'parameters.runGateFailureProbe, false'), /opt-in/],
     [bypassedSuccessCondition, /pipeline succeeded/],
     [pipeline.replace('FullyQualifiedName~DeliberateGateFailureProbe', 'FullyQualifiedName~UnrelatedTest'), /dedicated deliberately failing test/],
     [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '0'"), /scoped environment variable/],
+    [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '10'"), /scoped environment variable/],
     [pipeline.replace('      env:\n        PITCHMIND_GATE_FAILURE_PROBE', '      continueOnError: true\n      env:\n        PITCHMIND_GATE_FAILURE_PROBE'), /propagate/],
   ];
   for (const [mutated, expected] of mutations) assert.throws(() => assertGateFailureProbe(mutated), expected);
@@ -152,6 +163,7 @@ function check() {
   const pipeline=read('pipelines/azure-pipelines.yml');
   assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
   assertGateFailureProbe(pipeline);
+  assertStackedPrTrigger(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
   assert.equal(counts.P0,49); assert.equal(counts.P1,7); assert.equal(counts.P2,3);
   return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
@@ -162,7 +174,7 @@ if (process.argv.includes('--self-test')) {
   assert.throws(()=>acyclic([{storyId:'A',dependsOn:['B']},{storyId:'B',dependsOn:['A']}]),/cycle/);
   assert.throws(()=>acyclic([{storyId:'A',dependsOn:['UNKNOWN']}]),/Unknown/);
   gateFailureProbeSelfTest(read('pipelines/azure-pipelines.yml'));
-  console.log('PASS: dependency DAG and deliberate gate-failure probe self-tests');
+  console.log('PASS: dependency DAG, stacked PR trigger, and deliberate gate-failure probe self-tests');
 } else {
   try { console.log('PASS: Council skill/story/architecture/approval contract',JSON.stringify(check())); }
   catch(error) { console.error('FAIL:',error.message); process.exitCode=1; }
