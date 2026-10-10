@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
-import { clock, request } from './api';
+import { ApiRequestError, clock, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot } from './api';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
-type MatchView = { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage; insights: CanonicalInsightPage };
+type MatchView = {
+  snapshot: CanonicalMatchSnapshot;
+  events: CanonicalEventPage;
+  insights: CanonicalInsightPage;
+  keyMomentsStatus: string;
+};
 
 export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay }: {
   matchId: string;
@@ -24,19 +29,31 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .then(async snapshot => {
         const revision = snapshot.canonicalRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
-        const [events, insights] = await Promise.all([
+        const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
+        const [events, insights, keyMomentsStatus] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal),
-          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal)
+          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal),
+          request<unknown>(`canonical/matches/${encodeURIComponent(matchId)}/key-moments?${keyMomentQuery}`, controller.signal)
+            .then(() => 'The canonical key-moment response is not versioned, so this view cannot display it yet.')
+            .catch(error => error instanceof ApiRequestError && error.status === 503
+              ? 'No persisted canonical key moments are available at this selected time.'
+              : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
         const exactContext = [snapshot, events, insights].every(item => item.matchId === matchId &&
-          item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds);
-        if (!exactContext) {
+          item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
+          item.throughSequence === snapshot.throughSequence);
+        const eventsSafe = events.items.every((event, index) =>
+          event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
+          (index === 0 || events.items[index - 1].sequence < event.sequence));
+        const insightsSafe = insights.items.every(insight => insight.selectedTimeSeconds === selectedSeconds &&
+          insight.throughSequence <= snapshot.throughSequence);
+        if (!exactContext || !eventsSafe || !insightsSafe) {
           setView(null);
-          setError('Match data did not share the requested match, selected time and canonical revision.');
+          setError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
           return;
         }
-        setView({ snapshot, events, insights });
+        setView({ snapshot, events, insights, keyMomentsStatus });
       })
       .catch(() => { if (!controller.signal.aborted) { setView(null); setError('Canonical match data is unavailable. The page does not fall back to a demo fixture.'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -55,7 +72,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         : snapshot && view ? <>
           <section className="scoreboard" aria-label="Canonical match score">
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
-            <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{snapshot.phase}</small></div>
+            <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{phaseLabel(snapshot.phase)}</small></div>
             <span className="score">{snapshot.awayScore}</span><div className="team">Away</div>
           </section>
           <section className="page-state match-provenance" aria-label="Match source and revision">
@@ -66,6 +83,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           <div className="match-context-controls">
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
+              aria-valuetext={clock(selectedSeconds)}
               onChange={event => replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision)} />
             <span>{clock(selectedSeconds)}</span>
           </div>
@@ -76,7 +94,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               {view.events.items.length === 0 ? <p className="empty">No recorded events are visible at this time.</p>
                 : <ol className="canonical-events">{view.events.items.map(event => <li key={`${event.sequence}:${event.eventId}`}>
                   <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
-                  <span>{event.type.replaceAll('-', ' ')}</span>
+                  <span>{eventLabel(event.type)}</span>
+                  {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}
                   <small>Sequence {event.sequence} · period {event.period}</small>
                 </li>)}</ol>}
             </section>
@@ -90,9 +109,36 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                 </li>)}</ul>}
               <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.canonicalRevision)}>View insights</a>
             </section>
+            <section className="panel" aria-labelledby="key-moments-title">
+              <h2 id="key-moments-title">Key moments</h2>
+              <p role="status">{view.keyMomentsStatus}</p>
+            </section>
           </div>
           <p className="page-state data-limit">Pitch tracking frames are not returned by the current canonical match contract, so no player positions are drawn.</p>
         </>
         : <p className="page-state">This match is not available.</p>}
   </section>;
+}
+
+function eventLabel(type: string) {
+  const normalized = type.replaceAll('-', '').toLowerCase();
+  if (normalized === 'yellowcard') return 'Yellow card';
+  if (normalized === 'redcard') return 'Red card';
+  if (normalized === 'goal') return 'Goal';
+  return type.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' ');
+}
+
+function eventMarker(type: string) {
+  const normalized = type.replaceAll('-', '').toLowerCase();
+  if (normalized === 'goal') return 'Score event';
+  if (normalized === 'yellowcard' || normalized === 'redcard') return 'Discipline event';
+  return '';
+}
+
+function phaseLabel(phase: string) {
+  const labels: Record<string, string> = {
+    notstarted: 'Not started', firsthalf: 'First half', halftime: 'Half-time',
+    secondhalf: 'Second half', fulltime: 'Full-time'
+  };
+  return labels[phase.toLowerCase()] ?? phase.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' ').replaceAll('_', ' ');
 }
