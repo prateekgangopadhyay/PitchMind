@@ -269,11 +269,76 @@ it.each([
     name: 'an insight with a fractional cutoff',
     event: undefined,
     insight: (matchId: string) => ({insightId: 'fractional-cutoff-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19.5, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Fractional-cutoff insight', evidence: []})
+  },
+  {
+    name: 'all page watermarks null',
+    event: undefined,
+    insight: undefined,
+    pageWatermarks: {snapshot: null as unknown as number, events: null as unknown as number, insights: null as unknown as number}
+  },
+  {
+    name: 'a null snapshot watermark',
+    event: undefined,
+    insight: undefined,
+    pageWatermarks: {snapshot: null as unknown as number, events: 19, insights: 19}
+  },
+  {
+    name: 'a null event-page watermark',
+    event: undefined,
+    insight: undefined,
+    pageWatermarks: {snapshot: 19, events: null as unknown as number, insights: 19}
+  },
+  {
+    name: 'a null insight-page watermark',
+    event: undefined,
+    insight: undefined,
+    pageWatermarks: {snapshot: 19, events: 19, insights: null as unknown as number}
+  },
+  {
+    name: 'an event with a null sequence',
+    event: (matchId: string) => ({eventId: 'invalid-event-sequence', matchId, sequence: null as unknown as number, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a string sequence',
+    event: (matchId: string) => ({eventId: 'invalid-event-sequence', matchId, sequence: '18' as unknown as number, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a fractional sequence',
+    event: (matchId: string) => ({eventId: 'invalid-event-sequence', matchId, sequence: 18.5, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a negative sequence',
+    event: (matchId: string) => ({eventId: 'invalid-event-sequence', matchId, sequence: -1, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a null clock',
+    event: (matchId: string) => ({eventId: 'invalid-event-clock', matchId, sequence: 18, type: 'shot', clockSeconds: null as unknown as number, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a string clock',
+    event: (matchId: string) => ({eventId: 'invalid-event-clock', matchId, sequence: 18, type: 'shot', clockSeconds: '3300' as unknown as number, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a fractional clock',
+    event: (matchId: string) => ({eventId: 'invalid-event-clock', matchId, sequence: 18, type: 'shot', clockSeconds: 3300.5, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an event with a negative clock',
+    event: (matchId: string) => ({eventId: 'invalid-event-clock', matchId, sequence: 18, type: 'shot', clockSeconds: -1, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
   }
-])('rejects $name before rendering', async ({event, insight}) => {
+])('rejects $name before rendering', async ({event, insight, pageWatermarks}) => {
   const matchId = '11111111-1111-1111-1111-111111111111';
+  const watermarks = pageWatermarks ?? {snapshot: 19, events: 19, insights: 19};
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: watermarks.snapshot,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
@@ -284,8 +349,8 @@ it.each([
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: event ? [event(matchId)] : [], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: insight ? [insight(matchId)] : [], nextCursor: null, hasMore: false};
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: watermarks.events, items: event ? [event(matchId)] : [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: watermarks.insights, items: insight ? [insight(matchId)] : [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -300,6 +365,8 @@ it.each([
     expect(container.textContent).not.toContain('String-cutoff insight');
     expect(container.textContent).not.toContain('Fractional-cutoff insight');
     expect(container.textContent).not.toContain('wrong-match-event');
+    expect(container.querySelector('.canonical-events')).toBeNull();
+    expect(container.querySelector('.canonical-insights')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

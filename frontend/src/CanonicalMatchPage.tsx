@@ -40,11 +40,15 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
-        const exactContext = [snapshot, events, insights].every(item => item.matchId === matchId &&
+        const watermarks = [snapshot.throughSequence, events.throughSequence, insights.throughSequence];
+        const watermarksSafe = watermarks.every(watermark => Number.isSafeInteger(watermark) && watermark >= 0);
+        const exactContext = watermarksSafe && [snapshot, events, insights].every(item => item.matchId === matchId &&
           item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
-          event.matchId === matchId && event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
+          event.matchId === matchId && Number.isSafeInteger(event.sequence) && event.sequence >= 0 &&
+          Number.isSafeInteger(event.clockSeconds) && event.clockSeconds >= 0 &&
+          event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
           (index === 0 || events.items[index - 1].sequence < event.sequence));
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
           insight.canonicalRevision === revision && insight.selectedTimeSeconds === selectedSeconds &&
