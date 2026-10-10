@@ -13,8 +13,11 @@ public sealed class PostgresIntegrationFactAttribute : FactAttribute
 {
     public PostgresIntegrationFactAttribute()
     {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")))
+        var connectionString = Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
             Skip = "Set PITCHMIND_TEST_POSTGRES to an isolated local PostgreSQL test database; not evidence of a passing integration test.";
+        else if (!PostgresTestDatabaseGuard.TryValidate(connectionString, out var reason))
+            Skip = $"Unsafe PostgreSQL test target: {reason}";
     }
 }
 
@@ -28,7 +31,8 @@ public sealed class PostgresLedgerTests
     }
     private static MatchEvent Event(MatchId matchId, long sequence = 0) => MatchEvent.Create(Guid.NewGuid(), matchId, sequence,
         MatchEventType.Pass, (int)sequence + 1, 1, DateTimeOffset.UtcNow);
-    private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!);
+    private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(
+        PostgresTestDatabaseGuard.RequireSafeConnectionString(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")));
 
     [PostgresIntegrationFact]
     public async Task CommittedEventsSurviveNewDataSourceAndKeepTimestampPrecision()
@@ -120,8 +124,10 @@ public sealed class PostgresLedgerTests
     public async Task EventTypeRangeV2MigratesExistingV1SchemaAndAcceptsCurrentEnumValues()
     {
         await using var source = Source();
-        await using (var resetSchema = source.CreateCommand("DROP SCHEMA IF EXISTS pitchmind CASCADE"))
-            await resetSchema.ExecuteNonQueryAsync();
+        await using (var createSchema = source.CreateCommand("CREATE SCHEMA IF NOT EXISTS pitchmind"))
+            await createSchema.ExecuteNonQueryAsync();
+        await using (var resetTables = source.CreateCommand("DROP TABLE IF EXISTS pitchmind.match_events; DROP TABLE IF EXISTS pitchmind.schema_versions"))
+            await resetTables.ExecuteNonQueryAsync();
         await using (var createV1 = source.CreateCommand(PostgresSchemaMigrator.SchemaSql))
             await createV1.ExecuteNonQueryAsync();
 
