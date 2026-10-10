@@ -24,9 +24,9 @@ Azure-native football intelligence, rebuilt from an evidence-first architecture.
 - [Football low-level design](docs/architecture/05-football-lld.md)
 - [Consolidated API contract](docs/api/API.md)
 
-## Run the simulated match
+## Run the local workstation
 
-Requires .NET 10 and Node 22+. No Azure credentials are required for the offline experience. For PostgreSQL/Redis local services, Docker Desktop with Compose v2, and first-run/teardown instructions, see [local workstation guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
+Requires .NET 10 and Node 22+. No Azure credentials are required for the local workstation. For PostgreSQL/Redis local services, Docker Desktop with Compose v2, and first-run/teardown instructions, see [local workstation guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
 
 ```bash
 ./scripts/dev-up.sh
@@ -42,13 +42,13 @@ From the repository root, `./scripts/dev-health.sh http://127.0.0.1:5080` verifi
 
 Stop services while preserving local data with `./scripts/dev-down.sh`. To delete the local PostgreSQL and Redis data volumes, use `./scripts/dev-reset.sh` and confirm by typing `RESET`.
 
-Open the Vite URL, play the simulation or choose 55:09, then select **Show me why** and **Explain this moment**. Teams and telemetry are fictional. The deterministic explanation is labeled as a fallback; an active AI model is not implied.
+Open the Vite URL. The current stack reports match data unavailable because validated feed admission and canonical PostgreSQL read composition are not implemented. It does not serve the earlier synthetic match or deterministic explanation.
 
 The combined frontend/API image uses the repository root as its build context:
 
 ```bash
 docker build -f docker/Dockerfile -t pitchmind:dev .
-docker run --rm -p 127.0.0.1:5081:8080 pitchmind:dev
+docker run --rm -p 127.0.0.1:5081:8080 -e DOTNET_ENVIRONMENT=Development -e ASPNETCORE_ENVIRONMENT=Development -e Runtime__Profile=local pitchmind:dev
 python3 scripts/api-smoke.py http://127.0.0.1:5081
 ```
 

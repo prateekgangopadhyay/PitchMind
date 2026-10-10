@@ -12,9 +12,9 @@ public sealed class V1ContractCompatibilityTests
     [Theory]
     [InlineData("Development")]
     [InlineData("development")]
-    public void Offline_synthetic_API_is_allowed_only_in_local_Development(string environmentName)
+    public void Local_workstation_API_profile_is_allowed_in_Development(string environmentName)
     {
-        SyntheticFixtureRuntimeGuard.RequireLocalDevelopmentEnvironment(environmentName, "local");
+        LocalRuntimeProfileGuard.RequireLocalDevelopmentProfile(environmentName, "local");
     }
 
     [Theory]
@@ -24,9 +24,9 @@ public sealed class V1ContractCompatibilityTests
     [InlineData("Staging", "local")]
     [InlineData("Production", "local")]
     [InlineData("", "local")]
-    public void Offline_synthetic_API_fails_closed_without_local_Development_profile(string environmentName, string? runtimeProfile)
+    public void Local_workstation_API_profile_fails_closed_outside_Development_local(string environmentName, string? runtimeProfile)
     {
-        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureRuntimeGuard.RequireLocalDevelopmentEnvironment(environmentName, runtimeProfile));
+        Assert.Throws<InvalidOperationException>(() => LocalRuntimeProfileGuard.RequireLocalDevelopmentProfile(environmentName, runtimeProfile));
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
