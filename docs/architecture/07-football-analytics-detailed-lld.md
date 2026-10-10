@@ -137,7 +137,7 @@ erDiagram
 `match_events(match_id,event_id,sequence,period,match_ms,team_id,actor_id,type,outcome,source_ptr,payload_hash,schema_version,raw_json,revision,received_at)`, UNIQUE(match_id,sequence), UNIQUE(event_id);
 `tracking_frames(match_id,frame_id,match_ms,pitch_version,quality,source_hash,frame_json)`;
 `match_projections(match_id,revision,as_of_sequence,as_of_ms,algorithm_version,state_json,sha256)`;
-`insights(id,match_id,as_of_sequence,revision,detector_version,truth_class,summary,conditions_json)`;
+`insights(id,match_id,as_of_sequence,revision,detector_version,truth_class,summary,conditions_json,limitations_json?)`; the canonical read contract returns the bounded stored condition object and nullable limitations list. A null limitations list means the producer supplied no limitation metadata. `insight_evidence` rows can reference events/frames today; metric references stay hidden until a metric definition/payload store and writer exist.
 `insight_evidence(insight_id,kind,event_id?,frame_id?,metric_id?,relation,source_revision)`;
 `quarantine(match_id,source_ptr,payload_hash,reason,observed_at,retry_status)`;
 `outbox(id,match_id,revision,kind,payload_json,created_at,published_at,attempt_count)`;

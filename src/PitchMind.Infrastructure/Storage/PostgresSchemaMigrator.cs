@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -29,6 +29,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version2Sql, cancellationToken);
         if (currentVersion < 3)
             await ExecuteAsync(connection, transaction, Version3Sql, cancellationToken);
+        if (currentVersion < 4)
+            await ExecuteAsync(connection, transaction, Version4Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -194,5 +196,15 @@ public static class PostgresSchemaMigrator
         );
 
         INSERT INTO pitchmind.schema_versions(version) VALUES (3) ON CONFLICT DO NOTHING;
+        """;
+
+    public const string Version4Sql = """
+        ALTER TABLE pitchmind.insights ADD COLUMN IF NOT EXISTS limitations_json jsonb;
+        ALTER TABLE pitchmind.insights DROP CONSTRAINT IF EXISTS insights_limitations_array_check;
+        ALTER TABLE pitchmind.insights ADD CONSTRAINT insights_limitations_array_check
+            CHECK (limitations_json IS NULL OR jsonb_typeof(limitations_json) = 'array') NOT VALID;
+        ALTER TABLE pitchmind.insights VALIDATE CONSTRAINT insights_limitations_array_check;
+
+        INSERT INTO pitchmind.schema_versions(version) VALUES (4) ON CONFLICT DO NOTHING;
         """;
 }

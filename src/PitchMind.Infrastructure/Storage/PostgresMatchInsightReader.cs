@@ -16,7 +16,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, afterSequence, afterInsightId, limit);
         await using var command = dataSource.CreateCommand("""
             SELECT i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
-                   i.summary,
+                   i.summary, i.conditions_json::text, i.limitations_json::text,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
@@ -50,7 +50,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
                             AND tf.sequence <= $3 AND tf.clock_seconds <= $6))
               )
-            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
+            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
+                     i.summary, i.conditions_json, i.limitations_json
             ORDER BY i.as_of_sequence, i.insight_id
             LIMIT $7
             """);
@@ -80,7 +81,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
         await using var command = dataSource.CreateCommand("""
             SELECT i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
-                   i.summary,
+                   i.summary, i.conditions_json::text, i.limitations_json::text,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
@@ -113,7 +114,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
                             AND tf.sequence <= $4 AND tf.clock_seconds <= $5))
               )
-            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
+            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
+                     i.summary, i.conditions_json, i.limitations_json
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(insightId);
@@ -177,11 +179,45 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
     private static PersistedMatchInsight ReadInsight(NpgsqlDataReader reader)
     {
         var matchId = new MatchId(reader.GetGuid(1));
-        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(7),
+        var conditionsJson = reader.GetString(7);
+        if (System.Text.Encoding.UTF8.GetByteCount(conditionsJson) > 16_384)
+            throw new InvalidDataException("Persisted insight conditions exceed the response size limit.");
+        using var conditionsDocument = ParseJson(conditionsJson, "Persisted insight conditions must be valid JSON.");
+        if (conditionsDocument.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Persisted insight conditions must be a JSON object.");
+        if (conditionsDocument.RootElement.EnumerateObject().Take(129).Count() > 128)
+            throw new InvalidDataException("Persisted insight conditions contain too many properties.");
+        var limitations = ReadLimitations(reader.IsDBNull(8) ? null : reader.GetString(8));
+        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(9),
             new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidDataException("Persisted insight evidence references are empty.");
         return new PersistedMatchInsight(reader.GetString(0), matchId, reader.GetInt32(2), reader.GetInt64(3),
-            reader.GetString(4), reader.GetString(5), reader.GetString(6), Array.AsReadOnly(evidence));
+            reader.GetString(4), reader.GetString(5), reader.GetString(6), conditionsDocument.RootElement.Clone(), limitations,
+            Array.AsReadOnly(evidence));
+    }
+
+    private static IReadOnlyList<string>? ReadLimitations(string? limitationsJson)
+    {
+        if (limitationsJson is null) return null;
+        if (System.Text.Encoding.UTF8.GetByteCount(limitationsJson) > 4_096)
+            throw new InvalidDataException("Persisted insight limitations exceed the response size limit.");
+        using var document = ParseJson(limitationsJson, "Persisted insight limitations must be valid JSON.");
+        if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() > 32)
+            throw new InvalidDataException("Persisted insight limitations must be a bounded JSON array.");
+        var values = new List<string>();
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(item.GetString()) || item.GetString()!.Length > 512)
+                throw new InvalidDataException("Persisted insight limitation entries must be non-empty strings of at most 512 characters.");
+            values.Add(item.GetString()!);
+        }
+        return Array.AsReadOnly(values.ToArray());
+    }
+
+    private static JsonDocument ParseJson(string json, string errorMessage)
+    {
+        try { return JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 16 }); }
+        catch (JsonException exception) { throw new InvalidDataException(errorMessage, exception); }
     }
 
     private static void Validate(MatchId matchId, int maximumRevision, int selectedSeconds, long throughSequence,

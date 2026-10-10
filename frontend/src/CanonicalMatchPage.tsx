@@ -106,7 +106,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .then(result => {
         const contextSafe = result.insight.insightId === selectedInsight.insightId &&
           result.insight.matchId === matchId && result.insight.canonicalRevision === snapshot.canonicalRevision &&
-          result.insight.selectedTimeSeconds === selectedSeconds && result.insight.throughSequence <= snapshot.throughSequence;
+          result.insight.selectedTimeSeconds === selectedSeconds && result.insight.throughSequence <= snapshot.throughSequence &&
+          result.insight.throughSequence === selectedInsight.throughSequence &&
+          result.insight.detectorVersion === selectedInsight.detectorVersion &&
+          result.insight.truthClass === selectedInsight.truthClass && result.insight.summary === selectedInsight.summary &&
+          JSON.stringify(result.insight.conditions) === JSON.stringify(selectedInsight.conditions) &&
+          JSON.stringify(result.insight.limitations) === JSON.stringify(selectedInsight.limitations) &&
+          JSON.stringify(result.insight.evidence) === JSON.stringify(selectedInsight.evidence);
         const references = result.insight.evidence;
         const referencesResolved = references.length === result.items.length && references.every(reference =>
           result.items.filter(item => item.kind === reference.kind && item.id === reference.id && item.relation === reference.relation).length === 1);
@@ -229,7 +235,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                 : <ul className="canonical-insights">{view.insights.items.map((insight, index) => <li key={insight.insightId}>
                   <span className="badge">{insight.truthClass}</span><p>{insight.summary}</p>
                   <small>{insight.evidence.length} evidence reference(s)</small>
-                  <button type="button" aria-expanded={selectedEvidenceId === insight.insightId} aria-controls={`evidence-${index}`}
+                  <button type="button" aria-expanded={selectedEvidenceId === insight.insightId}
+                    aria-controls={selectedEvidenceId === insight.insightId ? `evidence-${index}` : undefined}
                     onClick={() => {
                       if (selectedEvidenceId === insight.insightId) {
                         setSelectedEvidenceId(null);
@@ -242,11 +249,21 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                   <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>Open insight detail</a>
                   {selectedEvidenceId === insight.insightId && <section className="canonical-evidence-drawer" id={`evidence-${index}`} role="region" aria-labelledby={`evidence-title-${index}`}>
                     <h3 id={`evidence-title-${index}`}>Evidence for this insight</h3>
-                    <p>Only persisted source records at or before this match time and sequence are shown. This view does not add intent or causality.</p>
+                    <p>Only persisted source records at or before this match time and sequence are shown. Metric payloads are not available through this canonical route. This view does not add intent or causality.</p>
                     {evidenceLoading && <p role="status">Loading source evidence…</p>}
                     {evidenceError && <p role="alert">{evidenceError}</p>}
                     {selectedEvidence && selectedEvidence.insight.insightId === insight.insightId && <>
                       <p>{selectedEvidence.insight.truthClass} · revision {selectedEvidence.insight.canonicalRevision} · through sequence {selectedEvidence.insight.throughSequence}</p>
+                      <details>
+                        <summary>Stored detector conditions</summary>
+                        <pre className="evidence-json">{JSON.stringify(selectedEvidence.insight.conditions, null, 2)}</pre>
+                      </details>
+                      {selectedEvidence.insight.limitations === null
+                        ? <p>Limitations are not recorded for this insight.</p>
+                        : selectedEvidence.insight.limitations.length === 0
+                          ? <p>No limitations were recorded for this insight.</p>
+                          : <div><h4>Recorded limitations</h4><ul>{selectedEvidence.insight.limitations.map((limitation, limitationIndex) =>
+                            <li key={`${limitationIndex}:${limitation}`}>{limitation}</li>)}</ul></div>}
                       {selectedEvidence.items.length === 0 ? <p className="empty">No source event or frame is attached to this insight.</p>
                         : <ol className="canonical-evidence-list">{[...selectedEvidence.items].sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)).map(item => <li key={`${item.kind}:${item.id}`}>
                           <div><span className="badge">{item.kind}</span><p>{item.relation} · {item.id}</p><small>{clock(item.clockSeconds)} · period {item.period} · sequence {item.sequence}</small></div>

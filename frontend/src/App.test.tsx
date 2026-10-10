@@ -156,6 +156,7 @@ it('rejects events and insights that cross the selected-time sequence', async ()
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
     expect(container.textContent).not.toContain('future-event');
+    expect(container.textContent).not.toContain('Mismatched evidence insight');
     expect(container.textContent).not.toContain('A future insight');
   } finally {
     await act(async () => root.unmount());
@@ -359,6 +360,7 @@ it('opens a match-context evidence drawer and navigates to the cited event time'
     insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
     throughSequence: 19, detectorVersion: 'pattern-v1', truthClass: 'interpretation',
     summary: 'A persisted sequence is classified as a pressing pattern.',
+    conditions: {sampleSize: 11, observed: true}, limitations: ['Sparse frame coverage'],
     evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
   };
   const evidenceRequestUrls: string[] = [];
@@ -401,6 +403,9 @@ it('opens a match-context evidence drawer and navigates to the cited event time'
     expect(container.textContent).toContain('event-18');
     expect(container.textContent).toContain('supports');
     expect(container.textContent).toContain('55:00 · period 2 · sequence 18');
+    expect(container.textContent).toContain('sampleSize');
+    expect(container.textContent).toContain('Sparse frame coverage');
+    expect(container.textContent).toContain('Metric payloads are not available through this canonical route.');
     expect(container.textContent).toContain('This view does not add intent or causality.');
     await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'View event in timeline')!.click(); });
     expect(new URL(window.location.href).searchParams.get('atSeconds')).toBe('3300');
@@ -417,6 +422,7 @@ it('does not show a source claim when evidence references do not resolve exactly
     insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
     throughSequence: 19, detectorVersion: 'pattern-v1', truthClass: 'interpretation',
     summary: 'A persisted sequence is classified as a pressing pattern.',
+    conditions: {sampleSize: 11}, limitations: null,
     evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
   };
   const snapshot = {
@@ -432,7 +438,7 @@ it('does not show a source claim when evidence references do not resolve exactly
     if (parsed.pathname.endsWith('/key-moments') || parsed.pathname.endsWith('/frames'))
       return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
     if (parsed.pathname.endsWith('/evidence/insight-press'))
-      return {ok: true, json: async () => ({insight, items: [{kind: 'event', id: 'future-event', relation: 'supports', sequence: 20, clockSeconds: 3310, period: 2,
+      return {ok: true, json: async () => ({insight: {...insight, summary: 'Mismatched evidence insight'}, items: [{kind: 'event', id: 'future-event', relation: 'supports', sequence: 20, clockSeconds: 3310, period: 2,
         payload: {eventId: 'future-event', matchId, sequence: 20, clockSeconds: 3310, period: 2}}]})};
     const page = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, nextCursor: null, hasMore: false};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
@@ -446,6 +452,7 @@ it('does not show a source claim when evidence references do not resolve exactly
     await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'Why this insight?')!.click(); });
     expect(container.textContent).toContain('The evidence response does not match this insight and selected match time. No source claims are shown.');
     expect(container.textContent).not.toContain('future-event');
+    expect(container.textContent).not.toContain('Mismatched evidence insight');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

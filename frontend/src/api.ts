@@ -48,6 +48,7 @@ export interface CanonicalEvidenceReference { kind: string; id: string; relation
 export interface CanonicalInsight {
   insightId: string; matchId: string; canonicalRevision: number; selectedTimeSeconds: number;
   throughSequence: number; detectorVersion: string; truthClass: string; summary: string;
+  conditions: Record<string, unknown>; limitations: string[] | null;
   evidence: CanonicalEvidenceReference[];
 }
 export interface CanonicalInsightPage {

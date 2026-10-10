@@ -191,6 +191,8 @@ public sealed record CanonicalInsightResponse(
     string DetectorVersion,
     string TruthClass,
     string Summary,
+    JsonElement Conditions,
+    IReadOnlyList<string>? Limitations,
     IReadOnlyList<CanonicalEvidenceReferenceResponse> Evidence);
 
 public sealed record CanonicalInsightPageResponse(

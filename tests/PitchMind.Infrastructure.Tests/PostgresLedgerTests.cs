@@ -38,7 +38,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -70,7 +70,7 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task ExistingVersionTwoDatabaseUpgradesToThreeRepeatably()
+    public async Task ExistingVersionTwoDatabaseUpgradesToFourRepeatably()
     {
         await using var source = Source();
         await using (var connection = await source.OpenConnectionAsync())
@@ -87,7 +87,9 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, (int[])(await versions.ExecuteScalarAsync())!);
+        await using var limitationsColumn = source.CreateCommand("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'insights' AND column_name = 'limitations_json')");
+        Assert.True((bool)(await limitationsColumn.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -424,17 +426,21 @@ public sealed class PostgresLedgerTests
         var update = Update(matchId);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
 
-        async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId)
+        async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId,
+            string conditions = "{}", string? limitations = null)
         {
             await using (var command = source.CreateCommand("""
-                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json)
-                VALUES ($1, $2, 1, 0, 'test-v1', $3, $4, '{}'::jsonb)
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json, limitations_json)
+                VALUES ($1, $2, 1, 0, 'test-v1', $3, $4, $5::jsonb, $6::jsonb)
                 """))
             {
                 command.Parameters.AddWithValue(insightId);
                 command.Parameters.AddWithValue(matchId.Value);
                 command.Parameters.AddWithValue(truthClass);
                 command.Parameters.AddWithValue(insightId);
+                command.Parameters.AddWithValue(conditions);
+                var limitationsParameter = command.Parameters.AddWithValue((object?)limitations ?? DBNull.Value);
+                limitationsParameter.NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
                 await command.ExecuteNonQueryAsync();
             }
             await using (var evidence = source.CreateCommand("""
@@ -469,7 +475,8 @@ public sealed class PostgresLedgerTests
             frame.Parameters.AddWithValue(new string('d', 64));
             await frame.ExecuteNonQueryAsync();
         }
-        await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
+        await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString(),
+            "{\"sampleSize\":11,\"observed\":true}", "[\"Sparse frame coverage\"]");
         await AddInsight(validFrameInsightId, "derived", "frame", validFrameId);
         await AddInsight(missingInsightId, "derived", "event", Guid.NewGuid().ToString());
         await AddInsight(metricInsightId, "derived", "metric", "unpersisted-metric");
@@ -485,6 +492,9 @@ public sealed class PostgresLedgerTests
             page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
         var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
+        Assert.Equal(11, visible.Conditions.GetProperty("sampleSize").GetInt32());
+        Assert.Equal("Sparse frame coverage", Assert.Single(visible.Limitations!));
+        Assert.Null(Assert.Single(page.Insights, i => i.InsightId == validFrameInsightId).Limitations);
         Assert.Null(await insightReader.GetAtAsync(matchId, missingInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,

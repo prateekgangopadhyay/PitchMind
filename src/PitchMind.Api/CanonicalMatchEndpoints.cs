@@ -211,7 +211,7 @@ internal static class CanonicalMatchEndpoints
 
     private static CanonicalInsightResponse ToInsight(PersistedMatchInsight insight, int selectedTime) => new(
         insight.InsightId, insight.MatchId.ToString(), insight.Revision, selectedTime, insight.AsOfSequence,
-        insight.DetectorVersion, insight.TruthClass, insight.Summary,
+        insight.DetectorVersion, insight.TruthClass, insight.Summary, insight.Conditions, insight.Limitations,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
 
     private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime)
