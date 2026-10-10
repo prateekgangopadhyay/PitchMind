@@ -31,9 +31,13 @@ chmod 600 docker/.env
 read_local_password() {
   local key="$1" line count=0 value="" unique_chars="" char index
   while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" == "$key="* ]] || continue
+    [[ "$line" =~ ^[[:space:]]*${key}([[:space:]]|=|:|$) ]] || continue
     count=$((count + 1))
-    value="${line#*=}"
+    if [[ "$line" =~ ^[[:space:]]*${key}[[:space:]]*[:=][[:space:]]*(.*)$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    else
+      value=""
+    fi
   done < docker/.env
   [[ "$count" -eq 1 && "$value" =~ ^[0-9a-f]{48}$ ]] || return 1
   for ((index = 0; index < ${#value}; index++)); do

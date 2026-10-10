@@ -254,6 +254,36 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertNotEqual(reused.returncode, 0)
         self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
 
+    def test_compose_alternate_password_assignments_are_counted_as_duplicates(self) -> None:
+        valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
+        distinct = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        cases = (
+            ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD: weak"),
+            ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD = weak"),
+            ("REDIS_PASSWORD", "REDIS_PASSWORD: weak"),
+            ("REDIS_PASSWORD", "REDIS_PASSWORD = weak"),
+        )
+
+        for key, duplicate in cases:
+            with self.subTest(key=key, duplicate=duplicate):
+                self.docker_log.unlink(missing_ok=True)
+                env_file = self.root / "docker" / ".env"
+                values = {
+                    "POSTGRES_PASSWORD": valid,
+                    "REDIS_PASSWORD": distinct,
+                }
+                env_file.write_text(
+                    f"POSTGRES_PASSWORD={values['POSTGRES_PASSWORD']}\n"
+                    f"REDIS_PASSWORD={values['REDIS_PASSWORD']}\n"
+                    f"{duplicate}\n",
+                    encoding="utf-8",
+                )
+                result = self._run("dev-up.sh")
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("must contain distinct 48-character", result.stderr)
+                self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+
     def test_stop_keeps_volumes_and_reset_requires_explicit_force_in_noninteractive_mode(self) -> None:
         (self.root / "docker" / ".env").write_text("POSTGRES_PASSWORD=x\nREDIS_PASSWORD=y\n")
         stop = self._run("dev-down.sh")
@@ -274,8 +304,28 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
     def test_compose_services_bind_only_to_loopback(self) -> None:
         compose = (REPOSITORY / "docker" / "compose.yml").read_text(encoding="utf-8")
-        self.assertIn('"127.0.0.1:${POSTGRES_PORT:-5432}:5432"', compose)
-        self.assertIn('"127.0.0.1:${REDIS_PORT:-6379}:6379"', compose)
+        published_ports = []
+        in_ports_block = False
+        ports_indent = -1
+        for line in compose.splitlines():
+            indentation = len(line) - len(line.lstrip())
+            content = line.strip()
+            if content == "ports:":
+                in_ports_block = True
+                ports_indent = indentation
+                continue
+            if in_ports_block and indentation <= ports_indent:
+                in_ports_block = False
+            if in_ports_block and content.startswith("-"):
+                published_ports.append(content[1:].strip().strip("\"'"))
+
+        self.assertEqual(
+            published_ports,
+            [
+                "127.0.0.1:${POSTGRES_PORT:-5432}:5432",
+                "127.0.0.1:${REDIS_PORT:-6379}:6379",
+            ],
+        )
 
 
 if __name__ == "__main__":
