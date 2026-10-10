@@ -143,12 +143,12 @@ button, select { min-height: 44px; }
 .ball-marker { fill:#fff; stroke:#06141d; stroke-width:.2; vector-effect:non-scaling-stroke; }
 .pitch-player-label { fill:#07131c; font-size:2.2px; font-weight:800; pointer-events:none; }
 .pitch-caption, .tracking-legend { font-size:.8rem; color:var(--pm-text-secondary); overflow-wrap:anywhere; }
-.position-table-details { margin-top:.8rem; }
-.position-table-details summary { min-height:44px; display:flex; align-items:center; cursor:pointer; text-decoration:underline; text-underline-offset:.2em; }
-.position-table-details table { width:100%; border-collapse:collapse; font-size:.8rem; }
+.position-table-details { max-width:100%; min-width:0; margin-top:.8rem; }
+.position-table-details table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font-size:.8rem; }
 .position-table-details caption { padding:.5rem 0; text-align:left; color:var(--pm-text-secondary); }
-.position-table-details th, .position-table-details td { padding:.45rem .35rem; border-bottom:1px solid var(--pm-border); text-align:left; overflow-wrap:anywhere; }
+.position-table-details th, .position-table-details td { min-width:0; padding:.45rem .35rem; border-bottom:1px solid var(--pm-border); text-align:left; overflow-wrap:anywhere; word-break:break-word; }
 .tracking-status { margin:.75rem 0; }
+.reduced-motion-note { grid-column:1/-1; color:var(--pm-text-secondary); font-size:.85rem; }
 @media(max-width:900px) { .pitch-dashboard { grid-template-columns:minmax(0,1fr) minmax(16rem,.9fr); } }
 @media(max-width:1100px) {
   .pitch-dashboard > :last-child { grid-column:auto; }
@@ -160,6 +160,8 @@ button, select { min-height: 44px; }
   .match-context-controls input { grid-column:1/-1; grid-row:2; }
   .pitch-dashboard { grid-template-columns:minmax(0,1fr); }
   .pitch-panel { grid-row:auto; }
+  .position-table-details table { font-size:.72rem; }
+  .position-table-details th, .position-table-details td { padding:.4rem .2rem; }
 }
 @media (max-width: 640px) {
   .site-header { align-items: flex-start; flex-wrap: wrap; padding: 16px 18px; }

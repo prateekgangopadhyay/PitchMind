@@ -29,6 +29,6 @@ internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader,
         int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken) =>
         throw new CanonicalReadUnavailableException();
 
-    public Task<PersistedTrackingFramePage> ReadAtAsync(PersistedMatchProjection projection, int selectedSeconds, int limit,
+    public Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds, int limit,
         CancellationToken cancellationToken) => throw new CanonicalReadUnavailableException();
 }

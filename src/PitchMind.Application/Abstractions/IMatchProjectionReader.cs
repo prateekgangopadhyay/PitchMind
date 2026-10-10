@@ -48,6 +48,6 @@ public interface IMatchProjectionReader
 /// <summary>Reads immutable tracking frames visible at the selected time and projection watermark.</summary>
 public interface IMatchTrackingReader
 {
-    Task<PersistedTrackingFramePage> ReadAtAsync(PersistedMatchProjection projection, int selectedSeconds, int limit,
+    Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds, int limit,
         CancellationToken cancellationToken);
 }

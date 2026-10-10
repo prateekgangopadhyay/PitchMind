@@ -22,8 +22,18 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const canonicalRevision = view?.snapshot.canonicalRevision;
   const canonicalSelectedSeconds = view?.snapshot.selectedTimeSeconds;
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
+    setReducedMotion(preference.matches);
+    preference.addEventListener('change', updatePreference);
+    return () => preference.removeEventListener('change', updatePreference);
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -85,6 +95,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [matchId, requestedRevision, selectedSeconds]);
 
   useEffect(() => {
+    if (reducedMotion) setPlaying(false);
+  }, [reducedMotion]);
+
+  useEffect(() => {
     if (!playing) return;
     if (selectedSeconds >= 5400) { setPlaying(false); return; }
     if (canonicalSelectedSeconds !== selectedSeconds || canonicalRevision === undefined) return;
@@ -126,9 +140,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               aria-valuetext={clock(selectedSeconds)}
               onChange={event => { setPlaying(false); replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision); }} />
             <span>{clock(selectedSeconds)}</span>
-            <button type="button" aria-pressed={playing} onClick={() => setPlaying(value => !value)} disabled={selectedSeconds >= 5400}>
-              {playing ? 'Pause replay' : 'Play replay'}
-            </button>
+            {reducedMotion
+              ? <span className="reduced-motion-note" role="status">Automatic replay is off under reduced motion. Use the selected-time slider to inspect the match.</span>
+              : <button type="button" aria-pressed={playing} onClick={() => setPlaying(value => !value)} disabled={selectedSeconds >= 5400}>
+                {playing ? 'Pause replay' : 'Play replay'}
+              </button>}
           </div>
           <div className="dashboard canonical-dashboard pitch-dashboard">
             <section className="panel pitch-panel" aria-labelledby="pitch-title">
@@ -147,9 +163,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     <title>{`${player.teamId} · ${player.playerId}`}</title>
                   </g>)}
                 </svg>
-                <p id="pitch-description" className="pitch-caption">Frame {selectedFrame.frameId} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m · {pitch.attackTeamId} attacks right in this view.</p>
-                <details className="position-table-details" open>
-                  <summary>Read observed player positions</summary>
+                <p id="pitch-description" className="pitch-caption" role="status" aria-live="polite" aria-atomic="true">
+                  Observed frame {selectedFrame.frameId} at {clock(selectedSeconds)} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m. Numbered player positions are listed below.
+                </p>
+                <div className="position-table-details">
                   <table>
                     <caption>Pitch view coordinates at {clock(selectedSeconds)} · {pitch.attackTeamId} attacks right · sequence {selectedFrame.sequence}</caption>
                     <thead><tr><th scope="col">Marker</th><th scope="col">Team ID</th><th scope="col">Player ID</th><th scope="col">View X (m)</th><th scope="col">View Y (m)</th></tr></thead>
@@ -157,7 +174,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                       <td>{index + 1}</td><td>{player.teamId}</td><td>{player.playerId}</td><td>{player.position.x.toFixed(2)}</td><td>{player.position.y.toFixed(2)}</td>
                     </tr>)}</tbody>
                   </table>
-                </details>
+                </div>
                 <p className="tracking-legend">Numbered team markers map to the position table. The white marker is the observed ball.</p>
               </> : <p className="empty tracking-status" role="status" aria-live="polite">{trackingMessage}</p>}
             </section>

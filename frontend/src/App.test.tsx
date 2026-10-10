@@ -203,6 +203,100 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
   }
 });
 
+it('exposes observed positions as a screen-reader table and keeps event and time controls keyboard focusable', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const observedFrame = {
+    frameId: 'observed-frame', sequence: 19, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
+    sourceSha256: 'c'.repeat(64), quality: {coverage: 'observed'},
+    frame: {
+      schemaVersion: 1, matchId, frameId: 'observed-frame', sequence: 19,
+      matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
+      coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
+      ball: {x: 52.5, y: 34}, players: [{playerId: 'player-a', teamId: 'team-a', position: {x: 10, y: 20}}],
+      source: {providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: 'observed-frame', sourceSequence: 1,
+        sourceSchemaVersion: 'test-v1', sourceSha256: 'c'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
+    }
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
+        {eventId: 'event-1', matchId, sequence: 18, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'},
+        {eventId: 'event-2', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}
+      ], nextCursor: null, hasMore: false}
+        : parsed.pathname.endsWith('/frames') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [observedFrame], hasMore: false}
+          : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    const pitch = container.querySelector('svg[role="img"]');
+    expect(pitch?.getAttribute('aria-label')).toContain('Observed player and ball positions at 55:09');
+    expect(pitch?.getAttribute('aria-describedby')).toBe('pitch-description');
+    expect(container.querySelector('table caption')?.textContent).toContain('Pitch view coordinates at 55:09');
+    expect(container.querySelector('table tbody')?.textContent).toContain('player-a');
+    expect(container.querySelector('details')).toBeNull();
+    const slider = container.querySelector<HTMLInputElement>('#selected-time')!;
+    const eventButton = container.querySelector<HTMLButtonElement>('.canonical-event')!;
+    slider.focus();
+    expect(document.activeElement).toBe(slider);
+    expect(slider.getAttribute('aria-valuetext')).toBe('55:09');
+    eventButton.focus();
+    expect(document.activeElement).toBe(eventButton);
+    expect(eventButton.getAttribute('aria-label')).toBe('Select shot at 55:00, sequence 18');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('keeps selected-time scrubbing available and disables auto replay when reduced motion is preferred', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('matchMedia', vi.fn((media: string) => ({
+    matches: media.includes('prefers-reduced-motion'), media, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn()
+  })));
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    const snapshot = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+      algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+      provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+      possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.querySelector('#selected-time')).not.toBeNull();
+    expect(container.textContent).toContain('Automatic replay is off under reduced motion');
+    expect(container.querySelector('button[aria-pressed]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('rejects events and insights that cross the selected-time sequence', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {

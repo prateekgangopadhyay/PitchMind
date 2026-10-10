@@ -8,7 +8,7 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
 {
     private const int MaximumPageSize = 100;
 
-    public async Task<PersistedTrackingFramePage> ReadAtAsync(PersistedMatchProjection projection,
+    public async Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection,
         int selectedSeconds, int limit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(projection);
