@@ -132,6 +132,16 @@ button, select { min-height: 44px; }
 .canonical-insights { margin:0; padding-left:1.25rem; }
 .canonical-insights > li { display:grid; gap:.45rem; padding:.75rem 0; border-top:1px solid var(--pm-border); }
 .canonical-insights a { justify-self:start; color:var(--pm-text); text-underline-offset:.2em; }
+.canonical-insights button { justify-self:start; min-height:44px; }
+.canonical-evidence-drawer { display:grid; gap:.55rem; min-width:0; margin-top:.25rem; padding:1rem; border:1px solid var(--pm-border); border-radius:10px; background:#102733; }
+.canonical-evidence-drawer h3, .canonical-evidence-drawer p { margin:.15rem 0; }
+.canonical-evidence-drawer > p { color:var(--pm-text-secondary); }
+.canonical-evidence-list { display:grid; gap:.5rem; margin:0; padding:0; list-style:none; }
+.canonical-evidence-list li { display:flex; align-items:center; justify-content:space-between; gap:1rem; min-width:0; padding:.75rem 0; border-top:1px solid var(--pm-border); }
+.canonical-evidence-list li > div { min-width:0; overflow-wrap:anywhere; }
+.canonical-evidence-list li p { margin:.25rem 0; }
+.canonical-evidence-list li small { color:var(--pm-text-secondary); }
+.canonical-evidence-list button { flex:0 0 auto; min-height:44px; }
 .event-marker { grid-column:2; justify-self:start; padding:.2rem .45rem; border:1px solid var(--pm-border); border-radius:999px; color:var(--pm-text-secondary); font-size:.7rem; }
 .match-context-controls { grid-template-columns:auto minmax(0,1fr) auto auto; }
 .pitch-dashboard { grid-template-columns:minmax(0,1.25fr) minmax(18rem,.9fr); }
@@ -160,6 +170,8 @@ button, select { min-height: 44px; }
   .match-context-controls input { grid-column:1/-1; grid-row:2; }
   .pitch-dashboard { grid-template-columns:minmax(0,1fr); }
   .pitch-panel { grid-row:auto; }
+  .canonical-evidence-list li { align-items:stretch; flex-direction:column; gap:.5rem; }
+  .canonical-evidence-list button { align-self:flex-start; white-space:normal; }
 }
 @media (max-width: 640px) {
   .site-header { align-items: flex-start; flex-wrap: wrap; padding: 16px 18px; }

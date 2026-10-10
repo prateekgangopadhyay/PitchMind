@@ -352,3 +352,103 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
     window.history.replaceState(null, '', '/');
   }
 });
+
+it('opens a match-context evidence drawer and navigates to the cited event time', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const insight = {
+    insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+    throughSequence: 19, detectorVersion: 'pattern-v1', truthClass: 'interpretation',
+    summary: 'A persisted sequence is classified as a pressing pattern.',
+    evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
+  };
+  const evidenceRequestUrls: string[] = [];
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments') || parsed.pathname.endsWith('/frames'))
+      return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (parsed.pathname.endsWith('/evidence/insight-press')) {
+      evidenceRequestUrls.push(url);
+      const item = {kind: 'event', id: 'event-18', relation: 'supports', sequence: 18, clockSeconds: 3300, period: 2,
+        payload: {eventId: 'event-18', matchId, sequence: 18, type: 'pass', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}};
+      return {ok: true, json: async () => ({insight, items: [item]})};
+    }
+    const page = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, nextCursor: null, hasMore: false};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {...page, items: [
+        {eventId: 'event-18', matchId, sequence: 18, type: 'pass', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'},
+        {eventId: 'event-19', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}
+      ]} : {...page, items: [insight]};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain(insight.summary);
+    await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'Why this insight?')!.click(); });
+    expect(evidenceRequestUrls).toHaveLength(1);
+    const evidenceUrl = new URL(evidenceRequestUrls[0]!, 'http://localhost');
+    expect(evidenceUrl.searchParams.get('atSeconds')).toBe('3309');
+    expect(evidenceUrl.searchParams.get('revision')).toBe('4');
+    expect(container.textContent).toContain('event-18');
+    expect(container.textContent).toContain('supports');
+    expect(container.textContent).toContain('55:00 · period 2 · sequence 18');
+    expect(container.textContent).toContain('This view does not add intent or causality.');
+    await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'View event in timeline')!.click(); });
+    expect(new URL(window.location.href).searchParams.get('atSeconds')).toBe('3300');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('does not show a source claim when evidence references do not resolve exactly', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const insight = {
+    insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+    throughSequence: 19, detectorVersion: 'pattern-v1', truthClass: 'interpretation',
+    summary: 'A persisted sequence is classified as a pressing pattern.',
+    evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
+  };
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments') || parsed.pathname.endsWith('/frames'))
+      return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (parsed.pathname.endsWith('/evidence/insight-press'))
+      return {ok: true, json: async () => ({insight, items: [{kind: 'event', id: 'future-event', relation: 'supports', sequence: 20, clockSeconds: 3310, period: 2,
+        payload: {eventId: 'future-event', matchId, sequence: 20, clockSeconds: 3310, period: 2}}]})};
+    const page = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, nextCursor: null, hasMore: false};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/insights') ? {...page, items: [insight]} : {...page, items: []};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'Why this insight?')!.click(); });
+    expect(container.textContent).toContain('The evidence response does not match this insight and selected match time. No source claims are shown.');
+    expect(container.textContent).not.toContain('future-event');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});

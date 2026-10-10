@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, request } from './api';
-import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
+import type { CanonicalEvidence, CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
 type MatchView = {
@@ -22,8 +22,14 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<CanonicalEvidence | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState('');
+  const snapshot = view?.snapshot;
   const canonicalRevision = view?.snapshot.canonicalRevision;
   const canonicalSelectedSeconds = view?.snapshot.selectedTimeSeconds;
+  const selectedInsight = view?.insights.items.find(insight => insight.insightId === selectedEvidenceId);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -84,6 +90,50 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [matchId, requestedRevision, selectedSeconds]);
 
   useEffect(() => {
+    setSelectedEvidenceId(null);
+    setSelectedEvidence(null);
+    setEvidenceError('');
+  }, [matchId, requestedRevision, selectedSeconds]);
+
+  useEffect(() => {
+    if (!selectedEvidenceId || !selectedInsight || !snapshot || snapshot.matchId !== matchId || snapshot.selectedTimeSeconds !== selectedSeconds) return;
+    const controller = new AbortController();
+    setSelectedEvidence(null);
+    setEvidenceError('');
+    setEvidenceLoading(true);
+    const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(snapshot.canonicalRevision) });
+    request<CanonicalEvidence>(`canonical/matches/${encodeURIComponent(matchId)}/evidence/${encodeURIComponent(selectedEvidenceId)}?${query}`, controller.signal)
+      .then(result => {
+        const contextSafe = result.insight.insightId === selectedInsight.insightId &&
+          result.insight.matchId === matchId && result.insight.canonicalRevision === snapshot.canonicalRevision &&
+          result.insight.selectedTimeSeconds === selectedSeconds && result.insight.throughSequence <= snapshot.throughSequence;
+        const references = result.insight.evidence;
+        const referencesResolved = references.length === result.items.length && references.every(reference =>
+          result.items.filter(item => item.kind === reference.kind && item.id === reference.id && item.relation === reference.relation).length === 1);
+        const itemsSafe = result.items.every(item => item.sequence <= snapshot.throughSequence && item.clockSeconds <= selectedSeconds &&
+          item.period >= 1 && item.period <= 5 && references.some(reference => reference.kind === item.kind && reference.id === item.id) &&
+          (item.kind === 'event'
+            ? item.payload.eventId === item.id && item.payload.matchId === matchId && item.payload.sequence === item.sequence && item.payload.clockSeconds === item.clockSeconds && item.payload.period === item.period
+            : item.payload.frameId === item.id && item.payload.matchId === matchId && item.payload.sequence === item.sequence &&
+              (item.payload.matchTime as {elapsedSeconds?: unknown} | undefined)?.elapsedSeconds === item.clockSeconds &&
+              (item.payload.matchTime as {period?: unknown} | undefined)?.period === item.period));
+        if (!contextSafe || !referencesResolved || !itemsSafe) {
+          setEvidenceError('The evidence response does not match this insight and selected match time. No source claims are shown.');
+          return;
+        }
+        setSelectedEvidence(result);
+      })
+      .catch(error => {
+        if (!controller.signal.aborted)
+          setEvidenceError(error instanceof ApiRequestError && error.status === 404
+            ? 'This insight has no complete source evidence at the selected time.'
+            : 'Source evidence is unavailable at the selected time. The insight is not expanded without it.');
+      })
+      .finally(() => { if (!controller.signal.aborted) setEvidenceLoading(false); });
+    return () => controller.abort();
+  }, [selectedEvidenceId, selectedInsight, matchId, selectedSeconds, snapshot]);
+
+  useEffect(() => {
     if (!playing) return;
     if (selectedSeconds >= 5400) { setPlaying(false); return; }
     if (canonicalSelectedSeconds !== selectedSeconds || canonicalRevision === undefined) return;
@@ -92,7 +142,6 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     return () => window.clearInterval(timer);
   }, [playing, matchId, selectedSeconds, canonicalRevision, canonicalSelectedSeconds]);
 
-  const snapshot = view?.snapshot;
   const selectedFrame = view?.trackingFrames?.items.at(-1) ?? null;
   const pitch = selectedFrame ? pitchCoordinates(selectedFrame) : null;
   const trackingMessage = view?.trackingStatus || (view?.trackingFrames?.items.length
@@ -177,10 +226,38 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <section className="panel" aria-labelledby="insights-title">
               <h2 id="insights-title">Evidence-backed insights</h2>
               {view.insights.items.length === 0 ? <p className="empty">No persisted insight is available at this selected time.</p>
-                : <ul className="canonical-insights">{view.insights.items.map(insight => <li key={insight.insightId}>
+                : <ul className="canonical-insights">{view.insights.items.map((insight, index) => <li key={insight.insightId}>
                   <span className="badge">{insight.truthClass}</span><p>{insight.summary}</p>
                   <small>{insight.evidence.length} evidence reference(s)</small>
-                  <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>Inspect evidence</a>
+                  <button type="button" aria-expanded={selectedEvidenceId === insight.insightId} aria-controls={`evidence-${index}`}
+                    onClick={() => {
+                      if (selectedEvidenceId === insight.insightId) {
+                        setSelectedEvidenceId(null);
+                        setSelectedEvidence(null);
+                        setEvidenceError('');
+                      } else {
+                        setSelectedEvidenceId(insight.insightId);
+                      }
+                    }}>{selectedEvidenceId === insight.insightId ? 'Hide evidence' : 'Why this insight?'}</button>
+                  <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>Open insight detail</a>
+                  {selectedEvidenceId === insight.insightId && <section className="canonical-evidence-drawer" id={`evidence-${index}`} role="region" aria-labelledby={`evidence-title-${index}`}>
+                    <h3 id={`evidence-title-${index}`}>Evidence for this insight</h3>
+                    <p>Only persisted source records at or before this match time and sequence are shown. This view does not add intent or causality.</p>
+                    {evidenceLoading && <p role="status">Loading source evidence…</p>}
+                    {evidenceError && <p role="alert">{evidenceError}</p>}
+                    {selectedEvidence && selectedEvidence.insight.insightId === insight.insightId && <>
+                      <p>{selectedEvidence.insight.truthClass} · revision {selectedEvidence.insight.canonicalRevision} · through sequence {selectedEvidence.insight.throughSequence}</p>
+                      {selectedEvidence.items.length === 0 ? <p className="empty">No source event or frame is attached to this insight.</p>
+                        : <ol className="canonical-evidence-list">{[...selectedEvidence.items].sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)).map(item => <li key={`${item.kind}:${item.id}`}>
+                          <div><span className="badge">{item.kind}</span><p>{item.relation} · {item.id}</p><small>{clock(item.clockSeconds)} · period {item.period} · sequence {item.sequence}</small></div>
+                          <button type="button" onClick={() => {
+                            setSelectedEvidenceId(null);
+                            setSelectedEvidence(null);
+                            replaceCurrentMatchContext(matchId, item.clockSeconds, snapshot.canonicalRevision);
+                          }}>{item.kind === 'frame' ? 'Show frame on pitch' : 'View event in timeline'}</button>
+                        </li>)}</ol>}
+                    </>}
+                  </section>}
                 </li>)}</ul>}
               <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.canonicalRevision)}>View insights</a>
             </section>
