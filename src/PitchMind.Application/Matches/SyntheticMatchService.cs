@@ -33,6 +33,8 @@ public sealed class SyntheticMatchService
                 !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > fixture.PitchLengthMetres ||
                 p.Y < 0 || p.Y > fixture.PitchWidthMetres)))
             throw new ArgumentException("Tracking must use finite in-pitch coordinates.", nameof(fixture));
+        if (!fixture.Frames.Any(frame => frame.ClockSeconds == 0))
+            throw new ArgumentException("A tracking frame at kickoff (elapsed second zero) is required to initialize the active roster.", nameof(fixture));
         Fixture = fixture with
         {
             Home = fixture.Home with { Players = Array.AsReadOnly(fixture.Home.Players.ToArray()) },

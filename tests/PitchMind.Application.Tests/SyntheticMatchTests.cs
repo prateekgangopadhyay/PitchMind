@@ -40,6 +40,24 @@ public sealed class SyntheticMatchTests
         var fixture = SyntheticFixtureGenerator.Generate();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = Array.Empty<TrackingFrame>() }, 5400));
     }
+    [Fact] public void FixtureWithoutKickoffFrameIsRejectedAtConstruction()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Where(frame => frame.ClockSeconds != 0).ToArray();
+
+        var error = Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+
+        Assert.Contains("tracking frame at kickoff", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact] public void FixtureWhoseFirstSampleIsAfterSelectedTimeIsRejectedBeforeQuery()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Where(frame => frame.ClockSeconds >= 60).ToArray();
+
+        var error = Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+
+        Assert.Contains("elapsed second zero", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
     [Fact] public void SuccessfulCirculationDoesNotBecomePressingTrap()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
