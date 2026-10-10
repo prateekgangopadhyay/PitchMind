@@ -470,6 +470,32 @@ public sealed class CandidateSourceFeedReaderTests
     }
 
     [Fact]
+    public async Task CandidateReplayCheckpointRejectsMalformedOversizedAndDuplicateJson()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var checkpointPath = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "replay.checkpoint.json");
+            var store = new CandidateReplayCheckpointStore(checkpointPath);
+
+            await File.WriteAllTextAsync(checkpointPath, "{");
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+
+            await File.WriteAllBytesAsync(checkpointPath, new byte[4_097]);
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+
+            await File.WriteAllTextAsync(checkpointPath,
+                "{\"SchemaVersion\":1,\"SchemaVersion\":1,\"FixtureId\":\"test-candidate\",\"SourceSha256\":\"" + fixture.SourceSha256 + "\",\"LastAcknowledgedSourceSequence\":1,\"NextSourceSequence\":2}");
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
     {
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
