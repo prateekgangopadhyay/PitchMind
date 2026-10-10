@@ -17,7 +17,16 @@ public sealed record EventEnvelopeV1
     public string? PlayerId { get; init; }
     public string? RelatedPlayerId { get; init; }
     public string? Outcome { get; init; }
+    /// <summary>Optional provider event location in its explicitly declared pitch coordinate system.</summary>
+    public PitchCoordinateSystemV1? CoordinateSystem { get; init; }
+    public EventLocationV1? Location { get; init; }
     public required SourceReferenceV1 Source { get; init; }
+}
+
+public sealed record EventLocationV1
+{
+    public PitchPointV1? Start { get; init; }
+    public PitchPointV1? End { get; init; }
 }
 
 public sealed record TrackingFrameV1

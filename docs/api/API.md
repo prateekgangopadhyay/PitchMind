@@ -56,7 +56,7 @@ New required routes are **proposals pending exact JSON schema and actual impleme
 `EvidenceRef`: `{kind:'event'|'frame'|'metric'|'condition',id,matchId,elapsedMs,sourceVersion,algorithmVersion,canonicalRevision}`.
 `ValidatedExplanation`: `{answerId,selectedTime,audience,source:'foundry-validated'|'deterministic-fallback',text,claims:[{text,evidenceIds}],limitations,revision,modelVersion?,traceId}`.
 `RealtimeCursor`: `{kind:'matchUpdated',matchId,canonicalRevision,lastSequence,serverUtc,schemaVersion}`; **payload does not carry canonical truth**.
-`EventEnvelope` and `TrackingFrame`: [simulation feed contract](../data/SIMULATION-FEED-CONTRACT.md); hash, coordinates, provenance, quality and period mandatory where applicable.
+`EventEnvelopeV1` and `TrackingFrameV1` are versioned transport contracts in [telemetry contracts v1](../data/TELEMETRY-CONTRACTS-V1.md); source hash, provenance, explicit coordinate semantics and period are mandatory where applicable. Optional event locations require their declared pitch coordinate system. Candidate-feed mapping remains separately governed by the [simulation feed contract](../data/SIMULATION-FEED-CONTRACT.md).
 
 ## Synchronization and pagination example
 1. UI chooses selected 55:08; all page queries add `atSeconds=3308` and match/contract revision. A 55:09 goal, its tactical insight, evidence and AI explanation cannot appear in this view.

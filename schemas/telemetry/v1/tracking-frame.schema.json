@@ -38,8 +38,8 @@
       "additionalProperties": false,
       "required": ["lengthMetres", "widthMetres", "unit", "axisOrigin", "teamDirections"],
       "properties": {
-        "lengthMetres": { "type": "number", "exclusiveMinimum": 0 },
-        "widthMetres": { "type": "number", "exclusiveMinimum": 0 },
+        "lengthMetres": { "type": "number", "minimum": 90, "maximum": 120 },
+        "widthMetres": { "type": "number", "minimum": 45, "maximum": 90 },
         "unit": { "enum": ["metres", "normalized_0_1", "percent_0_100"] },
         "axisOrigin": { "enum": ["bottom_left", "top_left"] },
         "teamDirections": {
