@@ -49,9 +49,14 @@ public sealed class SyntheticMatchTests
     [Fact] public void MissingTrackingSuppressesSpatialClaim()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
-        var service = new SyntheticMatchService(fixture with { Frames = Array.Empty<TrackingFrame>() });
+        // Keep the required kickoff sample for roster initialization, but remove all
+        // event-time tracking needed to support a spatial pressure sequence.
+        var service = new SyntheticMatchService(fixture with
+        {
+            Frames = fixture.Frames.Where(frame => frame.ClockSeconds == 0).ToArray()
+        });
         Assert.Empty(service.GetInsights(5400));
-        Assert.Throws<InvalidOperationException>(() => service.GetState(5400));
+        Assert.Equal(0, service.GetState(5400).Frame.ClockSeconds);
     }
     [Fact] public void FixtureWithoutKickoffFrameIsRejectedAtConstruction()
     {
