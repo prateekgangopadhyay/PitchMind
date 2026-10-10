@@ -16,7 +16,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     private const int MaximumMatchSeconds = 5400;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<PersistedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
+    public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
         int? maximumRevision, CancellationToken cancellationToken)
     {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
@@ -54,10 +54,10 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         if (state.MatchId != matchId.ToString() || state.LastSequence != asOfSequence || state.ClockSeconds != asOfClock)
             throw new InvalidDataException("Persisted projection metadata does not match its state.");
 
-        return new PersistedMatchProjection(state, revision, asOfSequence, asOfClock, algorithmVersion, sourceHash, storedStateHash);
+        return new SelectedMatchProjection(state, revision, asOfSequence, asOfClock, algorithmVersion, sourceHash, storedStateHash);
     }
 
-    public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(PersistedMatchProjection projection,
+    public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection,
         int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(projection);
@@ -95,7 +95,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             throw new InvalidDataException("Selected-time event window does not reach the projection sequence.");
     }
 
-    private async Task<long> VerifyPersistedProjectionAsync(MatchId matchId, PersistedMatchProjection projection,
+    private async Task<long> VerifyPersistedProjectionAsync(MatchId matchId, SelectedMatchProjection projection,
         CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand("""

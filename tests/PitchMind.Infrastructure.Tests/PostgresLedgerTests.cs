@@ -736,6 +736,9 @@ public sealed class PostgresLedgerTests
         var aggregate = new MatchAggregate(matchId, "home", "away", players,
             players.Select(p => p.Item1), "approved-synthetic-test");
         var updates = new PostgresCanonicalUpdateStore(source);
+        await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
+            new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", new string('c', 64),
+                "approved-synthetic-test", 105m, 68m), CancellationToken.None);
 
         async Task Apply(long sequence, int clock, MatchEventType type, string playerId, int revision)
         {
@@ -787,7 +790,7 @@ public sealed class PostgresLedgerTests
     }
 
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,
-        PersistedMatchProjection projection, int selectedSeconds)
+        SelectedMatchProjection projection, int selectedSeconds)
     {
         var events = new List<MatchEvent>();
         await foreach (var item in reader.ReadEventsAtAsync(projection, selectedSeconds, CancellationToken.None)) events.Add(item);
