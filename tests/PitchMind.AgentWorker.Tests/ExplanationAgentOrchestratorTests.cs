@@ -88,6 +88,27 @@ public sealed class ExplanationAgentOrchestratorTests
     }
 
     [Fact]
+    public async Task GenerateAsync_CuratorEnforcesEvidenceLimitInUtf8Bytes()
+    {
+        var generator = new StubGenerator((_, _) => throw new InvalidOperationException("Narrator must not run."));
+        var multibyteJson = "{\"x\":\"" + new string('é', 3_070) + "\"}";
+        Assert.True(multibyteJson.Length <= 6_144);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(multibyteJson) > 6_144);
+        var malformedContext = Packet() with
+        {
+            Evidence = Array.AsReadOnly(new[] { Packet().Evidence[0] with { PayloadJson = multibyteJson } })
+        };
+        using var workflow = Create(generator, contextTool: new StubContextTool(MatchIntelligenceContextBuildResult.Success(malformedContext)));
+
+        var result = await workflow.GenerateAsync(ContextRequest(), ExplanationAudience.Fan, "Why?", CancellationToken.None);
+
+        Assert.Equal(ExplanationWorkflowStatus.Rejected, result.Status);
+        Assert.Equal("InvalidContext", result.Trace.FailureCode);
+        Assert.Single(result.Trace.Handoffs);
+        Assert.Equal(0, generator.Calls);
+    }
+
+    [Fact]
     public async Task GenerateAsync_DeniedReadContextDoesNotCallNarrator()
     {
         var generator = new StubGenerator((_, _) => throw new InvalidOperationException("Narrator must not run."));

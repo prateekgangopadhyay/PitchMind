@@ -19,11 +19,12 @@
 
 Command: `dotnet test tests/PitchMind.AgentWorker.Tests/PitchMind.AgentWorker.Tests.csproj -c Release --filter 'FullyQualifiedName~ExplanationAgentOrchestratorTests|FullyQualifiedName~FoundryExplanationAdapterTests' -m:1 --disable-build-servers -p:NuGetAudit=false`
 
-Result: **26 passed, 0 failed, 0 skipped** (2026-10-10, local test runner). The suite covers the Foundry adapter tests and orchestrator cases for:
+Result: **27 passed, 0 failed, 0 skipped** (2026-10-10, local test runner). The suite covers the Foundry adapter tests and orchestrator cases for:
 
 - role order, shared context fingerprint, evidence-ID handoffs, and verified-only output;
 - unknown evidence citation rejection and removal of candidate prose;
 - future evidence rejection before the narrator call;
+- UTF-8 byte-limit rejection for a multibyte payload before the narrator call;
 - denied read-context failure before the narrator call;
 - context-tool and model-provider exception handling without leaking exception details;
 - match/revision/time mismatch rejection;
@@ -32,7 +33,7 @@ Result: **26 passed, 0 failed, 0 skipped** (2026-10-10, local test runner). The 
 - fan/analyst presentation with unchanged evidence IDs; and
 - same-candidate one-call single-agent baseline comparison.
 
-Focused `MatchIntelligenceContextTests` and `ExplanationCandidateVerifierTests` passed **24/24**. Full regression: `dotnet test PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false` exited 0 with **134 passed, 0 failed, 16 skipped**. All 16 skips were PostgreSQL integration tests because no database was configured. `dotnet build PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false --no-restore` exited 0 with zero warnings and errors. The Council operating-model validator, dependency DAG self-test, and `git diff --check` passed.
+Focused `MatchIntelligenceContextTests` and `ExplanationCandidateVerifierTests` passed **24/24**. Full regression: `dotnet test PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false` exited 0 with **135 passed, 0 failed, 16 skipped**. All 16 skips were PostgreSQL integration tests because no database was configured. `dotnet build PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false --no-restore` exited 0 with zero warnings and errors. The Council operating-model validator, dependency DAG self-test, and `git diff --check` passed.
 
 The tests use fake context/model ports and do not call Foundry, PostgreSQL, Azure or any network service. Full solution tests, integration tests, a real-model adversarial evaluation, authenticated worker consumption, security red-team, measured FinOps and PO acceptance remain unverified.
 

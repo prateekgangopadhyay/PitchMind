@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PitchMind.Application.MatchIntelligence;
@@ -344,7 +345,7 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
                 !ids.Add(item.Id) || !IsBounded(item.Relation, 128) || item.Sequence < 0 ||
                 item.Sequence > packet.ThroughSequence || item.ClockSeconds is < 0 ||
                 item.ClockSeconds > packet.SelectedTimeSeconds || item.Period is < 1 or > 5 ||
-                item.PayloadJson is null || item.PayloadJson.Length > _options.MaximumEvidenceItemBytes ||
+                item.PayloadJson is null || Encoding.UTF8.GetByteCount(item.PayloadJson) > _options.MaximumEvidenceItemBytes ||
                 item.TrustBoundary != EvidenceTrustBoundary || !IsJsonObjectOrArray(item.PayloadJson))
                 return false;
         }
