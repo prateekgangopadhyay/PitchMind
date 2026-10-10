@@ -49,6 +49,7 @@ flowchart TB
     Project["Project match / score / active roster"]
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
+    TrackingRead["IMatchTrackingReader / exact selected-time frames"]
     Explain["Grounded explanation policy"]
     Ports["IMatchEventStore / ICanonicalUpdateStore / IOutboxPublisher / inbox transaction / model + realtime ports"]
   end
@@ -62,6 +63,7 @@ flowchart TB
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
+  BFF --> TrackingRead
   EventWorker2["EventWorker host"] --> Validate
   AgentWorker2["AgentWorker host"] --> Explain
   Feed --> Validate
@@ -73,6 +75,7 @@ flowchart TB
   Query --> Ports
   Explain --> Ports
   Pg -. "implements event and canonical update ports" .-> Ports
+  Pg -. "implements exact-time frame reads" .-> TrackingRead
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
   Pg -. "implements consumer inbox" .-> Ports

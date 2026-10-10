@@ -1,3 +1,6 @@
+using System.Text.Json;
+using PitchMind.Contracts.Telemetry.V1;
+
 namespace PitchMind.Contracts.V1;
 
 /// <summary>Stable public JSON contracts for the currently executable offline v1 match API.</summary>
@@ -211,6 +214,24 @@ public sealed record CanonicalEvidencePayloadResponse(
 public sealed record CanonicalEvidenceResponse(
     CanonicalInsightResponse Insight,
     IReadOnlyList<CanonicalEvidencePayloadResponse> Items);
+
+public sealed record CanonicalTrackingFrameResponse(
+    string FrameId,
+    long Sequence,
+    int Period,
+    int ClockSeconds,
+    string CoordinateVersion,
+    string SourceSha256,
+    JsonElement Quality,
+    TrackingFrameV1 Frame);
+
+public sealed record CanonicalTrackingFramePageResponse(
+    string MatchId,
+    int CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    IReadOnlyList<CanonicalTrackingFrameResponse> Items,
+    bool HasMore);
 
 public sealed record CanonicalReplayResponse(
     CanonicalMatchSnapshotResponse Snapshot,

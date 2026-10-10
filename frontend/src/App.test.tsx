@@ -116,7 +116,8 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Goal');
     expect(container.textContent).toContain('Score event');
     expect(container.textContent).toContain('No persisted canonical key moments are available');
-    expect(observedRequests).toHaveLength(4);
+    expect(container.textContent).toContain('No observed tracking frame is recorded at 55:09. Positions are not estimated.');
+    expect(observedRequests).toHaveLength(5);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');
       expect(parsed.pathname).toContain(`/canonical/matches/${matchId}/`);
@@ -214,6 +215,106 @@ it('shows a clear canonical-unavailable state and retries without demo substitut
     await act(async () => { container.querySelector('button')!.click(); });
     expect(container.textContent).toContain('No canonical matches are available yet.');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('renders only an exact selected-time frame and exposes its nonvisual position table', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const sourceSha256 = 'd'.repeat(64);
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const frame = {
+    schemaVersion: 1, matchId, frameId: 'frame-3309', sequence: 19,
+    matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
+    coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'normalized_0_1', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'home', direction: 'left'}, {teamId: 'away', direction: 'right'}]},
+    ball: {x: .25, y: .25},
+    players: [{playerId: 'player-home-1', teamId: 'home', position: {x: .1, y: .2}}, {playerId: 'player-away-1', teamId: 'away', position: {x: .9, y: .8}}],
+    source: {providerId: 'test-provider', sourceMatchId: matchId, sourceRecordId: 'source-frame', sourceSequence: 42, sourceSchemaVersion: 'test-v1', sourceSha256, provenanceStatus: 'owner_declared_synthetic', rightsReviewStatus: 'pending'}
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    const page = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {...page, items: [{eventId: 'event-19', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}]}
+        : parsed.pathname.endsWith('/frames') ? {...page, items: [{frameId: 'frame-3309', sequence: 19, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1', sourceSha256, quality: {coverage: 'observed'}, frame}]}
+          : page;
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    const pitch = container.querySelector<SVGSVGElement>('.canonical-pitch')!;
+    expect(pitch.getAttribute('aria-label')).toContain('55:09, period 2');
+    expect(pitch.querySelector('.ball-marker')?.getAttribute('cx')).toBe('26.25');
+    expect(pitch.querySelector('.ball-marker')?.getAttribute('cy')).toBe('51');
+    expect(container.textContent).toContain('away attacks right in this view');
+    expect(container.textContent).toContain('Sample gaps are not filled.');
+    expect(container.textContent).toContain('player-home-1');
+    expect(container.querySelector('table caption')?.textContent).toContain('55:09');
+    expect(container.querySelector('details.position-table-details')?.hasAttribute('open')).toBe(true);
+    expect(container.querySelector('table thead')?.textContent).toContain('Marker');
+    const timelineEvent = container.querySelector<HTMLButtonElement>('[aria-label="Select Goal at 55:09, sequence 19"]');
+    expect(timelineEvent).not.toBeNull();
+    await act(async () => timelineEvent!.click());
+    expect(new URL(window.location.href).searchParams.get('atSeconds')).toBe('3309');
+    const play = [...container.querySelectorAll('button')].find(button => button.textContent === 'Play replay')!;
+    await act(async () => play.click());
+    expect(container.textContent).toContain('Pause replay');
+    const pause = [...container.querySelectorAll('button')].find(button => button.textContent === 'Pause replay')!;
+    await act(async () => pause.click());
+    expect(container.textContent).toContain('Play replay');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('rejects a tracking frame whose selected-time metadata does not match the query', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const frame = {
+    schemaVersion: 1, matchId, frameId: 'frame-3308', sequence: 19,
+    matchTime: {period: 2, elapsedSeconds: 3308, sourceClockValue: 3308, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
+    coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'normalized_0_1', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'home', direction: 'right'}]},
+    ball: {x: .5, y: .5}, players: [{playerId: 'player-home-1', teamId: 'home', position: {x: .1, y: .2}}],
+    source: {providerId: 'test-provider', sourceMatchId: matchId, sourceRecordId: 'source-frame', sourceSequence: 42, sourceSchemaVersion: 'test-v1', sourceSha256: 'd'.repeat(64), provenanceStatus: 'owner_declared_synthetic', rightsReviewStatus: 'pending'}
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    const page = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/frames') ? {...page, items: [{frameId: 'frame-3308', sequence: 19, period: 2, clockSeconds: 3308, coordinateVersion: 'pitch-v1', sourceSha256: 'd'.repeat(64), quality: {}, frame}]}
+        : page;
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+    expect(container.querySelector('.canonical-pitch')).toBeNull();
+    expect(container.textContent).not.toContain('player-home-1');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

@@ -60,6 +60,25 @@ export interface CanonicalEvidencePayload {
 }
 export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }
 export interface CanonicalReplay { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage }
+export interface TelemetryTrackingFrameV1 {
+  schemaVersion: number; matchId: string; frameId: string; sequence: number;
+  matchTime: { period: number; elapsedSeconds: number; sourceClockValue: number; sourceClockUnit: string; sourceClockBasis: string };
+  coordinateSystem: {
+    lengthMetres: number; widthMetres: number; unit: 'metres' | 'normalized_0_1' | 'percent_0_100';
+    axisOrigin: 'bottom_left' | 'top_left'; teamDirections: Array<{teamId: string; direction: 'left' | 'right'}>;
+  };
+  ball: { x: number; y: number };
+  players: Array<{playerId: string; teamId: string; position: {x: number; y: number}}>;
+  source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: string };
+}
+export interface CanonicalTrackingFrame {
+  frameId: string; sequence: number; period: number; clockSeconds: number;
+  coordinateVersion: string; sourceSha256: string; quality: unknown; frame: TelemetryTrackingFrameV1;
+}
+export interface CanonicalTrackingFramePage {
+  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  items: CanonicalTrackingFrame[]; hasMore: boolean;
+}
 export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
 }

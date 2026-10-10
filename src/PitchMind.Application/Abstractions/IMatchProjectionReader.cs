@@ -17,6 +17,18 @@ public sealed record PersistedMatchEventPage(
     long? NextAfterSequence,
     bool HasMore);
 
+public sealed record PersistedTrackingFrame(
+    string FrameId,
+    long Sequence,
+    int Period,
+    int ClockSeconds,
+    string CoordinateVersion,
+    string QualityJson,
+    string SourceSha256,
+    string PayloadJson);
+
+public sealed record PersistedTrackingFramePage(IReadOnlyList<PersistedTrackingFrame> Frames, bool HasMore);
+
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader
 {
@@ -30,5 +42,12 @@ public interface IMatchProjectionReader
         long afterSequence, int limit, CancellationToken cancellationToken);
 
     IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(PersistedMatchProjection projection, int selectedSeconds,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>Reads immutable tracking frames visible at the selected time and projection watermark.</summary>
+public interface IMatchTrackingReader
+{
+    Task<PersistedTrackingFramePage> ReadAtAsync(PersistedMatchProjection projection, int selectedSeconds, int limit,
         CancellationToken cancellationToken);
 }
