@@ -39,19 +39,23 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<PersistedMatchProjection?> ReadProjectionAsync(Guid matchId, int revision, CancellationToken cancellationToken)
+    public async Task<PersistedMatchProjection?> ReadProjectionAsync(Guid matchId, long canonicalRevision,
+        int projectionRevision, CancellationToken cancellationToken)
     {
-        if (matchId == Guid.Empty || revision < 1) throw new ArgumentOutOfRangeException(nameof(revision));
+        if (matchId == Guid.Empty || canonicalRevision < 1 || projectionRevision < 1)
+            throw new ArgumentOutOfRangeException(projectionRevision < 1 ? nameof(projectionRevision) : nameof(canonicalRevision));
         await using var command = dataSource.CreateCommand("""
-            SELECT revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_json::text, state_sha256
-            FROM pitchmind.match_projections WHERE match_id = $1 AND revision = $2
+            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_json::text, state_sha256
+            FROM pitchmind.match_projections WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3
             """);
         command.Parameters.AddWithValue(matchId);
-        command.Parameters.AddWithValue(revision);
+        command.Parameters.AddWithValue(canonicalRevision);
+        command.Parameters.AddWithValue(projectionRevision);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
-        var projection = ReadProjection(matchId, reader.GetInt32(0), reader.GetInt64(1), reader.GetInt32(2),
-            reader.GetString(3), reader.GetString(4).Trim(), reader.GetString(5), reader.GetString(6).Trim());
+        if (reader.IsDBNull(0)) throw new InvalidDataException("Projection has no canonical admission revision.");
+        var projection = ReadProjection(matchId, reader.GetInt64(0), reader.GetInt32(1), reader.GetInt64(2), reader.GetInt32(3),
+            reader.GetString(4), reader.GetString(5).Trim(), reader.GetString(6), reader.GetString(7).Trim());
         return projection;
     }
 
@@ -72,10 +76,12 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using (var command = new NpgsqlCommand("""
             SELECT i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary, i.conditions_json::text,
                 m.fixture_version, m.source_version, m.source_sha256, m.provenance, m.pitch_length_metres, m.pitch_width_metres,
-                p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256
+                p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256,
+                i.canonical_revision
             FROM pitchmind.insights i
             JOIN pitchmind.matches m ON m.match_id = i.match_id
             JOIN pitchmind.match_projections p ON p.match_id = i.match_id AND p.revision = i.revision
+                AND p.canonical_revision = i.canonical_revision
             WHERE i.insight_id = $1
             """, connection))
         {
@@ -95,7 +101,9 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             var projectionSourceSha = reader.GetString(16).Trim();
             if (!string.Equals(projectionSourceSha, source.SourceSha256, StringComparison.Ordinal))
                 throw new InvalidDataException("Projection source hash does not match the registered match source.");
-            projection = ReadProjection(matchId, revision, reader.GetInt64(13), reader.GetInt32(14),
+            if (reader.IsDBNull(19)) throw new InvalidDataException("Insight has no canonical admission revision.");
+            var canonicalRevision = reader.GetInt64(19);
+            projection = ReadProjection(matchId, canonicalRevision, revision, reader.GetInt64(13), reader.GetInt32(14),
                 reader.GetString(15), projectionSourceSha, reader.GetString(17), reader.GetString(18).Trim());
             stateSha256 = Hash(SerializeState(projection.State));
             if (projection.AsOfSequence < insightSequence)
@@ -127,17 +135,17 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
                 evidence.Add(new(evidenceKind, reader.GetString(1), reader.GetString(2)));
             }
         }
-        var insight = new CanonicalInsightRecord(insightId, matchId, revision, insightSequence,
+        var insight = new CanonicalInsightRecord(insightId, matchId, projection.CanonicalRevision, revision, insightSequence,
             detectorVersion, truthClass, summary, conditionsJson, Array.AsReadOnly(evidence.ToArray()));
         return new(insight, source, projection, stateSha256);
     }
 
-    private static PersistedMatchProjection ReadProjection(Guid matchId, int revision, long sequence, int clock,
+    private static PersistedMatchProjection ReadProjection(Guid matchId, long canonicalRevision, int revision, long sequence, int clock,
         string algorithmVersion, string sourceSha256, string stateJson, string expectedHash)
     {
         var state = JsonSerializer.Deserialize<MatchState>(stateJson, JsonOptions)
             ?? throw new InvalidDataException("Persisted projection state is empty.");
-        var projection = new PersistedMatchProjection(matchId, revision, sequence, clock, algorithmVersion, sourceSha256, state);
+        var projection = new PersistedMatchProjection(matchId, canonicalRevision, revision, sequence, clock, algorithmVersion, sourceSha256, state);
         Validate(projection);
         if (!string.Equals(Hash(SerializeState(state)), expectedHash, StringComparison.Ordinal))
             throw new InvalidDataException("Persisted projection state hash does not match its content.");
@@ -154,7 +162,7 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
 
     private static void Validate(PersistedMatchProjection value)
     {
-        if (value.MatchId == Guid.Empty || value.Revision < 1 || value.AsOfSequence < -1 || value.AsOfClockSeconds < 0 ||
+        if (value.MatchId == Guid.Empty || value.CanonicalRevision < 1 || value.Revision < 1 || value.AsOfSequence < -1 || value.AsOfClockSeconds < 0 ||
             string.IsNullOrWhiteSpace(value.AlgorithmVersion) || !IsSha256(value.SourceSha256) || value.State is null ||
             value.State.MatchId != value.MatchId.ToString("D") || value.State.LastSequence != value.AsOfSequence ||
             value.State.ClockSeconds > value.AsOfClockSeconds)
