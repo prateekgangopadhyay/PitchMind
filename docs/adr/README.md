@@ -12,3 +12,5 @@ Accepted as **target decisions**, pending executable verification:
 - [ADR-008 — Bounded offline synthetic vertical slice](ADR-008-offline-vertical-slice.md)
 - [ADR-009 — Separate canonical BFF from offline demo routes](ADR-009-canonical-bff-boundary.md)
 - [ADR-010 — API identity, role boundaries and local synthetic access](ADR-010-api-identity-and-abuse-controls.md)
+- [ADR-011 — Server-side Foundry candidate generation](ADR-011-foundry-candidate-adapter.md)
+- [ADR-012 — Bounded, claim-gated explanation handoffs](ADR-012-bounded-agent-handoffs.md)

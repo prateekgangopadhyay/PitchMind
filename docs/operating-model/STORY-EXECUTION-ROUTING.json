@@ -856,7 +856,8 @@
         "finops-engineer"
       ],
       "dependsOn": [
-        "EP08-S02"
+        "EP08-S02",
+        "EP08-S04"
       ],
       "status": "unverified",
       "assignedHuman": null,

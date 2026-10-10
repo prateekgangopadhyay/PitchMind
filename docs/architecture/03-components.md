@@ -72,7 +72,7 @@ flowchart TB
   end
   BFF["Thin API / role + selected-time guards"] --> Query
   EventWorker2["EventWorker host"] --> Validate
-  AgentWorker2["AgentWorker host"] --> Explain
+  AgentWorker2["AgentWorker host"] --> Curator["Evidence Curator: authorized read-only packet + selected-time validation"]
   Feed --> Validate
   EventHubs --> Validate
   Validate --> Facts
@@ -80,6 +80,7 @@ flowchart TB
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
+  Curator --> Explain --> Candidate --> VerifyCandidate
   Explain --> Candidate --> VerifyCandidate --> Ports
   Pg -. "implements event, projection/insight read and canonical update ports" .-> Ports
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
@@ -89,9 +90,10 @@ flowchart TB
   Hub -. "implements" .-> Ports
   Model -. "implements candidate generator" .-> Candidate
   Cache -. "optional" .-> Ports
+  VerifyCandidate --> HandoffTrace["Safe handoff trace; no candidate prose or evidence payload"]
 ```
 
-The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code, and the Application now includes an EP08-S04 verifier that checks packet identity/time/revision and evidence membership while discarding model-authored prose. It reformulates only selected insight classification and evidence metadata. The worker has no message/request consumer and the adapter has not been called against a real Foundry deployment. The dashed adapter arrow above is a target adapter implemented locally, not evidence of an operational Azure path. No public route uses the verifier yet.
+The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code. The Application EP08-S04 verifier checks packet identity/time/revision and evidence membership while discarding model-authored prose and reformulating only selected insight classification and evidence metadata. The EP08-S03 AgentWorker orchestration component is implemented and covered by fake-port tests; it requests context through the authorized read-only Application port, makes at most one candidate call and returns only the verifier result while recording safe per-stage traces. It is not yet registered or callable at runtime because AgentWorker has no real `IMatchIntelligenceReadOnlyTool` composition or authenticated request consumer. The adapter has not been called against a real Foundry deployment. The dashed adapter arrows above show local implementation and target composition only, not an operational Azure path. No public route uses the workflow.
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
