@@ -3,7 +3,7 @@ using PitchMind.Domain.Match;
 
 namespace PitchMind.Application.Abstractions;
 
-public sealed record PersistedMatchProjection(
+public sealed record SelectedMatchProjection(
     MatchState State,
     int Revision,
     long AsOfSequence,
@@ -15,9 +15,9 @@ public sealed record PersistedMatchProjection(
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader
 {
-    Task<PersistedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds, int? maximumRevision,
+    Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds, int? maximumRevision,
         CancellationToken cancellationToken);
 
-    IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(PersistedMatchProjection projection, int selectedSeconds,
+    IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection, int selectedSeconds,
         CancellationToken cancellationToken);
 }
