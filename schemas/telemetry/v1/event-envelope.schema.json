@@ -7,17 +7,17 @@
   "required": ["schemaVersion", "matchId", "canonicalRevision", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
     "eventId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "sequence": { "type": "integer", "minimum": 0 },
     "matchTime": { "$ref": "#/$defs/matchTime" },
     "eventType": { "enum": ["KickOff", "Pass", "Shot", "Goal", "Foul", "Turnover", "FullTime", "Pressure", "HalfTime", "BallRecovery", "Carry", "Clearance", "Interception", "PressureApplied", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] },
-    "sourceEventType": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
-    "outcome": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
+    "sourceEventType": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+    "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "outcome": { "type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
     "coordinateSystem": { "anyOf": [{ "$ref": "#/$defs/coordinateSystem" }, { "type": "null" }] },
     "location": { "anyOf": [{ "$ref": "#/$defs/eventLocation" }, { "type": "null" }] },
     "source": { "$ref": "#/$defs/source" }
@@ -92,7 +92,7 @@
             "additionalProperties": false,
             "required": ["teamId", "direction"],
             "properties": {
-              "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
               "direction": { "enum": ["left", "right"] }
             }
           }
@@ -104,15 +104,15 @@
       "additionalProperties": false,
       "required": ["providerId", "sourceMatchId", "sourceRecordId", "sourceSequence", "sourceSchemaVersion", "sourceSha256", "provenanceStatus", "rightsReviewStatus"],
       "properties": {
-        "providerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceMatchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceRecordId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "providerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "sourceMatchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "sourceRecordId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
         "sourceSequence": { "type": "integer", "minimum": 0 },
-        "sourceSchemaVersion": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "sourceTimestampUtc": { "type": ["string", "null"], "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
-        "provenanceStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "rightsReviewStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
+        "sourceSchemaVersion": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+        "sourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+        "sourceTimestampUtc": { "type": ["string", "null"], "maxLength": 64, "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
+        "provenanceStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+        "rightsReviewStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" }
       }
     }
   }

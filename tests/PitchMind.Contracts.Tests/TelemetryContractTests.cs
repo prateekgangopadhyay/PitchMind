@@ -166,6 +166,64 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
+    public void Canonical_telemetry_rejects_overlong_identifiers_and_source_text_without_truncating()
+    {
+        var longId = new string('x', TelemetryContractValidatorV1.MaximumIdentifierLength + 1);
+        var longText = new string('x', TelemetryContractValidatorV1.MaximumTextLength + 1);
+
+        var eventErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            EventId = longId,
+            Outcome = longText,
+            Source = Source() with { SourceRecordId = longId, ProvenanceStatus = longText }
+        }).Errors;
+        Assert.Contains(eventErrors, error => error.Code == "IDENTIFIER_TOO_LONG" && error.Path == "eventId");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "outcome");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "source.sourceRecordId");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "source.provenanceStatus");
+
+        var frameErrors = TelemetryContractValidatorV1.Validate(Frame() with
+        {
+            Players = new[] { Frame().Players[0] with { PlayerId = longId } }
+        }).Errors;
+        Assert.Contains(frameErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "players[0].playerId");
+    }
+
+    [Fact]
+    public void Canonical_telemetry_string_bounds_count_unicode_characters_as_json_schema_does()
+    {
+        var exactlyBounded = string.Concat(Enumerable.Repeat("\U0001F600", TelemetryContractValidatorV1.MaximumIdentifierLength));
+        var overBound = string.Concat(Enumerable.Repeat("\U0001F600", TelemetryContractValidatorV1.MaximumIdentifierLength + 1));
+
+        Assert.True(TelemetryContractValidatorV1.Validate(Event("Pass") with { MatchId = exactlyBounded }).IsValid);
+        Assert.Contains(TelemetryContractValidatorV1.Validate(Event("Pass") with { MatchId = overBound }).Errors,
+            error => error.Code == "VALUE_TOO_LONG" && error.Path == "matchId");
+    }
+
+    [Fact]
+    public void Versioned_schemas_declare_the_runtime_string_bounds()
+    {
+        var root = FindRepositoryRoot();
+        using var eventSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "event-envelope.schema.json")));
+        using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
+        var eventProperties = eventSchema.RootElement.GetProperty("properties");
+        var sourceProperties = eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties");
+        var frameProperties = frameSchema.RootElement.GetProperty("properties");
+        var playerProperties = frameSchema.RootElement.GetProperty("$defs").GetProperty("player").GetProperty("properties");
+
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, eventProperties.GetProperty("matchId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, eventProperties.GetProperty("eventId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumTextLength, eventProperties.GetProperty("outcome").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, sourceProperties.GetProperty("sourceRecordId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumTextLength, sourceProperties.GetProperty("provenanceStatus").GetProperty("maxLength").GetInt32());
+        Assert.Equal(64, sourceProperties.GetProperty("sourceSha256").GetProperty("maxLength").GetInt32());
+        Assert.Equal(64, sourceProperties.GetProperty("sourceTimestampUtc").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, frameProperties.GetProperty("frameId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, playerProperties.GetProperty("playerId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, playerProperties.GetProperty("teamId").GetProperty("maxLength").GetInt32());
+    }
+
+    [Fact]
     public void Tracking_frame_rejects_out_of_frame_coordinates_and_missing_team_direction()
     {
         var frame = Frame() with

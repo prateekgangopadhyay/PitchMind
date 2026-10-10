@@ -7,9 +7,9 @@
   "required": ["schemaVersion", "matchId", "canonicalRevision", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
-    "frameId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "frameId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "sequence": { "type": "integer", "minimum": 0 },
     "matchTime": { "$ref": "event-envelope.schema.json#/$defs/matchTime" },
     "coordinateSystem": { "$ref": "#/$defs/coordinateSystem" },
@@ -29,8 +29,8 @@
       "additionalProperties": false,
       "required": ["playerId", "teamId", "position"],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
         "position": { "$ref": "#/$defs/point" }
       }
     },
@@ -52,7 +52,7 @@
             "additionalProperties": false,
             "required": ["teamId", "direction"],
             "properties": {
-              "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
               "direction": { "enum": ["left", "right"] }
             }
           }
