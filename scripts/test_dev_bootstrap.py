@@ -323,6 +323,19 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "json",
             ],
             cwd=REPOSITORY,
+            env={
+                key: value
+                for key, value in os.environ.items()
+                if key
+                not in {
+                    "POSTGRES_USER",
+                    "POSTGRES_DB",
+                    "POSTGRES_PASSWORD",
+                    "POSTGRES_PORT",
+                    "REDIS_PASSWORD",
+                    "REDIS_PORT",
+                }
+            },
             capture_output=True,
             text=True,
             check=False,
@@ -349,17 +362,27 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 )
         return bindings
 
+    @classmethod
+    def _published_ports_are_loopback(cls, config: dict[str, object]) -> bool:
+        bindings = cls._published_ports(config)
+        if not bindings:
+            return False
+        for _, port in bindings:
+            host_ip = port.get("host_ip")
+            if not isinstance(host_ip, str):
+                return False
+            try:
+                if not ipaddress.ip_address(host_ip).is_loopback:
+                    return False
+            except ValueError:
+                return False
+        return True
+
     def test_compose_services_bind_only_to_loopback(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
         published_ports = self._published_ports(config)
         self.assertEqual(len(published_ports), 2)
-        for service_name, port in published_ports:
-            host_ip = port.get("host_ip")
-            self.assertIsInstance(host_ip, str, f"{service_name} port has no explicit host_ip")
-            self.assertTrue(
-                ipaddress.ip_address(host_ip).is_loopback,
-                f"{service_name} publishes {port} outside loopback",
-            )
+        self.assertTrue(self._published_ports_are_loopback(config), published_ports)
         self.assertEqual(
             {(service, port.get("published"), port.get("target")) for service, port in published_ports},
             {("postgres", "5432", 5432), ("redis", "6379", 6379)},
@@ -384,6 +407,7 @@ services:
         config = self._resolved_compose_config(compose_file)
         published_ports = self._published_ports(config)
         self.assertEqual(len(published_ports), 2)
+        self.assertFalse(self._published_ports_are_loopback(config), published_ports)
         self.assertEqual(
             {port.get("host_ip") for _, port in published_ports},
             {"0.0.0.0"},
