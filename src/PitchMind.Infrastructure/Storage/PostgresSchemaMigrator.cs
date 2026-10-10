@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -27,6 +27,8 @@ public static class PostgresSchemaMigrator
         }
         if (currentVersion < 2)
             await ExecuteAsync(connection, transaction, Version2Sql, cancellationToken);
+        if (currentVersion < 3)
+            await ExecuteAsync(connection, transaction, Version3Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -185,5 +187,68 @@ public static class PostgresSchemaMigrator
         CREATE INDEX IF NOT EXISTS ix_outbox_pending ON pitchmind.outbox(next_attempt_at, created_at) WHERE published_at IS NULL;
 
         INSERT INTO pitchmind.schema_versions(version) VALUES (2) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>
+    /// Separates PostgreSQL admission identity from projection algorithm revision. Legacy rows
+    /// remain NULL because assigning them an admission revision during migration would invent provenance.
+    /// New canonical writers must assign a positive revision to every event/frame/projection/insight/outbox row.
+    /// </summary>
+    public const string Version3Sql = """
+        ALTER TABLE pitchmind.match_events ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.match_events ADD CONSTRAINT match_events_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.match_events ADD CONSTRAINT match_events_match_event_revision_unique
+            UNIQUE (match_id, event_id, canonical_revision);
+
+        ALTER TABLE pitchmind.tracking_frames ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.tracking_frames ADD CONSTRAINT tracking_frames_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.tracking_frames ADD CONSTRAINT tracking_frames_match_frame_revision_unique
+            UNIQUE (match_id, frame_id, canonical_revision);
+
+        ALTER TABLE pitchmind.match_projections ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.match_projections ADD CONSTRAINT match_projections_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.match_projections ADD CONSTRAINT match_projections_match_projection_revision_unique
+            UNIQUE (match_id, revision, canonical_revision);
+
+        ALTER TABLE pitchmind.insights ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.insights ADD CONSTRAINT insights_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.insights ADD CONSTRAINT insights_match_canonical_revision_unique
+            UNIQUE (match_id, insight_id, canonical_revision);
+        ALTER TABLE pitchmind.insights ADD CONSTRAINT insights_projection_admission_revision_fk
+            FOREIGN KEY (match_id, revision, canonical_revision)
+            REFERENCES pitchmind.match_projections(match_id, revision, canonical_revision);
+
+        ALTER TABLE pitchmind.insight_evidence ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.insight_evidence ADD CONSTRAINT insight_evidence_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.insight_evidence ADD CONSTRAINT insight_evidence_insight_admission_revision_fk
+            FOREIGN KEY (match_id, insight_id, canonical_revision)
+            REFERENCES pitchmind.insights(match_id, insight_id, canonical_revision);
+        ALTER TABLE pitchmind.insight_evidence ADD CONSTRAINT insight_evidence_event_admission_revision_fk
+            FOREIGN KEY (match_id, event_id, canonical_revision)
+            REFERENCES pitchmind.match_events(match_id, event_id, canonical_revision);
+        ALTER TABLE pitchmind.insight_evidence ADD CONSTRAINT insight_evidence_frame_admission_revision_fk
+            FOREIGN KEY (match_id, frame_id, canonical_revision)
+            REFERENCES pitchmind.tracking_frames(match_id, frame_id, canonical_revision);
+
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS canonical_revision bigint;
+        ALTER TABLE pitchmind.outbox ADD CONSTRAINT outbox_canonical_revision_positive
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.outbox ADD CONSTRAINT outbox_match_canonical_revision_fk
+            FOREIGN KEY (match_id, revision, canonical_revision)
+            REFERENCES pitchmind.match_projections(match_id, revision, canonical_revision);
+
+        CREATE INDEX IF NOT EXISTS ix_match_events_match_canonical_revision
+            ON pitchmind.match_events(match_id, canonical_revision, sequence) WHERE canonical_revision IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS ix_tracking_frames_match_canonical_revision
+            ON pitchmind.tracking_frames(match_id, canonical_revision, sequence) WHERE canonical_revision IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS ix_match_projections_match_canonical_revision
+            ON pitchmind.match_projections(match_id, canonical_revision, revision) WHERE canonical_revision IS NOT NULL;
+
+        INSERT INTO pitchmind.schema_versions(version) VALUES (3) ON CONFLICT DO NOTHING;
         """;
 }
