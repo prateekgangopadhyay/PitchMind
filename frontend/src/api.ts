@@ -34,6 +34,12 @@ export interface CanonicalMatchCard {
   phase: string; homeScore: number; awayScore: number; provenance: string;
   algorithmVersion: string; sourceSha256: string;
 }
+export function provenanceLabel(provenance: string): string {
+  const normalized = provenance.trim().toLowerCase();
+  return normalized.includes('synthetic') || normalized.includes('simulat')
+    ? 'Simulated EPL-context match'
+    : provenance;
+}
 export interface CanonicalMatchPage { items: CanonicalMatchCard[]; nextMatchId: string | null; hasMore: boolean }
 export interface CanonicalMatchSnapshot {
   matchId: string; canonicalRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
