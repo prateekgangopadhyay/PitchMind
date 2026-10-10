@@ -69,6 +69,18 @@ public static class MatchContractMappings
         Array.AsReadOnly(moment.EventIds.ToArray()), Array.AsReadOnly(moment.FrameIds.ToArray()),
         Array.AsReadOnly(moment.EvidenceClaimNodeIds.ToArray()));
 
+    public static MechanismReplayResponse ToResponse(this MechanismReplay replay) => new(
+        replay.Id, replay.MatchId, replay.SourceVersion, replay.Provenance, replay.CanonicalRevision,
+        replay.SelectedTimeSeconds, replay.ThroughSequence, replay.StartSeconds, replay.EndSeconds,
+        replay.DetectorVersion, replay.PolicyStatus, replay.Publishable,
+        Array.AsReadOnly(replay.EventIds.ToArray()), Array.AsReadOnly(replay.MechanismEventIds.ToArray()),
+        Array.AsReadOnly(replay.FrameIds.ToArray()),
+        Array.AsReadOnly(replay.ParticipantIds.ToArray()),
+        Array.AsReadOnly(replay.Events.Select(ToResponse).ToArray()),
+        Array.AsReadOnly(replay.Frames.Select(frame => frame.ToResponse(replay.CoordinateConvention)).ToArray()),
+        replay.CoordinateConvention, Map(replay.EvidenceGraph),
+        Array.AsReadOnly(replay.Limitations.ToArray()));
+
     private static EvidenceGraphResponse Map(TacticalEvidenceGraph graph) => new(
         graph.MatchId, graph.SourceVersion, graph.Provenance, graph.CanonicalRevision,
         graph.SelectedTimeSeconds, graph.ThroughSequence, graph.DetectorVersion,
