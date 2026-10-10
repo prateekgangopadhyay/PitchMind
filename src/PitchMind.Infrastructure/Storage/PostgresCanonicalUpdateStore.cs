@@ -47,6 +47,9 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             update.Event.MatchId.Value, cancellationToken);
         if (update.Revision != expectedRevision)
             throw new InvalidOperationException("Projection revision conflict; rebuild from the canonical ledger.");
+        if (!await HasRegisteredSourceAsync(connection, transaction, update.Event.MatchId.Value,
+                update.SourceSha256, cancellationToken))
+            throw new InvalidOperationException("Canonical update source hash does not match registered match metadata.");
 
         await using (var command = new NpgsqlCommand("""
             INSERT INTO pitchmind.match_events(event_id, match_id, sequence, event_type, clock_seconds, period, occurred_at, payload)
@@ -126,6 +129,15 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
     {
         await using var command = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pitchmind.match_events WHERE event_id = $1)", connection, transaction);
         command.Parameters.AddWithValue(eventId);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
+    }
+
+    private static async Task<bool> HasRegisteredSourceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        Guid matchId, string sourceSha256, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pitchmind.matches WHERE match_id = $1 AND source_sha256 = $2)", connection, transaction);
+        command.Parameters.AddWithValue(matchId);
+        command.Parameters.AddWithValue(sourceSha256);
         return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 

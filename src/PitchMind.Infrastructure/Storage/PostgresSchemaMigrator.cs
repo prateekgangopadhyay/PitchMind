@@ -190,6 +190,8 @@ public static class PostgresSchemaMigrator
         """;
 
     public const string Version3Sql = """
+        ALTER TABLE pitchmind.match_projections ADD CONSTRAINT match_projections_source_fk
+            FOREIGN KEY (match_id, source_sha256) REFERENCES pitchmind.matches(match_id, source_sha256);
         ALTER TABLE pitchmind.outbox ADD CONSTRAINT outbox_projection_revision_fk
             FOREIGN KEY (match_id, revision) REFERENCES pitchmind.match_projections(match_id, revision);
         ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS claim_token uuid;
