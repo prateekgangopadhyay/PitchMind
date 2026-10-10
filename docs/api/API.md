@@ -26,7 +26,7 @@ These are from the offline fixture, **not** PostgreSQL, Azure Event Hubs, Micros
 
 ### Canonical BFF routes (EP06-S01; implementation evidence is in the story packet)
 
-These routes are separately namespaced under `/api/v1/canonical/*` and read PostgreSQL projections, ledger events, and persisted insight/evidence records only. They do not fall back to the offline synthetic fixture. Without a configured PostgreSQL adapter, they return sanitized `503 DEPENDENCY_UNAVAILABLE`. These routes do not yet authenticate callers; cloud exposure is blocked on EP06-S04 or an explicitly approved synthetic public-read boundary.
+These routes are separately namespaced under `/api/v1/canonical/*` and read PostgreSQL projections, ledger events, and persisted insight/evidence records only. They do not fall back to the offline synthetic fixture. Without a configured PostgreSQL adapter, they return sanitized `503 DEPENDENCY_UNAVAILABLE`. These routes do not yet authenticate callers; cloud exposure is blocked on EP06-S04 or an explicitly approved synthetic public-read boundary. Malformed query parameter binding returns sanitized RFC 7807 `400 INVALID_REQUEST`; requests exceeding the server body-size limit return `413 REQUEST_TOO_LARGE`. Neither response includes framework exception details.
 
 | Method | Route | Contract behavior |
 |---|---|---|
