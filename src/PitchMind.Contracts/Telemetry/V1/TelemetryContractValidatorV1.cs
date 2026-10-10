@@ -30,6 +30,7 @@ public static class TelemetryContractValidatorV1
         var errors = new List<TelemetryValidationError>();
         Version(value.SchemaVersion, errors);
         Required(value.MatchId, "matchId", errors);
+        CanonicalRevision(value.CanonicalRevision, errors);
         Required(value.EventId, "eventId", errors);
         if (value.EventId?.Length > 128) Add(errors, "IDENTIFIER_TOO_LONG", "eventId", "Event ID must not exceed 128 characters.");
         if (value.Sequence < 0) Add(errors, "INVALID_SEQUENCE", "sequence", "Canonical sequence must be non-negative.");
@@ -82,6 +83,7 @@ public static class TelemetryContractValidatorV1
         var errors = new List<TelemetryValidationError>();
         Version(value.SchemaVersion, errors);
         Required(value.MatchId, "matchId", errors);
+        CanonicalRevision(value.CanonicalRevision, errors);
         Required(value.FrameId, "frameId", errors);
         if (value.Sequence < 0) Add(errors, "INVALID_SEQUENCE", "sequence", "Canonical sequence must be non-negative.");
         Time(value.MatchTime, errors);
@@ -258,6 +260,12 @@ public static class TelemetryContractValidatorV1
     private static void Version(int version, List<TelemetryValidationError> errors)
     {
         if (version != CurrentSchemaVersion) Add(errors, "UNSUPPORTED_SCHEMA_VERSION", "schemaVersion", $"Schema version {version} is unsupported; expected {CurrentSchemaVersion}.");
+    }
+
+    private static void CanonicalRevision(long revision, List<TelemetryValidationError> errors)
+    {
+        if (revision < 1)
+            Add(errors, "INVALID_CANONICAL_REVISION", "canonicalRevision", "Canonical revision must be a positive store-assigned per-match revision.");
     }
 
     private static void Required(string? value, string path, List<TelemetryValidationError> errors)

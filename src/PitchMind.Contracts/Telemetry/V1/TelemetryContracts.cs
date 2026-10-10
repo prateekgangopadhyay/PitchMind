@@ -5,6 +5,8 @@ public sealed record EventEnvelopeV1
 {
     public required int SchemaVersion { get; init; }
     public required string MatchId { get; init; }
+    /// <summary>Positive per-match revision assigned by canonical-store admission; never a provider revision.</summary>
+    public required long CanonicalRevision { get; init; }
     /// <summary>Stable canonical identifier; the original source identifier is retained in Source.</summary>
     public required string EventId { get; init; }
     /// <summary>Zero-based contiguous canonical order within the match.</summary>
@@ -33,6 +35,8 @@ public sealed record TrackingFrameV1
 {
     public required int SchemaVersion { get; init; }
     public required string MatchId { get; init; }
+    /// <summary>Positive per-match revision assigned by canonical-store admission; never a provider revision.</summary>
+    public required long CanonicalRevision { get; init; }
     public required string FrameId { get; init; }
     /// <summary>Zero-based canonical order. Source sequence remains unchanged under Source.</summary>
     public required long Sequence { get; init; }

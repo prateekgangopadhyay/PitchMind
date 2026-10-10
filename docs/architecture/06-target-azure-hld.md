@@ -13,14 +13,14 @@ flowchart LR
  U <-. cursor .-> SR[Azure SignalR]
  API --> SR
  API --> PG[(Azure PostgreSQL Flexible Server)]
- FEED[Approved synthetic JSON Blob] --> GEN[ACA feeder Job / validator]
- GEN --> EH[Event Hubs partition=matchId]
- EH --> EW[.NET Event Worker ACA]
- EW --> PG
- EW --> RULES[Domain Tactical Engine]
- RULES --> PG
- PG --> OUT[Transactional Outbox]
+FEED[Approved synthetic JSON Blob] --> GEN[ACA feeder Job / source mapper]
+GEN --> PG
+PG --> OUT[Transactional outbox; admission assigns revision]
  OUT --> PUB[Dispatcher]
+PUB --> EH[Event Hubs canonical envelope partition=matchId]
+EH --> EW[.NET Event Worker projection consumers]
+EW --> RULES[Domain Tactical Engine]
+RULES --> PG
  PUB --> SR
  PUB --> SB[Service Bus commands + DLQ]
  SB --> AW[Agent Worker ACA]
@@ -76,12 +76,14 @@ sequenceDiagram
  participant R as React
  participant A as AgentWorker/Foundry
  J->>F: file/hash/schema/rights
- F->>H: keyed envelope eventId, matchId, sequence
- H-->>W: at-least-once event
- W->>P: transaction event + projection + evidence + outbox
+ F->>P: validate/mapping candidate; admit event/frame and assign canonicalRevision
+ P-->>F: commit / duplicate / quarantine + assigned revision
+ P-->>O: outbox canonical envelope with revision
+ O->>H: at-least-once publish keyed by matchId
+ H-->>W: canonical event/frame with canonicalRevision
+ W->>P: idempotent projection/evidence transaction
  P-->>W: commit / duplicate / quarantine
  W-->>H: checkpoint only if committed
- P-->>O: dispatch cursor
  O-->>R: match revision/lastSequence only
  R->>B: snapshot?atSeconds=X&revision=N
  B->>P: canonical snapshot, evidence
@@ -94,7 +96,7 @@ sequenceDiagram
 
 ## Security, operations and cost
 Private endpoint DNS/route and ACA VNet integration REQUIRED: inaccessible resources are not fixed by disabling network policies. Runtime least privilege, separate schema migration principal, Entra JWT audience/issuer/role verification, managed identity in Azure, no secrets in browser or logs. Public anonymous demo only with explicit PO approval and scoped read-only rate limit.
-Failure: Event Hubs lag pauses canonical progress (no skip); PostgreSQL loss -> stale/503 not invented live state; Redis down -> canonical read; SignalR down -> polling/backfill; Foundry down -> labeled deterministic fallback; Service Bus down -> transactional outbox recovery; invalid/late input -> append correction/revision/quarantine, do not alter canonical history.
+Failure: Event Hubs lag delays downstream projections/publication but cannot advance canonical state; PostgreSQL loss -> stale/503 not invented live state; Redis down -> canonical read; SignalR down -> polling/backfill; Foundry down -> labeled deterministic fallback; Service Bus down -> transactional outbox recovery; invalid/late input -> append correction/revision/quarantine, do not alter canonical history.
 Monitor: correlation IDs, lag/offset, error/quarantine, transaction retry, replay mismatch, p50/p95/p99 API latency, AI costs/tokens, user-facing staleness, uptime and monthly burn. FinOps approval required for model and ingestion quotas. Restore drills, backup/PITR and immutable rollback are release gates.
 
 ## Explicit differences from current prototype

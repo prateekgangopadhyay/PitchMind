@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PitchMind.Contracts.Telemetry.V1;
 using Xunit;
 
@@ -14,6 +15,7 @@ public sealed class TelemetryContractTests
         var original = Event("Pass") with
         {
             EventId = "canonical-event-01",
+            CanonicalRevision = 7,
             Sequence = 0,
             CoordinateSystem = Frame().CoordinateSystem,
             Location = new EventLocationV1
@@ -37,6 +39,7 @@ public sealed class TelemetryContractTests
         var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(json, JsonOptions)!;
 
         Assert.Equal("canonical-event-01", restored.EventId);
+        Assert.Equal(7, restored.CanonicalRevision);
         Assert.Equal(0, restored.Sequence);
         Assert.Equal("original-event-01", restored.Source.SourceRecordId);
         Assert.Equal(1, restored.Source.SourceSequence);
@@ -46,6 +49,47 @@ public sealed class TelemetryContractTests
         Assert.Equal(5761, restored.MatchTime.ElapsedSeconds);
         Assert.Equal(5761, restored.MatchTime.SourceClockValue);
         Assert.True(TelemetryContractValidatorV1.Validate(restored).IsValid);
+    }
+
+    [Fact]
+    public void Canonical_revision_is_distinct_from_schema_version_on_event_and_frame_contracts()
+    {
+        var eventValue = Event("Pass") with { CanonicalRevision = 7 };
+        var frameValue = Frame() with { CanonicalRevision = 9 };
+
+        using var eventJson = JsonDocument.Parse(JsonSerializer.Serialize(eventValue, JsonOptions));
+        using var frameJson = JsonDocument.Parse(JsonSerializer.Serialize(frameValue, JsonOptions));
+
+        Assert.Equal(1, eventJson.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(7, eventJson.RootElement.GetProperty("canonicalRevision").GetInt64());
+        Assert.Equal(1, frameJson.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(9, frameJson.RootElement.GetProperty("canonicalRevision").GetInt64());
+        Assert.True(TelemetryContractValidatorV1.Validate(eventValue).IsValid);
+        Assert.True(TelemetryContractValidatorV1.Validate(frameValue).IsValid);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Precanonical_or_invalid_revision_cannot_validate_as_canonical_telemetry(long revision)
+    {
+        var eventErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with { CanonicalRevision = revision }).Errors;
+        var frameErrors = TelemetryContractValidatorV1.Validate(Frame() with { CanonicalRevision = revision }).Errors;
+
+        Assert.Contains(eventErrors, error => error.Code == "INVALID_CANONICAL_REVISION" && error.Path == "canonicalRevision");
+        Assert.Contains(frameErrors, error => error.Code == "INVALID_CANONICAL_REVISION" && error.Path == "canonicalRevision");
+    }
+
+    [Fact]
+    public void Canonical_contract_deserialization_rejects_pre_revision_source_records()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode.Remove("canonicalRevision");
+        var frameNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        frameNode.Remove("canonicalRevision");
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(frameNode.ToJsonString(), JsonOptions));
     }
 
     [Theory]
@@ -102,8 +146,14 @@ public sealed class TelemetryContractTests
         using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
 
         Assert.Equal(".*\\S.*", eventSchema.RootElement.GetProperty("properties").GetProperty("eventId").GetProperty("pattern").GetString());
+        Assert.Contains(eventSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
+        Assert.Equal(1, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
         Assert.Equal("(?:Z|[+-]00:00)$", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceTimestampUtc").GetProperty("pattern").GetString());
         Assert.Equal(".*\\S.*", frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
+        Assert.Contains(frameSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
+        Assert.Equal(1, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
+        Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
         Assert.Contains(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
             rule.GetProperty("if").GetProperty("properties").GetProperty("eventType").GetProperty("const").GetString() == "Substitution" &&
             rule.GetProperty("then").GetProperty("required").EnumerateArray().Any(field => field.GetString() == "relatedPlayerId") &&
@@ -311,6 +361,7 @@ public sealed class TelemetryContractTests
     {
         SchemaVersion = 1,
         MatchId = "match-test",
+        CanonicalRevision = 1,
         EventId = "event-test",
         Sequence = 0,
         MatchTime = new MatchTimeV1
@@ -333,6 +384,7 @@ public sealed class TelemetryContractTests
     {
         SchemaVersion = 1,
         MatchId = "match-test",
+        CanonicalRevision = 1,
         FrameId = "frame-test",
         Sequence = 0,
         MatchTime = Event("Pass").MatchTime,

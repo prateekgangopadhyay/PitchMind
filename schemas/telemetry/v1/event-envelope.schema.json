@@ -4,10 +4,11 @@
   "title": "PitchMind canonical telemetry event envelope v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "matchId", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
+  "required": ["schemaVersion", "matchId", "canonicalRevision", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
     "eventId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
     "sequence": { "type": "integer", "minimum": 0 },
     "matchTime": { "$ref": "#/$defs/matchTime" },

@@ -25,13 +25,14 @@ flowchart LR
   Ingress --> BFF["ASP.NET Core API / BFF, Azure Container Apps"]
   Web <-. "live cursor" .-> Signal["Azure SignalR"]
   BFF --> Signal
-  BFF --> PG[("Azure PostgreSQL Flexible Server — canonical")]
-  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer"]
-  Sim --> EH["Azure Event Hubs (matchId partition)"]
-  EH --> Worker["ACA EventWorker: validation / projections / tactical"]
-  Worker --> PG
-  PG --> Outbox["Transactional outbox / inbox"]
+  BFF --> PG[("Azure PostgreSQL Flexible Server — canonical admission")]
+  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer / source mapper"]
+  Sim --> PG
+  PG --> Outbox["Transactional outbox: canonicalRevision assigned"]
   Outbox --> Dispatcher["Background dispatcher"]
+  Dispatcher --> EH["Azure Event Hubs (canonical envelopes, matchId partition)"]
+  EH --> Worker["ACA EventWorker: projection consumers"]
+  Worker --> PG
   Dispatcher --> Signal
   Dispatcher --> Bus["Azure Service Bus commands / DLQ"]
   Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
@@ -48,6 +49,8 @@ flowchart LR
 ```
 
 **Non-negotiable contract:** Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
+
+Only PostgreSQL-admitted records receive a positive per-match `canonicalRevision`; its transaction commits the canonical record and outbox intent together. The outbox publishes the canonical envelope with that revision. Raw source candidates have no canonical revision and do not use the canonical Event Hubs envelope.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 
