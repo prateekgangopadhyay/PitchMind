@@ -23,8 +23,9 @@ public sealed class PressSequenceDetectorTests
         Assert.Equal(input.SelectedTimeSeconds, insight.SelectedTimeSeconds);
         Assert.Equal(input.ThroughSequence, insight.ThroughSequence);
         Assert.Equal(input.SourceVersion, insight.SourceVersion);
+        var actionsByEventId = input.Events.ToDictionary(item => item.Event.EventId, item => item.Action);
         Assert.Equal(new[] { "back-pass", "press-arrival", "pressured-pass", "high-regain", "cutback", "shot", "goal" },
-            input.Events.Where(item => insight.EventIds.Contains(item.Event.EventId)).Select(item => item.Action));
+            insight.EventIds.Select(eventId => actionsByEventId[eventId]));
         Assert.Equal(insight.EventIds.Count, insight.FrameIds.Count);
         Assert.All(insight.EventIds, eventId => Assert.Contains(eventId, input.Events.Select(item => item.Event.EventId)));
         Assert.All(insight.FrameIds, frameId => Assert.Contains(frameId, input.Frames.Select(frame => frame.Id)));
