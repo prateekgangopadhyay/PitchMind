@@ -44,9 +44,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
-          event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
+          event.matchId === matchId && event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
           (index === 0 || events.items[index - 1].sequence < event.sequence));
-        const insightsSafe = insights.items.every(insight => insight.selectedTimeSeconds === selectedSeconds &&
+        const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
+          insight.canonicalRevision === revision && insight.selectedTimeSeconds === selectedSeconds &&
           insight.throughSequence <= snapshot.throughSequence);
         if (!exactContext || !eventsSafe || !insightsSafe) {
           setView(null);

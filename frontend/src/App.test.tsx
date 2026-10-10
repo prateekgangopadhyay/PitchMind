@@ -234,6 +234,61 @@ it('rejects events and insights that cross the selected-time sequence', async ()
   }
 });
 
+it.each([
+  {
+    name: 'an event with a different match id',
+    event: (matchId: string) => ({eventId: 'wrong-match-event', matchId: matchId.replace('11111111', '22222222'), sequence: 18, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}),
+    insight: undefined
+  },
+  {
+    name: 'an insight with a different match id',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'wrong-match-insight', matchId: matchId.replace('11111111', '22222222'), canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Wrong-match insight', evidence: []})
+  },
+  {
+    name: 'an insight from a different canonical revision',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'wrong-revision-insight', matchId, canonicalRevision: 3, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Wrong-revision insight', evidence: []})
+  },
+  {
+    name: 'an insight beyond the projection watermark',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'future-watermark-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 20, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Beyond-watermark insight', evidence: []})
+  }
+])('rejects $name before rendering', async ({event, insight}) => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: event ? [event(matchId)] : [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: insight ? [insight(matchId)] : [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+    expect(container.textContent).not.toContain('Wrong-match insight');
+    expect(container.textContent).not.toContain('Wrong-revision insight');
+    expect(container.textContent).not.toContain('Beyond-watermark insight');
+    expect(container.textContent).not.toContain('wrong-match-event');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('renders persisted home cards from canonical fields and keeps the match id in navigation', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';
