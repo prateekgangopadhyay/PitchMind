@@ -24,7 +24,22 @@ These are from the offline fixture, **not** PostgreSQL, Azure Event Hubs, Micros
 
 `evidence/{insightId}/replay` returns `eventIds` for all graph-linked source events and `frameIds` for all graph-linked source frames; `mechanismEventIds` separately identifies the detector's mechanism events. Those references resolve exactly to the evidence graph event/frame nodes. The response includes the fixture's coordinate convention and applies it to each returned frame. Replay preserves source event IDs, sequence, clock and period without synthesizing frames or interpolating player movement. A replay is unavailable when the insight is not present at the selected time or its graph references do not resolve.
 
-EP04-S04 adds an internal PostgreSQL projection reader for selected-time and revision-bounded snapshots and event windows. It is not mapped to an HTTP route; current public `/api/v1` match routes remain offline-fixture backed until the application use case and authorized API contract are implemented.
+### Canonical BFF routes (EP06-S01; implementation evidence is in the story packet)
+
+These routes are separately namespaced under `/api/v1/canonical/*` and read PostgreSQL projections, ledger events, and persisted insight/evidence records only. They do not fall back to the offline synthetic fixture. Without a configured PostgreSQL adapter, they return sanitized `503 DEPENDENCY_UNAVAILABLE`. These routes do not yet authenticate callers; cloud exposure is blocked on EP06-S04 or an explicitly approved synthetic public-read boundary.
+
+| Method | Route | Contract behavior |
+|---|---|---|
+| GET | `/api/v1/canonical/fixtures?afterMatchId&limit` | Latest persisted match projections; page size 1..100. |
+| GET | `/api/v1/canonical/matches/{matchId}/summary?atSeconds&revision` | Latest persisted snapshot at or before selected time/revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/events?atSeconds&revision&cursor&limit` | Ordered ledger event page, bounded by selected time and projection sequence; cursor bound to match/time/revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | Persisted insight page only if every event/frame reference resolves at selected time and sequence. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve at selected time and sequence. |
+| GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for resolvable event/frame evidence; incomplete evidence is unavailable. |
+| GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | Snapshot and bounded ledger event page at one selected time/revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | Typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no synthetic fallback. |
+
+The machine-readable contract is [openapi-canonical-bff-v1.yaml](openapi-canonical-bff-v1.yaml). The current offline `/api/v1/matches/*` routes remain fixture-backed and distinct from canonical BFF state. The canonical route DTOs are separate from fixture demo DTOs. PostgreSQL integration tests require the isolated local database prerequisite; implementation and contract tests alone do not constitute Product Owner or football acceptance.
 
 The current v1 DTO property names and representative JSON types are pinned by `PitchMind.Contracts.Tests`. `MatchContractMappings` is the only API mapping from the current application read models to public football response DTOs. `FixtureResponse.version` retains the source fixture version; API contract version is `X-Contract-Version`. `FixtureResponse` carries the fixture-defined duration, halftime, and pitch dimensions; frame and state DTOs describe the resulting coordinate convention. This metadata describes only the loaded fictional fixture and does not certify the supplied candidate feed's units or mappings. `MatchStateResponse` adds phase, possession, active-player counts, and player active/dismissed/yellow-card state. It preserves the existing `status` values (`replay` and `full-time`) and adds `phase` values `notstarted`, `firsthalf`, `halftime`, `secondhalf`, and `fulltime`; same-clock events are applied in source sequence order and later events are excluded. The React test fetch stubs are test-only fixtures; production UI data is loaded through `request()` and never falls back to those examples.
 

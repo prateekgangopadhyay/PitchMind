@@ -8,6 +8,6 @@ Decision: expose PostgreSQL-backed reads through the separate `/api/v1/canonical
 
 Security consequence: these routes are not yet authenticated. Cloud ingress must not expose them until EP06-S04 adds the identity boundary or the owner explicitly approves a synthetic public-read profile. This ADR is not deployment authorization.
 
-Verification consequence: route and DTO contract tests, selected-time PostgreSQL tests, and negative no-fallback HTTP checks must accompany implementation. Current local HTTP checks cover the no-database typed 503 and missing canonical key-moment 503; PostgreSQL integration and full contract test execution remain outstanding.
+Verification consequence: the isolated EP06-S01 branch builds cleanly and its full .NET solution tests pass 107 with 18 PostgreSQL tests skipped when no database is configured. On disposable PostgreSQL 17, the focused selected-time page and event/frame evidence tests pass 2/2; the full Infrastructure run records 16 passed and 2 failing outbox retry/dispatcher assertions. Local HTTP checks cover malformed IDs/time/cursors, no-database typed 503, and missing canonical key-moment 503. The evidence and API-contract route behavior still requires independent review and owner acceptance.
 
 Architecture: see [container](../architecture/02-container.md), [components](../architecture/03-components.md), and [canonical BFF OpenAPI](../api/openapi-canonical-bff-v1.yaml).

@@ -578,8 +578,14 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var matchId = MatchId.New();
-        var update = Update(matchId);
-        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+        var (update, aggregate) = BuildUpdate(matchId);
+        await RegisterSourceMetadata(source, update);
+        var updateStore = new PostgresCanonicalUpdateStore(source);
+        await updateStore.CommitAsync(update, CancellationToken.None);
+        var futureEvent = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 10, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(futureEvent, "home", "home-2", "pass", "complete"));
+        var futureUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, futureEvent, 2, "aggregate-v1", update.SourceSha256);
+        await updateStore.CommitAsync(futureUpdate, CancellationToken.None);
 
         async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId)
         {
@@ -595,21 +601,24 @@ public sealed class PostgresLedgerTests
                 await command.ExecuteNonQueryAsync();
             }
             await using (var evidence = source.CreateCommand("""
-                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id, revision, relation)
-                VALUES ($1, $2, $3, $4, 1, 'supports')
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id, revision,
+                    relation, event_id, frame_id)
+                VALUES ($1, $2, $3, $4, 1, 'supports', $5, $6)
                 """))
             {
                 evidence.Parameters.AddWithValue(insightId);
                 evidence.Parameters.AddWithValue(evidenceKind);
                 evidence.Parameters.AddWithValue(evidenceId);
                 evidence.Parameters.AddWithValue(matchId.Value);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "event" ? Guid.Parse(evidenceId) : null) ?? DBNull.Value);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "frame" ? evidenceId : null) ?? DBNull.Value);
                 await evidence.ExecuteNonQueryAsync();
             }
         }
 
         var validInsightId = $"valid-{Guid.NewGuid():N}";
         var validFrameInsightId = $"valid-frame-{Guid.NewGuid():N}";
-        var missingInsightId = $"missing-{Guid.NewGuid():N}";
+        var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
         var metricInsightId = $"metric-{Guid.NewGuid():N}";
         var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
         var validFrameId = $"frame-{Guid.NewGuid():N}";
@@ -623,13 +632,13 @@ public sealed class PostgresLedgerTests
             frame.Parameters.AddWithValue(matchId.Value);
             frame.Parameters.AddWithValue(frameId);
             frame.Parameters.AddWithValue(sequence);
-            frame.Parameters.AddWithValue(new string('d', 64));
+            frame.Parameters.AddWithValue(update.SourceSha256);
             await frame.ExecuteNonQueryAsync();
         }
         await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
         await AddInsight(validFrameInsightId, "derived", "frame", validFrameId);
-        await AddInsight(missingInsightId, "derived", "event", Guid.NewGuid().ToString());
-        await AddInsight(metricInsightId, "derived", "metric", "unpersisted-metric");
+        await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString());
+        await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric");
         await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId);
 
         var projectionReader = new PostgresMatchProjectionReader(source);
@@ -642,7 +651,7 @@ public sealed class PostgresLedgerTests
             page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
         var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
-        Assert.Null(await insightReader.GetAtAsync(matchId, missingInsightId, projection.Revision, 0,
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
@@ -650,7 +659,15 @@ public sealed class PostgresLedgerTests
             projection.AsOfSequence, CancellationToken.None));
         var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
             projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
-        Assert.Equal(validFrameId, Assert.Single(validFrameEvidence!).Id);
+        var framePayload = Assert.Single(validFrameEvidence!);
+        Assert.Equal(validFrameId, framePayload.Id);
+        Assert.Equal(0, framePayload.Sequence);
+        Assert.Equal(0, framePayload.ClockSeconds);
+        Assert.Equal(1, framePayload.Period);
+        Assert.Equal("{}", framePayload.PayloadJson);
+        var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
+            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
     }
