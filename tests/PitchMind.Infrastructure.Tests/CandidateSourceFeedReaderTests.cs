@@ -416,15 +416,26 @@ public sealed class CandidateSourceFeedReaderTests
         {
             var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
             using var cancellation = new CancellationTokenSource();
+            var clock = new ManualTimeProvider();
             await using var replay = feed.ReplayFromSourceSequenceAsync(
                 1,
-                new CandidateReplayOptions(0.1),
+                new CandidateReplayOptions(20, clock),
                 cancellation.Token).GetAsyncEnumerator();
 
-            Assert.True(await replay.MoveNextAsync());
+            var firstMove = replay.MoveNextAsync();
+            Assert.True(firstMove.IsCompletedSuccessfully, "The first eligible source envelope should not wait for the pacing interval.");
+            Assert.True(await firstMove);
             Assert.Equal(1, replay.Current.SourceSequence);
+
+            var secondMove = replay.MoveNextAsync();
+            Assert.False(secondMove.IsCompleted, "The second envelope should wait for its configured pacing interval.");
+            await clock.WaitForScheduledTimerAsync();
+            Assert.Equal(TimeSpan.FromMilliseconds(50), clock.TimeUntilNextTimer);
+            Assert.False(secondMove.IsCompleted, "The in-flight read should still be waiting before cancellation.");
+
             cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => { await replay.MoveNextAsync(); });
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => { await secondMove; });
+            Assert.Equal(TimeSpan.Zero, clock.Elapsed);
         }
         finally
         {
