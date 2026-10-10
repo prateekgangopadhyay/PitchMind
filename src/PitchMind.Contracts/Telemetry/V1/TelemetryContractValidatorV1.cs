@@ -5,6 +5,10 @@ public static class TelemetryContractValidatorV1
 {
     public const int CurrentSchemaVersion = 1;
     public const int MaximumPlayersPerFrame = 64;
+    public const decimal MinimumPitchLengthMetres = 90m;
+    public const decimal MaximumPitchLengthMetres = 120m;
+    public const decimal MinimumPitchWidthMetres = 45m;
+    public const decimal MaximumPitchWidthMetres = 90m;
 
     private static readonly HashSet<string> EventTypes = new(StringComparer.Ordinal)
     {
@@ -48,6 +52,25 @@ public static class TelemetryContractValidatorV1
         }
         if (value.EventType == "Substitution")
             Required(value.RelatedPlayerId, "relatedPlayerId", errors);
+        if (value.Location is not null)
+        {
+            if (value.CoordinateSystem is null)
+            {
+                Add(errors, "COORDINATE_SYSTEM_REQUIRED", "coordinateSystem", "Event coordinates require an explicit coordinate system.");
+            }
+            else
+            {
+                CoordinateSystem(value.CoordinateSystem, errors);
+                if (value.Location.Start is null && value.Location.End is null)
+                    Add(errors, "EVENT_LOCATION_REQUIRED", "location", "At least one event location point is required.");
+                if (value.Location.Start is not null) Point(value.Location.Start, value.CoordinateSystem, "location.start", errors);
+                if (value.Location.End is not null) Point(value.Location.End, value.CoordinateSystem, "location.end", errors);
+            }
+        }
+        else if (value.CoordinateSystem is not null)
+        {
+            Add(errors, "EVENT_LOCATION_REQUIRED", "location", "A coordinate system is only valid when an event location is supplied.");
+        }
         Source(value.Source, errors);
         return new(errors);
     }
@@ -162,8 +185,10 @@ public static class TelemetryContractValidatorV1
 
     private static void CoordinateSystem(PitchCoordinateSystemV1 system, List<TelemetryValidationError> errors, bool requireDirections = true)
     {
-        if (system.LengthMetres <= 0) Add(errors, "INVALID_PITCH_DIMENSION", "coordinateSystem.lengthMetres", "Pitch length must be positive.");
-        if (system.WidthMetres <= 0) Add(errors, "INVALID_PITCH_DIMENSION", "coordinateSystem.widthMetres", "Pitch width must be positive.");
+        if (system.LengthMetres is < MinimumPitchLengthMetres or > MaximumPitchLengthMetres)
+            Add(errors, "INVALID_PITCH_DIMENSION", "coordinateSystem.lengthMetres", $"Pitch length must be between {MinimumPitchLengthMetres} and {MaximumPitchLengthMetres} metres.");
+        if (system.WidthMetres is < MinimumPitchWidthMetres or > MaximumPitchWidthMetres)
+            Add(errors, "INVALID_PITCH_DIMENSION", "coordinateSystem.widthMetres", $"Pitch width must be between {MinimumPitchWidthMetres} and {MaximumPitchWidthMetres} metres.");
         if (system.Unit is not ("metres" or "normalized_0_1" or "percent_0_100"))
             Add(errors, "UNKNOWN_COORDINATE_UNIT", "coordinateSystem.unit", "Coordinate unit must be explicit and supported.");
         if (system.AxisOrigin is not ("bottom_left" or "top_left"))

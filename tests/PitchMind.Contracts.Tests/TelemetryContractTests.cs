@@ -15,6 +15,12 @@ public sealed class TelemetryContractTests
         {
             EventId = "canonical-event-01",
             Sequence = 0,
+            CoordinateSystem = Frame().CoordinateSystem,
+            Location = new EventLocationV1
+            {
+                Start = new PitchPointV1 { X = .25m, Y = .5m },
+                End = new PitchPointV1 { X = .75m, Y = .5m }
+            },
             MatchTime = new MatchTimeV1
             {
                 Period = 2,
@@ -35,6 +41,8 @@ public sealed class TelemetryContractTests
         Assert.Equal("original-event-01", restored.Source.SourceRecordId);
         Assert.Equal(1, restored.Source.SourceSequence);
         Assert.Equal("ProgressivePass", restored.SourceEventType);
+        Assert.Equal(.25m, restored.Location!.Start!.X);
+        Assert.Equal(.75m, restored.Location.End!.X);
         Assert.Equal(5761, restored.MatchTime.ElapsedSeconds);
         Assert.Equal(5761, restored.MatchTime.SourceClockValue);
         Assert.True(TelemetryContractValidatorV1.Validate(restored).IsValid);
@@ -100,6 +108,9 @@ public sealed class TelemetryContractTests
             rule.GetProperty("if").GetProperty("properties").GetProperty("eventType").GetProperty("const").GetString() == "Substitution" &&
             rule.GetProperty("then").GetProperty("required").EnumerateArray().Any(field => field.GetString() == "relatedPlayerId") &&
             rule.GetProperty("then").GetProperty("properties").GetProperty("relatedPlayerId").GetProperty("type").GetString() == "string");
+        Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
+        Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
+        Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
     }
 
     [Fact]
@@ -129,6 +140,61 @@ public sealed class TelemetryContractTests
 
         Assert.Equal(26.25m, normalized.XMetres);
         Assert.Equal(51m, normalized.YMetres);
+    }
+
+    [Fact]
+    public void Event_locations_require_declared_coordinates_and_normalize_under_bounded_pitch_dimensions()
+    {
+        var coordinateSystem = Frame().CoordinateSystem;
+        var value = Event("Pass") with
+        {
+            CoordinateSystem = coordinateSystem,
+            Location = new EventLocationV1
+            {
+                Start = new PitchPointV1 { X = .25m, Y = .5m },
+                End = new PitchPointV1 { X = .75m, Y = .5m }
+            }
+        };
+
+        Assert.True(TelemetryContractValidatorV1.Validate(value).IsValid);
+        Assert.Equal(26.25m, TelemetryContractValidatorV1.NormalizeToStadiumMetres(value.Location!.Start!, coordinateSystem).XMetres);
+
+        var missingSystem = TelemetryContractValidatorV1.Validate(value with { CoordinateSystem = null }).Errors;
+        Assert.Contains(missingSystem, error => error.Code == "COORDINATE_SYSTEM_REQUIRED");
+
+        var badPoint = value with { Location = value.Location with { End = new PitchPointV1 { X = 1.01m, Y = .5m } } };
+        Assert.Contains(TelemetryContractValidatorV1.Validate(badPoint).Errors, error => error.Code == "INVALID_COORDINATE");
+
+        var missingPoints = value with { Location = new EventLocationV1() };
+        Assert.Contains(TelemetryContractValidatorV1.Validate(missingPoints).Errors, error => error.Code == "EVENT_LOCATION_REQUIRED");
+    }
+
+    [Theory]
+    [InlineData(89, 68)]
+    [InlineData(121, 68)]
+    [InlineData(105, 44)]
+    [InlineData(105, 91)]
+    public void Tracking_frame_rejects_pitch_dimensions_outside_declared_football_bounds(decimal lengthMetres, decimal widthMetres)
+    {
+        var frame = Frame() with
+        {
+            CoordinateSystem = Frame().CoordinateSystem with { LengthMetres = lengthMetres, WidthMetres = widthMetres }
+        };
+
+        Assert.Single(TelemetryContractValidatorV1.Validate(frame).Errors, error => error.Code == "INVALID_PITCH_DIMENSION");
+    }
+
+    [Theory]
+    [InlineData(90, 45)]
+    [InlineData(120, 90)]
+    public void Tracking_frame_accepts_pitch_dimension_boundaries(decimal lengthMetres, decimal widthMetres)
+    {
+        var frame = Frame() with
+        {
+            CoordinateSystem = Frame().CoordinateSystem with { LengthMetres = lengthMetres, WidthMetres = widthMetres }
+        };
+
+        Assert.True(TelemetryContractValidatorV1.Validate(frame).IsValid);
     }
 
     [Fact]

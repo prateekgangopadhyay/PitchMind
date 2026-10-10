@@ -17,6 +17,8 @@
     "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
     "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
     "outcome": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
+    "coordinateSystem": { "anyOf": [{ "$ref": "#/$defs/coordinateSystem" }, { "type": "null" }] },
+    "location": { "anyOf": [{ "$ref": "#/$defs/eventLocation" }, { "type": "null" }] },
     "source": { "$ref": "#/$defs/source" }
   },
   "allOf": [
@@ -30,6 +32,14 @@
     {
       "if": { "properties": { "eventType": { "enum": ["Pass", "Shot", "Goal", "Foul", "Turnover", "Pressure", "PressureApplied", "BallRecovery", "Carry", "Clearance", "Interception", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] } } },
       "then": { "required": ["teamId", "playerId"] }
+    },
+    {
+      "if": { "properties": { "location": { "type": "object" } } },
+      "then": { "required": ["coordinateSystem"], "properties": { "coordinateSystem": { "$ref": "#/$defs/coordinateSystem" } } }
+    },
+    {
+      "if": { "properties": { "coordinateSystem": { "type": "object" } } },
+      "then": { "required": ["location"], "properties": { "location": { "$ref": "#/$defs/eventLocation" } } }
     }
   ],
   "$defs": {
@@ -43,6 +53,45 @@
         "sourceClockValue": { "type": "number", "minimum": 0 },
         "sourceClockUnit": { "enum": ["seconds", "milliseconds", "provider_defined"] },
         "sourceClockBasis": { "enum": ["match_elapsed", "period_elapsed", "provider_defined"] }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "eventLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": { "$ref": "#/$defs/point" },
+        "end": { "$ref": "#/$defs/point" }
+      },
+      "anyOf": [{ "required": ["start"] }, { "required": ["end"] }]
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lengthMetres", "widthMetres", "unit", "axisOrigin", "teamDirections"],
+      "properties": {
+        "lengthMetres": { "type": "number", "minimum": 90, "maximum": 120 },
+        "widthMetres": { "type": "number", "minimum": 45, "maximum": 90 },
+        "unit": { "enum": ["metres", "normalized_0_1", "percent_0_100"] },
+        "axisOrigin": { "enum": ["bottom_left", "top_left"] },
+        "teamDirections": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["teamId", "direction"],
+            "properties": {
+              "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+              "direction": { "enum": ["left", "right"] }
+            }
+          }
+        }
       }
     },
     "source": {
