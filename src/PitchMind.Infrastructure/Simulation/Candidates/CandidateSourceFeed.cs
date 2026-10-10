@@ -36,21 +36,54 @@ public sealed class CandidateSourceFeed
     public long SourceByteSize { get; }
     public IReadOnlyList<CandidateSourceEnvelope> Events { get; }
 
-    /// <summary>Replays the unchanged candidate envelopes in source order, beginning inclusively at a source sequence.</summary>
+    /// <summary>
+    /// Replays unchanged candidate envelopes in source order, beginning inclusively at a source sequence,
+    /// with a caller-selected upper bound on the event rate.
+    /// </summary>
     public async IAsyncEnumerable<CandidateSourceEnvelope> ReplayFromSourceSequenceAsync(
         long sourceSequence,
+        CandidateReplayOptions options,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        var delayBetweenEvents = TimeSpan.FromSeconds(1d / options.EventsPerSecond);
+        var emittedAny = false;
+
         foreach (var envelope in Events)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (envelope.SourceSequence < sourceSequence)
                 continue;
 
+            if (emittedAny)
+                await Task.Delay(delayBetweenEvents, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
             yield return envelope;
-            await Task.Yield();
+            emittedAny = true;
         }
     }
+}
+
+/// <summary>Validated rate ceiling for local replay of candidate source records.</summary>
+public sealed record CandidateReplayOptions
+{
+    public const double MinimumEventsPerSecond = 0.01;
+    public const double MaximumEventsPerSecond = 1_000;
+
+    public CandidateReplayOptions(double eventsPerSecond)
+    {
+        if (!double.IsFinite(eventsPerSecond) || eventsPerSecond < MinimumEventsPerSecond || eventsPerSecond > MaximumEventsPerSecond)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(eventsPerSecond),
+                $"Replay rate must be between {MinimumEventsPerSecond} and {MaximumEventsPerSecond} events per second.");
+        }
+
+        EventsPerSecond = eventsPerSecond;
+    }
+
+    public double EventsPerSecond { get; }
 }
 
 /// <summary>

@@ -40,7 +40,8 @@ public sealed class CandidateSourceFeedReaderTests
         {
             var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
             var replay = new List<CandidateSourceEnvelope>();
-            await foreach (var item in feed.ReplayFromSourceSequenceAsync(1)) replay.Add(item);
+            var replayOptions = new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond);
+            await foreach (var item in feed.ReplayFromSourceSequenceAsync(1, replayOptions)) replay.Add(item);
 
             Assert.False(feed.IsCanonical);
             Assert.Equal("candidate_not_canonical", feed.Disposition);
@@ -52,7 +53,7 @@ public sealed class CandidateSourceFeedReaderTests
             Assert.Equal("123", RawNestedProperty(replay[0].RawJson, "playerPositions", "heartRate"));
             Assert.Equal("0", replay[0].RawClockSeconds);
             Assert.Equal("1", replay[0].RawPeriod);
-            Assert.Equal(new[] { "event-b" }, (await Collect(feed.ReplayFromSourceSequenceAsync(2))).Select(item => item.EventId));
+            Assert.Equal(new[] { "event-b" }, (await Collect(feed.ReplayFromSourceSequenceAsync(2, replayOptions))).Select(item => item.EventId));
         }
         finally
         {
@@ -294,8 +295,71 @@ public sealed class CandidateSourceFeedReaderTests
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             {
-                await foreach (var _ in feed.ReplayFromSourceSequenceAsync(1, cancellation.Token)) { }
+                await foreach (var _ in feed.ReplayFromSourceSequenceAsync(
+                    1,
+                    new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond),
+                    cancellation.Token)) { }
             });
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
+    {
+        const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
+        const string second = "{\"eventId\":\"event-b\",\"matchId\":\"match-a\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}";
+        const string third = "{\"eventId\":\"event-c\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":3,\"clockSeconds\":2,\"period\":1,\"eventType\":\"Goal\"}";
+        var fixture = await Fixture.CreateAsync($"[{first},{second},{third}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var replay = await Collect(feed.ReplayFromSourceSequenceAsync(1, new CandidateReplayOptions(20)));
+            stopwatch.Stop();
+
+            Assert.Equal(new long[] { 1, 2, 3 }, replay.Select(item => item.SourceSequence));
+            Assert.Equal(new[] { first, second, third }, replay.Select(item => item.RawJson));
+            Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(75), $"Replay completed too quickly: {stopwatch.Elapsed}.");
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(0.001)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(1000.01)]
+    public void RejectsReplayRatesOutsideTheBoundedRange(double eventsPerSecond)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CandidateReplayOptions(eventsPerSecond));
+    }
+
+    [Fact]
+    public async Task CancellationStopsRateLimitedReplayDuringInterEventWait()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            using var cancellation = new CancellationTokenSource();
+            await using var replay = feed.ReplayFromSourceSequenceAsync(
+                1,
+                new CandidateReplayOptions(0.1),
+                cancellation.Token).GetAsyncEnumerator();
+
+            Assert.True(await replay.MoveNextAsync());
+            Assert.Equal(1, replay.Current.SourceSequence);
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => { await replay.MoveNextAsync(); });
         }
         finally
         {
