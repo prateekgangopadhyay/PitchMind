@@ -18,7 +18,7 @@ type ExpectedContext = {
 export function CanonicalEvidenceDisclosure({ matchId, selectedSeconds, revision, throughSequence, insight }: ExpectedContext) {
   const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<EvidenceState | null>(null);
-  const key = `${matchId}:${selectedSeconds}:${revision}:${insight.insightId}`;
+  const key = `${matchId}:${selectedSeconds}:${revision}:${throughSequence}:${insight.insightId}`;
   const current = state?.key === key ? state : null;
 
   useEffect(() => {

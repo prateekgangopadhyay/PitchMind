@@ -149,6 +149,36 @@ describe('Canonical evidence disclosure', () => {
     }
   });
 
+  it('hides previously loaded evidence immediately when only the selected sequence watermark changes', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    let resolveRefresh!: (value: Response) => void;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => response(evidenceAt(3308)))
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { resolveRefresh = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = (watermark: number) => root.render(createElement(CanonicalEvidenceDisclosure, {
+      matchId, selectedSeconds: 3308, revision: 4, throughSequence: watermark, insight
+    }));
+    try {
+      await act(async () => render(20));
+      await openDisclosure(container);
+      await settle();
+      expect(container.textContent).toContain('event event-source-1');
+      await act(async () => { render(21); await new Promise(resolve => setTimeout(resolve, 0)); });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(container.textContent).not.toContain('event event-source-1');
+      expect(container.textContent).toContain('Loading evidence for the selected match, time and revision…');
+      await act(async () => resolveRefresh(await response(evidenceAt(3308))));
+      await settle();
+      expect(container.textContent).toContain('event event-source-1');
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it('uses a truthful empty state when the insight has no source references', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const noReferences: CanonicalInsight = { ...insight, evidence: [] };
