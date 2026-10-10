@@ -308,6 +308,96 @@ public sealed class CandidateSourceFeedReaderTests
     }
 
     [Fact]
+    public async Task ReplaySessionPauseAndResumeAreAuditedAtTheSourceCursor()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"c\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":3,\"clockSeconds\":2,\"period\":1,\"eventType\":\"Goal\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var clock = new ManualTimeProvider();
+            var session = new CandidateReplaySession(feed, 1, new CandidateReplayOptions(1_000, clock));
+            await using var replay = session.ReplayAsync().GetAsyncEnumerator();
+
+            Assert.True(await replay.MoveNextAsync());
+            Assert.Equal("a", replay.Current.EventId);
+            Assert.Equal(CandidateReplaySessionState.Running, session.State);
+            Assert.Equal(1, session.LastEmittedSourceSequence);
+
+            session.Pause();
+            var secondMove = replay.MoveNextAsync();
+            await clock.WaitForScheduledTimerAsync();
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.False(secondMove.IsCompleted, "A paused session must not emit the next source envelope.");
+            Assert.Equal(CandidateReplaySessionState.Paused, session.State);
+            Assert.Equal(1, session.LastEmittedSourceSequence);
+
+            session.Resume();
+            Assert.True(await secondMove);
+            Assert.Equal("b", replay.Current.EventId);
+            var thirdMove = replay.MoveNextAsync();
+            await clock.WaitForScheduledTimerAsync();
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.True(await thirdMove);
+            Assert.Equal("c", replay.Current.EventId);
+            Assert.False(await replay.MoveNextAsync());
+
+            Assert.Equal(CandidateReplaySessionState.Completed, session.State);
+            Assert.Equal(new[]
+            {
+                CandidateReplayTransition.Started,
+                CandidateReplayTransition.Emitted,
+                CandidateReplayTransition.Paused,
+                CandidateReplayTransition.Resumed,
+                CandidateReplayTransition.Emitted,
+                CandidateReplayTransition.Emitted,
+                CandidateReplayTransition.Completed
+            }, session.AuditTrail.Select(entry => entry.Transition));
+            Assert.All(session.AuditTrail, entry => Assert.Equal(feed.SourceSha256, entry.SourceSha256));
+            Assert.Equal(new long?[] { 1, 2, 3 }, session.AuditTrail
+                .Where(entry => entry.Transition == CandidateReplayTransition.Emitted)
+                .Select(entry => entry.LastEmittedSourceSequence));
+            var pauseEntry = Assert.Single(session.AuditTrail, entry => entry.Transition == CandidateReplayTransition.Paused);
+            Assert.Equal(1, pauseEntry.LastEmittedSourceSequence);
+            Assert.Equal(2, pauseEntry.NextSourceSequence);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ReplaySessionCancellationWhilePausedRetainsNextSequenceForAudit()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var clock = new ManualTimeProvider();
+            var session = new CandidateReplaySession(feed, 1, new CandidateReplayOptions(1_000, clock));
+            await using var replay = session.ReplayAsync().GetAsyncEnumerator();
+
+            Assert.True(await replay.MoveNextAsync());
+            session.Pause();
+            var secondMove = replay.MoveNextAsync();
+            await clock.WaitForScheduledTimerAsync();
+            session.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await secondMove);
+            Assert.Equal(CandidateReplaySessionState.Cancelled, session.State);
+            Assert.Equal(1, session.LastEmittedSourceSequence);
+            var cancelEntry = Assert.Single(session.AuditTrail, entry => entry.Transition == CandidateReplayTransition.Cancelled);
+            Assert.Equal(feed.SourceSha256, cancelEntry.SourceSha256);
+            Assert.Equal(1, cancelEntry.LastEmittedSourceSequence);
+            Assert.Equal(2, cancelEntry.NextSourceSequence);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
     {
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
