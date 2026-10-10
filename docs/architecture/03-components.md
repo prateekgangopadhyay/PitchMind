@@ -32,6 +32,8 @@ flowchart TB
   end
   subgraph App["PitchMind.Application — use cases and ports"]
     Validate["Normalize / Admit / Quarantine"]
+    ValidateCanonical["Validate canonical revision / order"]
+    Admit["Canonical admission / revision"]
     Project["Project match / score / active roster"]
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
@@ -48,17 +50,18 @@ flowchart TB
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
-  EventWorker2["EventWorker host"] --> Validate
+  EventWorker2["EventWorker host"] --> ValidateCanonical
   AgentWorker2["AgentWorker host"] --> Explain
-  Feed --> Validate
-  EventHubs --> Validate
-  Validate --> Facts
+  Feed --> Validate --> Admit
+  Admit --> Facts
   Facts --> Project --> MatchId
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
   Explain --> Ports
   Pg -. "implements" .-> Ports
+  Pg --> EventHubs
+  EventHubs --> EventWorker2 --> ValidateCanonical --> Project
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports
@@ -69,6 +72,7 @@ flowchart TB
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
 - `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
 - PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.
+- PostgreSQL canonical admission assigns the positive per-match `canonicalRevision`; only its outbox publishes `EventEnvelopeV1`/`TrackingFrameV1`. Raw source candidates have no canonical revision and cannot validate as these canonical DTOs.
 - `MatchTimeContext` fixes match, selected timestamp, revision and period across API, pitch, scoreboard, events, claims and AI.
 - Foundry receives read-only evidence scoped to selected time; separate deterministic validator checks every published claim; malformed model output falls back.
 - React gets data via BFF; no clubs, players, scores, tactical observations or event-specific narrative hardcoded in `*.cs` or `*.tsx` after feed integration.

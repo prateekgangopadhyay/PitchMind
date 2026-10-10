@@ -4,10 +4,11 @@
   "title": "PitchMind canonical telemetry tracking frame v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "matchId", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
+  "required": ["schemaVersion", "matchId", "canonicalRevision", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
     "frameId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
     "sequence": { "type": "integer", "minimum": 0 },
     "matchTime": { "$ref": "event-envelope.schema.json#/$defs/matchTime" },
