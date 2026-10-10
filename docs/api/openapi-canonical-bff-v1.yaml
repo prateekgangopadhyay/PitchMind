@@ -145,6 +145,11 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '400':
+          description: Invalid match identifier, selected time, or revision; returns sanitized Problem Details.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ApiProblem' }
         '503':
           description: No persisted canonical key-moment projection exists; demo moments are not substituted.
           content:
