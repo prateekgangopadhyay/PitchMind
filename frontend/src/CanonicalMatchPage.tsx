@@ -10,7 +10,10 @@ type MatchView = {
   trackingFrames: CanonicalTrackingFramePage | null;
   trackingStatus: string;
   keyMomentsStatus: string;
+  eventsStatus: string;
+  insightsStatus: string;
 };
+type FocusRequest = { kind: 'event'; eventId: string } | { kind: 'time' } | { kind: 'retry' };
 
 export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay }: {
   matchId: string;
@@ -22,6 +25,9 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [audience, setAudience] = useState<'fan' | 'analyst'>('fan');
+  const [retryCounter, setRetryCounter] = useState(0);
+  const [focusAfterLoad, setFocusAfterLoad] = useState<FocusRequest | null>(null);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<CanonicalEvidence | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -42,9 +48,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
         const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
-        const [events, insights, frameResult, keyMomentsStatus] = await Promise.all([
-          request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal),
-          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal),
+        const [eventResult, insightResult, frameResult, keyMomentsStatus] = await Promise.all([
+          request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal)
+            .then(page => ({ page, status: '' }))
+            .catch(error => ({ page: null, status: unavailableMessage(error, 'Recorded events') })),
+          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal)
+            .then(page => ({ page, status: '' }))
+            .catch(error => ({ page: null, status: unavailableMessage(error, 'Saved insights') })),
           request<CanonicalTrackingFramePage>(`canonical/matches/${encodeURIComponent(matchId)}/frames?${frameQuery}`, controller.signal)
             .then(page => ({ page, status: '' }))
             .catch(error => ({
@@ -60,8 +70,12 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
+        const emptyContext = { matchId, canonicalRevision: revision, selectedTimeSeconds: selectedSeconds, throughSequence: snapshot.throughSequence };
+        const events = eventResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
+        const insights = insightResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const trackingFrames = frameResult.page;
-        const exactContext = [snapshot, events, insights].every(item => item.matchId === matchId &&
+        const requiredPages = [snapshot, ...(eventResult.page ? [events] : []), ...(insightResult.page ? [insights] : [])];
+        const exactContext = requiredPages.every(item => item.matchId === matchId &&
           item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
@@ -82,12 +96,12 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           setError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
           return;
         }
-        setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus });
+        setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus, eventsStatus: eventResult.status, insightsStatus: insightResult.status });
       })
-      .catch(() => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError('Canonical match data is unavailable. The page does not fall back to a demo fixture.'); } })
+      .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Canonical match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [matchId, requestedRevision, selectedSeconds]);
+  }, [matchId, requestedRevision, selectedSeconds, retryCounter]);
 
   useEffect(() => {
     setSelectedEvidenceId(null);
@@ -139,6 +153,28 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     return () => controller.abort();
   }, [selectedEvidenceId, selectedInsight, matchId, selectedSeconds, snapshot]);
 
+
+  useEffect(() => {
+    if (!focusAfterLoad || loading) return;
+    if (error) {
+      document.getElementById('canonical-match-retry')?.focus();
+      setFocusAfterLoad(null);
+      return;
+    }
+    if (!view || view.snapshot.selectedTimeSeconds !== selectedSeconds || view.snapshot.matchId !== matchId) return;
+    if (focusAfterLoad.kind === 'event') {
+      const eventButton = [...document.querySelectorAll<HTMLButtonElement>('[data-event-id]')]
+        .find(button => button.dataset.eventId === focusAfterLoad.eventId);
+      if (eventButton) {
+        eventButton.focus();
+        setFocusAfterLoad(null);
+        return;
+      }
+    }
+    document.getElementById('selected-time')?.focus();
+    setFocusAfterLoad(null);
+  }, [focusAfterLoad, loading, error, view, selectedSeconds, matchId]);
+
   useEffect(() => {
     if (!playing) return;
     if (selectedSeconds >= 5400) { setPlaying(false); return; }
@@ -155,14 +191,14 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
     : `No observed tracking frame is recorded at ${clock(selectedSeconds)}. Positions are not estimated.`);
 
-  return <section className="content-page">
+  return <section className="content-page" aria-busy={loading}>
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
       <h1>{replay ? 'Selected-time replay' : 'Match overview'}</h1>
       <p>How did the recorded match stand at {clock(selectedSeconds)}?</p>
     </div>
     {loading ? <p className="page-state" role="status">Loading the selected match revision…</p>
-      : error ? <p className="page-state error-copy" role="alert">{error}</p>
+      : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button id="canonical-match-retry" type="button" onClick={() => { setFocusAfterLoad({ kind: 'retry' }); setRetryCounter(value => value + 1); }}>Retry canonical match</button></div>
         : snapshot && view ? <>
           <section className="scoreboard" aria-label="Canonical match score">
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
@@ -183,6 +219,12 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <button type="button" aria-pressed={playing} onClick={() => setPlaying(value => !value)} disabled={selectedSeconds >= 5400}>
               {playing ? 'Pause replay' : 'Play replay'}
             </button>
+          </div>
+          <div className="audience-mode" role="group" aria-label="Explanation detail">
+            <span>Explanation detail</span>
+            <button type="button" className={audience === 'fan' ? 'active' : ''} aria-pressed={audience === 'fan'} onClick={() => setAudience('fan')}>Fan</button>
+            <button type="button" className={audience === 'analyst' ? 'active' : ''} aria-pressed={audience === 'analyst'} onClick={() => setAudience('analyst')}>Analyst</button>
+            <p>Both views use the same saved insight and evidence. AI explanations are not connected; match facts remain available without them.</p>
           </div>
           <div className="dashboard canonical-dashboard pitch-dashboard">
             <section className="panel pitch-panel" aria-labelledby="pitch-title">
@@ -218,10 +260,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <section className="panel" aria-labelledby="timeline-title">
               <h2 id="timeline-title">Recorded events</h2>
               <p>Choose an event to inspect its exact recorded time.</p>
-              {view.events.items.length === 0 ? <p className="empty">No recorded events are visible at this time.</p>
+              {view.events.items.length === 0 ? <p className="empty" role="status">{view.eventsStatus || 'No recorded events are visible at this time.'}</p>
                 : <ol className="canonical-events">{view.events.items.map(event => <li key={`${event.sequence}:${event.eventId}`}>
                   <button type="button" className="canonical-event" aria-label={`Select ${eventLabel(event.type)} at ${clock(event.clockSeconds)}, sequence ${event.sequence}`}
-                    onClick={() => { setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.canonicalRevision); }}>
+                    onClick={() => { setFocusAfterLoad({ kind: 'event', eventId: event.eventId }); setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.canonicalRevision); }} data-event-id={event.eventId}>
                     <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
                     <span>{eventLabel(event.type)}</span>
                     {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}
@@ -231,9 +273,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             </section>
             <section className="panel" aria-labelledby="insights-title">
               <h2 id="insights-title">Evidence-backed insights</h2>
-              {view.insights.items.length === 0 ? <p className="empty">No persisted insight is available at this selected time.</p>
+              {view.insights.items.length === 0 ? <p className="empty" role="status">{view.insightsStatus || 'No persisted insight is available at this selected time.'}</p>
                 : <ul className="canonical-insights">{view.insights.items.map((insight, index) => <li key={insight.insightId}>
-                  <span className="badge">{insight.truthClass}</span><p>{insight.summary}</p>
+                  <span className="badge" aria-label={`Insight category: ${insight.truthClass}`}>{insight.truthClass}</span><p>{insight.summary}</p>
+                  {audience === 'analyst' && <div className="analyst-insight-detail"><p>Detector {insight.detectorVersion} · sequence through {insight.throughSequence}</p><details><summary>Recorded conditions and limitations</summary><pre className="evidence-json">{JSON.stringify(insight.conditions, null, 2)}</pre>{insight.limitations === null ? <p>Limitations are not recorded.</p> : insight.limitations.length === 0 ? <p>No limitations were recorded.</p> : <ul>{insight.limitations.map((limitation, limitationIndex) => <li key={`${limitationIndex}:${limitation}`}>{limitation}</li>)}</ul>}</details></div>}
                   <small>{insight.evidence.length} evidence reference(s)</small>
                   <button type="button" aria-expanded={selectedEvidenceId === insight.insightId}
                     aria-controls={selectedEvidenceId === insight.insightId ? `evidence-${index}` : undefined}
@@ -268,6 +311,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                         : <ol className="canonical-evidence-list">{[...selectedEvidence.items].sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id)).map(item => <li key={`${item.kind}:${item.id}`}>
                           <div><span className="badge">{item.kind}</span><p>{item.relation} · {item.id}</p><small>{clock(item.clockSeconds)} · period {item.period} · sequence {item.sequence}</small></div>
                           <button type="button" onClick={() => {
+                            setFocusAfterLoad(item.kind === 'event' ? { kind: 'event', eventId: item.id } : { kind: 'time' });
                             setSelectedEvidenceId(null);
                             setSelectedEvidence(null);
                             replaceCurrentMatchContext(matchId, item.clockSeconds, snapshot.canonicalRevision);
@@ -289,6 +333,16 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
 }
 
 type PitchPoint = { x: number; y: number };
+
+function unavailableMessage(error: unknown, label: string): string {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 401 || error.status === 403) return `${label} is unavailable because access was denied.`;
+    if (error.status === 404) return `${label} is unavailable for this match and selected time.`;
+    if (error.status === 503) return `${label} service is temporarily unavailable.`;
+  }
+  return `${label} could not be loaded.`;
+}
+
 function pitchCoordinates(record: CanonicalTrackingFrame): { length: number; width: number; ball: PitchPoint; players: Array<{playerId: string; teamId: string; position: PitchPoint}>; teamIds: string[]; attackTeamId: string } | null {
   const { frame } = record;
   const system = frame.coordinateSystem;
