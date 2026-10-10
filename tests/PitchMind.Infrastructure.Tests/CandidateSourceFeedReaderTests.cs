@@ -313,17 +313,82 @@ public sealed class CandidateSourceFeedReaderTests
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
         const string second = "{\"eventId\":\"event-b\",\"matchId\":\"match-a\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}";
         const string third = "{\"eventId\":\"event-c\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":3,\"clockSeconds\":2,\"period\":1,\"eventType\":\"Goal\"}";
-        var fixture = await Fixture.CreateAsync($"[{first},{second},{third}]");
+        const string fourth = "{\"eventId\":\"event-d\",\"matchId\":\"match-a\",\"teamId\":\"team-b\",\"sequence\":4,\"clockSeconds\":3,\"period\":1,\"eventType\":\"Pass\"}";
+        var fixture = await Fixture.CreateAsync($"[{first},{second},{third},{fourth}]");
         try
         {
             var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var replay = await Collect(feed.ReplayFromSourceSequenceAsync(1, new CandidateReplayOptions(20)));
-            stopwatch.Stop();
+            var clock = new ManualTimeProvider();
+            await using var replay = feed.ReplayFromSourceSequenceAsync(
+                2,
+                new CandidateReplayOptions(20, clock)).GetAsyncEnumerator();
 
-            Assert.Equal(new long[] { 1, 2, 3 }, replay.Select(item => item.SourceSequence));
-            Assert.Equal(new[] { first, second, third }, replay.Select(item => item.RawJson));
-            Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(75), $"Replay completed too quickly: {stopwatch.Elapsed}.");
+            var firstMove = replay.MoveNextAsync();
+            Assert.True(firstMove.IsCompletedSuccessfully, "The first eligible source envelope should be yielded without a pacing delay.");
+            Assert.True(await firstMove);
+            Assert.Equal(2, replay.Current.SourceSequence);
+            Assert.Equal(second, replay.Current.RawJson);
+            Assert.Equal(TimeSpan.Zero, clock.Elapsed);
+
+            var secondMove = replay.MoveNextAsync();
+            Assert.False(secondMove.IsCompleted, "Subsequent source envelopes should wait for the configured interval.");
+            await clock.WaitForScheduledTimerAsync();
+            Assert.Equal(TimeSpan.FromMilliseconds(50), clock.TimeUntilNextTimer);
+            clock.Advance(TimeSpan.FromMilliseconds(49));
+            Assert.False(secondMove.IsCompleted, "The next envelope must not be yielded before its interval elapses.");
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.True(await secondMove);
+            Assert.Equal(3, replay.Current.SourceSequence);
+            Assert.Equal(third, replay.Current.RawJson);
+            Assert.Equal(TimeSpan.FromMilliseconds(50), clock.Elapsed);
+
+            var thirdMove = replay.MoveNextAsync();
+            Assert.False(thirdMove.IsCompleted);
+            await clock.WaitForScheduledTimerAsync();
+            Assert.Equal(TimeSpan.FromMilliseconds(50), clock.TimeUntilNextTimer);
+            clock.Advance(TimeSpan.FromMilliseconds(49));
+            Assert.False(thirdMove.IsCompleted, "The third source envelope must receive its own pacing interval.");
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.True(await thirdMove);
+            Assert.Equal(4, replay.Current.SourceSequence);
+            Assert.Equal(fourth, replay.Current.RawJson);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), clock.Elapsed);
+            Assert.False(await replay.MoveNextAsync());
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task MinimumReplayRateUsesTheBoundedHundredSecondInterval()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var clock = new ManualTimeProvider();
+            await using var replay = feed.ReplayFromSourceSequenceAsync(
+                1,
+                new CandidateReplayOptions(CandidateReplayOptions.MinimumEventsPerSecond, clock)).GetAsyncEnumerator();
+
+            var firstMove = replay.MoveNextAsync();
+            Assert.True(firstMove.IsCompletedSuccessfully);
+            Assert.True(await firstMove);
+            Assert.Equal(1, replay.Current.SourceSequence);
+            Assert.Equal(TimeSpan.Zero, clock.Elapsed);
+
+            var secondMove = replay.MoveNextAsync();
+            Assert.False(secondMove.IsCompleted);
+            await clock.WaitForScheduledTimerAsync();
+            Assert.Equal(TimeSpan.FromSeconds(100), clock.TimeUntilNextTimer);
+            clock.Advance(TimeSpan.FromSeconds(99) + TimeSpan.FromMilliseconds(999));
+            Assert.False(secondMove.IsCompleted);
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.True(await secondMove);
+            Assert.Equal(2, replay.Current.SourceSequence);
+            Assert.Equal(TimeSpan.FromSeconds(100), clock.Elapsed);
         }
         finally
         {
@@ -396,6 +461,105 @@ public sealed class CandidateSourceFeedReaderTests
         var result = new List<CandidateSourceEnvelope>();
         await foreach (var item in source) result.Add(item);
         return result;
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private readonly object _gate = new();
+        private readonly List<ManualTimer> _timers = [];
+        private long _timestampTicks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _timestampTicks;
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch.AddTicks(_timestampTicks);
+        public TimeSpan Elapsed => TimeSpan.FromTicks(_timestampTicks);
+
+        public TimeSpan TimeUntilNextTimer
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    var nextDue = _timers.Where(timer => timer.DueTimestamp is not null)
+                        .Select(timer => timer.DueTimestamp!.Value).DefaultIfEmpty(long.MaxValue).Min();
+                    return nextDue == long.MaxValue ? Timeout.InfiniteTimeSpan : TimeSpan.FromTicks(nextDue - _timestampTicks);
+                }
+            }
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = new ManualTimer(this, callback, state);
+            timer.Change(dueTime, period);
+            lock (_gate) _timers.Add(timer);
+            return timer;
+        }
+
+        public void Advance(TimeSpan elapsed)
+        {
+            if (elapsed < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(elapsed));
+            List<ManualTimer> due;
+            lock (_gate)
+            {
+                _timestampTicks += elapsed.Ticks;
+                due = _timers.Where(timer => timer.DueTimestamp is { } dueAt && dueAt <= _timestampTicks).ToList();
+            }
+
+            foreach (var timer in due)
+                timer.FireIfDue(_timestampTicks);
+        }
+
+        public async Task WaitForScheduledTimerAsync()
+        {
+            for (var attempt = 0; attempt < 100 && TimeUntilNextTimer == Timeout.InfiniteTimeSpan; attempt++)
+                await Task.Yield();
+
+            Assert.NotEqual(Timeout.InfiniteTimeSpan, TimeUntilNextTimer);
+        }
+
+        private void SetDueTimestamp(ManualTimer timer, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (_gate)
+            {
+                timer.Period = period;
+                timer.DueTimestamp = dueTime == Timeout.InfiniteTimeSpan
+                    ? null
+                    : _timestampTicks + Math.Max(0, dueTime.Ticks);
+            }
+        }
+
+        private sealed class ManualTimer(ManualTimeProvider owner, TimerCallback callback, object? state) : ITimer
+        {
+            public long? DueTimestamp { get; set; }
+            public TimeSpan Period { get; set; }
+            private bool _disposed;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                if (_disposed) return false;
+                owner.SetDueTimestamp(this, dueTime, period);
+                return true;
+            }
+
+            public void Dispose()
+            {
+                _disposed = true;
+                DueTimestamp = null;
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+
+            public void FireIfDue(long now)
+            {
+                if (_disposed || DueTimestamp is not { } dueAt || dueAt > now) return;
+                DueTimestamp = Period == Timeout.InfiniteTimeSpan ? null : now + Period.Ticks;
+                callback(state);
+            }
+        }
     }
 
     private sealed class Fixture : IDisposable

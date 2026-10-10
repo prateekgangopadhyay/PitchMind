@@ -56,7 +56,7 @@ public sealed class CandidateSourceFeed
                 continue;
 
             if (emittedAny)
-                await Task.Delay(delayBetweenEvents, cancellationToken);
+                await Task.Delay(delayBetweenEvents, options.Clock, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
             yield return envelope;
@@ -71,7 +71,9 @@ public sealed record CandidateReplayOptions
     public const double MinimumEventsPerSecond = 0.01;
     public const double MaximumEventsPerSecond = 1_000;
 
-    public CandidateReplayOptions(double eventsPerSecond)
+    public CandidateReplayOptions(double eventsPerSecond) : this(eventsPerSecond, TimeProvider.System) { }
+
+    internal CandidateReplayOptions(double eventsPerSecond, TimeProvider clock)
     {
         if (!double.IsFinite(eventsPerSecond) || eventsPerSecond < MinimumEventsPerSecond || eventsPerSecond > MaximumEventsPerSecond)
         {
@@ -80,10 +82,12 @@ public sealed record CandidateReplayOptions
                 $"Replay rate must be between {MinimumEventsPerSecond} and {MaximumEventsPerSecond} events per second.");
         }
 
+        Clock = clock ?? throw new ArgumentNullException(nameof(clock));
         EventsPerSecond = eventsPerSecond;
     }
 
     public double EventsPerSecond { get; }
+    internal TimeProvider Clock { get; }
 }
 
 /// <summary>
