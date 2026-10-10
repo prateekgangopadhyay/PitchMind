@@ -39,7 +39,7 @@ These routes are separately namespaced under `/api/v1/canonical/*` and read Post
 | GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve no later than both the selected time/sequence and its own `as_of_sequence`, with revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for event/frame evidence bounded by selected time/sequence and the insight's own `as_of_sequence`; incomplete evidence is unavailable and the insight includes revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | Snapshot and bounded ledger event page at one selected time/revision. |
-| GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | Typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no synthetic fallback. |
+| GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds&revision` | Invalid match ID, selected time, or revision returns sanitized typed 400 `INVALID_REQUEST`; when the request is valid but no persisted key-moment projection exists, returns typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no synthetic fallback. |
 
 The machine-readable contract is [openapi-canonical-bff-v1.yaml](openapi-canonical-bff-v1.yaml). PostgreSQL integration tests require the isolated local database prerequisite; implementation and contract tests alone do not constitute Product Owner or football acceptance.
 
