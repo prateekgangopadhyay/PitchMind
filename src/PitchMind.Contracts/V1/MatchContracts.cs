@@ -75,6 +75,7 @@ public sealed record TacticalContextResponse(
 public sealed record EvidenceGraphResponse(
     string MatchId,
     string SourceVersion,
+    string SourceSha256,
     string Provenance,
     int? CanonicalRevision,
     int SelectedTimeSeconds,
@@ -84,7 +85,9 @@ public sealed record EvidenceGraphResponse(
     bool Publishable,
     string ClaimNodeId,
     IReadOnlyList<EvidenceNodeResponse> Nodes,
-    IReadOnlyList<EvidenceEdgeResponse> Edges);
+    IReadOnlyList<EvidenceEdgeResponse> Edges,
+    string Uncertainty,
+    IReadOnlyList<EvidenceConditionResponse> Conditions);
 
 public sealed record EvidenceNodeResponse(
     string Id,
@@ -96,11 +99,20 @@ public sealed record EvidenceNodeResponse(
     int? ClockSeconds,
     long? Sequence,
     string SourceVersion,
+    string SourceSha256,
     int? CanonicalRevision,
     decimal? NumericValue,
     string? Unit);
 
 public sealed record EvidenceEdgeResponse(string FromNodeId, string ToNodeId, string Relation);
+
+public sealed record EvidenceConditionResponse(
+    string Id,
+    bool Passed,
+    string Observed,
+    string? Threshold,
+    IReadOnlyList<string> SourceNodeIds,
+    string? ExclusionReason);
 
 public sealed record EvidenceResponse(
     InsightResponse Insight,

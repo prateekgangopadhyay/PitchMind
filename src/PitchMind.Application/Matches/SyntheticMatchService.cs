@@ -93,7 +93,8 @@ public sealed class SyntheticMatchService
             events,
             Array.AsReadOnly(Fixture.Frames.Where(frame => frame.ClockSeconds <= clockSeconds).ToArray()))
         {
-            SelectedState = ProjectMatchState(clockSeconds, events)
+            SelectedState = ProjectMatchState(clockSeconds, events),
+            SourceSha256 = Fixture.SourceSha256
         };
         return PressSequenceDetector.Detect(input);
     }

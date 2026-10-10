@@ -39,6 +39,7 @@ public sealed record PressSequenceInput(
     IReadOnlyList<TrackingFrame> Frames)
 {
     public MatchState? SelectedState { get; init; }
+    public string SourceSha256 { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -135,6 +136,43 @@ public static class PressSequenceDetector
                 $"context: {scoreline}; pressing team role {context.TeamRole}; numerical advantage {context.NumericalAdvantage}; match phase {context.MatchPhase}; opponent goes from in-possession to defending after observed regain",
                 $"policy: {policy.Version} ({policy.ReviewStatus}); publication approval is absent"
             });
+            string EventNode(SimulationEvent item) => $"event:{item.Event.EventId:D}";
+            string FrameNode(TrackingFrame frame) => $"frame:{frame.Id}";
+            var evidenceConditions = Array.AsReadOnly(new[]
+            {
+                new TacticalEvidenceCondition("trigger", true,
+                    $"Completed back-pass at {trigger.Event.ClockSeconds}s, sequence {trigger.Event.Sequence}.", null,
+                    new[] { EventNode(trigger) }, null),
+                new TacticalEvidenceCondition("pressure", true,
+                    $"Observed separation {distance:F2}m at {pressure.Event.ClockSeconds}s.",
+                    $"<= {policy.MaximumPressureDistanceMetres:F0}m (unapproved demonstration threshold)",
+                    new[] { EventNode(pressure), FrameNode(pressureFrame) }, null),
+                new TacticalEvidenceCondition("response", true,
+                    $"Incomplete opponent pass {response.Event.ClockSeconds - pressure.Event.ClockSeconds}s after pressure.",
+                    $"<= {policy.MaximumPressToResponseSeconds}s (unapproved demonstration threshold)",
+                    new[] { EventNode(pressure), EventNode(response) }, null),
+                new TacticalEvidenceCondition("regain", true,
+                    $"Same pressing team regained possession {regain.Event.ClockSeconds - response.Event.ClockSeconds}s after response.",
+                    $"<= {policy.MaximumResponseToRegainSeconds}s (unapproved demonstration threshold)",
+                    new[] { EventNode(response), EventNode(regain) }, null),
+                new TacticalEvidenceCondition("exploitation", true,
+                    $"Completed cutback followed by a shot; cutback-to-shot interval {shot.Event.ClockSeconds - cutback.Event.ClockSeconds}s.",
+                    $"<= {policy.MaximumRegainToOutcomeSeconds}s per action (unapproved demonstration threshold)",
+                    new[] { EventNode(regain), EventNode(cutback), EventNode(shot) }, null),
+                new TacticalEvidenceCondition("outcome", true,
+                    $"Goal at {goal.Event.ClockSeconds}s, {goal.Event.ClockSeconds - trigger.Event.ClockSeconds}s after trigger.",
+                    $"<= {policy.MaximumTriggerToOutcomeSeconds}s from trigger (unapproved demonstration threshold)",
+                    new[] { EventNode(trigger), EventNode(goal) }, null),
+                new TacticalEvidenceCondition("tracking-coverage", true,
+                    $"{requiredFrameClocks.Length} event-time frames include the required pressure participants.", null,
+                    requiredFrameClocks.Select(clock => FrameNode(framesByClock[clock])).ToArray(), null),
+                new TacticalEvidenceCondition("selected-time", true,
+                    $"All linked evidence is at or before {input.SelectedTimeSeconds}s and through sequence {input.ThroughSequence}.", null,
+                    events.Select(EventNode).Concat(frameIds.Select(id => $"frame:{id}")).ToArray(), null),
+                new TacticalEvidenceCondition("publication-policy", false,
+                    $"Policy {policy.Version} status is {policy.ReviewStatus}.", "approved canonical policy",
+                    Array.Empty<string>(), "The demonstration policy has not received football/Product Owner approval.")
+            });
 
             var insight = new TacticalInsight(
                 $"press-{trigger.Event.EventId:D}", input.MatchId, goal.Event.ClockSeconds,
@@ -145,13 +183,16 @@ public static class PressSequenceDetector
                 Array.AsReadOnly(frameIds))
             {
                 SourceVersion = input.SourceVersion,
+                SourceSha256 = input.SourceSha256,
                 CanonicalRevision = input.CanonicalRevision,
                 SelectedTimeSeconds = input.SelectedTimeSeconds,
                 ThroughSequence = input.ThroughSequence,
                 PolicyStatus = policy.ReviewStatus,
                 Publishable = policy.Publishable,
                 Conditions = conditions,
-                Context = context
+                Context = context,
+                EvidenceConditions = evidenceConditions,
+                Uncertainty = "The demonstration policy is uncalibrated; no confidence score is available."
             };
             var graph = TacticalEvidenceGraphBuilder.Build(insight, input.Events, input.Frames);
             if (insight.Publishable != graph.Publishable)
@@ -179,6 +220,8 @@ public static class PressSequenceDetector
             !double.IsFinite(input.PitchLengthMetres) || !double.IsFinite(input.PitchWidthMetres) ||
             input.PitchLengthMetres <= 0 || input.PitchWidthMetres <= 0 || input.Events is null || input.Frames is null)
             throw new ArgumentException("Tactical sequence input metadata is invalid.", nameof(input));
+        if (!IsSha256(input.SourceSha256))
+            throw new ArgumentException("Tactical sequence input requires a lowercase SHA-256 source hash.", nameof(input));
         if (input.SelectedState is null || input.SelectedState.MatchId != input.MatchId ||
             input.SelectedState.ClockSeconds != input.SelectedTimeSeconds || input.SelectedState.Provenance != input.Provenance ||
             input.SelectedState.HomeScore < 0 || input.SelectedState.AwayScore < 0 ||
@@ -219,4 +262,7 @@ public static class PressSequenceDetector
                 throw new InvalidDataException("Tactical input frames must be unique, finite, in-pitch and selected-time bounded.");
         }
     }
+
+    private static bool IsSha256(string value) => value.Length == 64 &&
+        value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 }

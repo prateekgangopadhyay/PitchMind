@@ -16,6 +16,7 @@ public sealed record SyntheticFixture(string MatchId, string Version, int Seed, 
     int HalfTimeSeconds, double PitchLengthMetres, double PitchWidthMetres,
     SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames)
 {
+    public string SourceSha256 { get; init; } = string.Empty;
     public string CoordinateConvention =>
         $"Offline synthetic fixture; metre coordinates, x=0..{PitchLengthMetres:R}, y=0..{PitchWidthMetres:R}; fixed stadium axes; attacking direction changes at {HalfTimeSeconds} seconds.";
 }
@@ -26,6 +27,10 @@ public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds
     string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds)
 {
     public string SourceVersion { get; init; } = "unknown";
+    public string SourceSha256 { get; init; } = string.Empty;
+    public string ClaimTruthClass { get; init; } = "pattern";
+    public string Uncertainty { get; init; } = "Uncalibrated demonstration policy; confidence is not calibrated.";
+    public IReadOnlyList<TacticalEvidenceCondition> EvidenceConditions { get; init; } = Array.Empty<TacticalEvidenceCondition>();
     public int? CanonicalRevision { get; init; }
     public int SelectedTimeSeconds { get; init; }
     public long ThroughSequence { get; init; } = -1;
@@ -62,17 +67,20 @@ public static class SyntheticFixtureGenerator
 
     public static SyntheticFixture Generate(int seed = 42)
     {
-        return GenerateFromDefinition(LoadDefinition(), seed);
+        var json = LoadDefinitionJson();
+        var definition = JsonSerializer.Deserialize<FixtureDefinition>(json, JsonOptions)
+            ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
+        return GenerateFromDefinition(definition, seed, ComputeSourceSha256(json));
     }
 
     internal static SyntheticFixture GenerateFromDefinitionJson(string json, int seed = 42)
     {
         var definition = JsonSerializer.Deserialize<FixtureDefinition>(json, JsonOptions)
             ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
-        return GenerateFromDefinition(definition, seed);
+        return GenerateFromDefinition(definition, seed, ComputeSourceSha256(json));
     }
 
-    private static SyntheticFixture GenerateFromDefinition(FixtureDefinition definition, int seed)
+    private static SyntheticFixture GenerateFromDefinition(FixtureDefinition definition, int seed, string sourceSha256)
     {
         if (!string.Equals(definition.Version, Version, StringComparison.Ordinal))
             throw new InvalidOperationException($"Fixture definition version '{definition.Version}' does not match generator '{Version}'.");
@@ -115,18 +123,21 @@ public static class SyntheticFixtureGenerator
             .Concat(definition.FrameOverrides.Select(f => f.ClockSeconds))
             .Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, homeDefinition, awayDefinition, definition, seed)).ToArray();
-        return new(fixtureMatchId.ToString(), definition.Version, seed, definition.Provenance, definition.DurationSeconds,
+        return new SyntheticFixture(fixtureMatchId.ToString(), definition.Version, seed, definition.Provenance, definition.DurationSeconds,
             definition.HalfTimeSeconds, definition.PitchLengthMetres, definition.PitchWidthMetres,
-            home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
+            home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames)) { SourceSha256 = sourceSha256 };
     }
 
-    private static FixtureDefinition LoadDefinition()
+    private static string LoadDefinitionJson()
     {
         using var stream = typeof(SyntheticFixtureGenerator).Assembly.GetManifestResourceStream(DefinitionResource)
             ?? throw new InvalidOperationException($"Embedded fixture definition '{DefinitionResource}' was not found.");
-        return JsonSerializer.Deserialize<FixtureDefinition>(stream, JsonOptions)
-            ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
+
+    private static string ComputeSourceSha256(string json) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
 
     private static void ValidateDefinition(FixtureDefinition definition)
     {

@@ -27,6 +27,9 @@ public sealed class SyntheticMatchTests
         var graph = insight.EvidenceGraph!;
         Assert.Equal(insight.MatchId, graph.MatchId);
         Assert.Equal(insight.SourceVersion, graph.SourceVersion);
+        Assert.Equal(service.Fixture.SourceSha256, insight.SourceSha256);
+        Assert.Equal(insight.SourceSha256, graph.SourceSha256);
+        Assert.All(graph.Nodes, node => Assert.Equal(graph.SourceSha256, node.SourceSha256));
         Assert.Null(graph.CanonicalRevision);
         Assert.False(graph.Publishable);
         Assert.Equal("synthetic", graph.Provenance);
@@ -45,6 +48,20 @@ public sealed class SyntheticMatchTests
             graph.Edges.Count(edge => edge.Relation == "derived_from"));
         Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
+    }
+
+    [Theory]
+    [InlineData("interpretation")]
+    [InlineData("hypothesis")]
+    public void EvidenceGraphPreservesQualifiedClaimTruthClasses(string truthClass)
+    {
+        var service = new SyntheticMatchService();
+        var insight = service.GetInsights(5400).Single() with { ClaimTruthClass = truthClass };
+
+        var graph = TacticalEvidenceGraphBuilder.Build(insight, service.Fixture.Events, service.Fixture.Frames);
+
+        Assert.Equal(truthClass, graph.Nodes.Single(node => node.Id == graph.ClaimNodeId).TruthClass);
+        Assert.All(graph.Nodes, node => Assert.Equal(service.Fixture.SourceSha256, node.SourceSha256));
     }
     [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
     {

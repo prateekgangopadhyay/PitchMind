@@ -41,6 +41,8 @@ public sealed class SyntheticFixtureTests
         Assert.NotEqual(first.Events[0].Event.EventId, differentSeed.Events[0].Event.EventId);
         Assert.Equal("synthetic-v2", first.Version);
         Assert.Equal("synthetic", first.Provenance);
+        Assert.Equal("ff3ab70d93cb64e793e641d0291f48e11e6992c3b106ef7e3d2ef8b294c04f0a", first.SourceSha256);
+        Assert.Equal(first.SourceSha256, differentSeed.SourceSha256);
     }
 
     [Fact] public void ScenarioIncludesPeriodsCardsSubstitutionAndLegalScoreTransitions()

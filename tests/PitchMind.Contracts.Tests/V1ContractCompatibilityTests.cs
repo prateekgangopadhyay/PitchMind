@@ -10,6 +10,7 @@ namespace PitchMind.Contracts.Tests;
 public sealed class V1ContractCompatibilityTests
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private const string SourceHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     [Fact]
     public void Fixture_serialization_preserves_the_v1_consumer_shape()
@@ -44,15 +45,19 @@ public sealed class V1ContractCompatibilityTests
             "sourceVersion", "canonicalRevision", "selectedTimeSeconds", "throughSequence", "policyStatus", "publishable", "conditions", "context", "evidenceGraph");
         AssertJsonProperties(new TacticalContextResponse("home 1–0 away", "home", 0, "opponent defending", "SecondHalf"),
             "scoreline", "teamRole", "numericalAdvantage", "opponentPhase", "matchPhase");
-        AssertJsonProperties(new EvidenceGraphResponse("match", "synthetic-v2", "synthetic", null, 0, -1,
-                "press-sequence-v2", "unapproved-demo", false, "claim:demo", Array.Empty<EvidenceNodeResponse>(), Array.Empty<EvidenceEdgeResponse>()),
-            "matchId", "sourceVersion", "provenance", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
-            "detectorVersion", "policyStatus", "publishable", "claimNodeId", "nodes", "edges");
+        AssertJsonProperties(new EvidenceGraphResponse("match", "synthetic-v2", SourceHash, "synthetic", null, 0, -1,
+                "press-sequence-v2", "unapproved-demo", false, "claim:demo", Array.Empty<EvidenceNodeResponse>(),
+                Array.Empty<EvidenceEdgeResponse>(), "No calibrated confidence score.", Array.Empty<EvidenceConditionResponse>()),
+            "matchId", "sourceVersion", "sourceSha256", "provenance", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
+            "detectorVersion", "policyStatus", "publishable", "claimNodeId", "nodes", "edges", "uncertainty", "conditions");
         AssertJsonProperties(new EvidenceNodeResponse("event:demo", "event", "fact", "Synthetic event", Guid.Empty, null,
-                0, 0, "synthetic-v2", null, null, null),
-            "id", "kind", "truthClass", "description", "eventId", "frameId", "clockSeconds", "sequence", "sourceVersion", "canonicalRevision", "numericValue", "unit");
+                0, 0, "synthetic-v2", SourceHash, null, null, null),
+            "id", "kind", "truthClass", "description", "eventId", "frameId", "clockSeconds", "sequence", "sourceVersion", "sourceSha256", "canonicalRevision", "numericValue", "unit");
         AssertJsonProperties(new EvidenceEdgeResponse("claim:demo", "event:demo", "derived_from"),
             "fromNodeId", "toNodeId", "relation");
+        AssertJsonProperties(new EvidenceConditionResponse("pressure", true, "2m separation", "<=3m",
+                new[] { "event:demo", "frame:demo" }, null),
+            "id", "passed", "observed", "threshold", "sourceNodeIds", "exclusionReason");
         AssertJsonProperties(evidence, "insight", "events", "frames", "coordinateConvention", "conditions", "limitations");
         AssertJsonProperties(explanation, "insightId", "clockSeconds", "audience", "source", "text", "eventIds", "limitations");
         AssertJsonProperties(problem, "type", "title", "status", "code", "correlationId", "detail", "instance");
@@ -79,6 +84,26 @@ public sealed class V1ContractCompatibilityTests
         Assert.Equal("secondhalf", state.Phase);
         Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
         Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
+    }
+
+    [Fact]
+    public void Insight_evidence_graph_exposes_the_source_hash_on_graph_and_nodes()
+    {
+        var insight = new SyntheticMatchService().GetInsights(5400).Single().ToResponse();
+        var graph = Assert.IsType<EvidenceGraphResponse>(insight.EvidenceGraph);
+
+        Assert.Matches("^[a-f0-9]{64}$", graph.SourceSha256);
+        Assert.NotEmpty(graph.Nodes);
+        Assert.All(graph.Nodes, node => Assert.Equal(graph.SourceSha256, node.SourceSha256));
+        Assert.NotEmpty(graph.Conditions);
+        Assert.Contains(graph.Conditions, condition => condition.Id == "publication-policy" && !condition.Passed &&
+            condition.ExclusionReason is not null);
+        Assert.All(graph.Conditions.SelectMany(condition => condition.SourceNodeIds), sourceNodeId =>
+            Assert.Contains(graph.Nodes, node => node.Id == sourceNodeId));
+        Assert.Contains("no confidence score", graph.Uncertainty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(graph.Nodes, node => node.TruthClass == "pattern");
+        Assert.Contains(graph.Nodes, node => node.TruthClass == "fact");
+        Assert.Contains(graph.Nodes, node => node.TruthClass == "derivation");
     }
 
     [Fact]

@@ -12,15 +12,25 @@ public sealed record TacticalEvidenceNode(
     int? ClockSeconds,
     long? Sequence,
     string SourceVersion,
+    string SourceSha256,
     int? CanonicalRevision,
     decimal? NumericValue,
     string? Unit);
 
 public sealed record TacticalEvidenceEdge(string FromNodeId, string ToNodeId, string Relation);
 
+public sealed record TacticalEvidenceCondition(
+    string Id,
+    bool Passed,
+    string Observed,
+    string? Threshold,
+    IReadOnlyList<string> SourceNodeIds,
+    string? ExclusionReason);
+
 public sealed record TacticalEvidenceGraph(
     string MatchId,
     string SourceVersion,
+    string SourceSha256,
     string Provenance,
     int? CanonicalRevision,
     int SelectedTimeSeconds,
@@ -30,7 +40,9 @@ public sealed record TacticalEvidenceGraph(
     bool Publishable,
     string ClaimNodeId,
     IReadOnlyList<TacticalEvidenceNode> Nodes,
-    IReadOnlyList<TacticalEvidenceEdge> Edges);
+    IReadOnlyList<TacticalEvidenceEdge> Edges,
+    string Uncertainty,
+    IReadOnlyList<TacticalEvidenceCondition> Conditions);
 
 /// <summary>Builds source-linked, non-publishable evidence graphs for the deterministic demo detector.</summary>
 public static class TacticalEvidenceGraphBuilder
@@ -63,24 +75,25 @@ public static class TacticalEvidenceGraphBuilder
         var claimNodeId = $"claim:{insight.Id}";
         var nodes = new List<TacticalEvidenceNode>
         {
-            new(claimNodeId, "claim", "pattern", insight.Summary, null, null, insight.ClockSeconds,
-                insight.ThroughSequence, insight.SourceVersion, insight.CanonicalRevision, null, null)
+            new(claimNodeId, "claim", insight.ClaimTruthClass, insight.Summary, null, null, insight.ClockSeconds,
+                insight.ThroughSequence, insight.SourceVersion, insight.SourceSha256, insight.CanonicalRevision, null, null)
         };
         nodes.AddRange(graphEvents.Select(item => new TacticalEvidenceNode(
             $"event:{item.Event.EventId:D}", "event", "fact",
             $"Synthetic source event: {item.Event.Type} ({item.Action}, {item.Outcome}).",
             item.Event.EventId, null, item.Event.ClockSeconds, item.Event.Sequence,
-            insight.SourceVersion, insight.CanonicalRevision, null, null)));
+            insight.SourceVersion, insight.SourceSha256, insight.CanonicalRevision, null, null)));
         nodes.AddRange(selectedFrames.Select(frame => new TacticalEvidenceNode(
             $"frame:{frame.Id}", "frame", "fact", "Synthetic tracking frame used by the detector.",
-            null, frame.Id, frame.ClockSeconds, null, insight.SourceVersion, insight.CanonicalRevision, null, null)));
+            null, frame.Id, frame.ClockSeconds, null, insight.SourceVersion, insight.SourceSha256,
+            insight.CanonicalRevision, null, null)));
         if (insight.Context is not null)
             nodes.Add(new($"metric:{insight.Id}:selected-context", "metric", "derivation",
                 $"Selected-time scoreline {insight.Context.Scoreline}; pressing-team role {insight.Context.TeamRole}; " +
                 $"active-player difference {insight.Context.NumericalAdvantage}; match phase {insight.Context.MatchPhase}; " +
                 $"opponent phase {insight.Context.OpponentPhase}.", null, null, insight.SelectedTimeSeconds,
-                insight.ThroughSequence, insight.SourceVersion, insight.CanonicalRevision,
-                insight.Context.NumericalAdvantage, "active-players"));
+                insight.ThroughSequence, insight.SourceVersion, insight.SourceSha256,
+                insight.CanonicalRevision, insight.Context.NumericalAdvantage, "active-players"));
 
         var edges = new List<TacticalEvidenceEdge>();
         for (var i = 1; i < graphEvents.Length; i++)
@@ -99,10 +112,11 @@ public static class TacticalEvidenceGraphBuilder
                 $"event:{item.Event.EventId:D}", "derived_from")));
         }
 
-        var graph = new TacticalEvidenceGraph(insight.MatchId, insight.SourceVersion, "synthetic",
+        var graph = new TacticalEvidenceGraph(insight.MatchId, insight.SourceVersion, insight.SourceSha256, "synthetic",
             insight.CanonicalRevision, insight.SelectedTimeSeconds, insight.ThroughSequence,
             insight.DetectorVersion, insight.PolicyStatus, insight.Publishable, claimNodeId,
-            Array.AsReadOnly(nodes.ToArray()), Array.AsReadOnly(edges.ToArray()));
+            Array.AsReadOnly(nodes.ToArray()), Array.AsReadOnly(edges.ToArray()),
+            insight.Uncertainty, Array.AsReadOnly(insight.EvidenceConditions.ToArray()));
         TacticalEvidenceGraphValidator.Validate(graph);
         return graph;
     }
@@ -114,17 +128,20 @@ public static class TacticalEvidenceGraphValidator
     {
         ArgumentNullException.ThrowIfNull(graph);
         if (string.IsNullOrWhiteSpace(graph.MatchId) || string.IsNullOrWhiteSpace(graph.SourceVersion) ||
-            graph.SelectedTimeSeconds < 0 || graph.CanonicalRevision is <= 0 || graph.Nodes is null || graph.Edges is null)
+            !IsSha256(graph.SourceSha256) ||
+            graph.SelectedTimeSeconds < 0 || graph.CanonicalRevision is <= 0 || graph.Nodes is null || graph.Edges is null ||
+            string.IsNullOrWhiteSpace(graph.Uncertainty) || graph.Conditions is null)
             throw new ArgumentException("Evidence graph metadata is invalid.", nameof(graph));
 
         var nodes = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
         if (nodes.Count == 0 || !nodes.TryGetValue(graph.ClaimNodeId, out var claim) ||
-            claim.Kind != "claim" || claim.TruthClass != "pattern")
-            throw new InvalidDataException("The graph must have one identified pattern claim node.");
+            claim.Kind != "claim" || !IsClaimTruthClass(claim.TruthClass))
+            throw new InvalidDataException("The graph must have one identified claim with a supported truth class.");
         if (graph.Nodes.Any(node => string.IsNullOrWhiteSpace(node.Id) || node.SourceVersion != graph.SourceVersion ||
+            node.SourceSha256 != graph.SourceSha256 ||
             node.CanonicalRevision != graph.CanonicalRevision || node.ClockSeconds is int clock &&
             (clock < 0 || clock > graph.SelectedTimeSeconds) ||
-            node.Kind == "claim" && node.TruthClass != "pattern" ||
+            node.Kind == "claim" && node.TruthClass is not ("fact" or "derivation" or "pattern" or "interpretation" or "hypothesis") ||
             (node.Kind is "event" or "frame") && node.TruthClass != "fact" ||
             node.Kind == "metric" && node.TruthClass != "derivation" ||
             node.Kind == "metric" && (node.NumericValue is null || string.IsNullOrWhiteSpace(node.Unit)) ||
@@ -151,8 +168,20 @@ public static class TacticalEvidenceGraphValidator
                 throw new InvalidDataException("Unsupported evidence edge relation.");
         }
 
+        if (graph.Conditions.Select(condition => condition.Id).Distinct(StringComparer.Ordinal).Count() != graph.Conditions.Count ||
+            graph.Conditions.Any(condition => string.IsNullOrWhiteSpace(condition.Id) ||
+                string.IsNullOrWhiteSpace(condition.Observed) || condition.SourceNodeIds is null ||
+                condition.SourceNodeIds.Any(sourceId => !nodes.ContainsKey(sourceId)) ||
+                condition.Passed && condition.ExclusionReason is not null ||
+                !condition.Passed && string.IsNullOrWhiteSpace(condition.ExclusionReason)))
+            throw new InvalidDataException("Evidence conditions must be uniquely identified, source-linked, and explain failed evaluations.");
+
         if (graph.Publishable)
         {
+            if (claim.TruthClass == "hypothesis")
+                throw new InvalidDataException("A hypothesis cannot be published as a supported tactical claim.");
+            if (graph.Conditions.Count == 0 || graph.Conditions.Any(condition => !condition.Passed))
+                throw new InvalidDataException("A publishable claim requires recorded conditions that all pass.");
             var claimHasSourceEvidence = graph.Edges.Any(edge => edge.FromNodeId == graph.ClaimNodeId &&
                 edge.Relation == "derived_from" && (nodes[edge.ToNodeId].Kind is "event" or "frame")) ||
                 graph.Edges.Any(claimEdge => claimEdge.FromNodeId == graph.ClaimNodeId &&
@@ -164,4 +193,10 @@ public static class TacticalEvidenceGraphValidator
                 throw new InvalidDataException("A publishable claim requires approved policy and revisioned canonical source evidence.");
         }
     }
+
+    private static bool IsSha256(string value) => value is { Length: 64 } &&
+        value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+    private static bool IsClaimTruthClass(string value) =>
+        value is "fact" or "derivation" or "pattern" or "interpretation" or "hypothesis";
 }
