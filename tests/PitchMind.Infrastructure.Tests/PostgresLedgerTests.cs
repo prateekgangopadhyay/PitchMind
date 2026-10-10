@@ -122,6 +122,75 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task QuarantineV4RejectsLegacyZeroIdAndRollsBackWithoutDataLoss()
+    {
+        await using var source = Source();
+        await using (var reset = source.CreateCommand("""
+            DROP TABLE IF EXISTS pitchmind.quarantine;
+            DROP TABLE IF EXISTS pitchmind.match_events;
+            DROP TABLE IF EXISTS pitchmind.schema_versions;
+            DROP FUNCTION IF EXISTS pitchmind.reject_quarantine_mutation();
+            """))
+            await reset.ExecuteNonQueryAsync();
+        await using (var v1 = source.CreateCommand(PostgresSchemaMigrator.SchemaSql))
+            await v1.ExecuteNonQueryAsync();
+        await using (var v2 = source.CreateCommand(PostgresSchemaMigrator.EventTypeRangeV2Sql))
+            await v2.ExecuteNonQueryAsync();
+        await using (var v3 = source.CreateCommand(PostgresSchemaMigrator.QuarantineV3Sql))
+            await v3.ExecuteNonQueryAsync();
+
+        await using (var legacyRow = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(record_id, source_ptr, reason, observed_at)
+            VALUES ($1, $2, $3, $4)
+            """))
+        {
+            legacyRow.Parameters.AddWithValue(Guid.Empty);
+            legacyRow.Parameters.AddWithValue("legacy/v3/zero-id");
+            legacyRow.Parameters.AddWithValue("INVALID_LEGACY_ID");
+            legacyRow.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+            await legacyRow.ExecuteNonQueryAsync();
+        }
+
+        var migrationFailure = await Assert.ThrowsAsync<PostgresException>(
+            () => PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, migrationFailure.SqlState);
+
+        await using (var rollbackEvidence = source.CreateCommand("""
+            SELECT (SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 3),
+                   (SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 4),
+                   (SELECT COUNT(*) FROM pitchmind.quarantine WHERE record_id = $1),
+                   (SELECT COUNT(*) FROM pg_constraint
+                    WHERE conrelid = 'pitchmind.quarantine'::regclass AND conname = 'quarantine_record_id_nonzero'),
+                   (SELECT COUNT(*) FROM pg_trigger
+                    WHERE tgrelid = 'pitchmind.quarantine'::regclass
+                      AND tgname IN ('quarantine_immutable', 'quarantine_no_truncate')),
+                   (SELECT to_regprocedure('pitchmind.reject_quarantine_mutation()') IS NULL)
+            """))
+        {
+            rollbackEvidence.Parameters.AddWithValue(Guid.Empty);
+            await using var reader = await rollbackEvidence.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1L, reader.GetInt64(0));
+            Assert.Equal(0L, reader.GetInt64(1));
+            Assert.Equal(1L, reader.GetInt64(2));
+            Assert.Equal(0L, reader.GetInt64(3));
+            Assert.Equal(0L, reader.GetInt64(4));
+            Assert.True(reader.GetBoolean(5));
+        }
+
+        await using (var removeInvalidTestRow = source.CreateCommand(
+            "DELETE FROM pitchmind.quarantine WHERE record_id = $1 AND source_ptr = $2"))
+        {
+            removeInvalidTestRow.Parameters.AddWithValue(Guid.Empty);
+            removeInvalidTestRow.Parameters.AddWithValue("legacy/v3/zero-id");
+            Assert.Equal(1, await removeInvalidTestRow.ExecuteNonQueryAsync());
+        }
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await using var applied = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 4");
+        Assert.Equal(1L, (long)(await applied.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
     public async Task QuarantineRejectsMalformedHashAndReasonWithoutWritingEvidence()
     {
         await using var source = Source();
