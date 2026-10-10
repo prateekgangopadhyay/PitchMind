@@ -25,6 +25,8 @@ public sealed class InMemoryEventStoreTests
             () => store.AppendAsync(input with { EventId = Guid.NewGuid() }, default));
         Xunit.Assert.Equal("SEQUENCE_ALREADY_USED", conflictingSequence.Code);
         Xunit.Assert.Equal(MatchEventIngestionDisposition.Quarantine, conflictingSequence.Disposition);
+        events.Clear();
+        await foreach (var item in store.ReadAsync(input.MatchId, default)) events.Add(item);
         Xunit.Assert.Equal(input, Xunit.Assert.Single(events));
     }
 
