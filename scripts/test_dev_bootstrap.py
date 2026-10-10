@@ -358,7 +358,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 bindings.extend(
                     (service_name, port)
                     for port in ports
-                    if isinstance(port, dict) and "published" in port
+                    if isinstance(port, dict)
                 )
         return bindings
 
@@ -401,17 +401,18 @@ services:
   aliased:
     image: alpine:3.20
     ports: *public_ports
+  implicit_host_binding:
+    image: alpine:3.20
+    ports: ["8082"]
 """,
             encoding="utf-8",
         )
         config = self._resolved_compose_config(compose_file)
         published_ports = self._published_ports(config)
-        self.assertEqual(len(published_ports), 2)
+        self.assertEqual(len(published_ports), 3)
         self.assertFalse(self._published_ports_are_loopback(config), published_ports)
-        self.assertEqual(
-            {port.get("host_ip") for _, port in published_ports},
-            {"0.0.0.0"},
-        )
+        self.assertIn("0.0.0.0", {port.get("host_ip") for _, port in published_ports})
+        self.assertIn(None, {port.get("host_ip") for _, port in published_ports})
 
 
 if __name__ == "__main__":
