@@ -1,5 +1,17 @@
 # EP07-S01 design and implementation review (local candidate)
 
+## Exact PR #53 head repair revalidation — 2026-10-10
+
+The current PR #53 head was rechecked at `ef62f11f4e351bf64a3aa9fa7ef9d454d103869b`. Its `ShellPages.tsx` and tests imported route helpers, but its tree omitted `frontend/src/routes.ts` and still rendered the legacy demo directly from `App.tsx`. This local candidate restores the route shell and route helpers from the prior S01 candidate (`934d261`) and keeps the older demo at `/demo/matches/:id`. The demo pitch renderer now reads pitch dimensions from its fixture response, matching the existing contract and regression test instead of fixing a match-specific pitch size in React.
+
+On this exact-parent candidate, `npm ci --offline` installed 224 packages with 0 reported vulnerabilities; `npm test` passed 8/8; `npm run build` passed; `npm run lint` passed; the operating-model validator, design-skill self-test, and `git diff --check` passed. The code change is local and uncommitted at the time these checks ran. A fresh Vite/browser inspection was not available: starting Vite failed with `listen EPERM` on `127.0.0.1:5173`. Therefore, the browser screenshots, keyboard and AX-tree observations below apply to the earlier local candidate at `94db64ca0ac54967949012eccdeec168d2f4306c`, not this exact-parent repair. Current visual regression, retained screenshots, real AT/axe, full keyboard and WCAG evidence remain unverified.
+
+## Current-tree static design review
+
+- Taste: kept the existing React/Vite/CSS stack, dark navy and emerald tokens, and restrained static interaction. No extra packages or animation were introduced. Demo pitch geometry now uses fixture-provided dimensions (`frontend/src/App.tsx:21-27,83`), rather than a fixed match-specific field size.
+- Vercel Web Interface Guidelines: fetched the official `command.md` on 2026-10-10. Static inspection found semantic skip/navigation links and active route state (`frontend/src/App.tsx:113-120`), bounded selected-time/revision URL context (`frontend/src/routes.ts:34-45,64-72`), visible focus replacement and reduced-motion rules (`frontend/src/styles.css:31-38,64-65`), and 44px control targets (`frontend/src/styles.css:18`). No new actionable static finding was identified. Horizontal navigation on narrow screens still needs browser/keyboard verification; there was no fresh visual inspection.
+- Awesome Design: the anti-slop and premium scores below apply to the earlier browser-inspected candidate `94db64c`. This repair was not browser-rendered, so no new screenshot-based score or visual-quality pass is claimed.
+
 **Result: UNVERIFIED for story acceptance.** This independent code/UI review found and fixed one acceptance gap on a local branch; it does not grant Product Owner acceptance or human Accessibility/UX approval.
 
 - PR: [#53](https://github.com/prateekgangopadhyay/PitchMind/pull/53), observed open, draft, mergeable; remote state and head were not changed.
