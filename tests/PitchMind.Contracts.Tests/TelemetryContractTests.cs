@@ -224,6 +224,35 @@ public sealed class TelemetryContractTests
         Assert.True(TelemetryContractValidatorV1.Validate(frame).IsValid);
     }
 
+    [Theory]
+    [InlineData(90, 45)]
+    [InlineData(120, 90)]
+    public void Event_location_accepts_pitch_dimension_boundaries(decimal lengthMetres, decimal widthMetres)
+    {
+        var value = Event("Pass") with
+        {
+            CoordinateSystem = Frame().CoordinateSystem with { LengthMetres = lengthMetres, WidthMetres = widthMetres },
+            Location = new EventLocationV1 { Start = new PitchPointV1 { X = .5m, Y = .5m } }
+        };
+
+        Assert.True(TelemetryContractValidatorV1.Validate(value).IsValid);
+    }
+
+    [Fact]
+    public void Tracking_frame_bounds_team_direction_count()
+    {
+        var frame = Frame() with
+        {
+            CoordinateSystem = Frame().CoordinateSystem with
+            {
+                TeamDirections = Enumerable.Range(0, TelemetryContractValidatorV1.MaximumPlayersPerFrame + 1)
+                    .Select(index => new TeamAttackingDirectionV1 { TeamId = $"team-{index}", Direction = "left" }).ToArray()
+            }
+        };
+
+        Assert.Contains(TelemetryContractValidatorV1.Validate(frame).Errors, error => error.Code == "TOO_MANY_TEAM_DIRECTIONS");
+    }
+
     [Fact]
     public void Team_relative_x_is_stable_across_halves_when_declared_directions_mirror()
     {
