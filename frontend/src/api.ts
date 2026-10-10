@@ -53,7 +53,8 @@ export interface CanonicalLedgerEvent {
 export interface CanonicalEvidenceReference { kind: string; id: string; relation: string }
 export interface CanonicalInsight {
   insightId: string; matchId: string; canonicalRevision: number; selectedTimeSeconds: number;
-  throughSequence: number; detectorVersion: string; truthClass: string; summary: string;
+  throughSequence: number; sourceVersion: string; provenance: string; sourceSha256: string;
+  detectorVersion: string; truthClass: string; summary: string;
   evidence: CanonicalEvidenceReference[];
 }
 export interface CanonicalInsightPage {

@@ -273,13 +273,16 @@ components:
         relation: { type: string }
     CanonicalInsight:
       type: object
-      required: [insightId, matchId, canonicalRevision, selectedTimeSeconds, throughSequence, detectorVersion, truthClass, summary, evidence]
+      required: [insightId, matchId, canonicalRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, evidence]
       properties:
         insightId: { type: string }
         matchId: { type: string, format: uuid }
         canonicalRevision: { type: integer }
         selectedTimeSeconds: { type: integer }
         throughSequence: { type: integer }
+        sourceVersion: { type: string }
+        provenance: { type: string }
+        sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         detectorVersion: { type: string }
         truthClass: { type: string }
         summary: { type: string }

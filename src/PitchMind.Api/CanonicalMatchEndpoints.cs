@@ -189,6 +189,7 @@ internal static class CanonicalMatchEndpoints
 
     private static CanonicalInsightResponse ToInsight(PersistedMatchInsight insight, int selectedTime) => new(
         insight.InsightId, insight.MatchId.ToString(), insight.Revision, selectedTime, insight.AsOfSequence,
+        insight.SourceVersion, insight.Provenance, insight.SourceSha256,
         insight.DetectorVersion, insight.TruthClass, insight.Summary,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
 

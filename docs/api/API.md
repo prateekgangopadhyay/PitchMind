@@ -33,9 +33,9 @@ These routes are separately namespaced under `/api/v1/canonical/*` and read Post
 | GET | `/api/v1/canonical/fixtures?afterMatchId&limit` | Latest persisted match projections; page size 1..100. |
 | GET | `/api/v1/canonical/matches/{matchId}/summary?atSeconds&revision` | Latest persisted snapshot at or before selected time/revision. |
 | GET | `/api/v1/canonical/matches/{matchId}/events?atSeconds&revision&cursor&limit` | Ordered ledger event page, bounded by selected time and projection sequence; cursor bound to match/time/revision. |
-| GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | Persisted insight page only if every event/frame reference resolves at selected time and sequence. |
-| GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve at selected time and sequence. |
-| GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for resolvable event/frame evidence; incomplete evidence is unavailable. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | Persisted insight page only if every event/frame reference resolves no later than both the selected time/sequence and the insight's own `as_of_sequence`; each insight includes source version, provenance and the source hash for its canonical revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve no later than both the selected time/sequence and its own `as_of_sequence`, with revision-specific source lineage. |
+| GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for event/frame evidence bounded by selected time/sequence and the insight's own `as_of_sequence`; incomplete evidence is unavailable and the insight includes revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | Snapshot and bounded ledger event page at one selected time/revision. |
 | GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | Typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no synthetic fallback. |
 

@@ -16,12 +16,14 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, afterSequence, afterInsightId, limit);
         await using var command = dataSource.CreateCommand("""
             SELECT i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
-                   i.summary,
+                   i.summary, m.source_version, m.provenance, p.source_sha256,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
                        FILTER (WHERE e.insight_id IS NOT NULL), '[]'::jsonb)::text AS evidence
             FROM pitchmind.insights i
+            JOIN pitchmind.matches m ON m.match_id = i.match_id
+            JOIN pitchmind.match_projections p ON p.match_id = i.match_id AND p.revision = i.revision
             LEFT JOIN pitchmind.insight_evidence e ON e.insight_id = i.insight_id
             WHERE i.match_id = $1 AND i.revision <= $2 AND i.as_of_sequence <= $3
               AND ($4::bigint IS NULL OR i.as_of_sequence > $4 OR (i.as_of_sequence = $4 AND i.insight_id > $5))
@@ -31,11 +33,11 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       valid.evidence_kind = 'event' AND EXISTS (
                           SELECT 1 FROM pitchmind.match_events me
                           WHERE me.match_id = i.match_id AND me.event_id::text = valid.evidence_id
-                            AND me.sequence <= $3 AND me.clock_seconds <= $6)
+                            AND me.sequence <= $3 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $6)
                       OR valid.evidence_kind = 'frame' AND EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = valid.evidence_id
-                            AND tf.sequence <= $3 AND tf.clock_seconds <= $6))
+                            AND tf.sequence <= $3 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $6))
               )
               AND NOT EXISTS (
                   SELECT 1 FROM pitchmind.insight_evidence unsupported
@@ -44,13 +46,14 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR unsupported.evidence_kind = 'event' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.match_events me
                           WHERE me.match_id = i.match_id AND me.event_id::text = unsupported.evidence_id
-                            AND me.sequence <= $3 AND me.clock_seconds <= $6)
+                            AND me.sequence <= $3 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $6)
                       OR unsupported.evidence_kind = 'frame' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
-                            AND tf.sequence <= $3 AND tf.clock_seconds <= $6))
+                            AND tf.sequence <= $3 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $6))
               )
-            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
+            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
+                     i.summary, m.source_version, m.provenance, p.source_sha256
             ORDER BY i.as_of_sequence, i.insight_id
             LIMIT $7
             """);
@@ -80,12 +83,14 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
         await using var command = dataSource.CreateCommand("""
             SELECT i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
-                   i.summary,
+                   i.summary, m.source_version, m.provenance, p.source_sha256,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
                        FILTER (WHERE e.insight_id IS NOT NULL), '[]'::jsonb)::text AS evidence
             FROM pitchmind.insights i
+            JOIN pitchmind.matches m ON m.match_id = i.match_id
+            JOIN pitchmind.match_projections p ON p.match_id = i.match_id AND p.revision = i.revision
             LEFT JOIN pitchmind.insight_evidence e ON e.insight_id = i.insight_id
             WHERE i.match_id = $1 AND i.insight_id = $2 AND i.revision <= $3 AND i.as_of_sequence <= $4
               AND EXISTS (
@@ -94,11 +99,11 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       valid.evidence_kind = 'event' AND EXISTS (
                           SELECT 1 FROM pitchmind.match_events me
                           WHERE me.match_id = i.match_id AND me.event_id::text = valid.evidence_id
-                            AND me.sequence <= $4 AND me.clock_seconds <= $5)
+                            AND me.sequence <= $4 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $5)
                       OR valid.evidence_kind = 'frame' AND EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = valid.evidence_id
-                            AND tf.sequence <= $4 AND tf.clock_seconds <= $5))
+                            AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $5))
               )
               AND NOT EXISTS (
                   SELECT 1 FROM pitchmind.insight_evidence unsupported
@@ -107,13 +112,14 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                       OR unsupported.evidence_kind = 'event' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.match_events me
                           WHERE me.match_id = i.match_id AND me.event_id::text = unsupported.evidence_id
-                            AND me.sequence <= $4 AND me.clock_seconds <= $5)
+                            AND me.sequence <= $4 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $5)
                       OR unsupported.evidence_kind = 'frame' AND NOT EXISTS (
                           SELECT 1 FROM pitchmind.tracking_frames tf
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
-                            AND tf.sequence <= $4 AND tf.clock_seconds <= $5))
+                            AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $5))
               )
-            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary
+            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
+                     i.summary, m.source_version, m.provenance, p.source_sha256
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(insightId);
@@ -132,7 +138,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
         await using var command = dataSource.CreateCommand("""
             WITH refs AS (
-                SELECT i.insight_id, e.evidence_kind, e.evidence_id, e.relation,
+                SELECT i.insight_id, i.as_of_sequence, e.evidence_kind, e.evidence_id, e.relation,
                        (SELECT count(*) FROM pitchmind.insight_evidence all_refs
                         WHERE all_refs.insight_id = i.insight_id) AS total_count
                 FROM pitchmind.insights i
@@ -150,9 +156,9 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             LEFT JOIN pitchmind.tracking_frames tf ON refs.evidence_kind = 'frame'
                 AND tf.match_id = $1 AND tf.frame_id = refs.evidence_id
             WHERE (refs.evidence_kind = 'event' AND me.event_id IS NOT NULL
-                       AND me.sequence <= $4 AND me.clock_seconds <= $5
+                       AND me.sequence <= $4 AND me.sequence <= refs.as_of_sequence AND me.clock_seconds <= $5
                    OR refs.evidence_kind = 'frame' AND tf.frame_id IS NOT NULL
-                       AND tf.sequence <= $4 AND tf.clock_seconds <= $5)
+                       AND tf.sequence <= $4 AND tf.sequence <= refs.as_of_sequence AND tf.clock_seconds <= $5)
             ORDER BY refs.evidence_kind, refs.evidence_id
             """);
         command.Parameters.AddWithValue(matchId.Value);
@@ -177,11 +183,12 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
     private static PersistedMatchInsight ReadInsight(NpgsqlDataReader reader)
     {
         var matchId = new MatchId(reader.GetGuid(1));
-        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(7),
+        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(10),
             new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidDataException("Persisted insight evidence references are empty.");
         return new PersistedMatchInsight(reader.GetString(0), matchId, reader.GetInt32(2), reader.GetInt64(3),
-            reader.GetString(4), reader.GetString(5), reader.GetString(6), Array.AsReadOnly(evidence));
+            reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7), reader.GetString(8),
+            reader.GetString(9).Trim(), Array.AsReadOnly(evidence));
     }
 
     private static void Validate(MatchId matchId, int maximumRevision, int selectedSeconds, long throughSequence,

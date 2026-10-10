@@ -651,6 +651,9 @@ public sealed class PostgresLedgerTests
             page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
         var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
+        Assert.Equal("source-v1", visible.SourceVersion);
+        Assert.Equal("synthetic-test", visible.Provenance);
+        Assert.Equal(update.SourceSha256, visible.SourceSha256);
         Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
@@ -670,6 +673,22 @@ public sealed class PostgresLedgerTests
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
+
+        // Evidence visible to the later projection still cannot support an insight persisted earlier.
+        var laterProjection = await projectionReader.GetAtAsync(matchId, 10, null, CancellationToken.None);
+        Assert.NotNull(laterProjection);
+        Assert.Equal(1, laterProjection.AsOfSequence);
+        foreach (var futureInsightId in new[] { futureEventInsightId, futureFrameInsightId })
+        {
+            Assert.Null(await insightReader.GetAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+            Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+        }
+        var laterPage = await insightReader.ReadAtAsync(matchId, laterProjection.Revision, 10, laterProjection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureEventInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureFrameInsightId);
     }
 
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,
