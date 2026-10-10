@@ -346,10 +346,12 @@ components:
         hasMore: { type: boolean }
     CanonicalTrackingFrame:
       type: object
-      required: [frameId, sequence, period, clockSeconds, coordinateVersion, sourceSha256, quality, frame]
+      description: Observed frame admitted at canonicalRevision. sourceSha256 identifies the immutable source artifact and must match the selected projection source hash.
+      required: [frameId, sequence, canonicalRevision, period, clockSeconds, coordinateVersion, sourceSha256, quality, frame]
       properties:
         frameId: { type: string, minLength: 1, maxLength: 128 }
         sequence: { type: integer, minimum: 0 }
+        canonicalRevision: { type: integer, minimum: 1 }
         period: { type: integer, minimum: 1, maximum: 5 }
         clockSeconds: { type: integer, minimum: 0, maximum: 5400 }
         coordinateVersion: { type: string, minLength: 1, maxLength: 128 }

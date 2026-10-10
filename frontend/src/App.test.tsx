@@ -212,15 +212,15 @@ it('exposes observed positions as a screen-reader table and keeps event and time
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
   };
   const observedFrame = {
-    frameId: 'observed-frame', sequence: 19, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
-    sourceSha256: 'c'.repeat(64), quality: {coverage: 'observed'},
+    frameId: 'observed-frame', sequence: 19, canonicalRevision: 4, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
+    sourceSha256: 'a'.repeat(64), quality: {coverage: 'observed'},
     frame: {
       schemaVersion: 1, matchId, frameId: 'observed-frame', sequence: 19,
       matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
       coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
       ball: {x: 52.5, y: 34}, players: [{playerId: 'player-a', teamId: 'team-a', position: {x: 10, y: 20}}],
       source: {providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: 'observed-frame', sourceSequence: 1,
-        sourceSchemaVersion: 'test-v1', sourceSha256: 'c'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
+        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
     }
   };
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -247,6 +247,9 @@ it('exposes observed positions as a screen-reader table and keeps event and time
     expect(pitch?.getAttribute('aria-describedby')).toBe('pitch-description');
     expect(container.querySelector('table caption')?.textContent).toContain('Pitch view coordinates at 55:09');
     expect(container.querySelector('table tbody')?.textContent).toContain('player-a');
+    expect(container.querySelector('table tbody')?.textContent).toContain('Ball');
+    expect(container.querySelector('table tbody')?.textContent).toContain('52.50');
+    expect(container.querySelector('table tbody')?.textContent).toContain('34.00');
     expect(container.querySelector('details')).toBeNull();
     const slider = container.querySelector<HTMLInputElement>('#selected-time')!;
     const eventButton = container.querySelector<HTMLButtonElement>('.canonical-event')!;
@@ -297,7 +300,7 @@ it('keeps selected-time scrubbing available and disables auto replay when reduce
   }
 });
 
-it('rejects events and insights that cross the selected-time sequence', async () => {
+it('rejects events and insights with a different match, revision or selected-time sequence', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
     matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
@@ -311,8 +314,8 @@ it('rejects events and insights that cross the selected-time sequence', async ()
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{eventId: 'future-event', matchId, sequence: 20, type: 'goal', clockSeconds: 3310, period: 2, occurredAt: '2026-01-01T00:55:10Z'}], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{insightId: 'future-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 20, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'A future insight', evidence: []}], nextCursor: null, hasMore: false};
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{eventId: 'foreign-event', matchId: '22222222-2222-2222-2222-222222222222', sequence: 18, type: 'goal', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{insightId: 'foreign-insight', matchId, canonicalRevision: 3, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'A mismatched revision insight', evidence: []}], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -320,8 +323,8 @@ it('rejects events and insights that cross the selected-time sequence', async ()
   try {
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
-    expect(container.textContent).not.toContain('future-event');
-    expect(container.textContent).not.toContain('A future insight');
+    expect(container.textContent).not.toContain('foreign-event');
+    expect(container.textContent).not.toContain('A mismatched revision insight');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

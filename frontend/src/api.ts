@@ -86,7 +86,7 @@ export interface TelemetryTrackingFrameV1 {
   source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: string };
 }
 export interface CanonicalTrackingFrame {
-  frameId: string; sequence: number; period: number; clockSeconds: number;
+  frameId: string; sequence: number; canonicalRevision: number; period: number; clockSeconds: number;
   coordinateVersion: string; sourceSha256: string; quality: unknown; frame: TelemetryTrackingFrameV1;
 }
 export interface CanonicalTrackingFramePage {

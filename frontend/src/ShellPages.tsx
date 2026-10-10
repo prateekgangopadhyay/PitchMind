@@ -195,7 +195,10 @@ function InsightPage({ route, matchId, selectedSeconds, revision }: {
     request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal)
       .then(result => {
         if (controller.signal.aborted) return;
-        if (result.matchId !== matchId || result.selectedTimeSeconds !== selectedSeconds || (revision && result.canonicalRevision !== revision)) {
+        if (result.matchId !== matchId || result.selectedTimeSeconds !== selectedSeconds ||
+          (revision && result.canonicalRevision !== revision) ||
+          result.items.some(item => item.matchId !== matchId || item.canonicalRevision !== result.canonicalRevision ||
+            item.selectedTimeSeconds !== selectedSeconds || item.throughSequence > result.throughSequence)) {
           setError('The response does not match the selected match, time and revision.');
           setPage(null);
           return;

@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -29,6 +29,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version2Sql, cancellationToken);
         if (currentVersion < 3)
             await ExecuteAsync(connection, transaction, Version3Sql, cancellationToken);
+        if (currentVersion < 4)
+            await ExecuteAsync(connection, transaction, Version4Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -209,5 +211,22 @@ public static class PostgresSchemaMigrator
         );
 
         INSERT INTO pitchmind.schema_versions(version) VALUES (3) ON CONFLICT DO NOTHING;
+        """;
+
+    public const string Version4Sql = """
+        ALTER TABLE pitchmind.tracking_frames ADD COLUMN canonical_revision integer;
+        ALTER TABLE pitchmind.tracking_frames ADD CONSTRAINT tracking_frames_canonical_revision_check
+            CHECK (canonical_revision IS NULL OR canonical_revision > 0);
+        ALTER TABLE pitchmind.tracking_frames ADD CONSTRAINT tracking_frames_projection_revision_fk
+            FOREIGN KEY (match_id, canonical_revision) REFERENCES pitchmind.match_projections(match_id, revision);
+
+        -- Existing rows have no recorded admission revision. Leave them unversioned so the
+        -- reader fails closed instead of inventing historical visibility during migration.
+        CREATE INDEX ix_tracking_frames_match_time_revision_source
+            ON pitchmind.tracking_frames(match_id, clock_seconds, canonical_revision, source_sha256, sequence);
+        CREATE INDEX ix_tracking_frames_match_revision
+            ON pitchmind.tracking_frames(match_id, canonical_revision);
+
+        INSERT INTO pitchmind.schema_versions(version) VALUES (4) ON CONFLICT DO NOTHING;
         """;
 }

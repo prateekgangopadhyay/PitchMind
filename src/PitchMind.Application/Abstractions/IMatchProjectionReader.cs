@@ -20,6 +20,7 @@ public sealed record PersistedMatchEventPage(
 public sealed record PersistedTrackingFrame(
     string FrameId,
     long Sequence,
+    int CanonicalRevision,
     int Period,
     int ClockSeconds,
     string CoordinateVersion,

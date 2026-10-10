@@ -77,6 +77,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
           trackingFrames.canonicalRevision === revision && trackingFrames.selectedTimeSeconds === selectedSeconds &&
           trackingFrames.throughSequence === snapshot.throughSequence && trackingFrames.items.every(frame =>
+            frame.canonicalRevision > 0 && frame.canonicalRevision <= revision && frame.sourceSha256 === snapshot.sourceSha256 &&
             frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
             frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
             frame.frame.sequence === frame.sequence && frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&
@@ -170,7 +171,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                   <table>
                     <caption>Pitch view coordinates at {clock(selectedSeconds)} · {pitch.attackTeamId} attacks right · sequence {selectedFrame.sequence}</caption>
                     <thead><tr><th scope="col">Marker</th><th scope="col">Team ID</th><th scope="col">Player ID</th><th scope="col">View X (m)</th><th scope="col">View Y (m)</th></tr></thead>
-                    <tbody>{pitch.players.map((player, index) => <tr key={player.playerId}>
+                    <tbody><tr><th scope="row">Ball</th><td>—</td><td>Ball</td><td>{pitch.ball.x.toFixed(2)}</td><td>{pitch.ball.y.toFixed(2)}</td></tr>{pitch.players.map((player, index) => <tr key={player.playerId}>
                       <td>{index + 1}</td><td>{player.teamId}</td><td>{player.playerId}</td><td>{player.position.x.toFixed(2)}</td><td>{player.position.y.toFixed(2)}</td>
                     </tr>)}</tbody>
                   </table>

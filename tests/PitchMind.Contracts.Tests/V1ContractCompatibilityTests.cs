@@ -162,6 +162,19 @@ public sealed class V1ContractCompatibilityTests
             3000, 2, JsonSerializer.Deserialize<JsonElement>("{\"eventId\":\"sample\"}"));
         var canonicalEvidence = new CanonicalEvidenceResponse(insight, new[] { evidencePayload });
         var replay = new CanonicalReplayResponse(snapshot, eventPage);
+        using var quality = JsonDocument.Parse("{} ");
+        var trackingFramePayload = JsonSerializer.Deserialize<PitchMind.Contracts.Telemetry.V1.TrackingFrameV1>("""
+            {"schemaVersion":1,"matchId":"match","frameId":"frame","sequence":42,
+             "matchTime":{"period":2,"elapsedSeconds":3308,"sourceClockValue":3308,"sourceClockUnit":"seconds","sourceClockBasis":"match_elapsed"},
+             "coordinateSystem":{"lengthMetres":105,"widthMetres":68,"unit":"metres","axisOrigin":"bottom_left","teamDirections":[{"teamId":"team","direction":"right"}]},
+             "ball":{"x":52.5,"y":34},"players":[],
+             "source":{"providerId":"test","sourceMatchId":"source-match","sourceRecordId":"frame","sourceSequence":9,
+             "sourceSchemaVersion":"test-v1","sourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+             "provenanceStatus":"test","rightsReviewStatus":"test"}}
+            """, Json)!;
+        var trackingFrame = new CanonicalTrackingFrameResponse("frame", 42, 3, 2, 3308, "pitch-v1",
+            new string('a', 64), quality.RootElement.Clone(), trackingFramePayload);
+        var trackingPage = new CanonicalTrackingFramePageResponse("match", 4, 3308, 42, new[] { trackingFrame }, false);
 
         AssertJsonProperties(card, "matchId", "canonicalRevision", "asOfSeconds", "throughSequence", "phase",
             "homeScore", "awayScore", "provenance", "algorithmVersion", "sourceSha256");
@@ -179,6 +192,11 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(evidencePayload, "kind", "id", "relation", "sequence", "clockSeconds", "period", "payload");
         AssertJsonProperties(canonicalEvidence, "insight", "items");
         AssertJsonProperties(replay, "snapshot", "events");
+        AssertJsonProperties(trackingFrame, "frameId", "sequence", "canonicalRevision", "period", "clockSeconds",
+            "coordinateVersion", "sourceSha256", "quality", "frame");
+        AssertJsonProperties(trackingPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence", "items", "hasMore");
+        Assert.Equal(3, trackingFrame.CanonicalRevision);
+        Assert.Equal(new string('a', 64), trackingFrame.SourceSha256);
     }
 
     [Fact]

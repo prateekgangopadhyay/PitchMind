@@ -135,7 +135,7 @@ erDiagram
 ```
 `matches(id PK,fixture_version,source_hash,provenance,pitch_length,width,clock_policy,created_at)`;
 `match_events(match_id,event_id,sequence,period,match_ms,team_id,actor_id,type,outcome,source_ptr,payload_hash,schema_version,raw_json,revision,received_at)`, UNIQUE(match_id,sequence), UNIQUE(event_id);
-`tracking_frames(match_id,frame_id,match_ms,pitch_version,quality,source_hash,frame_json)`;
+`tracking_frames(match_id,frame_id,canonical_revision,sequence,clock_seconds,pitch_version,quality,source_sha256,frame_json)`. A read is bounded by the selected projection's revision, source hash, exact selected second, and sequence watermark. Rows without known admission revision stay inaccessible until a reviewed admission path assigns their revision.
 `match_projections(match_id,revision,as_of_sequence,as_of_ms,algorithm_version,state_json,sha256)`;
 `insights(id,match_id,as_of_sequence,revision,detector_version,truth_class,summary,conditions_json)`;
 `insight_evidence(insight_id,kind,event_id?,frame_id?,metric_id?,relation,source_revision)`;

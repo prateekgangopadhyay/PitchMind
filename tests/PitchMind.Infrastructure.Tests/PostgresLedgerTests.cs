@@ -40,7 +40,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -257,7 +257,7 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task ExistingVersionTwoDatabaseUpgradesToThreeRepeatably()
+    public async Task ExistingVersionTwoDatabaseUpgradesToFourRepeatably()
     {
         await using var source = Source();
         await using (var connection = await source.OpenConnectionAsync())
@@ -270,14 +270,31 @@ public sealed class PostgresLedgerTests
 
         var existingEvent = Event(MatchId.New());
         await new PostgresMatchEventStore(source).AppendAsync(existingEvent, CancellationToken.None);
+        var legacyFrameMatchId = MatchId.New();
+        var legacyFrameHash = new string('f', 64);
+        await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
+            new MatchSourceMetadata(legacyFrameMatchId.Value, "legacy-fixture", "legacy-source", legacyFrameHash,
+                "synthetic-test", 105m, 68m), CancellationToken.None);
+        await using (var frame = source.CreateCommand("""
+            INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
+            VALUES ($1, 'legacy-frame', 0, 1, 0, 'pitch-v1', '{}'::jsonb, $2, '{}'::jsonb)
+            """))
+        {
+            frame.Parameters.AddWithValue(legacyFrameMatchId.Value);
+            frame.Parameters.AddWithValue(legacyFrameHash);
+            await frame.ExecuteNonQueryAsync();
+        }
 
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
+        await using var legacyRevision = source.CreateCommand("SELECT canonical_revision FROM pitchmind.tracking_frames WHERE match_id = $1 AND frame_id = 'legacy-frame'");
+        legacyRevision.Parameters.AddWithValue(legacyFrameMatchId.Value);
+        Assert.Equal(DBNull.Value, await legacyRevision.ExecuteScalarAsync());
     }
 
     private static (CanonicalUpdate Update, MatchAggregate Aggregate) BuildUpdate(MatchId matchId, int revision = 1)
@@ -578,14 +595,23 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var matchId = MatchId.New();
-        var update = Update(matchId);
+        var (update, aggregate) = BuildUpdate(matchId);
+        await RegisterSourceMetadata(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
-        var projection = await new PostgresMatchProjectionReader(source).GetAtAsync(matchId, 0, null, CancellationToken.None);
+
+        var laterEvent = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 0, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(laterEvent, "home", "home-2", "pass", "complete"));
+        var laterUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, laterEvent, 2, "aggregate-v1", update.SourceSha256);
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(laterUpdate, CancellationToken.None);
+
+        var projectionReader = new PostgresMatchProjectionReader(source);
+        var projection = await projectionReader.GetAtAsync(matchId, 0, 1, CancellationToken.None);
         Assert.NotNull(projection);
 
-        async Task AddFrame(string frameId, long sequence, int clockSeconds)
+        var alternateSourceHash = new string('e', 64);
+
+        async Task AddFrame(string frameId, long sequence, int clockSeconds, int canonicalRevision, string sourceHash)
         {
-            var sourceHash = new string('d', 64);
             var payload = JsonSerializer.Serialize(new
             {
                 schemaVersion = 1,
@@ -616,22 +642,30 @@ public sealed class PostgresLedgerTests
                 }
             });
             await using var command = source.CreateCommand("""
-                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
-                VALUES ($1, $2, $3, 1, $4, 'pitch-v1', '{"coverage":"observed"}'::jsonb, $5, $6::jsonb)
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, canonical_revision, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, $4, 1, $5, 'pitch-v1', '{"coverage":"observed"}'::jsonb, $6, $7::jsonb)
                 """);
             command.Parameters.AddWithValue(matchId.Value);
             command.Parameters.AddWithValue(frameId);
             command.Parameters.AddWithValue(sequence);
+            command.Parameters.AddWithValue(canonicalRevision);
             command.Parameters.AddWithValue(clockSeconds);
             command.Parameters.AddWithValue(sourceHash);
             command.Parameters.AddWithValue(payload);
             await command.ExecuteNonQueryAsync();
         }
 
-        await AddFrame("observed-a", 0, 0);
-        await AddFrame("observed-b", 0, 0);
-        await AddFrame("future-sequence", 1, 0);
-        await AddFrame("future-time", 0, 1);
+        await AddFrame("observed-a", 0, 0, 1, update.SourceSha256);
+        await AddFrame("observed-b", 0, 0, 1, update.SourceSha256);
+        await AddFrame("later-revision", 0, 0, 2, update.SourceSha256);
+        await AddFrame("unversioned", 0, 0, 1, update.SourceSha256);
+        await using (var unversioned = source.CreateCommand("UPDATE pitchmind.tracking_frames SET canonical_revision = NULL WHERE match_id = $1 AND frame_id = 'unversioned'"))
+        {
+            unversioned.Parameters.AddWithValue(matchId.Value);
+            await unversioned.ExecuteNonQueryAsync();
+        }
+        await AddFrame("future-sequence", 1, 0, 1, update.SourceSha256);
+        await AddFrame("future-time", 0, 1, 1, update.SourceSha256);
 
         var reader = new PostgresMatchTrackingReader(source);
         var firstPage = await reader.ReadAtAsync(projection, 0, 1, CancellationToken.None);
@@ -640,6 +674,19 @@ public sealed class PostgresLedgerTests
         var allVisible = await reader.ReadAtAsync(projection, 0, 10, CancellationToken.None);
         Assert.False(allVisible.HasMore);
         Assert.Equal(new[] { "observed-a", "observed-b" }, allVisible.Frames.Select(frame => frame.FrameId));
+        Assert.DoesNotContain(allVisible.Frames, frame => frame.FrameId == "unversioned");
+        // This schema binds one immutable source identity to a match; presenting a selection from
+        // another source must not return any of the source-A frame rows.
+        var mismatchedSourceProjection = await reader.ReadAtAsync(projection with { SourceSha256 = alternateSourceHash },
+            0, 10, CancellationToken.None);
+        Assert.Empty(mismatchedSourceProjection.Frames);
+
+        var revisionTwo = await projectionReader.GetAtAsync(matchId, 0, 2, CancellationToken.None);
+        Assert.NotNull(revisionTwo);
+        Assert.Equal(2, revisionTwo.Revision);
+        var revisionTwoFrames = await reader.ReadAtAsync(revisionTwo, 0, 10, CancellationToken.None);
+        Assert.Contains(revisionTwoFrames.Frames, frame => frame.FrameId == "later-revision" && frame.CanonicalRevision == 2);
+        Assert.DoesNotContain(revisionTwoFrames.Frames, frame => frame.SourceSha256 != revisionTwo.SourceSha256);
     }
 
     [PostgresIntegrationFact]

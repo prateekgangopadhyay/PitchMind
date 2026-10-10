@@ -259,9 +259,11 @@ public sealed record CanonicalEvidenceResponse(
 public sealed record CanonicalTrackingFrameResponse(
     string FrameId,
     long Sequence,
+    int CanonicalRevision,
     int Period,
     int ClockSeconds,
     string CoordinateVersion,
+    /// <summary>Hash of the immutable source artifact used by this frame and its selected projection.</summary>
     string SourceSha256,
     JsonElement Quality,
     TrackingFrameV1 Frame);

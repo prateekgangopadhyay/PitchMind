@@ -169,7 +169,7 @@ internal static class CanonicalMatchEndpoints
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var page = await tracking.ReadAtAsync(projection, selectedTime, pageSize, cancellationToken);
-            var items = page.Frames.Select(frame => ToTrackingFrame(frame, canonicalMatchId, selectedTime)).ToArray();
+            var items = page.Frames.Select(frame => ToTrackingFrame(frame, canonicalMatchId, selectedTime, projection)).ToArray();
             return Results.Ok(new CanonicalTrackingFramePageResponse(canonicalMatchId.ToString("D"), projection.Revision,
                 selectedTime, projection.AsOfSequence, Array.AsReadOnly(items), page.HasMore));
         });
@@ -215,9 +215,11 @@ internal static class CanonicalMatchEndpoints
         insight.DetectorVersion, insight.TruthClass, insight.Summary,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
 
-    private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime)
+    private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime,
+        SelectedMatchProjection projection)
     {
         if (string.IsNullOrWhiteSpace(frame.FrameId) || frame.FrameId.Length > 128 || frame.Sequence < 0 ||
+            frame.CanonicalRevision <= 0 || frame.CanonicalRevision > projection.Revision || frame.SourceSha256 != projection.SourceSha256 ||
             frame.Period is < 1 or > 5 || frame.ClockSeconds != selectedTime ||
             string.IsNullOrWhiteSpace(frame.CoordinateVersion) || frame.CoordinateVersion.Length > 128 ||
             System.Text.Encoding.UTF8.GetByteCount(frame.PayloadJson) > 32_768 ||
@@ -245,7 +247,7 @@ internal static class CanonicalMatchEndpoints
             using var qualityDocument = JsonDocument.Parse(frame.QualityJson);
             if (qualityDocument.RootElement.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Persisted tracking frame quality must be a JSON object.");
-            return new CanonicalTrackingFrameResponse(frame.FrameId, frame.Sequence, frame.Period, frame.ClockSeconds,
+            return new CanonicalTrackingFrameResponse(frame.FrameId, frame.Sequence, frame.CanonicalRevision, frame.Period, frame.ClockSeconds,
                 frame.CoordinateVersion, frame.SourceSha256, qualityDocument.RootElement.Clone(), payload);
         }
         catch (JsonException)
