@@ -61,6 +61,7 @@ public static class TelemetryContractValidatorV1
             else
             {
                 CoordinateSystem(value.CoordinateSystem, errors);
+                TeamDirections(value.CoordinateSystem.TeamDirections, errors);
                 if (value.Location.Start is null && value.Location.End is null)
                     Add(errors, "EVENT_LOCATION_REQUIRED", "location", "At least one event location point is required.");
                 if (value.Location.Start is not null) Point(value.Location.Start, value.CoordinateSystem, "location.start", errors);
@@ -121,29 +122,7 @@ public static class TelemetryContractValidatorV1
             if (!string.IsNullOrWhiteSpace(player.TeamId)) teams.Add(player.TeamId);
             Point(player.Position, system, $"{path}.position", errors);
         }
-        if (system.TeamDirections is null)
-            Add(errors, "TEAM_DIRECTIONS_REQUIRED", "coordinateSystem.teamDirections", "Team directions are required.");
-        else
-        {
-            var directions = new HashSet<string>(StringComparer.Ordinal);
-            for (var index = 0; index < Math.Min(system.TeamDirections.Count, MaximumPlayersPerFrame); index++)
-            {
-                var direction = system.TeamDirections[index];
-                var path = $"coordinateSystem.teamDirections[{index}]";
-                if (direction is null)
-                {
-                    Add(errors, "TEAM_DIRECTION_REQUIRED", path, "Team direction is required.");
-                    continue;
-                }
-                Required(direction.TeamId, $"{path}.teamId", errors);
-                if (direction.Direction is not ("left" or "right"))
-                    Add(errors, "UNKNOWN_ATTACK_DIRECTION", $"{path}.direction", "Attacking direction must be left or right.");
-                if (!string.IsNullOrWhiteSpace(direction.TeamId) && !directions.Add(direction.TeamId))
-                    Add(errors, "DUPLICATE_TEAM_DIRECTION", $"{path}.teamId", "Team direction must be declared once.");
-            }
-            foreach (var team in teams)
-                if (!directions.Contains(team)) Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", $"No attacking direction is declared for team '{team}'.");
-        }
+        TeamDirections(system.TeamDirections, errors, teams);
         return new(errors);
     }
 
@@ -152,7 +131,7 @@ public static class TelemetryContractValidatorV1
         ArgumentNullException.ThrowIfNull(point);
         ArgumentNullException.ThrowIfNull(system);
         var errors = new List<TelemetryValidationError>();
-        CoordinateSystem(system, errors, requireDirections: false);
+        CoordinateSystem(system, errors);
         Point(point, system, "point", errors);
         if (errors.Count > 0)
             throw new ArgumentException(string.Join(" ", errors.Select(error => $"{error.Path}: {error.Message}")), nameof(point));
@@ -183,7 +162,7 @@ public static class TelemetryContractValidatorV1
         };
     }
 
-    private static void CoordinateSystem(PitchCoordinateSystemV1 system, List<TelemetryValidationError> errors, bool requireDirections = true)
+    private static void CoordinateSystem(PitchCoordinateSystemV1 system, List<TelemetryValidationError> errors)
     {
         if (system.LengthMetres is < MinimumPitchLengthMetres or > MaximumPitchLengthMetres)
             Add(errors, "INVALID_PITCH_DIMENSION", "coordinateSystem.lengthMetres", $"Pitch length must be between {MinimumPitchLengthMetres} and {MaximumPitchLengthMetres} metres.");
@@ -193,10 +172,44 @@ public static class TelemetryContractValidatorV1
             Add(errors, "UNKNOWN_COORDINATE_UNIT", "coordinateSystem.unit", "Coordinate unit must be explicit and supported.");
         if (system.AxisOrigin is not ("bottom_left" or "top_left"))
             Add(errors, "UNKNOWN_AXIS_ORIGIN", "coordinateSystem.axisOrigin", "Axis origin must be bottom_left or top_left.");
-        if (system.TeamDirections is null)
+    }
+
+    private static void TeamDirections(
+        IReadOnlyList<TeamAttackingDirectionV1>? teamDirections,
+        List<TelemetryValidationError> errors,
+        IEnumerable<string>? requiredTeams = null)
+    {
+        if (teamDirections is null)
+        {
             Add(errors, "TEAM_DIRECTIONS_REQUIRED", "coordinateSystem.teamDirections", "Team directions are required.");
-        else if (requireDirections && system.TeamDirections.Count == 0)
+            return;
+        }
+        if (teamDirections.Count == 0)
             Add(errors, "TEAM_DIRECTIONS_REQUIRED", "coordinateSystem.teamDirections", "At least one team direction is required.");
+        if (teamDirections.Count > MaximumPlayersPerFrame)
+            Add(errors, "TOO_MANY_TEAM_DIRECTIONS", "coordinateSystem.teamDirections", $"A coordinate system cannot exceed {MaximumPlayersPerFrame} team directions.");
+
+        var declaredTeams = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < Math.Min(teamDirections.Count, MaximumPlayersPerFrame); index++)
+        {
+            var direction = teamDirections[index];
+            var path = $"coordinateSystem.teamDirections[{index}]";
+            if (direction is null)
+            {
+                Add(errors, "TEAM_DIRECTION_REQUIRED", path, "Team direction is required.");
+                continue;
+            }
+            Required(direction.TeamId, $"{path}.teamId", errors);
+            if (direction.Direction is not ("left" or "right"))
+                Add(errors, "UNKNOWN_ATTACK_DIRECTION", $"{path}.direction", "Attacking direction must be left or right.");
+            if (!string.IsNullOrWhiteSpace(direction.TeamId) && !declaredTeams.Add(direction.TeamId))
+                Add(errors, "DUPLICATE_TEAM_DIRECTION", $"{path}.teamId", "Team direction must be declared once.");
+        }
+
+        if (requiredTeams is null) return;
+        foreach (var team in requiredTeams)
+            if (!declaredTeams.Contains(team))
+                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", $"No attacking direction is declared for team '{team}'.");
     }
 
     private static void Point(PitchPointV1? point, PitchCoordinateSystemV1 system, string path, List<TelemetryValidationError> errors)

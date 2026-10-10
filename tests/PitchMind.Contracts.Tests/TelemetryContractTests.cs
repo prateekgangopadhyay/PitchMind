@@ -111,6 +111,8 @@ public sealed class TelemetryContractTests
         Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
         Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
+        Assert.Equal(64, eventSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("teamDirections").GetProperty("maxItems").GetInt32());
+        Assert.Equal("null", eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").GetProperty("properties").GetProperty("end").GetProperty("anyOf")[1].GetProperty("type").GetString());
     }
 
     [Fact]
@@ -167,6 +169,31 @@ public sealed class TelemetryContractTests
 
         var missingPoints = value with { Location = new EventLocationV1() };
         Assert.Contains(TelemetryContractValidatorV1.Validate(missingPoints).Errors, error => error.Code == "EVENT_LOCATION_REQUIRED");
+
+        var oneSided = value with { Location = new EventLocationV1 { Start = new PitchPointV1 { X = .25m, Y = .5m } } };
+        var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(JsonSerializer.Serialize(oneSided, JsonOptions), JsonOptions)!;
+        Assert.Null(restored.Location!.End);
+        Assert.True(TelemetryContractValidatorV1.Validate(restored).IsValid);
+
+        var invalidDirections = value with
+        {
+            CoordinateSystem = coordinateSystem with
+            {
+                TeamDirections = new[]
+                {
+                    new TeamAttackingDirectionV1 { TeamId = " ", Direction = "north" },
+                    new TeamAttackingDirectionV1 { TeamId = "home", Direction = "left" },
+                    new TeamAttackingDirectionV1 { TeamId = "home", Direction = "right" }
+                }
+            }
+        };
+        var directionErrors = TelemetryContractValidatorV1.Validate(invalidDirections).Errors;
+        Assert.Contains(directionErrors, error => error.Path == "coordinateSystem.teamDirections[0].teamId");
+        Assert.Contains(directionErrors, error => error.Code == "UNKNOWN_ATTACK_DIRECTION");
+        Assert.Contains(directionErrors, error => error.Code == "DUPLICATE_TEAM_DIRECTION");
+
+        var invalidDimensions = value with { CoordinateSystem = coordinateSystem with { LengthMetres = 89 } };
+        Assert.Contains(TelemetryContractValidatorV1.Validate(invalidDimensions).Errors, error => error.Code == "INVALID_PITCH_DIMENSION");
     }
 
     [Theory]
