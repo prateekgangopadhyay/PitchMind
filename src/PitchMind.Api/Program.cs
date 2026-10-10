@@ -26,6 +26,7 @@ else
     builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
     builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
 }
+builder.Services.AddSingleton<IMatchIntelligencePacketReader, MatchIntelligencePacketReader>();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
 {
