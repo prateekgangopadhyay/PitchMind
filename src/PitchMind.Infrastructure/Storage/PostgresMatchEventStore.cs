@@ -29,7 +29,8 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
             {
                 if (!MatchEventPayloadEquality.AreEqual(Deserialize(existing), matchEvent))
                 {
-                    var expected = await GetExpectedSequenceAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
+                    var existingSequenceState = await GetSequenceStateAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
+                    var expected = existingSequenceState.FirstGap ?? existingSequenceState.NextExpected;
                     throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
                         MatchEventIngestionFailure.EventIdPayloadConflict, expected, matchEvent.Sequence);
                 }
@@ -37,6 +38,11 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
                 return;
             }
         }
+        var sequenceState = await GetSequenceStateAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
+        if (sequenceState.FirstGap is { } firstGap)
+            throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                MatchEventIngestionFailure.SequenceGap, firstGap, matchEvent.Sequence);
+
         await using (var command = new NpgsqlCommand("SELECT event_id FROM pitchmind.match_events WHERE match_id = $1 AND sequence = $2", connection, transaction))
         {
             command.Parameters.AddWithValue(matchEvent.MatchId.Value);
@@ -44,22 +50,16 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
             var sequenceOwner = await command.ExecuteScalarAsync(cancellationToken);
             if (sequenceOwner is Guid)
             {
-                var expected = await GetExpectedSequenceAsync(connection, transaction, matchEvent.MatchId, cancellationToken);
                 throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
-                    MatchEventIngestionFailure.SequenceAlreadyUsed, expected, matchEvent.Sequence);
+                    MatchEventIngestionFailure.SequenceAlreadyUsed, sequenceState.NextExpected, matchEvent.Sequence);
             }
         }
-        await using (var command = new NpgsqlCommand("SELECT COALESCE(MAX(sequence), -1) + 1 FROM pitchmind.match_events WHERE match_id = $1", connection, transaction))
-        {
-            command.Parameters.AddWithValue(matchEvent.MatchId.Value);
-            var expected = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
-            if (matchEvent.Sequence > expected)
-                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
-                    MatchEventIngestionFailure.SequenceGap, expected, matchEvent.Sequence);
-            if (matchEvent.Sequence < expected)
-                throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
-                    MatchEventIngestionFailure.OutOfOrder, expected, matchEvent.Sequence);
-        }
+        if (matchEvent.Sequence > sequenceState.NextExpected)
+            throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                MatchEventIngestionFailure.SequenceGap, sequenceState.NextExpected, matchEvent.Sequence);
+        if (matchEvent.Sequence < sequenceState.NextExpected)
+            throw new MatchEventIngestionException(matchEvent.MatchId, matchEvent.EventId,
+                MatchEventIngestionFailure.OutOfOrder, sequenceState.NextExpected, matchEvent.Sequence);
         await using (var command = new NpgsqlCommand("""
             INSERT INTO pitchmind.match_events(event_id, match_id, sequence, event_type, clock_seconds, period, occurred_at, payload)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -131,11 +131,24 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task<long> GetExpectedSequenceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+    private static async Task<(long NextExpected, long? FirstGap)> GetSequenceStateAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction,
         MatchId matchId, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand("SELECT COALESCE(MAX(sequence), -1) + 1 FROM pitchmind.match_events WHERE match_id = $1", connection, transaction);
+        await using var command = new NpgsqlCommand("""
+            SELECT COUNT(*)::bigint AS event_count,
+                   MIN(expected_sequence) FILTER (WHERE sequence <> expected_sequence) AS first_gap
+            FROM (
+                SELECT sequence, ROW_NUMBER() OVER (ORDER BY sequence) - 1 AS expected_sequence
+                FROM pitchmind.match_events
+                WHERE match_id = $1
+            ) ordered_events
+            """, connection, transaction);
         command.Parameters.AddWithValue(matchId.Value);
-        return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        var count = reader.GetInt64(0);
+        long? firstGap = reader.IsDBNull(1) ? null : reader.GetInt64(1);
+        return (count, firstGap);
     }
 }

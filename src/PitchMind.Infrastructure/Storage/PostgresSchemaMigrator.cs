@@ -13,6 +13,8 @@ public static class PostgresSchemaMigrator
             await guard.ExecuteNonQueryAsync(cancellationToken);
         await using var command = new NpgsqlCommand(SchemaSql, connection, transaction);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var migration = new NpgsqlCommand(EventTypeRangeV2Sql, connection, transaction);
+        await migration.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
     public const string SchemaSql = """
@@ -35,5 +37,20 @@ public static class PostgresSchemaMigrator
             applied_at timestamptz NOT NULL DEFAULT now()
         );
         INSERT INTO pitchmind.schema_versions(version) VALUES (1) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Expands the v1 event type check to cover every currently defined MatchEventType value.</summary>
+    public const string EventTypeRangeV2Sql = """
+        DO $migration$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pitchmind.schema_versions WHERE version = 2) THEN
+                ALTER TABLE pitchmind.match_events
+                    DROP CONSTRAINT IF EXISTS match_events_event_type_check;
+                ALTER TABLE pitchmind.match_events
+                    ADD CONSTRAINT match_events_event_type_check CHECK (event_type BETWEEN 0 AND 10);
+                INSERT INTO pitchmind.schema_versions(version) VALUES (2);
+            END IF;
+        END
+        $migration$;
         """;
 }

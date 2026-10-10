@@ -76,7 +76,7 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task OutOfOrderEventAgainstLedgerGapIsHeldForReconciliation()
+    public async Task NewAppendsAgainstLegacyLedgerGapAreHeldUntilContinuityIsReconciled()
     {
         await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var store = new PostgresMatchEventStore(source); var matchId = MatchId.New();
@@ -98,16 +98,47 @@ public sealed class PostgresLedgerTests
             await command.ExecuteNonQueryAsync();
         }
 
-        var outOfOrder = await Assert.ThrowsAsync<MatchEventIngestionException>(
-            () => store.AppendAsync(Event(matchId, 1), CancellationToken.None));
+        var nextAfterMax = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(Event(matchId, 3), CancellationToken.None));
+        Assert.Equal("SEQUENCE_GAP", nextAfterMax.Code);
+        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, nextAfterMax.Disposition);
+        Assert.Equal<long?>(1, nextAfterMax.ExpectedSequence);
+        Assert.Equal(3L, nextAfterMax.ReceivedSequence);
 
-        Assert.Equal("OUT_OF_ORDER_EVENT", outOfOrder.Code);
-        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, outOfOrder.Disposition);
-        Assert.Equal<long?>(3, outOfOrder.ExpectedSequence);
-        Assert.Equal(1L, outOfOrder.ReceivedSequence);
+        var missingSequence = await Assert.ThrowsAsync<MatchEventIngestionException>(
+            () => store.AppendAsync(Event(matchId, 1), CancellationToken.None));
+        Assert.Equal("SEQUENCE_GAP", missingSequence.Code);
+        Assert.Equal(MatchEventIngestionDisposition.HoldForReconciliation, missingSequence.Disposition);
+        Assert.Equal<long?>(1, missingSequence.ExpectedSequence);
+        Assert.Equal(1L, missingSequence.ReceivedSequence);
         await using var countCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_events WHERE match_id = $1");
         countCommand.Parameters.AddWithValue(matchId.Value);
         Assert.Equal(2L, (long)(await countCommand.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task EventTypeRangeV2MigratesExistingV1SchemaAndAcceptsCurrentEnumValues()
+    {
+        await using var source = Source();
+        await using (var resetSchema = source.CreateCommand("DROP SCHEMA IF EXISTS pitchmind CASCADE"))
+            await resetSchema.ExecuteNonQueryAsync();
+        await using (var createV1 = source.CreateCommand(PostgresSchemaMigrator.SchemaSql))
+            await createV1.ExecuteNonQueryAsync();
+
+        var store = new PostgresMatchEventStore(source);
+        var matchId = MatchId.New();
+        await Assert.ThrowsAsync<PostgresException>(
+            () => store.AppendAsync(Event(matchId) with { Type = MatchEventType.Turnover }, CancellationToken.None));
+
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        var currentTypes = new[] { MatchEventType.Turnover, MatchEventType.FullTime, MatchEventType.Pressure };
+        for (var sequence = 0; sequence < currentTypes.Length; sequence++)
+            await store.AppendAsync(Event(matchId, sequence) with { Type = currentTypes[sequence] }, CancellationToken.None);
+
+        Assert.Equal(currentTypes, (await Read(store, matchId)).Select(item => item.Type));
+        await using var versionCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 2");
+        Assert.Equal(1L, (long)(await versionCommand.ExecuteScalarAsync())!);
     }
 
     [PostgresIntegrationFact]
