@@ -27,3 +27,17 @@ Run `node scripts/validate_operating_model.mjs` at repository root (or `node scr
 
 ## Cross-cutting UI specialists
 The original 28 accountable role skills remain unchanged in number. Three optional-on-non-UI, **mandatory-on-UI** design skills are now available under `.github/skills/`: Taste, Vercel Web Design Guidelines and Awesome Design audit. [Design registry](../design/DESIGN-SKILL-REGISTRY.json) · [Premium brand system](../design/PITCHMIND-DESIGN-SYSTEM.md) · [Frontend review protocol](../design/FRONTEND-DESIGN-DELIVERY.md) · [Vendor/license notes](../design/VENDOR-SOURCES.md). This does not mean any visual story or UX audit has already passed.
+
+## Direct design-skill and audit URLs
+
+Use these links to open each specialist's **PitchMind audit instructions** and the corresponding upstream reference directly, instead of relying on the registry alone. All three skills are design-time review resources, not proof that a particular UI has passed an audit.
+
+| Specialist | PitchMind audit instructions | Upstream audit/source URL |
+| --- | --- | --- |
+| **Taste** | [Taste frontend skill](../../.github/skills/design-taste-frontend/SKILL.md) | [Pinned Taste Skill source](https://github.com/girishlade111/taste-skill/blob/8399cf57f6faad8c943700cce0dd9873ff2ae296/skills/taste-skill/SKILL.md) |
+| **Vercel Web Design Guidelines** | [Web Design Guidelines audit skill](../../.github/skills/web-design-guidelines/SKILL.md) | [Current Web Interface Guidelines (audit rules)](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md) · [Pinned Vercel skill source](https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/skills/web-design-guidelines/SKILL.md) |
+| **Awesome Design audit** | [Awesome Design audit skill](../../.github/skills/awesome-design-audit/SKILL.md) | [Pinned Awesome Design rubric collection](https://github.com/frankxai/awesome-design-agent-skills/tree/9a6b8fe9f0ccf8b851863485b76143c54f33df7e/rubrics) |
+
+The **Awesome Design audit rubrics** are also available directly in this repository: [anti-slop rubric](../design/vendor/awesome-anti-slop-rubric.md), [AI UI quality rubric](../design/vendor/awesome-ai-ui-quality-rubric.md), and [premium generation gate](../design/vendor/awesome-premium-generation-gate.md).
+
+For audit records and execution, use the [source-only baseline UI audit](../design/BASELINE-UI-AUDIT.md) and [per-screen frontend audit workflow](../design/FRONTEND-DESIGN-DELIVERY.md). The baseline audit is explicitly partial; final visual/accessibility acceptance requires rendered-screen evidence, relevant tests and independent review. [Source attribution and licenses](../design/VENDOR-SOURCES.md) document the pinned versions.
