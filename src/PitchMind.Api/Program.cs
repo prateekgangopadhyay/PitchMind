@@ -45,6 +45,13 @@ app.Use(async (context, next) =>
     {
         await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request", exception.Message).ExecuteAsync(context);
     }
+    catch (BadHttpRequestException exception) when (exception.StatusCode is >= 400 and < 500)
+    {
+        var tooLarge = exception.StatusCode == StatusCodes.Status413PayloadTooLarge;
+        await ApiProblem(context, exception.StatusCode,
+            tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST",
+            tooLarge ? "Request content exceeds supported limits" : "Invalid match request").ExecuteAsync(context);
+    }
     catch (KeyNotFoundException)
     {
         await ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time").ExecuteAsync(context);
