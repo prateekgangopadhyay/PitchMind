@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { clock, request } from './api';
 import type { Evidence, Explanation, Fixture, Insight, MatchEvent, Snapshot } from './api';
+import { RoutePage } from './ShellPages';
+import { CanonicalMatchPage } from './CanonicalMatchPage';
+import { contextHref, currentLocation, replaceCurrentMatchContext, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
 
-export function App() {
+function MatchExperience({ expectedMatchId, initialSeconds, replay }: { expectedMatchId?: string; initialSeconds: number; replay: boolean }) {
   const contextVersion = useRef(0);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
-  const [matchId, setMatchId] = useState('');
-  const [seconds, setSeconds] = useState(0);
+  const [matchId, setMatchId] = useState(expectedMatchId ?? new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('matchId') ?? '');
+  const [seconds, setSeconds] = useState(initialSeconds);
   const [speed, setSpeed] = useState(15);
   const [playing, setPlaying] = useState(false);
   const [data, setData] = useState<{state: Snapshot; events: MatchEvent[]; insights: Insight[]} | null>(null);
@@ -18,9 +21,16 @@ export function App() {
   const fixture = fixtures.find(f => f.matchId === matchId);
   useEffect(() => {
     const controller = new AbortController();
-    request<Fixture[]>('matches', controller.signal).then(items => { setFixtures(items); setMatchId(items[0]?.matchId ?? ''); }).catch(e => { if (!controller.signal.aborted) setError(String(e.message)); });
+    request<Fixture[]>('matches', controller.signal).then(items => {
+      if (controller.signal.aborted) return;
+      setFixtures(items);
+      const requestedMatch = expectedMatchId ?? new URLSearchParams(window.location.search).get('matchId') ?? undefined;
+      const selected = requestedMatch ? items.find(item => item.matchId === requestedMatch) : items[0];
+      if (selected) { setMatchId(selected.matchId); setError(''); }
+      else setError('This simulated match is unavailable. Choose a match from Home.');
+    }).catch(e => { if (!controller.signal.aborted) setError(String(e.message)); });
     return () => controller.abort();
-  }, []);
+  }, [expectedMatchId]);
   useEffect(() => {
     if (!matchId) return;
     const controller = new AbortController();
@@ -36,6 +46,9 @@ export function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, [playing, fixture, speed, seconds]);
+  useEffect(() => {
+    if (matchId) replaceCurrentMatchContext(matchId, seconds);
+  }, [matchId, seconds]);
   const selectTime = (time: number) => {contextVersion.current++; setSeconds(time); setEvidence(null); setExplanation(null);};
   const current = data?.state.clockSeconds === seconds ? data : null;
   const insight = current?.insights.at(-1);
@@ -55,8 +68,8 @@ export function App() {
     catch(e) {if (version === contextVersion.current) setError(e instanceof Error ? e.message : 'Explanation unavailable.');}
     finally {setBusy(false);}
   }
-  return <><a href="#main-content" className="skip-link">Skip to match content</a><header><div className="brand"><span>◈</span> PitchMind</div><span className="tag">Simulated match · Fictional teams</span></header><main id="main-content">
-    <div className="intro"><div><p className="eyebrow">Football intelligence, grounded in evidence</p><h1>The match. The mechanism. The proof.</h1></div>{fixtures.length > 0 && <select aria-label="Select simulated match" value={matchId} onChange={e => {setMatchId(e.target.value); selectTime(0); setPlaying(false);}}>{fixtures.map(f => <option key={f.matchId} value={f.matchId}>{f.home.name} vs {f.away.name}</option>)}</select>}</div>
+  return <>
+    <div className="intro"><div><p className="eyebrow">Football intelligence, grounded in evidence</p><h1>{replay ? 'Match replay' : 'The match. The mechanism. The proof.'}</h1></div>{fixtures.length > 0 && <select aria-label="Select simulated match" value={matchId} onChange={e => {setMatchId(e.target.value); selectTime(0); setPlaying(false);}}>{fixtures.map(f => <option key={f.matchId} value={f.matchId}>{f.home.name} vs {f.away.name}</option>)}</select>}</div>
     {error && <div role="alert" className="notice error">{error} <button onClick={() => window.location.reload()}>Retry connection</button></div>}
     {!fixture && !error && <div role="status" className="notice">Loading simulated fixtures…</div>}
     {fixture && <><section className="scoreboard" aria-label="Match score"><div className="team">{fixture.home.name}<p>{fixture.home.formation}</p></div><span className="score">{current?.state.homeScore ?? '—'}</span><div className="clock">{clock(seconds)}<small>{current ? current.state.status : 'Loading selected moment…'}</small></div><span className="score">{current?.state.awayScore ?? '—'}</span><div className="team">{fixture.away.name}<p>{fixture.away.formation}</p></div></section>
@@ -67,5 +80,46 @@ export function App() {
     <section className="panel"><h2>Match Analyst</h2><p>Explain the selected insight with the same evidence.</p><div className="mode">{['fan','analyst'].map(mode => <button key={mode} className={mode === audience ? 'active' : ''} aria-pressed={mode === audience} onClick={() => {contextVersion.current++; setAudience(mode); setExplanation(null);}}>{mode === 'fan' ? 'Fan' : 'Analyst'}</button>)}</div><button disabled={!current?.insights.length || busy} onClick={askAnalyst}>{busy ? 'Loading…' : 'Explain this moment →'}</button>{explanation && <><p>{explanation.text}</p><p className="badge">{explanation.source} · {clock(explanation.clockSeconds)}</p><p>{explanation.limitations.join(' ')}</p></>}</section></div></div>
     <section className="panel replay"><div className="replay-head"><div><h2>Match Replay</h2><p>Every view follows the selected timestamp. Playback advances {speed} match seconds per second.</p></div><select aria-label="Simulation playback speed" value={speed} onChange={e => setSpeed(Number(e.target.value))}><option value="1">1× speed</option><option value="15">15× speed</option><option value="60">60× speed</option></select><button className={playing ? 'active' : ''} onClick={() => {contextVersion.current++; setEvidence(null); setExplanation(null); setPlaying(!playing);}} disabled={seconds >= fixture.durationSeconds}>{seconds >= fixture.durationSeconds ? 'Simulation finished' : playing ? 'Pause' : 'Play simulation'}</button></div><input aria-label="Selected match timestamp in seconds" type="range" min="0" max={fixture.durationSeconds} value={seconds} onChange={e => {setPlaying(false); selectTime(Number(e.target.value));}}/><div className="bounds"><span>Kick-off · 00:00</span><span aria-live="off">Selected {clock(seconds)}</span><span>Full time · {clock(fixture.durationSeconds)}</span></div></section>
     <footer>Synthetic fixture {fixture.version} · Seed {fixture.seed}. All displayed football facts come from the match API. Tracking frames are sampled; positions do not imply an unobserved tactical intent.</footer></>}
-  </main></>;
+  </>;
+}
+
+export function App() {
+  const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/');
+  const separator = location.indexOf('?');
+  const pathname = separator === -1 ? location : location.slice(0, separator);
+  const search = separator === -1 ? '' : location.slice(separator);
+  const route = resolveRoute(pathname);
+  const params = new URLSearchParams(search);
+  const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined : params.get('matchId') ?? undefined;
+  const selectedSeconds = selectedTimeFromSearch(search);
+  const revisionValue = Number(params.get('revision'));
+  const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
+  const matchPath = matchId ? `/matches/${encodeURIComponent(matchId)}` : '/home';
+  const links = [
+    { label: 'Home', path: '/home', active: route.kind === 'home' },
+    { label: 'Match', path: matchPath, active: route.kind === 'matches' || route.kind === 'demo-match' },
+    { label: 'Teams', path: '/teams', active: route.kind === 'teams' },
+    { label: 'Players', path: '/players', active: route.kind === 'players' },
+    { label: 'Insights', path: '/insights', active: route.kind === 'insights' },
+    { label: 'AI Analyst', path: '/analyst', active: route.kind === 'analyst' }
+  ];
+  return <div className="app-shell">
+    <a href="#main-content" className="skip-link">Skip to main content</a>
+    <header className="site-header">
+      <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision)} aria-label="PitchMind home"><span aria-hidden="true">◈</span> PitchMind</a>
+      <span className="tag">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Canonical match data · Source labelled'}</span>
+    </header>
+    <nav className="main-navigation" aria-label="Main navigation">
+      {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
+    </nav>
+    <main id="main-content" tabIndex={-1}>
+      {route.kind === 'matches' && matchId
+        ? <CanonicalMatchPage key={`${matchId}:${revision ?? ''}:${route.replay}`} matchId={matchId} selectedSeconds={selectedSeconds} requestedRevision={revision} replay={route.replay} />
+        : route.kind === 'demo-match'
+          ? <MatchExperience key={`${route.matchId ?? ''}:${route.replay}`} expectedMatchId={route.matchId} initialSeconds={selectedSeconds} replay={route.replay} />
+        : route.kind === 'matches'
+          ? <RoutePage route={{ kind: 'home' }} search={search} />
+        : <RoutePage route={route} search={search} />}
+    </main>
+  </div>;
 }
