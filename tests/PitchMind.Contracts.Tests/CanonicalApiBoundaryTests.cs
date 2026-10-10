@@ -64,6 +64,25 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
         await reader.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
+    [Fact]
+    public async Task Event_cursor_pins_revision_when_query_omits_revision()
+    {
+        var reader = new RevisionCapturingProjectionReader();
+        using var testFactory = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IMatchProjectionReader>();
+            services.AddSingleton<IMatchProjectionReader>(reader);
+        }));
+        using var client = testFactory.CreateClient();
+        var cursor = EncodeCursor("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 120, revision: 2, afterSequence: 10);
+
+        using var response = await client.GetAsync(
+            $"/api/v1/canonical/matches/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/events?atSeconds=120&cursor={Uri.EscapeDataString(cursor)}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(2, await reader.MaximumRevision.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     private static string EncodeCursor(string matchId, int selectedTime, int revision, long afterSequence)
     {
         var json = JsonSerializer.Serialize(new
@@ -104,6 +123,35 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
                 CancellationObserved.TrySetResult();
                 throw;
             }
+        }
+
+        public Task<PersistedMatchEventPage> ReadEventsPageAtAsync(
+            SelectedMatchProjection projection, int selectedSeconds, long afterSequence, int limit,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(
+            SelectedMatchProjection projection, int selectedSeconds,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield break;
+        }
+    }
+
+    private sealed class RevisionCapturingProjectionReader : IMatchProjectionReader
+    {
+        public TaskCompletionSource<int?> MaximumRevision { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<PersistedMatchProjection>> ListLatestAsync(
+            MatchId? afterMatchId, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<SelectedMatchProjection?> GetAtAsync(
+            MatchId matchId, int selectedSeconds, int? maximumRevision, CancellationToken cancellationToken)
+        {
+            MaximumRevision.TrySetResult(maximumRevision);
+            return Task.FromResult<SelectedMatchProjection?>(null);
         }
 
         public Task<PersistedMatchEventPage> ReadEventsPageAtAsync(
