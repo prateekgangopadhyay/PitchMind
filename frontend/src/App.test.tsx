@@ -250,3 +250,52 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
     window.history.replaceState(null, '', '/');
   }
 });
+
+it('aborts and ignores a pending cursor page when Home is refreshed', async () => {
+  const firstId = '11111111-1111-1111-1111-111111111111';
+  const refreshedId = '33333333-3333-3333-3333-333333333333';
+  const staleId = '22222222-2222-2222-2222-222222222222';
+  const card = (matchId: string) => ({
+    matchId, canonicalRevision: 1, asOfSeconds: 1200, throughSequence: 3, phase: 'firsthalf', homeScore: 0, awayScore: 0,
+    provenance: 'synthetic-approved', algorithmVersion: 'projection-v1', sourceSha256: 'e'.repeat(64)
+  });
+  let resolveCursor!: (response: { ok: boolean; json: () => Promise<unknown> }) => void;
+  let cursorSignal: AbortSignal | undefined;
+  let firstPageRequests = 0;
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/home');
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('afterMatchId=')) {
+      cursorSignal = init?.signal ?? undefined;
+      return new Promise<{ ok: boolean; json: () => Promise<unknown> }>(resolve => { resolveCursor = resolve; });
+    }
+    firstPageRequests += 1;
+    const match = firstPageRequests === 1 ? card(firstId) : card(refreshedId);
+    return Promise.resolve({ ok: true, json: async () => ({ items: [match], nextMatchId: firstId, hasMore: true }) });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(cursorSignal?.aborted).toBe(false);
+
+    await act(async () => { container.querySelector('.refresh-matches')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(cursorSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain(refreshedId);
+
+    await act(async () => {
+      resolveCursor({ ok: true, json: async () => ({ items: [card(staleId)], nextMatchId: null, hasMore: false }) });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain(refreshedId);
+    expect(container.textContent).not.toContain(staleId);
+    expect(container.textContent).not.toContain(firstId);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});

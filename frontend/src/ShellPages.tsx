@@ -12,35 +12,57 @@ function useCanonicalFixtures() {
   const [moreError, setMoreError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const pageController = useRef<AbortController | null>(null);
+  const requestGeneration = useRef(0);
   useEffect(() => {
+    const generation = ++requestGeneration.current;
     const controller = new AbortController();
+    pageController.current?.abort();
+    pageController.current = null;
     setLoading(true);
     setPage(null);
     setError('');
+    setLoadingMore(false);
+    setMoreError('');
     request<CanonicalMatchPage>('canonical/fixtures?limit=20', controller.signal)
-      .then(result => { if (!controller.signal.aborted) { setPage(result); setError(''); } })
-      .catch(() => { if (!controller.signal.aborted) setError('Canonical match data is temporarily unavailable. No demo fixture has been substituted.'); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+      .then(result => { if (!controller.signal.aborted && generation === requestGeneration.current) { setPage(result); setError(''); } })
+      .catch(() => { if (!controller.signal.aborted && generation === requestGeneration.current) setError('Canonical match data is temporarily unavailable. No demo fixture has been substituted.'); })
+      .finally(() => { if (!controller.signal.aborted && generation === requestGeneration.current) setLoading(false); });
+    return () => {
+      controller.abort();
+      if (requestGeneration.current === generation) requestGeneration.current += 1;
+    };
   }, [attempt]);
-  useEffect(() => () => pageController.current?.abort(), []);
+  useEffect(() => () => {
+    requestGeneration.current += 1;
+    pageController.current?.abort();
+    pageController.current = null;
+  }, []);
+  const retry = () => {
+    requestGeneration.current += 1;
+    pageController.current?.abort();
+    pageController.current = null;
+    setLoadingMore(false);
+    setMoreError('');
+    setAttempt(value => value + 1);
+  };
   const loadMore = async () => {
     if (!page?.hasMore || !page.nextMatchId || loadingMore) return;
     pageController.current?.abort();
     const controller = new AbortController();
     pageController.current = controller;
+    const generation = requestGeneration.current;
     setLoadingMore(true);
     setMoreError('');
     try {
       const next = await request<CanonicalMatchPage>(`canonical/fixtures?limit=20&afterMatchId=${encodeURIComponent(page.nextMatchId)}`, controller.signal);
-      if (!controller.signal.aborted) setPage(current => current ? { ...next, items: [...current.items, ...next.items] } : next);
+      if (!controller.signal.aborted && generation === requestGeneration.current) setPage(current => current ? { ...next, items: [...current.items, ...next.items] } : next);
     } catch {
-      if (!controller.signal.aborted) setMoreError('More persisted matches could not be loaded.');
+      if (!controller.signal.aborted && generation === requestGeneration.current) setMoreError('More persisted matches could not be loaded.');
     } finally {
-      if (!controller.signal.aborted) setLoadingMore(false);
+      if (!controller.signal.aborted && generation === requestGeneration.current) setLoadingMore(false);
     }
   };
-  return { page, error, loading, loadingMore, moreError, retry: () => setAttempt(value => value + 1), loadMore };
+  return { page, error, loading, loadingMore, moreError, retry, loadMore };
 }
 
 function PageHeading({ eyebrow, title, question }: { eyebrow: string; title: string; question: string }) {
@@ -112,6 +134,7 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
           {phases.map(phase => <option key={phase} value={phase}>{phaseLabel(phase)}</option>)}
         </select>
       </label>}
+      {!loading && !error && page && <button className="refresh-matches" type="button" onClick={retry}>Refresh matches</button>}
     </div>
     {loading ? <PageState loading empty="" />
       : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button type="button" onClick={retry}>Retry canonical service</button></div>
