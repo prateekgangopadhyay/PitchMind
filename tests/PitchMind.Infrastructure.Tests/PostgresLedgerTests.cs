@@ -578,6 +578,7 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var matchId = MatchId.New();
+        await using var outboxCleanup = new OutboxMatchCleanup(source, matchId);
         var (update, aggregate) = BuildUpdate(matchId);
         await RegisterSourceMetadata(source, update);
         var updateStore = new PostgresCanonicalUpdateStore(source);
@@ -721,6 +722,16 @@ public sealed class PostgresLedgerTests
     {
         public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated persistent transport outage.");
+    }
+
+    private sealed class OutboxMatchCleanup(NpgsqlDataSource source, MatchId matchId) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await using var command = source.CreateCommand("DELETE FROM pitchmind.outbox WHERE match_id = $1");
+            command.Parameters.AddWithValue(matchId.Value);
+            await command.ExecuteNonQueryAsync();
+        }
     }
 
     private sealed class BlockingPublisher : IOutboxPublisher
