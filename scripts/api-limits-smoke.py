@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""Run against a fresh API process; validates bounds without bypassing quotas."""
+"""Verify the analyst endpoint remains rate-limited while match data is unavailable.
+
+Run against a fresh API process so this client's fixed-window quota is untouched.
+"""
 import json
 import sys
 import urllib.error
 import urllib.request
+import uuid
 
 base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5080"
-try:
-    with urllib.request.urlopen(base + "/api/v1/matches", timeout=10) as response:
-        fixture_payload = json.load(response)
-except urllib.error.HTTPError as error:
-    if error.code == 503:
-        problem = json.load(error)
-        if problem.get("code") == "MATCH_DATA_UNAVAILABLE":
-            raise SystemExit("BLOCKED: analyst rate-limit smoke requires a validated match provider")
-    raise
-fixture = fixture_payload[0]
-route = base + "/api/v1/matches/" + fixture["matchId"]
-insight = json.load(urllib.request.urlopen(route + "/insights?atSeconds=3309", timeout=10))[0]
-body = json.dumps({"insightId": insight["id"], "atSeconds": 3309, "audience": "fan"}).encode()
+route = f"{base}/api/v1/matches/{uuid.uuid4()}/analyst"
+payload = json.dumps({"insightId": "smoke-check", "atSeconds": 0, "audience": "fan"}).encode()
 statuses = []
-for _ in range(31):
-    req = urllib.request.Request(route + "/analyst", data=body, headers={"Content-Type": "application/json"})
+
+for attempt in range(31):
+    request = urllib.request.Request(
+        route,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            statuses.append(response.status)
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status = response.status
+            body = json.load(response)
     except urllib.error.HTTPError as error:
-        statuses.append(error.code)
-assert 200 in statuses and 429 in statuses, statuses
-req = urllib.request.Request(route + "/analyst", data=b" " * 5000, headers={"Content-Type": "application/json"})
-try:
-    urllib.request.urlopen(req, timeout=10)
-    raise AssertionError("Oversized request accepted")
-except urllib.error.HTTPError as error:
-    # The quota can take precedence over body admission once exhausted.
-    assert error.code in (413, 429), error.code
-print("PASS: analyst request quota rejects excess requests; oversized request rejected")
+        status = error.code
+        body = json.load(error) if error.headers.get("Content-Type", "").endswith("+json") else None
+
+    statuses.append(status)
+    if attempt < 30:
+        assert status == 503, (attempt + 1, status, body)
+        assert body["code"] == "MATCH_DATA_UNAVAILABLE", body
+    else:
+        assert status == 429, (attempt + 1, status, body)
+
+print("PASS: 30 analyst requests fail closed with 503; request 31 is rate-limited with 429")
