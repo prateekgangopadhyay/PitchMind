@@ -37,6 +37,19 @@ public sealed class MatchIntelligenceContextTests
     }
 
     [Fact]
+    public async Task BuildAsync_PreservesAddedTimeBeyondNinetyMinutes()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Builder().BuildAsync(fixture.Request() with { SelectedTimeSeconds = 5_761 },
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(5_761, result.Packet!.SelectedTimeSeconds);
+        Assert.Equal(110, result.Packet.ProjectionAsOfTimeSeconds);
+    }
+
+    [Fact]
     public async Task BuildAsync_DeniesBeforeReadingWhenScopeIsNotAuthorized()
     {
         var fixture = new Fixture { Authorized = false };

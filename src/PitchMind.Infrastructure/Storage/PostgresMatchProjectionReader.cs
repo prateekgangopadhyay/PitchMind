@@ -13,7 +13,6 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Point-in-time reads from immutable PostgreSQL projection revisions and the canonical event ledger.</summary>
 public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) : IMatchProjectionReader
 {
-    private const int MaximumMatchSeconds = 5400;
     private const int MaximumPageSize = 100;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -57,7 +56,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         int? maximumRevision, CancellationToken cancellationToken)
     {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
-        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (selectedSeconds < 0) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
         if (maximumRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumRevision));
 
         await using var command = dataSource.CreateCommand("""
@@ -98,7 +97,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(projection);
-        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (selectedSeconds < 0) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
         if (projection.AsOfClockSeconds > selectedSeconds)
             throw new ArgumentOutOfRangeException(nameof(projection), "Projection is later than the selected time.");
 
@@ -136,7 +135,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         int selectedSeconds, long afterSequence, int limit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(projection);
-        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (selectedSeconds < 0) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
         if (afterSequence < -1 || afterSequence > projection.AsOfSequence) throw new ArgumentOutOfRangeException(nameof(afterSequence));
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
         if (projection.AsOfClockSeconds > selectedSeconds)

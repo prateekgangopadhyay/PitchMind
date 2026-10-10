@@ -67,7 +67,7 @@ public sealed class ExplanationCandidateVerifier
         if (context.Claim is null || !Enum.IsDefined(context.Claim.Category) ||
             !IsSafeIdentifier(context.MatchId, 64) || candidate.MatchId != context.MatchId || candidate.CanonicalRevision != context.CanonicalRevision ||
             candidate.SelectedTimeSeconds != context.SelectedTimeSeconds || context.CanonicalRevision <= 0 ||
-            context.SelectedTimeSeconds is < 0 or > 5400 || context.ProjectionAsOfTimeSeconds is < 0 ||
+            context.SelectedTimeSeconds < 0 || context.ProjectionAsOfTimeSeconds < 0 ||
             context.ProjectionAsOfTimeSeconds > context.SelectedTimeSeconds || context.ThroughSequence < 0 ||
             context.Evidence is null || context.Evidence.Count is < 1 or > 12 ||
             context.Evidence.Any(item => item is null || item.Kind is not ("event" or "frame") ||

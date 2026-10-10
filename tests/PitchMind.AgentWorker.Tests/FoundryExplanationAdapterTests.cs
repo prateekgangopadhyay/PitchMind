@@ -37,6 +37,26 @@ public sealed class FoundryExplanationAdapterTests
         Assert.Contains("untrusted data", body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
     }
 
+    [Fact]
+    public async Task GenerateAsync_PreservesSelectedAddedTimeBeyondNinetyMinutes()
+    {
+        var handler = new StubHandler(_ => Task.FromResult(JsonResponse(Completion("The pattern is visible.", "event-1"))));
+        using var http = new HttpClient(handler);
+        using var adapter = Create(http, new StubTokenProvider());
+        var context = Packet() with
+        {
+            SelectedTimeSeconds = 5_761,
+            ProjectionAsOfTimeSeconds = 5_761,
+            Evidence = Array.AsReadOnly(new[] { Packet().Evidence[0] with { ClockSeconds = 5_761 } })
+        };
+
+        var result = await adapter.GenerateAsync(new ExplanationGenerationRequest(context, ExplanationAudience.Fan,
+            "Explain this"), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(5_761, result.Candidate!.SelectedTimeSeconds);
+    }
+
     [Theory]
     [InlineData(ExplanationAudience.Fan, "fan")]
     [InlineData(ExplanationAudience.Analyst, "analyst")]

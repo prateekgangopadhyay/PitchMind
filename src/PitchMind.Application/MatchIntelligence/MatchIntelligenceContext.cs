@@ -119,7 +119,7 @@ public sealed class MatchIntelligenceContextBuilder(
         _limits.Validate();
         if (request.MatchId.Value == Guid.Empty ||
             string.IsNullOrWhiteSpace(request.InsightId) || request.InsightId.Length > 256 ||
-            request.SelectedTimeSeconds is < 0 or > 5400 || request.CanonicalRevision is <= 0)
+            request.SelectedTimeSeconds < 0 || request.CanonicalRevision is <= 0)
             return MatchIntelligenceContextBuildResult.Refused(MatchIntelligenceContextFailure.MatchStateUnavailable);
 
         if (!await authorizer.CanReadMatchIntelligenceAsync(request.MatchId, cancellationToken))

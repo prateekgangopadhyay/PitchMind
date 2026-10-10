@@ -243,9 +243,30 @@ public sealed class ExplanationAgentOrchestratorTests
     private static MatchIntelligenceContextBuildResult ContextResult() =>
         MatchIntelligenceContextBuildResult.Success(Packet());
 
-    private static MatchIntelligenceContextRequest ContextRequest() => new("test-requester",
+    private static MatchIntelligenceContextRequest ContextRequest() => new(
         new PitchMind.Domain.Match.MatchId(Guid.Parse("11111111-1111-1111-1111-111111111111")),
         "insight-1", 120, 3);
+
+    [Fact]
+    public async Task GenerateAsync_AcceptsAddedTimeBeyondNinetyMinutes()
+    {
+        var packet = Packet() with
+        {
+            SelectedTimeSeconds = 5_761,
+            ProjectionAsOfTimeSeconds = 5_761,
+            Evidence = Array.AsReadOnly(new[] { Packet().Evidence[0] with { ClockSeconds = 5_761 } })
+        };
+        using var workflow = Create(new StubGenerator((_, _) => Task.FromResult(
+            ExplanationGenerationResult.Success(Candidate("untrusted candidate", "event-1") with
+                { SelectedTimeSeconds = 5_761 }))),
+            contextTool: new StubContextTool(MatchIntelligenceContextBuildResult.Success(packet)));
+
+        var result = await workflow.GenerateAsync(ContextRequest() with { SelectedTimeSeconds = 5_761 },
+            ExplanationAudience.Fan, "Explain", CancellationToken.None);
+
+        Assert.Equal(ExplanationWorkflowStatus.Completed, result.Status);
+        Assert.Equal(5_761, result.Explanation!.SelectedTimeSeconds);
+    }
 
     private static MatchIntelligenceContextPacket Packet() => new(
         "11111111-1111-1111-1111-111111111111", 3, 120, 120, 8, new MatchIntelligenceScore(1, 0),

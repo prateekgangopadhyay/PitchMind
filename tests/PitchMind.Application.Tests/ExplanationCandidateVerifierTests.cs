@@ -32,6 +32,23 @@ public sealed class ExplanationCandidateVerifierTests
     }
 
     [Fact]
+    public void Verify_PreservesAddedTimeBeyondNinetyMinutes()
+    {
+        var packet = Context() with
+        {
+            SelectedTimeSeconds = 5_761,
+            ProjectionAsOfTimeSeconds = 5_761,
+            Evidence = Array.AsReadOnly(new[] { Context().Evidence[0] with { ClockSeconds = 5_761 } })
+        };
+
+        var result = new ExplanationCandidateVerifier().Verify(Candidate(packet, "safe candidate"), packet,
+            ExplanationAudience.Fan);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(5_761, result.Explanation!.SelectedTimeSeconds);
+    }
+
+    [Fact]
     public void Verify_RejectsCitationNotPresentInSelectedContext()
     {
         var packet = Context();

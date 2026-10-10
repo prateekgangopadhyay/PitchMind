@@ -213,7 +213,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
     {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
         if (maximumRevision <= 0) throw new ArgumentOutOfRangeException(nameof(maximumRevision));
-        if (selectedSeconds is < 0 or > 5400) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (selectedSeconds < 0) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
         if (throughSequence < -1) throw new ArgumentOutOfRangeException(nameof(throughSequence));
         if (afterSequence is < 0) throw new ArgumentOutOfRangeException(nameof(afterSequence));
         if (afterSequence is not null && afterSequence > throughSequence) throw new ArgumentOutOfRangeException(nameof(afterSequence));

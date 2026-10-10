@@ -130,9 +130,9 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
                 identity?.SelectedTimeSeconds ?? contextRequest.SelectedTimeSeconds,
                 identity?.ThroughSequence ?? 0, Array.AsReadOnly(handoffs.ToArray()), failure));
 
-        if (string.IsNullOrWhiteSpace(contextRequest.RequesterId) || contextRequest.MatchId.Value == Guid.Empty ||
+        if (contextRequest.MatchId.Value == Guid.Empty ||
             string.IsNullOrWhiteSpace(contextRequest.InsightId) || contextRequest.InsightId.Length > 256 ||
-            contextRequest.SelectedTimeSeconds is < 0 or > 5400 || contextRequest.CanonicalRevision is <= 0)
+            contextRequest.SelectedTimeSeconds < 0 || contextRequest.CanonicalRevision is <= 0)
         {
             handoffs.Add(Handoff(1, ExplanationAgentRole.EvidenceCurator, ExplanationHandoffStatus.Rejected,
                 "", contextIds, Array.Empty<string>(), 0, "InvalidContextRequest"));
@@ -323,7 +323,7 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
         }
 
         if (string.IsNullOrWhiteSpace(packet.MatchId) || packet.MatchId.Length > 128 ||
-            packet.CanonicalRevision <= 0 || packet.SelectedTimeSeconds is < 0 or > 5400 ||
+            packet.CanonicalRevision <= 0 || packet.SelectedTimeSeconds < 0 ||
             packet.ProjectionAsOfTimeSeconds < 0 || packet.ProjectionAsOfTimeSeconds > packet.SelectedTimeSeconds ||
             packet.ThroughSequence < 0 || packet.Score is null || packet.Score.Home < 0 || packet.Score.Away < 0 ||
             !IsSha256(packet.SourceSha256) || !IsSha256(packet.StateSha256) ||
