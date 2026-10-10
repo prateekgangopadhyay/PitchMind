@@ -25,18 +25,39 @@ public sealed class CandidateReplayCheckpointStore
     {
         ArgumentNullException.ThrowIfNull(feed);
         EnsureCandidate(feed);
-        if (File.Exists(_path) || new FileInfo(_path).LinkTarget is not null)
-            EnsureRegularFile(_path);
-        if (!File.Exists(_path))
+        if (new FileInfo(_path).LinkTarget is not null)
+            throw new InvalidDataException("Candidate replay checkpoint must not be a symbolic link.");
+
+        FileStream input;
+        try
+        {
+            input = new FileStream(
+                _path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 4_096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+        }
+        catch (FileNotFoundException)
+        {
             return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
 
-        var info = new FileInfo(_path);
-        if (info.Length is <= 0 or > MaximumCheckpointBytes)
-            throw new InvalidDataException("Candidate replay checkpoint has an invalid size.");
+        byte[] bytes;
+        await using (input.ConfigureAwait(false))
+        {
+            // Inspect the opened object where the platform exposes handle attributes;
+            // this avoids treating a path-only check as proof of the object we read.
+            if ((File.GetAttributes(input.SafeFileHandle) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Candidate replay checkpoint must not be a reparse point.");
 
-        var bytes = await File.ReadAllBytesAsync(_path, cancellationToken).ConfigureAwait(false);
-        if (bytes.Length > MaximumCheckpointBytes)
-            throw new InvalidDataException("Candidate replay checkpoint exceeds the configured size limit.");
+            bytes = await ReadBoundedCheckpointBytesAsync(input, cancellationToken).ConfigureAwait(false);
+        }
 
         CandidateReplayCheckpoint checkpoint;
         try
@@ -83,6 +104,7 @@ public sealed class CandidateReplayCheckpointStore
         Validate(checkpoint, feed);
 
         var directory = Path.GetDirectoryName(_path)!;
+        EnsureNoLink(directory);
         Directory.CreateDirectory(directory);
         EnsureNoLink(directory);
         if (File.Exists(_path))
@@ -121,6 +143,17 @@ public sealed class CandidateReplayCheckpointStore
     {
         if (feed.IsCanonical || feed.Disposition != "candidate_not_canonical")
             throw new InvalidOperationException("Replay checkpoints are limited to noncanonical candidate feeds.");
+    }
+
+    internal static Task<byte[]> ReadBoundedCheckpointBytesAsync(
+        Stream input,
+        CancellationToken cancellationToken)
+    {
+        return CandidateSourceFeedReader.ReadBoundedBytesAsync(
+            input,
+            MaximumCheckpointBytes,
+            "Candidate replay checkpoint",
+            cancellationToken);
     }
 
     private static void Validate(CandidateReplayCheckpoint checkpoint, CandidateSourceFeed feed)

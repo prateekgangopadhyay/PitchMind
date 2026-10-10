@@ -496,6 +496,40 @@ public sealed class CandidateSourceFeedReaderTests
     }
 
     [Fact]
+    public async Task CandidateReplayCheckpointReadIsBoundedWhenTheOpenedStreamGrows()
+    {
+        const int maximumBytes = 4_096;
+        var stream = new GrowthAfterOpenStream(new byte[maximumBytes * 4], initialLength: 4);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => CandidateReplayCheckpointStore.ReadBoundedCheckpointBytesAsync(
+            stream,
+            CancellationToken.None));
+
+        Assert.Equal(maximumBytes + 1, stream.BytesReturned);
+    }
+
+    [Fact]
+    public async Task CandidateReplayCheckpointReadRejectsSymbolicLink()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var targetPath = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "target.json");
+            var checkpointPath = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "linked-checkpoint.json");
+            await File.WriteAllTextAsync(targetPath, "{}");
+            File.CreateSymbolicLink(checkpointPath, targetPath);
+
+            var store = new CandidateReplayCheckpointStore(checkpointPath);
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
     {
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
