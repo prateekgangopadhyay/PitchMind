@@ -37,12 +37,12 @@ Do not grant table ownership, schema CREATE, UPDATE, DELETE, TRUNCATE, or the mi
 ./scripts/test-postgres.sh
 ```
 
-`tests/PitchMind.Infrastructure.Tests` also supports direct opt-in PostgreSQL runs. Set `PITCHMIND_TEST_POSTGRES` to an **isolated local test database** connection string and run:
+`tests/PitchMind.Infrastructure.Tests` also supports direct opt-in PostgreSQL runs. The test fixture validates the connection before constructing any data source: host must be exactly `localhost`, `127.0.0.1` or `::1`, and database must be `pitchmind_test_<32-hex>`. Remote hosts, host lists, service-file targets, and ordinary database names are rejected; the `Source()` helper repeats the guard before each connection. The guard cannot establish that an operator-created matching database is disposable, so prefer the wrapper below, which creates a fresh random database and drops it in `finally`. Direct runs must point only at a disposable local database:
 
 ```sh
 dotnet test tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj
 ```
 
-Without that environment variable, tests explicitly skip and must not be reported as verified. Test setup runs the migration; the privilege test needs local role-creation permission. Tests create fresh match IDs and never truncate existing history. The role test grants an ephemeral runtime role, verifies append/read, denies UPDATE/DELETE/CREATE TABLE, and removes its grants/role afterward.
+Without that environment variable, database integration tests explicitly skip and must not be reported as verified. If a configured target fails the local/disposable-name guard, those facts skip and direct data-source creation throws before connecting. The migration regression removes only its two owned tables (`pitchmind.match_events` and `pitchmind.schema_versions`) without `CASCADE`; it never drops the schema. Test setup runs the migration; the privilege test needs local role-creation permission. Tests create fresh match IDs. The role test grants an ephemeral runtime role, verifies append/read, denies UPDATE/DELETE/CREATE TABLE, and removes its grants/role afterward.
 
 Actual local run: existing Compose PostgreSQL 17 container, isolated `pitchmind_ledger_test` database. Evidence covers persistence after opening a new data source, twelve concurrent identical appends, conflicting payloads, sequence gaps/conflicts, cancellation, and runtime write restrictions. Database restart, backup restore, telemetry metadata durability, migration upgrade/rollback, Azure identity and Azure deployment still require separate evidence.
