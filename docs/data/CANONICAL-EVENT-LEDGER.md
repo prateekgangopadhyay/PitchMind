@@ -16,7 +16,9 @@ Npgsql is pinned to **10.0.3**, verified against the [official release](https://
 
 ## Migration and runtime identities
 
-`PostgresSchemaMigrator.ApplyAsync(migrationDataSource, cancellationToken)` is an **explicit separate migration operation**. Runtime constructors never execute DDL. Version 1 creates `pitchmind.match_events` and the migration version ledger inside an advisory-locked transaction. The embedded schema is the authoritative SQL for this version; future migrations must use new versions rather than editing deployed v1 semantics.
+`PostgresSchemaMigrator.ApplyAsync(migrationDataSource, cancellationToken)` is an **explicit separate migration operation**. Runtime constructors never execute DDL. Version 1 creates `pitchmind.match_events` and the migration version ledger inside an advisory-locked transaction. Version 2 expands the event-type check from the historical v1 values 0–7 to the current `MatchEventType` values 0–10. The v1 SQL remains unchanged so existing installations upgrade through a distinct, recorded migration.
+
+Before a new append, PostgreSQL checks whether the existing match ledger is contiguous from sequence zero. If it finds a gap (for example, legacy rows 0 and 2), it holds every new nonduplicate append at the first missing sequence. This prevents appending 3 and creating a ledger that subsequent reads reject. Writes resume only after an explicit reconciliation repairs the history; this adapter does not perform that repair.
 
 Run migrations with a dedicated migration identity authorized to create schema/tables. Grant runtime only:
 
