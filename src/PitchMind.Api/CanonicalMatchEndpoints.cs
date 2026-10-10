@@ -1,6 +1,8 @@
 using PitchMind.Application.Abstractions;
+using PitchMind.Contracts.Telemetry.V1;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Match;
+using System.Text.Json;
 
 namespace PitchMind.Api;
 
@@ -152,6 +154,26 @@ internal static class CanonicalMatchEndpoints
             return Results.Ok(new CanonicalReplayResponse(ToSnapshot(projection, selectedTime), ToEventPage(projection, selectedTime, page, canonicalMatchId)));
         });
 
+        match.MapGet("/frames", async (
+            string matchId, int? atSeconds, int? revision, int? limit,
+            IMatchProjectionReader projections, IMatchTrackingReader tracking, HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            var selectedTime = atSeconds ?? 0;
+            var pageSize = limit ?? 12;
+            if (pageSize is < 1 or > 25)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 25.");
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, revision, cancellationToken);
+            if (projection is null)
+                return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
+            var page = await tracking.ReadAtAsync(projection, selectedTime, pageSize, cancellationToken);
+            var items = page.Frames.Select(frame => ToTrackingFrame(frame, canonicalMatchId, selectedTime)).ToArray();
+            return Results.Ok(new CanonicalTrackingFramePageResponse(canonicalMatchId.ToString("D"), projection.Revision,
+                selectedTime, projection.AsOfSequence, Array.AsReadOnly(items), page.HasMore));
+        });
+
         match.MapGet("/key-moments", (string matchId, int? atSeconds, int? revision, HttpContext context) =>
         {
             if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
@@ -192,6 +214,45 @@ internal static class CanonicalMatchEndpoints
         insight.SourceVersion, insight.Provenance, insight.SourceSha256,
         insight.DetectorVersion, insight.TruthClass, insight.Summary,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
+
+    private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime)
+    {
+        if (string.IsNullOrWhiteSpace(frame.FrameId) || frame.FrameId.Length > 128 || frame.Sequence < 0 ||
+            frame.Period is < 1 or > 5 || frame.ClockSeconds != selectedTime ||
+            string.IsNullOrWhiteSpace(frame.CoordinateVersion) || frame.CoordinateVersion.Length > 128 ||
+            System.Text.Encoding.UTF8.GetByteCount(frame.PayloadJson) > 32_768 ||
+            System.Text.Encoding.UTF8.GetByteCount(frame.QualityJson) > 4_096)
+            throw new InvalidDataException("Persisted tracking frame metadata is invalid.");
+
+        TrackingFrameV1? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<TrackingFrameV1>(frame.PayloadJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (JsonException)
+        {
+            throw new InvalidDataException("Persisted tracking frame payload is invalid.");
+        }
+        if (payload is null || !TelemetryContractValidatorV1.Validate(payload).IsValid ||
+            payload.MatchId != matchId.ToString("D") || payload.FrameId != frame.FrameId ||
+            payload.Sequence != frame.Sequence || payload.MatchTime.ElapsedSeconds != frame.ClockSeconds ||
+            payload.MatchTime.Period != frame.Period || payload.Source.SourceSha256 != frame.SourceSha256 ||
+            payload.CoordinateSystem.LengthMetres > 120 || payload.CoordinateSystem.WidthMetres > 90)
+            throw new InvalidDataException("Persisted tracking frame payload does not match its indexed metadata.");
+
+        try
+        {
+            using var qualityDocument = JsonDocument.Parse(frame.QualityJson);
+            if (qualityDocument.RootElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Persisted tracking frame quality must be a JSON object.");
+            return new CanonicalTrackingFrameResponse(frame.FrameId, frame.Sequence, frame.Period, frame.ClockSeconds,
+                frame.CoordinateVersion, frame.SourceSha256, qualityDocument.RootElement.Clone(), payload);
+        }
+        catch (JsonException)
+        {
+            throw new InvalidDataException("Persisted tracking frame quality is invalid.");
+        }
+    }
 
     private static IResult Problem(HttpContext context, int status, string code, string title) =>
         Results.Json(new ApiProblemResponse("about:blank", title, status, code, context.TraceIdentifier,

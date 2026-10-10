@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, provenanceLabel, request } from './api';
-import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot } from './api';
+import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
 type MatchView = {
   snapshot: CanonicalMatchSnapshot;
   events: CanonicalEventPage;
   insights: CanonicalInsightPage;
+  trackingFrames: CanonicalTrackingFramePage | null;
+  trackingStatus: string;
   keyMomentsStatus: string;
 };
 
@@ -19,6 +21,9 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [view, setView] = useState<MatchView | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [playing, setPlaying] = useState(false);
+  const canonicalRevision = view?.snapshot.canonicalRevision;
+  const canonicalSelectedSeconds = view?.snapshot.selectedTimeSeconds;
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -29,10 +34,19 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .then(async snapshot => {
         const revision = snapshot.canonicalRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
+        const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
-        const [events, insights, keyMomentsStatus] = await Promise.all([
+        const [events, insights, frameResult, keyMomentsStatus] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal),
           request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal),
+          request<CanonicalTrackingFramePage>(`canonical/matches/${encodeURIComponent(matchId)}/frames?${frameQuery}`, controller.signal)
+            .then(page => ({ page, status: '' }))
+            .catch(error => ({
+              page: null,
+              status: error instanceof ApiRequestError && error.status === 503
+                ? 'Observed tracking is unavailable from the canonical service at this selected time.'
+                : 'Observed tracking could not be loaded; player positions are not estimated.'
+            })),
           request<unknown>(`canonical/matches/${encodeURIComponent(matchId)}/key-moments?${keyMomentQuery}`, controller.signal)
             .then(() => 'The canonical key-moment response is not versioned, so this view cannot display it yet.')
             .catch(error => error instanceof ApiRequestError && error.status === 503 && error.code === 'CANONICAL_KEY_MOMENTS_UNAVAILABLE'
@@ -40,6 +54,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
+        const trackingFrames = frameResult.page;
         const exactContext = [snapshot, events, insights].every(item => item.matchId === matchId &&
           item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
@@ -49,19 +64,43 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
           insight.canonicalRevision === revision && insight.selectedTimeSeconds === selectedSeconds &&
           insight.throughSequence <= snapshot.throughSequence);
-        if (!exactContext || !eventsSafe || !insightsSafe) {
+        const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
+          trackingFrames.canonicalRevision === revision && trackingFrames.selectedTimeSeconds === selectedSeconds &&
+          trackingFrames.throughSequence === snapshot.throughSequence && trackingFrames.items.every(frame =>
+            frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
+            frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
+            frame.frame.sequence === frame.sequence && frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&
+            frame.frame.matchTime.period === frame.period && frame.frame.source.sourceSha256 === frame.sourceSha256));
+        if (!exactContext || !eventsSafe || !insightsSafe || !framesSafe) {
           setView(null);
+          setPlaying(false);
           setError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
           return;
         }
-        setView({ snapshot, events, insights, keyMomentsStatus });
+        setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus });
       })
-      .catch(() => { if (!controller.signal.aborted) { setView(null); setError('Canonical match data is unavailable. The page does not fall back to a demo fixture.'); } })
+      .catch(() => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError('Canonical match data is unavailable. The page does not fall back to a demo fixture.'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [matchId, requestedRevision, selectedSeconds]);
 
+  useEffect(() => {
+    if (!playing) return;
+    if (selectedSeconds >= 5400) { setPlaying(false); return; }
+    if (canonicalSelectedSeconds !== selectedSeconds || canonicalRevision === undefined) return;
+    const timer = window.setInterval(() =>
+      replaceCurrentMatchContext(matchId, Math.min(selectedSeconds + 1, 5400), canonicalRevision), 1_000);
+    return () => window.clearInterval(timer);
+  }, [playing, matchId, selectedSeconds, canonicalRevision, canonicalSelectedSeconds]);
+
   const snapshot = view?.snapshot;
+  const selectedFrame = view?.trackingFrames?.items.at(-1) ?? null;
+  const pitch = selectedFrame ? pitchCoordinates(selectedFrame) : null;
+  const trackingMessage = view?.trackingStatus || (view?.trackingFrames?.items.length
+    ? pitch ? `Observed frame ${selectedFrame?.frameId} at ${clock(selectedSeconds)} · period ${selectedFrame?.period}. No positions are interpolated.`
+      : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
+    : `No observed tracking frame is recorded at ${clock(selectedSeconds)}. Positions are not estimated.`);
+
   return <section className="content-page">
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
@@ -85,19 +124,55 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
               aria-valuetext={clock(selectedSeconds)}
-              onChange={event => replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision)} />
+              onChange={event => { setPlaying(false); replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision); }} />
             <span>{clock(selectedSeconds)}</span>
+            <button type="button" aria-pressed={playing} onClick={() => setPlaying(value => !value)} disabled={selectedSeconds >= 5400}>
+              {playing ? 'Pause replay' : 'Play replay'}
+            </button>
           </div>
-          <div className="dashboard canonical-dashboard">
+          <div className="dashboard canonical-dashboard pitch-dashboard">
+            <section className="panel pitch-panel" aria-labelledby="pitch-title">
+              <h2 id="pitch-title">Observed pitch</h2>
+              <p>Only a recorded frame at the selected time is shown. Sample gaps are not filled.</p>
+              {pitch && selectedFrame ? <>
+                <svg className="canonical-pitch" style={{ aspectRatio: `${pitch.length} / ${pitch.width}` }} viewBox={`-1 -1 ${pitch.length + 2} ${pitch.width + 2}`} role="img"
+                  aria-label={`Observed player and ball positions at ${clock(selectedSeconds)}, period ${selectedFrame.period}`} aria-describedby="pitch-description">
+                  <rect className="pitch-boundary" x="0" y="0" width={pitch.length} height={pitch.width} />
+                  <line className="pitch-marking" x1={pitch.length / 2} y1="0" x2={pitch.length / 2} y2={pitch.width} />
+                  <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={pitch.width * .135} />
+                  <circle className="ball-marker" cx={pitch.ball.x} cy={pitch.ball.y} r={Math.max(pitch.width * .012, .25)} />
+                  {pitch.players.map((player, index) => <g key={player.playerId}>
+                    <circle className={`player-marker team-marker-${pitch.teamIds.indexOf(player.teamId) % 2}`} cx={player.position.x} cy={player.position.y} r={Math.max(pitch.width * .038, 1.1)} />
+                    <text className="pitch-player-label" x={player.position.x} y={player.position.y + Math.max(pitch.width * .009, .2)} textAnchor="middle">{index + 1}</text>
+                    <title>{`${player.teamId} · ${player.playerId}`}</title>
+                  </g>)}
+                </svg>
+                <p id="pitch-description" className="pitch-caption">Frame {selectedFrame.frameId} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m · {pitch.attackTeamId} attacks right in this view.</p>
+                <details className="position-table-details" open>
+                  <summary>Read observed player positions</summary>
+                  <table>
+                    <caption>Pitch view coordinates at {clock(selectedSeconds)} · {pitch.attackTeamId} attacks right · sequence {selectedFrame.sequence}</caption>
+                    <thead><tr><th scope="col">Marker</th><th scope="col">Team ID</th><th scope="col">Player ID</th><th scope="col">View X (m)</th><th scope="col">View Y (m)</th></tr></thead>
+                    <tbody>{pitch.players.map((player, index) => <tr key={player.playerId}>
+                      <td>{index + 1}</td><td>{player.teamId}</td><td>{player.playerId}</td><td>{player.position.x.toFixed(2)}</td><td>{player.position.y.toFixed(2)}</td>
+                    </tr>)}</tbody>
+                  </table>
+                </details>
+                <p className="tracking-legend">Numbered team markers map to the position table. The white marker is the observed ball.</p>
+              </> : <p className="empty tracking-status" role="status" aria-live="polite">{trackingMessage}</p>}
+            </section>
             <section className="panel" aria-labelledby="timeline-title">
               <h2 id="timeline-title">Recorded events</h2>
-              <p>Events keep their canonical sequence and source time.</p>
+              <p>Choose an event to inspect its exact recorded time.</p>
               {view.events.items.length === 0 ? <p className="empty">No recorded events are visible at this time.</p>
                 : <ol className="canonical-events">{view.events.items.map(event => <li key={`${event.sequence}:${event.eventId}`}>
-                  <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
-                  <span>{eventLabel(event.type)}</span>
-                  {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}
-                  <small>Sequence {event.sequence} · period {event.period}</small>
+                  <button type="button" className="canonical-event" aria-label={`Select ${eventLabel(event.type)} at ${clock(event.clockSeconds)}, sequence ${event.sequence}`}
+                    onClick={() => { setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.canonicalRevision); }}>
+                    <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
+                    <span>{eventLabel(event.type)}</span>
+                    {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}
+                    <small>Sequence {event.sequence} · period {event.period}</small>
+                  </button>
                 </li>)}</ol>}
             </section>
             <section className="panel" aria-labelledby="insights-title">
@@ -115,10 +190,43 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               <p role="status">{view.keyMomentsStatus}</p>
             </section>
           </div>
-          <p className="page-state data-limit">Pitch tracking frames are not returned by the current canonical match contract, so no player positions are drawn.</p>
         </>
         : <p className="page-state">This match is not available.</p>}
   </section>;
+}
+
+type PitchPoint = { x: number; y: number };
+function pitchCoordinates(record: CanonicalTrackingFrame): { length: number; width: number; ball: PitchPoint; players: Array<{playerId: string; teamId: string; position: PitchPoint}>; teamIds: string[]; attackTeamId: string } | null {
+  const { frame } = record;
+  const system = frame.coordinateSystem;
+  if (!system || !Array.isArray(system.teamDirections) || !Array.isArray(frame.players) || !frame.players.length) return null;
+  const teamIds = [...new Set(frame.players.map(player => player.teamId))].sort();
+  const directionsSafe = teamIds.every(teamId => system.teamDirections.filter(direction => direction.teamId === teamId).length === 1 &&
+    ['left', 'right'].includes(system.teamDirections.find(direction => direction.teamId === teamId)?.direction ?? ''));
+  const reference = system.teamDirections.find(direction => direction.teamId === teamIds[0]);
+  if (!reference || !directionsSafe || !Number.isFinite(system.lengthMetres) || !Number.isFinite(system.widthMetres) ||
+      system.lengthMetres <= 0 || system.lengthMetres > 120 || system.widthMetres <= 0 || system.widthMetres > 90 ||
+      !['metres', 'normalized_0_1', 'percent_0_100'].includes(system.unit) ||
+      !['bottom_left', 'top_left'].includes(system.axisOrigin)) return null;
+  const point = (raw: {x: number; y: number}): PitchPoint | null => {
+    if (!Number.isFinite(raw.x) || !Number.isFinite(raw.y) || raw.x < 0 || raw.y < 0 ||
+        raw.x > (system.unit === 'metres' ? system.lengthMetres : system.unit === 'normalized_0_1' ? 1 : 100) ||
+        raw.y > (system.unit === 'metres' ? system.widthMetres : system.unit === 'normalized_0_1' ? 1 : 100)) return null;
+    const scaleX = system.unit === 'metres' ? 1 : system.unit === 'normalized_0_1' ? system.lengthMetres : system.lengthMetres / 100;
+    const scaleY = system.unit === 'metres' ? 1 : system.unit === 'normalized_0_1' ? system.widthMetres : system.widthMetres / 100;
+    let x = raw.x * scaleX;
+    let y = raw.y * scaleY;
+    if (system.axisOrigin === 'top_left') y = system.widthMetres - y;
+    if (reference.direction === 'left') { x = system.lengthMetres - x; y = system.widthMetres - y; }
+    return { x, y: system.widthMetres - y };
+  };
+  const ball = point(frame.ball);
+  const players = frame.players.map(player => {
+    const position = point(player.position);
+    return position ? { playerId: player.playerId, teamId: player.teamId, position } : null;
+  });
+  if (!ball || players.some(player => player === null)) return null;
+  return { length: system.lengthMetres, width: system.widthMetres, ball, players: players as Array<{playerId: string; teamId: string; position: PitchPoint}>, teamIds, attackTeamId: reference.teamId };
 }
 
 function eventLabel(type: string) {

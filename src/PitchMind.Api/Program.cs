@@ -18,11 +18,13 @@ if (!string.IsNullOrWhiteSpace(postgresConnectionString))
     builder.Services.AddSingleton(dataSource);
     builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
     builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+    builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
 }
 else
 {
     builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
     builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+    builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
 }
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
@@ -59,6 +61,14 @@ app.Use(async (context, next) =>
     catch (CanonicalReadUnavailableException)
     {
         await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "Canonical match data is not configured").ExecuteAsync(context);
+    }
+    catch (InvalidDataException)
+    {
+        app.Logger.LogError("Canonical tracking data failed validation for {Path}", context.Request.Path);
+        if (!context.Response.HasStarted)
+            await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "TRACKING_DATA_INVALID", "Tracking data is unavailable at the selected time").ExecuteAsync(context);
+        else
+            throw;
     }
     catch (NpgsqlException exception)
     {

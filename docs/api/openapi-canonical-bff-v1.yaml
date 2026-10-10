@@ -137,6 +137,25 @@ paths:
         '400': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/frames:
+    get:
+      operationId: listCanonicalTrackingFramesAtSelectedTime
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 25, default: 12 }
+      responses:
+        '200':
+          description: Exact selected-time observed frames bounded by the canonical revision sequence watermark. Empty items means no observed frame was recorded for that second.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalTrackingFramePage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/key-moments:
     get:
       operationId: listCanonicalKeyMoments
@@ -315,6 +334,98 @@ components:
       properties:
         insight: { $ref: '#/components/schemas/CanonicalInsight' }
         items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidencePayload' } }
+    CanonicalTrackingFramePage:
+      type: object
+      required: [matchId, canonicalRevision, selectedTimeSeconds, throughSequence, items, hasMore]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer, minimum: 0, maximum: 5400 }
+        throughSequence: { type: integer, minimum: -1 }
+        items: { type: array, maxItems: 25, items: { $ref: '#/components/schemas/CanonicalTrackingFrame' } }
+        hasMore: { type: boolean }
+    CanonicalTrackingFrame:
+      type: object
+      required: [frameId, sequence, period, clockSeconds, coordinateVersion, sourceSha256, quality, frame]
+      properties:
+        frameId: { type: string, minLength: 1, maxLength: 128 }
+        sequence: { type: integer, minimum: 0 }
+        period: { type: integer, minimum: 1, maximum: 5 }
+        clockSeconds: { type: integer, minimum: 0, maximum: 5400 }
+        coordinateVersion: { type: string, minLength: 1, maxLength: 128 }
+        sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        quality: { type: object, additionalProperties: true }
+        frame: { $ref: '#/components/schemas/TrackingFrameV1' }
+    TrackingFrameV1:
+      type: object
+      description: Validated observed sample preserving canonical and original source frame identity, source sequence, source clock semantics, coordinate units/origin/dimensions, attack directions and provenance.
+      required: [schemaVersion, matchId, frameId, sequence, matchTime, coordinateSystem, ball, players, source]
+      properties:
+        schemaVersion: { type: integer, const: 1 }
+        matchId: { type: string, format: uuid }
+        frameId: { type: string, minLength: 1, maxLength: 128 }
+        sequence: { type: integer, minimum: 0 }
+        matchTime:
+          type: object
+          required: [period, elapsedSeconds, sourceClockValue, sourceClockUnit, sourceClockBasis]
+          properties:
+            period: { type: integer, minimum: 1, maximum: 5 }
+            elapsedSeconds: { type: integer, minimum: 0 }
+            sourceClockValue: { type: number, minimum: 0 }
+            sourceClockUnit: { type: string, enum: [seconds, milliseconds, provider_defined] }
+            sourceClockBasis: { type: string, enum: [match_elapsed, period_elapsed, provider_defined] }
+        coordinateSystem:
+          type: object
+          required: [lengthMetres, widthMetres, unit, axisOrigin, teamDirections]
+          properties:
+            lengthMetres: { type: number, exclusiveMinimum: 0, maximum: 120 }
+            widthMetres: { type: number, exclusiveMinimum: 0, maximum: 90 }
+            unit: { type: string, enum: [metres, normalized_0_1, percent_0_100] }
+            axisOrigin: { type: string, enum: [bottom_left, top_left] }
+            teamDirections:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [teamId, direction]
+                properties:
+                  teamId: { type: string, minLength: 1 }
+                  direction: { type: string, enum: [left, right] }
+        ball:
+          type: object
+          required: [x, y]
+          properties:
+            x: { type: number }
+            y: { type: number }
+        players:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            required: [playerId, teamId, position]
+            properties:
+              playerId: { type: string, minLength: 1 }
+              teamId: { type: string, minLength: 1 }
+              position:
+                type: object
+                required: [x, y]
+                properties:
+                  x: { type: number }
+                  y: { type: number }
+        source:
+          type: object
+          required: [providerId, sourceMatchId, sourceRecordId, sourceSequence, sourceSchemaVersion, sourceSha256, provenanceStatus, rightsReviewStatus]
+          properties:
+            providerId: { type: string, minLength: 1 }
+            sourceMatchId: { type: string, minLength: 1 }
+            sourceRecordId: { type: string, minLength: 1 }
+            sourceSequence: { type: integer, minimum: 0 }
+            sourceSchemaVersion: { type: string, minLength: 1 }
+            sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+            sourceTimestampUtc: { type: string, format: date-time }
+            provenanceStatus: { type: string, minLength: 1 }
+            rightsReviewStatus: { type: string, minLength: 1 }
     CanonicalReplay:
       type: object
       required: [snapshot, events]

@@ -39,7 +39,10 @@ These routes are separately namespaced under `/api/v1/canonical/*` and read Post
 | GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve no later than both the selected time/sequence and its own `as_of_sequence`, with revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for event/frame evidence bounded by selected time/sequence and the insight's own `as_of_sequence`; incomplete evidence is unavailable and the insight includes revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | Snapshot and bounded ledger event page at one selected time/revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/frames?atSeconds&revision&limit` | Exact-second observed tracking frames only, bounded by the selected projection sequence watermark; validates indexed identity/time/hash against `TrackingFrameV1`. Empty means no sample; invalid stored data returns `503 TRACKING_DATA_INVALID`. No interpolation/lookahead; limit 1..25. |
 | GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds` | Typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no synthetic fallback. |
+
+The `/frames` route reads only already-admitted rows from `pitchmind.tracking_frames`; it does not import the candidate JSON. Owner-declared synthetic provenance and redistribution permission are confirmed, while coordinate semantics, player metrics, canonical mappings, football realism and source admission remain under review. No candidate positions are shown until validated `TrackingFrameV1` records are admitted.
 
 The machine-readable contract is [openapi-canonical-bff-v1.yaml](openapi-canonical-bff-v1.yaml). PostgreSQL integration tests require the isolated local database prerequisite; implementation and contract tests alone do not constitute Product Owner or football acceptance.
 

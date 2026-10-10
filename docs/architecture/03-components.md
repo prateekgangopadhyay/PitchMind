@@ -72,6 +72,7 @@ flowchart TB
   Query --> Ports
   Explain --> Ports
   Pg -. "implements event, projection read and canonical update ports" .-> Ports
+  Pg -. "implements exact-time frame reads" .-> TrackingRead
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
   Pg -. "implements consumer inbox" .-> Ports

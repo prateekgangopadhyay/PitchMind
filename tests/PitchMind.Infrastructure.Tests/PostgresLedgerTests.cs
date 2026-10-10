@@ -573,6 +573,76 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task TrackingFrameReaderReturnsOnlyExactTimeFramesAtProjectionWatermark()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        var update = Update(matchId);
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+        var projection = await new PostgresMatchProjectionReader(source).GetAtAsync(matchId, 0, null, CancellationToken.None);
+        Assert.NotNull(projection);
+
+        async Task AddFrame(string frameId, long sequence, int clockSeconds)
+        {
+            var sourceHash = new string('d', 64);
+            var payload = JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                matchId = matchId.ToString(),
+                frameId,
+                sequence,
+                matchTime = new { period = 1, elapsedSeconds = clockSeconds, sourceClockValue = clockSeconds, sourceClockUnit = "seconds", sourceClockBasis = "match_elapsed" },
+                coordinateSystem = new
+                {
+                    lengthMetres = 105,
+                    widthMetres = 68,
+                    unit = "metres",
+                    axisOrigin = "bottom_left",
+                    teamDirections = new[] { new { teamId = "home", direction = "right" }, new { teamId = "away", direction = "left" } }
+                },
+                ball = new { x = 52.5, y = 34 },
+                players = new[] { new { playerId = "home-1", teamId = "home", position = new { x = 10, y = 20 } } },
+                source = new
+                {
+                    providerId = "test",
+                    sourceMatchId = "source-match",
+                    sourceRecordId = frameId,
+                    sourceSequence = 7,
+                    sourceSchemaVersion = "test-v1",
+                    sourceSha256 = sourceHash,
+                    provenanceStatus = "approved-test",
+                    rightsReviewStatus = "approved-test"
+                }
+            });
+            await using var command = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, 1, $4, 'pitch-v1', '{"coverage":"observed"}'::jsonb, $5, $6::jsonb)
+                """);
+            command.Parameters.AddWithValue(matchId.Value);
+            command.Parameters.AddWithValue(frameId);
+            command.Parameters.AddWithValue(sequence);
+            command.Parameters.AddWithValue(clockSeconds);
+            command.Parameters.AddWithValue(sourceHash);
+            command.Parameters.AddWithValue(payload);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await AddFrame("observed-a", 0, 0);
+        await AddFrame("observed-b", 0, 0);
+        await AddFrame("future-sequence", 1, 0);
+        await AddFrame("future-time", 0, 1);
+
+        var reader = new PostgresMatchTrackingReader(source);
+        var firstPage = await reader.ReadAtAsync(projection, 0, 1, CancellationToken.None);
+        Assert.True(firstPage.HasMore);
+        Assert.Equal("observed-a", Assert.Single(firstPage.Frames).FrameId);
+        var allVisible = await reader.ReadAtAsync(projection, 0, 10, CancellationToken.None);
+        Assert.False(allVisible.HasMore);
+        Assert.Equal(new[] { "observed-a", "observed-b" }, allVisible.Frames.Select(frame => frame.FrameId));
+    }
+
+    [PostgresIntegrationFact]
     public async Task InsightReadsRequireResolvableEvidenceVisibleAtTheSelectedTime()
     {
         await using var source = Source();
