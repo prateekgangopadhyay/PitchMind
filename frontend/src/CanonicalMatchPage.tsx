@@ -48,6 +48,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           (index === 0 || events.items[index - 1].sequence < event.sequence));
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
           insight.canonicalRevision === revision && insight.selectedTimeSeconds === selectedSeconds &&
+          Number.isSafeInteger(insight.throughSequence) && insight.throughSequence >= 0 &&
           insight.throughSequence <= snapshot.throughSequence);
         if (!exactContext || !eventsSafe || !insightsSafe) {
           setView(null);

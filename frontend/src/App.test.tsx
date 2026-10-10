@@ -254,6 +254,21 @@ it.each([
     name: 'an insight beyond the projection watermark',
     event: undefined,
     insight: (matchId: string) => ({insightId: 'future-watermark-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 20, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Beyond-watermark insight', evidence: []})
+  },
+  {
+    name: 'an insight with a null cutoff',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'null-cutoff-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: null as unknown as number, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Null-cutoff insight', evidence: []})
+  },
+  {
+    name: 'an insight with a string cutoff',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'string-cutoff-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: '19' as unknown as number, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'String-cutoff insight', evidence: []})
+  },
+  {
+    name: 'an insight with a fractional cutoff',
+    event: undefined,
+    insight: (matchId: string) => ({insightId: 'fractional-cutoff-insight', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19.5, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Fractional-cutoff insight', evidence: []})
   }
 ])('rejects $name before rendering', async ({event, insight}) => {
   const matchId = '11111111-1111-1111-1111-111111111111';
@@ -281,6 +296,9 @@ it.each([
     expect(container.textContent).not.toContain('Wrong-match insight');
     expect(container.textContent).not.toContain('Wrong-revision insight');
     expect(container.textContent).not.toContain('Beyond-watermark insight');
+    expect(container.textContent).not.toContain('Null-cutoff insight');
+    expect(container.textContent).not.toContain('String-cutoff insight');
+    expect(container.textContent).not.toContain('Fractional-cutoff insight');
     expect(container.textContent).not.toContain('wrong-match-event');
   } finally {
     await act(async () => root.unmount());
