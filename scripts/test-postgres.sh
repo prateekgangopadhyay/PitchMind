@@ -43,42 +43,59 @@ def postgres_command(arguments):
     return subprocess.run(compose + ['exec', '-T', 'postgres'] + arguments,
                           capture_output=True, text=True)
 
-database = 'pitchmind_test_' + uuid.uuid4().hex
-created = postgres_command(['createdb', '-U', username, database])
-if created.returncode:
-    sys.exit('FAIL: cannot create isolated local test database; ensure Compose PostgreSQL is healthy')
-exit_code = 1
-try:
-    test_environment = os.environ.copy()
-    test_environment['PITCHMIND_TEST_POSTGRES'] = (
-        'Host=127.0.0.1;Port=' + str(published) + ';Username=' + quoted(username) +
-        ';Password=' + quoted(password) + ';Database=' + database + ';Include Error Detail=false')
-    retained_results = os.environ.get('PITCHMIND_TEST_RESULTS_DIRECTORY')
-    if retained_results:
-        Path(retained_results).mkdir(parents=True, exist_ok=True)
-    result_context = contextlib.nullcontext(retained_results) if retained_results else tempfile.TemporaryDirectory(prefix='pitchmind-postgres-tests-')
-    with result_context as results:
-        command = ['dotnet', 'test', 'tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj',
-                   '--nologo', '-m:1', '-p:UseSharedCompilation=false',
-                   '--logger', 'trx;LogFileName=postgres.trx', '--results-directory', results]
-        exit_code = subprocess.run(command, env=test_environment).returncode
-        if exit_code == 0:
-            report = Path(results) / 'postgres.trx'
-            if not report.exists():
-                print('FAIL: integration test result evidence missing', file=sys.stderr)
+project = 'tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj'
+command = ['dotnet', 'test', project, '--nologo', '-m:1', '-p:UseSharedCompilation=false']
+listing = subprocess.run(command + ['--list-tests'], capture_output=True, text=True)
+if listing.returncode:
+    sys.exit('FAIL: could not discover PostgreSQL integration tests')
+tests = [line.strip() for line in listing.stdout.splitlines()
+         if line.strip().startswith('PitchMind.Infrastructure.Tests.')]
+if not tests:
+    sys.exit('FAIL: no PostgreSQL integration tests were discovered')
+
+retained_results = os.environ.get('PITCHMIND_TEST_RESULTS_DIRECTORY')
+if retained_results:
+    Path(retained_results).mkdir(parents=True, exist_ok=True)
+result_context = contextlib.nullcontext(retained_results) if retained_results else tempfile.TemporaryDirectory(prefix='pitchmind-postgres-tests-')
+exit_code = 0
+with result_context as results:
+    for index, test_name in enumerate(tests, start=1):
+        database = 'pitchmind_test_' + uuid.uuid4().hex
+        created = postgres_command(['createdb', '-U', username, database])
+        if created.returncode:
+            print('FAIL: cannot create isolated local test database; ensure Compose PostgreSQL is healthy', file=sys.stderr)
+            exit_code = 1
+            continue
+        try:
+            test_environment = os.environ.copy()
+            test_environment['PITCHMIND_TEST_POSTGRES'] = (
+                'Host=127.0.0.1;Port=' + str(published) + ';Username=' + quoted(username) +
+                ';Password=' + quoted(password) + ';Database=' + database + ';Include Error Detail=false')
+            report_name = 'postgres-' + str(index) + '.trx'
+            test_command = command + ['--no-restore', '--no-build', '--filter', 'FullyQualifiedName=' + test_name,
+                                      '--logger', 'trx;LogFileName=' + report_name, '--results-directory', results]
+            print('=== ' + test_name + ' (isolated disposable database) ===', flush=True)
+            report = Path(results) / report_name
+            report.unlink(missing_ok=True)
+            result = subprocess.run(test_command, env=test_environment)
+            if result.returncode or not report.exists():
+                print('FAIL: PostgreSQL test failed or result evidence is missing: ' + test_name, file=sys.stderr)
                 exit_code = 1
             else:
                 ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
                 counters = ET.parse(report).find('t:ResultSummary/t:Counters', ns)
-                if counters is None or int(counters.get('executed', '0')) == 0 or int(counters.get('notExecuted', '0')) != 0:
-                    print('FAIL: PostgreSQL integration tests must execute without skips', file=sys.stderr)
+                if counters is None or int(counters.get('executed', '0')) != 1 or int(counters.get('notExecuted', '0')) != 0:
+                    print('FAIL: PostgreSQL test must execute exactly once without skips: ' + test_name, file=sys.stderr)
                     exit_code = 1
-                else:
-                    print('PASS: real PostgreSQL integration tests executed without skips')
-finally:
-    cleaned = postgres_command(['dropdb', '-U', username, '--if-exists', '--force', database])
-    if cleaned.returncode:
-        print('FAIL: isolated test database cleanup failed; database=' + database, file=sys.stderr)
-        exit_code = 1
+        except Exception:
+            print('FAIL: unexpected PostgreSQL test runner error: ' + test_name, file=sys.stderr)
+            exit_code = 1
+        finally:
+            cleaned = postgres_command(['dropdb', '-U', username, '--if-exists', '--force', database])
+            if cleaned.returncode:
+                print('FAIL: isolated test database cleanup failed; database=' + database, file=sys.stderr)
+                exit_code = 1
+if exit_code == 0:
+    print('PASS: all ' + str(len(tests)) + ' real PostgreSQL integration tests executed without skips in isolated disposable databases')
 sys.exit(exit_code)
 PY
