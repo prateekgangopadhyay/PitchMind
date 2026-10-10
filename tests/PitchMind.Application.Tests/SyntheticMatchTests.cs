@@ -1,4 +1,5 @@
 using PitchMind.Application.Matches;
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Simulation;
 using Xunit;
 namespace PitchMind.Application.Tests;
@@ -13,7 +14,17 @@ public sealed class SyntheticMatchTests
         Assert.Equal("harbour", service.GetState(3308).PossessionTeamId);
         Assert.Null(service.GetState(3309).PossessionTeamId);
         Assert.Equal("harbour", service.GetState(4680).PossessionTeamId);
-        var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
+        var insight = service.GetInsights(5400).Single();
+        Assert.Equal("simulated", insight.Classification);
+        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("unapproved-demo", insight.PolicyStatus);
+        Assert.False(insight.Publishable);
+        Assert.Null(insight.CanonicalRevision);
+        Assert.Equal(5400, insight.SelectedTimeSeconds);
+        Assert.Equal(190, insight.ThroughSequence);
+        Assert.Equal("synthetic-v2", insight.SourceVersion);
+        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
     [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
@@ -38,7 +49,9 @@ public sealed class SyntheticMatchTests
     [Fact] public void MissingTrackingSuppressesSpatialClaim()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = Array.Empty<TrackingFrame>() }, 5400));
+        var service = new SyntheticMatchService(fixture with { Frames = Array.Empty<TrackingFrame>() });
+        Assert.Empty(service.GetInsights(5400));
+        Assert.Throws<InvalidOperationException>(() => service.GetState(5400));
     }
     [Fact] public void FixtureWithoutKickoffFrameIsRejectedAtConstruction()
     {
@@ -62,13 +75,13 @@ public sealed class SyntheticMatchTests
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var events = fixture.Events.Select(e => e.Action == "pressured-pass" ? e with { Outcome = "complete" } : e).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Events = events }).GetInsights(5400));
     }
     [Fact] public void UnrelatedRegainIsNotAttributedToPress()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = "ridge" } : e).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Events = events }).GetInsights(5400));
     }
     [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService().GetState(clock));
     [Fact] public void ReplayUsesDurationHalfTimeAndPitchFromTheFixtureDefinition()
@@ -134,7 +147,18 @@ public sealed class SyntheticMatchTests
         var fixture = SyntheticFixtureGenerator.Generate();
         var frames = fixture.Frames.Select(f => f.ClockSeconds == 3293 ? f with
         { Players = f.Players.Select(p => p.PlayerId == "harbour-10" ? p with { X = 40 } : p).ToArray() } : f).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = frames }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Frames = frames }).GetInsights(5400));
+    }
+    [Fact] public void IdenticalSelectedTimeInputAndPolicyProduceIdenticalDetection()
+    {
+        var service = new SyntheticMatchService();
+        var first = service.GetInsights(5400).Single();
+        var second = service.GetInsights(5400).Single();
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(first.EventIds, second.EventIds);
+        Assert.Equal(first.FrameIds, second.FrameIds);
+        Assert.Equal(first.Conditions, second.Conditions);
+        Assert.Equal(first.Summary, second.Summary);
     }
     [Fact] public void NonFiniteCoordinatesAreRejected()
     {
