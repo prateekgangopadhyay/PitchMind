@@ -55,12 +55,19 @@ public sealed class PostgresOutboxDispatcher(
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using var command = new NpgsqlCommand("""
             WITH candidate AS (
-                SELECT message_id FROM pitchmind.outbox
-                WHERE published_at IS NULL AND failed_at IS NULL
-                  AND (next_attempt_at IS NULL OR next_attempt_at <= now())
-                  AND (lease_expires_at IS NULL OR lease_expires_at <= now())
-                ORDER BY created_at, message_id
-                FOR UPDATE SKIP LOCKED LIMIT 1
+                SELECT o.message_id FROM pitchmind.outbox AS o
+                WHERE o.published_at IS NULL AND o.failed_at IS NULL
+                  AND (o.next_attempt_at IS NULL OR o.next_attempt_at <= now())
+                  AND (o.lease_expires_at IS NULL OR o.lease_expires_at <= now())
+                  AND NOT EXISTS (
+                      SELECT 1 FROM pitchmind.outbox AS earlier
+                      WHERE earlier.match_id = o.match_id
+                        AND earlier.canonical_revision < o.canonical_revision
+                        AND earlier.published_at IS NULL
+                        AND earlier.failed_at IS NULL
+                  )
+                ORDER BY o.created_at, o.message_id
+                FOR UPDATE OF o SKIP LOCKED LIMIT 1
             )
             UPDATE pitchmind.outbox AS o
             SET claim_token = $1, lease_expires_at = now() + $2, attempt_count = attempt_count + 1

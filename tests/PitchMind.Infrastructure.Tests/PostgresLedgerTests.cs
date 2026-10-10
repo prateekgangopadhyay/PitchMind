@@ -652,6 +652,45 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task LaterRevisionWaitsUntilEarlierSameMatchOutboxMessageIsTerminal()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await IsolateOutboxAsync(source);
+        var matchId = MatchId.New();
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var aggregate = new MatchAggregate(matchId, "home", "away", players,
+            players.Select(p => p.Item1), "approved-synthetic-test");
+        var store = new PostgresCanonicalUpdateStore(source);
+        var kickoff = MatchEvent.Create(Guid.NewGuid(), matchId, 0, MatchEventType.KickOff, 0, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(kickoff, "home", "home-1", "kickoff", "started"));
+        var kickoffUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, kickoff, 1, "aggregate-v1", new string('a', 64));
+        Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(kickoffUpdate, CancellationToken.None));
+
+        var goal = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Goal, 120, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(goal, "home", "home-2", "shot", "goal"));
+        var goalUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, goal, 2, "aggregate-v1", new string('a', 64));
+        Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(goalUpdate, CancellationToken.None));
+
+        var firstPublisher = new BlockingPublisher();
+        var firstDispatch = new PostgresOutboxDispatcher(source, firstPublisher, leaseDuration: TimeSpan.FromMinutes(1))
+            .DispatchOneAsync(CancellationToken.None);
+        await firstPublisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(kickoff.EventId, firstPublisher.MessageId);
+
+        // The second worker must not skip the leased first revision to publish the goal update.
+        Assert.Equal(OutboxDispatchResult.NoMessage,
+            await new PostgresOutboxDispatcher(source, new CapturingPublisher()).DispatchOneAsync(CancellationToken.None));
+
+        firstPublisher.Release.TrySetResult();
+        Assert.Equal(OutboxDispatchResult.Published, await firstDispatch);
+        var secondPublisher = new CapturingPublisher();
+        Assert.Equal(OutboxDispatchResult.Published,
+            await new PostgresOutboxDispatcher(source, secondPublisher).DispatchOneAsync(CancellationToken.None));
+        Assert.Equal(goal.EventId, Assert.Single(secondPublisher.MessageIds));
+    }
+
+    [PostgresIntegrationFact]
     public async Task ExpiredLeaseCanBeClaimedAfterWorkerCancellation()
     {
         await using var source = Source();
@@ -700,12 +739,24 @@ public sealed class PostgresLedgerTests
 
     private sealed class BlockingPublisher : IOutboxPublisher
     {
+        public Guid MessageId { get; private set; }
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
         {
+            MessageId = messageId;
             Started.TrySetResult();
             await Release.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class CapturingPublisher : IOutboxPublisher
+    {
+        public List<Guid> MessageIds { get; } = [];
+        public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            MessageIds.Add(messageId);
+            return Task.CompletedTask;
         }
     }
 
