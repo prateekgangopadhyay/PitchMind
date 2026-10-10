@@ -135,7 +135,7 @@ it('loads a canonical match using one exact selected time and revision without d
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     observedRequests.push(url);
     const parsed = new URL(url, 'http://localhost');
-    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
       : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
         {eventId: 'event-1', matchId, sequence: 18, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'},
@@ -154,7 +154,7 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('shot');
     expect(container.textContent).toContain('Goal');
     expect(container.textContent).toContain('Score event');
-    expect(container.textContent).toContain('No persisted canonical key moments are available');
+    expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
     expect(observedRequests).toHaveLength(4);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');
@@ -163,6 +163,38 @@ it('loads a canonical match using one exact selected time and revision without d
       expect(parsed.searchParams.get('revision')).toBe('4');
     }
     expect(new URL(observedRequests.find(url => url.includes('/key-moments'))!, 'http://localhost').searchParams.has('limit')).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('does not describe an unrelated key-moments 503 as an empty canonical projection', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Service offline', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Canonical key moments could not be loaded.');
+    expect(container.textContent).not.toContain('no canonical projection is available');
+    expect(container.textContent).not.toContain('No persisted canonical key moments are available');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

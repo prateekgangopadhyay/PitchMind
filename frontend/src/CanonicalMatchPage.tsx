@@ -35,8 +35,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal),
           request<unknown>(`canonical/matches/${encodeURIComponent(matchId)}/key-moments?${keyMomentQuery}`, controller.signal)
             .then(() => 'The canonical key-moment response is not versioned, so this view cannot display it yet.')
-            .catch(error => error instanceof ApiRequestError && error.status === 503
-              ? 'No persisted canonical key moments are available at this selected time.'
+            .catch(error => error instanceof ApiRequestError && error.status === 503 && error.code === 'CANONICAL_KEY_MOMENTS_UNAVAILABLE'
+              ? 'Canonical Key Moments are unavailable because no canonical projection is available.'
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
