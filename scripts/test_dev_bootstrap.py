@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import os
 import shutil
 import stat
@@ -262,6 +264,8 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD = weak"),
             ("REDIS_PASSWORD", "REDIS_PASSWORD: weak"),
             ("REDIS_PASSWORD", "REDIS_PASSWORD = weak"),
+            ("POSTGRES_PASSWORD", "export POSTGRES_PASSWORD=weak"),
+            ("REDIS_PASSWORD", "export REDIS_PASSWORD=weak"),
         )
 
         for key, duplicate in cases:
@@ -302,29 +306,87 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertIn("down --volumes --remove-orphans", self.docker_log.read_text())
         self.assertTrue((self.root / "docker" / ".env").is_file())
 
-    def test_compose_services_bind_only_to_loopback(self) -> None:
-        compose = (REPOSITORY / "docker" / "compose.yml").read_text(encoding="utf-8")
-        published_ports = []
-        in_ports_block = False
-        ports_indent = -1
-        for line in compose.splitlines():
-            indentation = len(line) - len(line.lstrip())
-            content = line.strip()
-            if content == "ports:":
-                in_ports_block = True
-                ports_indent = indentation
-                continue
-            if in_ports_block and indentation <= ports_indent:
-                in_ports_block = False
-            if in_ports_block and content.startswith("-"):
-                published_ports.append(content[1:].strip().strip("\"'"))
-
-        self.assertEqual(
-            published_ports,
+    def _resolved_compose_config(self, compose_file: Path) -> dict[str, object]:
+        docker = shutil.which("docker")
+        if docker is None:
+            self.skipTest("Docker Compose CLI is unavailable for resolved-port validation")
+        result = subprocess.run(
             [
-                "127.0.0.1:${POSTGRES_PORT:-5432}:5432",
-                "127.0.0.1:${REDIS_PORT:-6379}:6379",
+                docker,
+                "compose",
+                "--env-file",
+                str(REPOSITORY / "docker" / ".env.example"),
+                "-f",
+                str(compose_file),
+                "config",
+                "--format",
+                "json",
             ],
+            cwd=REPOSITORY,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def _published_ports(config: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
+        services = config.get("services", {})
+        if not isinstance(services, dict):
+            return []
+        bindings = []
+        for service_name, service in services.items():
+            if not isinstance(service, dict):
+                continue
+            ports = service.get("ports", [])
+            if isinstance(ports, list):
+                bindings.extend(
+                    (service_name, port)
+                    for port in ports
+                    if isinstance(port, dict) and "published" in port
+                )
+        return bindings
+
+    def test_compose_services_bind_only_to_loopback(self) -> None:
+        config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
+        published_ports = self._published_ports(config)
+        self.assertEqual(len(published_ports), 2)
+        for service_name, port in published_ports:
+            host_ip = port.get("host_ip")
+            self.assertIsInstance(host_ip, str, f"{service_name} port has no explicit host_ip")
+            self.assertTrue(
+                ipaddress.ip_address(host_ip).is_loopback,
+                f"{service_name} publishes {port} outside loopback",
+            )
+        self.assertEqual(
+            {(service, port.get("published"), port.get("target")) for service, port in published_ports},
+            {("postgres", "5432", 5432), ("redis", "6379", 6379)},
+        )
+
+    def test_resolved_compose_port_check_handles_inline_lists_and_aliases(self) -> None:
+        compose_file = Path(self.temp.name) / "compose-public-ports.yml"
+        compose_file.write_text(
+            """name: pitchmind-port-regression
+x-public-ports: &public_ports
+  - "0.0.0.0:8081:8081"
+services:
+  inline:
+    image: alpine:3.20
+    ports: ["0.0.0.0:8080:8080"]
+  aliased:
+    image: alpine:3.20
+    ports: *public_ports
+""",
+            encoding="utf-8",
+        )
+        config = self._resolved_compose_config(compose_file)
+        published_ports = self._published_ports(config)
+        self.assertEqual(len(published_ports), 2)
+        self.assertEqual(
+            {port.get("host_ip") for _, port in published_ports},
+            {"0.0.0.0"},
         )
 
 

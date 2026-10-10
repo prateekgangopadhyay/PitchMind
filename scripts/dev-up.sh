@@ -31,10 +31,10 @@ chmod 600 docker/.env
 read_local_password() {
   local key="$1" line count=0 value="" unique_chars="" char index
   while IFS= read -r line || [[ -n "$line" ]]; do
-    [[ "$line" =~ ^[[:space:]]*${key}([[:space:]]|=|:|$) ]] || continue
+    [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}([[:space:]]|=|:|$) ]] || continue
     count=$((count + 1))
-    if [[ "$line" =~ ^[[:space:]]*${key}[[:space:]]*[:=][[:space:]]*(.*)$ ]]; then
-      value="${BASH_REMATCH[1]}"
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*[:=][[:space:]]*(.*)$ ]]; then
+      value="${BASH_REMATCH[2]}"
     else
       value=""
     fi
