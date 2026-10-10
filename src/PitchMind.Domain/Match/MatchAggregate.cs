@@ -32,6 +32,7 @@ public sealed class MatchAggregate
     private readonly Dictionary<string, int> _yellowCards = new(StringComparer.Ordinal);
     private readonly HashSet<string> _dismissedPlayers = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, SimulationEvent> _appliedEvents = [];
+    private Guid? _lastAppliedEventId;
     private long _lastSequence = -1;
     private int _clockSeconds;
     private int _period = 1;
@@ -85,8 +86,18 @@ public sealed class MatchAggregate
         ValidateTransition(item);
         ApplyTransition(item);
         _appliedEvents.Add(evt.EventId, item);
+        _lastAppliedEventId = evt.EventId;
         _lastSequence = evt.Sequence;
         _clockSeconds = evt.ClockSeconds;
+    }
+
+    public MatchState SnapshotAfter(MatchEvent expectedEvent)
+    {
+        ArgumentNullException.ThrowIfNull(expectedEvent);
+        if (_lastAppliedEventId != expectedEvent.EventId ||
+            !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent)
+            throw new InvalidOperationException("A canonical projection must come from this aggregate after applying the exact event.");
+        return Snapshot();
     }
 
     public MatchState Snapshot()

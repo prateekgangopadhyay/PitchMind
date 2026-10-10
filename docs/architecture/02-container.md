@@ -11,11 +11,12 @@ flowchart LR
   S --> G["C# generated fixture (transitional)"]
   S --> T["Deterministic pressing rule"]
   S --> E["Selected-time evidence and fallback"]
-  L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
+  L["PostgreSQL event ledger and canonical update store"] --> P[("Local PostgreSQL (standalone tests)")]
+  P --> O["Pending transactional outbox"] --> D["Leased dispatcher / publisher port"]
   J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-The current PostgreSQL adapter persists `MatchEvent` but does **not** provide the fixture-backed API's match frames, projections, evidence or transactional outbox. The earlier Central India ACA prototype serves this offline path only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
+The current PostgreSQL adapters persist events and projection provenance, and the EP04-S03 local slice atomically writes aggregate-derived event/projection/outbox records. A PostgreSQL dispatcher and same-database consumer inbox are implemented as unregistered primitives; there is no API/EventWorker integration or cloud broker adapter, so this does not provide a live ingestion path. The earlier Central India ACA prototype serves the offline fixture-backed API only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
 
 ## TARGET — canonical Azure platform
 

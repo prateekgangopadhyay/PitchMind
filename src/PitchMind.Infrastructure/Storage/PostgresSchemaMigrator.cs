@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -31,6 +31,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version3Sql, cancellationToken);
         if (currentVersion < 4)
             await ExecuteAsync(connection, transaction, Version4Sql, cancellationToken);
+        if (currentVersion < 5)
+            await ExecuteAsync(connection, transaction, Version5Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -250,7 +252,6 @@ public static class PostgresSchemaMigrator
             ON pitchmind.tracking_frames(match_id, canonical_revision, sequence) WHERE canonical_revision IS NOT NULL;
         CREATE INDEX IF NOT EXISTS ix_match_projections_match_canonical_revision
             ON pitchmind.match_projections(match_id, canonical_revision, revision) WHERE canonical_revision IS NOT NULL;
-
         INSERT INTO pitchmind.schema_versions(version) VALUES (3) ON CONFLICT DO NOTHING;
         """;
 
@@ -260,7 +261,28 @@ public static class PostgresSchemaMigrator
             ADD CONSTRAINT match_projections_match_source_fk
             FOREIGN KEY (match_id, source_sha256)
             REFERENCES pitchmind.matches(match_id, source_sha256) NOT VALID;
-
         INSERT INTO pitchmind.schema_versions(version) VALUES (4) ON CONFLICT DO NOTHING;
+        """;
+
+    public const string Version5Sql = """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_match_events_match_canonical_revision
+            ON pitchmind.match_events(match_id, canonical_revision) WHERE canonical_revision IS NOT NULL;
+        ALTER TABLE pitchmind.outbox ADD CONSTRAINT outbox_event_admission_revision_fk
+            FOREIGN KEY (match_id, message_id, canonical_revision)
+            REFERENCES pitchmind.match_events(match_id, event_id, canonical_revision);
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS claim_token uuid;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS lease_expires_at timestamptz;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS failed_at timestamptz;
+        ALTER TABLE pitchmind.outbox ADD COLUMN IF NOT EXISTS last_error_code text;
+        CREATE INDEX IF NOT EXISTS ix_outbox_claimable ON pitchmind.outbox(next_attempt_at, created_at)
+            WHERE published_at IS NULL AND failed_at IS NULL;
+
+        CREATE TABLE IF NOT EXISTS pitchmind.consumer_inbox (
+            consumer_id text NOT NULL CHECK (length(consumer_id) BETWEEN 1 AND 128),
+            message_id uuid NOT NULL,
+            processed_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (consumer_id, message_id)
+        );
+        INSERT INTO pitchmind.schema_versions(version) VALUES (5) ON CONFLICT DO NOTHING;
         """;
 }
