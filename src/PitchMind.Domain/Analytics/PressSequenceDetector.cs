@@ -168,10 +168,10 @@ public static class PressSequenceDetector
         var previousClock = -1;
         foreach (var item in input.Events)
         {
-            if (item.Event.MatchId.ToString() != input.MatchId || item.Event.Sequence <= previousSequence ||
+            if (item.Event.MatchId.ToString() != input.MatchId || item.Event.Sequence != previousSequence + 1 ||
                 item.Event.ClockSeconds < previousClock || item.Event.ClockSeconds > input.SelectedTimeSeconds ||
                 !eventIds.Add(item.Event.EventId) || !sequences.Add(item.Event.Sequence))
-                throw new InvalidDataException("Tactical input events must preserve unique ordered source identity and stay within selected time.");
+                throw new InvalidDataException("Tactical input events must preserve a contiguous source prefix, unique ordered identity and selected-time bounds.");
             previousSequence = item.Event.Sequence;
             previousClock = item.Event.ClockSeconds;
         }
