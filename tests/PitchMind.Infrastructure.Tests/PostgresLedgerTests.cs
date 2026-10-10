@@ -74,6 +74,49 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task QuarantineV4HardensAnAlreadyRecordedV3TableAndPreservesRows()
+    {
+        await using var source = Source();
+        await using (var reset = source.CreateCommand("DROP SCHEMA IF EXISTS pitchmind CASCADE"))
+            await reset.ExecuteNonQueryAsync();
+        await using (var v1 = source.CreateCommand(PostgresSchemaMigrator.SchemaSql))
+            await v1.ExecuteNonQueryAsync();
+        await using (var v2 = source.CreateCommand(PostgresSchemaMigrator.EventTypeRangeV2Sql))
+            await v2.ExecuteNonQueryAsync();
+        await using (var v3 = source.CreateCommand(PostgresSchemaMigrator.QuarantineV3Sql))
+            await v3.ExecuteNonQueryAsync();
+        var legacyId = Guid.NewGuid();
+        await using (var legacyRow = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(record_id, source_ptr, reason, observed_at)
+            VALUES ($1, $2, $3, $4)
+            """))
+        {
+            legacyRow.Parameters.AddWithValue(legacyId);
+            legacyRow.Parameters.AddWithValue("legacy/v3/item");
+            legacyRow.Parameters.AddWithValue("LEGACY_V3_RECORD");
+            legacyRow.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+            await legacyRow.ExecuteNonQueryAsync();
+        }
+
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        await using var versions = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version IN (3, 4)");
+        Assert.Equal(2L, (long)(await versions.ExecuteScalarAsync())!);
+        await using var preserved = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.quarantine WHERE record_id = $1");
+        preserved.Parameters.AddWithValue(legacyId);
+        Assert.Equal(1L, (long)(await preserved.ExecuteScalarAsync())!);
+        await using var zeroId = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(record_id, source_ptr, reason, observed_at)
+            VALUES ($1, $2, $3, $4)
+            """);
+        zeroId.Parameters.AddWithValue(Guid.Empty);
+        zeroId.Parameters.AddWithValue("legacy/v3/zero-id");
+        zeroId.Parameters.AddWithValue("INVALID_EVENT");
+        zeroId.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+        await Assert.ThrowsAsync<PostgresException>(() => zeroId.ExecuteNonQueryAsync());
+    }
+
+    [PostgresIntegrationFact]
     public async Task QuarantineRejectsMalformedHashAndReasonWithoutWritingEvidence()
     {
         await using var source = Source();
@@ -130,6 +173,8 @@ public sealed class PostgresLedgerTests
         await using var delete = source.CreateCommand("DELETE FROM pitchmind.quarantine WHERE record_id = $1");
         delete.Parameters.AddWithValue(id);
         await Assert.ThrowsAsync<PostgresException>(() => delete.ExecuteNonQueryAsync());
+        await using var truncate = source.CreateCommand("TRUNCATE pitchmind.quarantine");
+        await Assert.ThrowsAsync<PostgresException>(() => truncate.ExecuteNonQueryAsync());
     }
 
     [PostgresIntegrationFact]
@@ -229,8 +274,8 @@ public sealed class PostgresLedgerTests
             await store.AppendAsync(Event(matchId, sequence) with { Type = currentTypes[sequence] }, CancellationToken.None);
 
         Assert.Equal(currentTypes, (await Read(store, matchId)).Select(item => item.Type));
-        await using var versionCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version IN (2, 3)");
-        Assert.Equal(2L, (long)(await versionCommand.ExecuteScalarAsync())!);
+        await using var versionCommand = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version IN (2, 3, 4)");
+        Assert.Equal(3L, (long)(await versionCommand.ExecuteScalarAsync())!);
     }
 
     [PostgresIntegrationFact]

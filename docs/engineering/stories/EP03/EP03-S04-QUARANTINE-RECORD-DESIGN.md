@@ -16,8 +16,8 @@ The existing story requires conflicting event IDs to be quarantined and gaps or 
 - `observed_at`: required observation instant; the adapter normalizes it to UTC on write.
 - `retry_status`: reserved nullable text column from the target LLD. This slice always writes NULL and defines no legal values or transitions.
 
-The migration is version 3, runs under the existing explicit migration operation and advisory lock, and can be applied repeatedly. The database rejects a zero record UUID and blocks `UPDATE`/`DELETE` through a trigger; the adapter exposes append and read only. The canonical event store does not invoke it yet. Runtime role grants and automatic quarantine of classified ingestion failures remain separate work.
+Migration V3 creates the storage table; V4 adds a nonzero record UUID constraint and database triggers that block `UPDATE`, `DELETE`, and `TRUNCATE`, including databases that had already recorded V3. Both run under the existing explicit migration operation and advisory lock and can be applied repeatedly. The adapter exposes append and read only. The canonical event store does not invoke it yet. Runtime role grants and automatic quarantine of classified ingestion failures remain separate work.
 
 ## Verification
 
-The PostgreSQL integration tests prove append/read across a new data source, nullable match/hash behavior, UTC normalization, reserved status remains NULL, malformed hash/reason rejection, zero UUID rejection, database mutation rejection, and migration reapplication without duplicate version rows. They do not prove automatic failure capture, source-specific parsing, deduplication, retry, operator workflow, or reconciliation.
+The PostgreSQL integration tests prove append/read across a new data source, nullable match/hash behavior, UTC normalization, reserved status remains NULL, malformed hash/reason rejection, zero UUID rejection, database mutation rejection, migration reapplication without duplicate version rows, and V3-to-V4 upgrade while preserving legacy rows. They do not prove automatic failure capture, source-specific parsing, deduplication, retry, operator workflow, or reconciliation.
