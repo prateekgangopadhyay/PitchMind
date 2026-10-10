@@ -18,6 +18,8 @@ The existing story requires conflicting event IDs to be quarantined and gaps or 
 
 Migration V3 creates the storage table; V4 adds a nonzero record UUID constraint and database triggers that block `UPDATE`, `DELETE`, and `TRUNCATE`, including databases that had already recorded V3. Both run under the existing explicit migration operation and advisory lock and can be applied repeatedly. The adapter exposes append and read only. The canonical event store does not invoke it yet. Runtime role grants and automatic quarantine of classified ingestion failures remain separate work.
 
+Upgrade note: V4 validates existing rows when adding the nonzero UUID constraint. If a V3 database contains a zero record UUID (which the adapter has always rejected, but direct database writes may have bypassed), V4 fails and rolls back without deleting data. Operators should check for that value before applying V4; the migration will not repair or discard the record automatically.
+
 ## Verification
 
 The PostgreSQL integration tests prove append/read across a new data source, nullable match/hash behavior, UTC normalization, reserved status remains NULL, malformed hash/reason rejection, zero UUID rejection, database mutation rejection, migration reapplication without duplicate version rows, and V3-to-V4 upgrade while preserving legacy rows. They do not prove automatic failure capture, source-specific parsing, deduplication, retry, operator workflow, or reconciliation.
