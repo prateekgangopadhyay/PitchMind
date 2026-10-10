@@ -11,7 +11,7 @@ describe('Match experience', () => {
     expect(markup).toContain('Skip to main content');
     expect(markup).toContain('id="main-content"');
     expect(markup).toContain('aria-label="Main navigation"');
-    expect(markup).toContain('Available matches');
+    expect(markup).toContain('Choose a match');
     expect(markup).toContain('Loading canonical match data');
     expect(markup).not.toContain('Arsenal');
   });
@@ -40,6 +40,8 @@ describe('Information architecture routes', () => {
 
   it('keeps selected time bounded in route context links', () => {
     expect(contextHref('/matches/match-1', 'match-1', 3309)).toBe('/matches/match-1?matchId=match-1&atSeconds=3309');
+    expect(contextHref('/home')).toBe('/home');
+    expect(contextHref('/home', 'match-1', 0, 2)).toBe('/home?matchId=match-1&atSeconds=0&revision=2');
     expect(selectedTimeFromSearch('?atSeconds=5761')).toBe(0);
   });
 });
@@ -114,6 +116,95 @@ it('loads a canonical match using one exact selected time and revision without d
       expect(parsed.searchParams.get('atSeconds')).toBe('3309');
       expect(parsed.searchParams.get('revision')).toBe('4');
     }
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('renders persisted home cards from canonical fields and keeps the match id in navigation', async () => {
+  const firstId = '11111111-1111-1111-1111-111111111111';
+  const secondId = '22222222-2222-2222-2222-222222222222';
+  const card = (matchId: string, phase: string, homeScore: number, awayScore: number) => ({
+    matchId, canonicalRevision: 3, asOfSeconds: 2700, throughSequence: 12, phase, homeScore, awayScore,
+    provenance: 'synthetic-approved', algorithmVersion: 'projection-v1', sourceSha256: 'c'.repeat(64)
+  });
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/home');
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [card(firstId, 'secondhalf', 1, 0), card(secondId, 'fulltime', 1, 1)], nextMatchId: null, hasMore: false }) })));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Synthetic match');
+    expect(container.textContent).toContain('Home side 1–0 Away side');
+    expect(container.textContent).toContain(firstId);
+    expect(container.textContent).toContain('Second half');
+    const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(link => link.href.includes(firstId));
+    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=2700&revision=3`);
+    const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(phaseFilter, 'secondhalf');
+      phaseFilter.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.textContent).toContain(firstId);
+    expect(container.textContent).not.toContain(secondId);
+    expect(window.location.search).toBe('?phase=secondhalf');
+    expect(container.textContent).not.toContain('Arsenal');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('shows a clear canonical-unavailable state and retries without demo substitution', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/home');
+  const fetchMock = vi.fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) });
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('No demo fixture has been substituted');
+    await act(async () => { container.querySelector('button')!.click(); });
+    expect(container.textContent).toContain('No canonical matches are available yet.');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('follows the canonical fixtures cursor when more persisted matches exist', async () => {
+  const firstId = '11111111-1111-1111-1111-111111111111';
+  const secondId = '22222222-2222-2222-2222-222222222222';
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/home');
+  const fetchMock = vi.fn(async (url: string) => {
+    const firstPage = !url.includes('afterMatchId=');
+    const matchId = firstPage ? firstId : secondId;
+    return { ok: true, json: async () => ({
+      items: [{ matchId, canonicalRevision: 1, asOfSeconds: 1200, throughSequence: 3, phase: 'firsthalf', homeScore: 0, awayScore: 0, provenance: 'synthetic-approved', algorithmVersion: 'projection-v1', sourceSha256: 'e'.repeat(64) }],
+      nextMatchId: firstPage ? firstId : null,
+      hasMore: firstPage
+    }) };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain(firstId);
+    await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(container.textContent).toContain(secondId);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain(`afterMatchId=${firstId}`);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
