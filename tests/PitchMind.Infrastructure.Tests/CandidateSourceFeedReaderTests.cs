@@ -398,6 +398,78 @@ public sealed class CandidateSourceFeedReaderTests
     }
 
     [Fact]
+    public async Task AcknowledgedCandidateReplayCheckpointResumesFromNextSourceSequence()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"c\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":3,\"clockSeconds\":2,\"period\":1,\"eventType\":\"Goal\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var checkpointPath = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "replay.checkpoint.json");
+            var checkpointStore = new CandidateReplayCheckpointStore(checkpointPath);
+            Assert.Null(await checkpointStore.ReadAsync(feed));
+
+            var firstSession = new CandidateReplaySession(
+                feed,
+                1,
+                new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            await using (var firstReplay = firstSession.ReplayAsync().GetAsyncEnumerator())
+            {
+                Assert.True(await firstReplay.MoveNextAsync());
+                Assert.Equal("a", firstReplay.Current.EventId);
+                var checkpoint = await checkpointStore.WriteAcknowledgedAsync(feed, firstSession, 1);
+                Assert.Equal(1, checkpoint.LastAcknowledgedSourceSequence);
+                Assert.Equal(2, checkpoint.NextSourceSequence);
+            }
+
+            var saved = await checkpointStore.ReadAsync(feed);
+            Assert.NotNull(saved);
+            var resumedSession = new CandidateReplaySession(
+                feed,
+                saved!.NextSourceSequence,
+                new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            var resumed = new List<CandidateSourceEnvelope>();
+            await foreach (var envelope in resumedSession.ReplayAsync())
+                resumed.Add(envelope);
+
+            Assert.Equal(new long[] { 2, 3 }, resumed.Select(envelope => envelope.SourceSequence));
+            Assert.Equal(new[] { "b", "c" }, resumed.Select(envelope => envelope.EventId));
+            Assert.All(resumed, envelope => Assert.Equal(feed.SourceSha256, resumedSession.AuditTrail
+                .First(entry => entry.EventId == envelope.EventId).SourceSha256));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task CandidateReplayCheckpointFailsClosedForChangedFeedAndUnacknowledgedCursor()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Pass\"}]");
+        var changedFixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"},{\"eventId\":\"b\",\"matchId\":\"m\",\"teamId\":\"team-b\",\"sequence\":2,\"clockSeconds\":1,\"period\":1,\"eventType\":\"Goal\"}]");
+        try
+        {
+            var reader = new CandidateSourceFeedReader();
+            var feed = await reader.ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var changedFeed = await reader.ReadAsync(changedFixture.SourcePath, changedFixture.ManifestPath);
+            var store = new CandidateReplayCheckpointStore(Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "replay.checkpoint.json"));
+            var session = new CandidateReplaySession(feed, 1, new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            await using var replay = session.ReplayAsync().GetAsyncEnumerator();
+            Assert.True(await replay.MoveNextAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(() => store.WriteAcknowledgedAsync(feed, session, 2));
+            await store.WriteAcknowledgedAsync(feed, session, 1);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(changedFeed));
+            Assert.Equal(2, (await store.ReadAsync(feed))!.NextSourceSequence);
+        }
+        finally
+        {
+            fixture.Dispose();
+            changedFixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
     {
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";

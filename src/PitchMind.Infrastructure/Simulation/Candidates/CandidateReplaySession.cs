@@ -42,6 +42,10 @@ public sealed class CandidateReplaySession
         get { lock (_sync) return _lastEmittedSourceSequence; }
     }
 
+    public string SourceSha256 => _feed.SourceSha256;
+
+    public string FixtureId => _feed.FixtureId;
+
     /// <summary>
     /// Returns an immutable snapshot of the source-hash and cursor transitions observed in this process.
     /// </summary>
