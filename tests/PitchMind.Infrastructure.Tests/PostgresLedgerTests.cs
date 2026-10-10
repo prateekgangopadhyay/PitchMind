@@ -77,7 +77,12 @@ public sealed class PostgresLedgerTests
     public async Task QuarantineV4HardensAnAlreadyRecordedV3TableAndPreservesRows()
     {
         await using var source = Source();
-        await using (var reset = source.CreateCommand("DROP SCHEMA IF EXISTS pitchmind CASCADE"))
+        await using (var reset = source.CreateCommand("""
+            DROP TABLE IF EXISTS pitchmind.quarantine;
+            DROP TABLE IF EXISTS pitchmind.match_events;
+            DROP TABLE IF EXISTS pitchmind.schema_versions;
+            DROP FUNCTION IF EXISTS pitchmind.reject_quarantine_mutation();
+            """))
             await reset.ExecuteNonQueryAsync();
         await using (var v1 = source.CreateCommand(PostgresSchemaMigrator.SchemaSql))
             await v1.ExecuteNonQueryAsync();
@@ -131,7 +136,7 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task QuarantineDatabaseRejectsZeroRecordIdAndMutation()
+    public async Task QuarantineDatabaseRejectsZeroRecordId()
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
@@ -140,41 +145,62 @@ public sealed class PostgresLedgerTests
             new QuarantineRecord(Guid.Empty, null, "source/item/2", null, "INVALID_EVENT", DateTimeOffset.UtcNow),
             CancellationToken.None));
 
-        await using (var zeroId = source.CreateCommand("""
+        await using var zeroId = source.CreateCommand("""
             INSERT INTO pitchmind.quarantine(record_id, source_ptr, reason, observed_at)
             VALUES ($1, $2, $3, $4)
-            """))
-        {
-            zeroId.Parameters.AddWithValue(Guid.Empty);
-            zeroId.Parameters.AddWithValue("source/item/zero-id");
-            zeroId.Parameters.AddWithValue("INVALID_EVENT");
-            zeroId.Parameters.AddWithValue(DateTimeOffset.UtcNow);
-            await Assert.ThrowsAsync<PostgresException>(() => zeroId.ExecuteNonQueryAsync());
-        }
+            """);
+        zeroId.Parameters.AddWithValue(Guid.Empty);
+        zeroId.Parameters.AddWithValue("source/item/zero-id");
+        zeroId.Parameters.AddWithValue("INVALID_EVENT");
+        zeroId.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => zeroId.ExecuteNonQueryAsync());
+        Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
+    }
 
-        await using (var insert = source.CreateCommand("""
-            INSERT INTO pitchmind.quarantine(record_id, source_ptr, reason, observed_at)
-            VALUES ($1, $2, $3, $4)
-            """))
+    [PostgresIntegrationFact]
+    public async Task QuarantineDatabaseRejectsMutationsForRoleWithExplicitTablePrivileges()
+    {
+        await using var migrationSource = Source();
+        await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
+        var role = "quarantine_test_" + Guid.NewGuid().ToString("N");
+        var password = Guid.NewGuid().ToString("N");
+        await using (var setup = migrationSource.CreateCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON pitchmind.quarantine TO {role};"))
+            await setup.ExecuteNonQueryAsync();
+        try
         {
-            insert.Parameters.AddWithValue(Guid.NewGuid());
-            insert.Parameters.AddWithValue("source/item/2");
-            insert.Parameters.AddWithValue("INVALID_EVENT");
-            insert.Parameters.AddWithValue(DateTimeOffset.UtcNow);
-            await insert.ExecuteNonQueryAsync();
-        }
+            var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!)
+            { Username = role, Password = password };
+            await using var runtimeSource = NpgsqlDataSource.Create(builder.ConnectionString);
+            var store = new PostgresQuarantineRecordStore(runtimeSource);
+            var record = new QuarantineRecord(Guid.NewGuid(), null, "source/item/application-role", null,
+                "INVALID_EVENT", new DateTimeOffset(2026, 10, 11, 12, 30, 0, TimeSpan.Zero));
+            await store.AppendAsync(record, CancellationToken.None);
+            Assert.Equal(record, await store.ReadAsync(record.RecordId, CancellationToken.None));
 
-        await using var recordId = source.CreateCommand("SELECT record_id FROM pitchmind.quarantine WHERE source_ptr = $1");
-        recordId.Parameters.AddWithValue("source/item/2");
-        var id = (Guid)(await recordId.ExecuteScalarAsync())!;
-        await using var update = source.CreateCommand("UPDATE pitchmind.quarantine SET reason = 'REPAIRED' WHERE record_id = $1");
-        update.Parameters.AddWithValue(id);
-        await Assert.ThrowsAsync<PostgresException>(() => update.ExecuteNonQueryAsync());
-        await using var delete = source.CreateCommand("DELETE FROM pitchmind.quarantine WHERE record_id = $1");
-        delete.Parameters.AddWithValue(id);
-        await Assert.ThrowsAsync<PostgresException>(() => delete.ExecuteNonQueryAsync());
-        await using var truncate = source.CreateCommand("TRUNCATE pitchmind.quarantine");
-        await Assert.ThrowsAsync<PostgresException>(() => truncate.ExecuteNonQueryAsync());
+            foreach (var sql in new[]
+            {
+                "UPDATE pitchmind.quarantine SET reason = 'REPAIRED' WHERE record_id = $1",
+                "DELETE FROM pitchmind.quarantine WHERE record_id = $1"
+            })
+            {
+                await using var mutation = runtimeSource.CreateCommand(sql);
+                mutation.Parameters.AddWithValue(record.RecordId);
+                var exception = await Assert.ThrowsAsync<PostgresException>(() => mutation.ExecuteNonQueryAsync());
+                Assert.Equal("55000", exception.SqlState);
+            }
+
+            await using (var truncate = runtimeSource.CreateCommand("TRUNCATE pitchmind.quarantine"))
+            {
+                var exception = await Assert.ThrowsAsync<PostgresException>(() => truncate.ExecuteNonQueryAsync());
+                Assert.Equal("55000", exception.SqlState);
+            }
+            Assert.Equal(record, await store.ReadAsync(record.RecordId, CancellationToken.None));
+        }
+        finally
+        {
+            await using var cleanup = migrationSource.CreateCommand($"REVOKE ALL PRIVILEGES ON TABLE pitchmind.quarantine FROM {role}; REVOKE USAGE ON SCHEMA pitchmind FROM {role}; DROP ROLE IF EXISTS {role}");
+            await cleanup.ExecuteNonQueryAsync();
+        }
     }
 
     [PostgresIntegrationFact]
