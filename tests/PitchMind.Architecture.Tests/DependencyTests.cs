@@ -62,7 +62,8 @@ public sealed class DependencyTests
     {
         var root = FindRepositoryRoot();
         var productionFiles = EnumerateProductionSourceFiles(root);
-        var violations = FindFixtureDataMarkers(productionFiles)
+        var fixtureDataMarkers = ReadFixtureDataMarkers(root);
+        var violations = FindFixtureDataMarkers(productionFiles, fixtureDataMarkers)
             .Select(item => $"{Path.GetRelativePath(root, item.Path)}:{item.LineNumber}: {item.Line.Trim()}")
             .ToArray();
 
@@ -80,7 +81,7 @@ public sealed class DependencyTests
             var source = Path.Combine(root.FullName, fileName);
             File.WriteAllText(source, "const team = 'Harbour FC';");
 
-            var violations = FindFixtureDataMarkers([source]);
+            var violations = FindFixtureDataMarkers([source], new HashSet<string>(["Harbour FC"], StringComparer.Ordinal));
 
             Xunit.Assert.Single(violations);
             Xunit.Assert.Equal(source, violations[0].Path);
@@ -111,10 +112,62 @@ public sealed class DependencyTests
             .Where(path => !Path.GetFileName(path).Contains(".spec.", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
-        IEnumerable<string> files)
+    private static IReadOnlySet<string> ReadFixtureDataMarkers(string root)
     {
-        var markers = new[] { "SyntheticFixtureGenerator", "Harbour FC", "Ridge Athletic" };
+        var markers = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "SyntheticFixtureGenerator", "Harbour FC", "Ridge Athletic"
+        };
+
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        if (!File.Exists(feedPath))
+        {
+            throw new FileNotFoundException("The candidate synthetic feed is required to check production source for fixture literals.", feedPath);
+        }
+
+        using var stream = File.OpenRead(feedPath);
+        using var document = JsonDocument.Parse(stream);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return markers;
+        }
+
+        foreach (var sourceEvent in document.RootElement.EnumerateArray())
+        {
+            AddStringProperties(sourceEvent, markers, "eventId", "matchId", "teamName", "playerName", "receiverName");
+            if (!sourceEvent.TryGetProperty("playerPositions", out var positions) || positions.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var position in positions.EnumerateArray())
+            {
+                AddStringProperties(position, markers, "teamName", "playerName");
+            }
+        }
+
+        return markers;
+    }
+
+    private static void AddStringProperties(JsonElement element, ISet<string> markers, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String)
+            {
+                var value = property.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    markers.Add(value);
+                }
+            }
+        }
+    }
+
+    private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
+        IEnumerable<string> files,
+        IReadOnlySet<string> markers)
+    {
         return files
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
             .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)))
