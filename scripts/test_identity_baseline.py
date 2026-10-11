@@ -152,6 +152,51 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="deployment uses ACR connection"), self.assertRaises(PipelinePolicyError):
             validate_pipeline_policy(pipeline, build_template, swapped_deploy)
 
+        scalar_spoof = build_template.replace(
+            "azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            'azureSubscription: ${{ parameters.devDeploymentServiceConnection }}\n    displayName: "azureSubscription: ${{ parameters.acrPushServiceConnection }}"',
+            1,
+        )
+        with self.subTest(mutation="connection text in displayName cannot spoof task input"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pipeline, scalar_spoof, deploy_template)
+
+        pass_through_spoof = pipeline.replace(
+            "          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
+            '          acrPushServiceConnection: ${{ parameters.devDeploymentServiceConnection }}\n          displayName: "acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}"',
+            1,
+        )
+        with self.subTest(mutation="connection text in displayName cannot spoof template parameter"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pass_through_spoof, build_template, deploy_template)
+
+    def test_policy_rejects_unrecognized_unguarded_azure_mutation(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        direct_stage = pipeline.replace(
+            "- ${{ if eq(parameters.enableDevDelivery, true) }}:",
+            "- stage: DirectDeploy\n  jobs:\n  - job: Deploy\n    steps:\n    - task: AzureCLI@2\n- ${{ if eq(parameters.enableDevDelivery, true) }}:",
+            1,
+        )
+        with self.subTest(mutation="new root delivery stage outside opt-in"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(direct_stage, build_template, deploy_template)
+
+        extra_guarded_stage = pipeline.replace(
+            "  - stage: OwnerApprovalBeforeAzureMutation",
+            "  - stage: UnreviewedRelease\n    jobs:\n    - job: Deploy\n      steps:\n      - task: AzureCLI@2\n  - stage: OwnerApprovalBeforeAzureMutation",
+            1,
+        )
+        with self.subTest(mutation="unrecognized release stage inside opt-in"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(extra_guarded_stage, build_template, deploy_template)
+
+        mutation_in_validation = pipeline.replace(
+            "- stage: Validate\n",
+            "- stage: Validate\n  - task: AzureCLI@2\n",
+            1,
+        )
+        with self.subTest(mutation="Azure CLI task outside the guarded release block"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(mutation_in_validation, build_template, deploy_template)
+
 
 if __name__ == "__main__":
     unittest.main()
