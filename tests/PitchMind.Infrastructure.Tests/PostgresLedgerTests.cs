@@ -32,6 +32,15 @@ public sealed class PostgresLedgerTests
         MatchEventType.Pass, (int)sequence + 1, 1, DateTimeOffset.UtcNow);
     private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!);
 
+    private static async Task ClearPendingOutboxForTestAsync(NpgsqlDataSource source)
+    {
+        // These integration tests share one explicitly isolated test database, while the real
+        // dispatcher claims globally. Remove pending rows left by prior/failed test runs so each
+        // dispatch assertion observes the message created by that test.
+        await using var command = source.CreateCommand("DELETE FROM pitchmind.outbox WHERE published_at IS NULL AND failed_at IS NULL");
+        await command.ExecuteNonQueryAsync();
+    }
+
     [PostgresIntegrationFact]
     public async Task SchemaMigrationsAreVersionedRepeatableAndAdmitRedCards()
     {
@@ -303,6 +312,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var (update, aggregate) = BuildUpdate(MatchId.New());
         var store = new PostgresCanonicalUpdateStore(source);
         await RegisterSourceMetadata(source, update);
@@ -363,6 +373,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var update = Update(MatchId.New());
         await RegisterSourceMetadata(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
@@ -435,6 +446,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var update = Update(MatchId.New());
         await RegisterSourceMetadata(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
@@ -462,6 +474,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var update = Update(MatchId.New());
         await RegisterSourceMetadata(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
@@ -483,6 +496,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var update = Update(MatchId.New());
         await RegisterSourceMetadata(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
@@ -506,6 +520,7 @@ public sealed class PostgresLedgerTests
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await ClearPendingOutboxForTestAsync(source);
         var matchId = MatchId.New();
         var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
         var aggregate = new MatchAggregate(matchId, "home", "away", players,
