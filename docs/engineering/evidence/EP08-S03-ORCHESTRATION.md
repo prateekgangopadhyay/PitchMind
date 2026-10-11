@@ -13,7 +13,7 @@ The four EP08-S03 commits were replayed onto exact EP08-S04 PR #51 head `612f844
 - `tests/PitchMind.Infrastructure.Tests` on an isolated UUID-named database in the existing local PostgreSQL service: **18 passed, 0 failed, 0 skipped**. The disposable database was dropped afterward. The repository harness could not be used directly because this checkout had no `docker/.env`; no existing application database was used.
 - Council operating-model validation passed (12 epics, 59 stories, 28 Council skills, acyclic routing); design-skill registry self-test and `git diff --check` passed.
 
-A solution-wide build was **not established**: the no-restore build found missing NuGet assets in unrelated API/Contracts/EventWorker projects, and the subsequent restore was canceled after stalling without progress. The three affected story test projects compiled and passed. GitHub CI, live Foundry evaluation, authenticated runtime composition, human review and PO acceptance remain unverified. No Azure resources or deployments were touched.
+A solution-wide build was **not established**: the no-restore build found missing NuGet assets in unrelated API/Contracts/EventWorker projects, and the subsequent restore did not complete during this verification. The three affected story test projects compiled and passed. GitHub CI, live Foundry evaluation, authenticated runtime composition, human review and PO acceptance remain unverified. No Azure resources or deployments were touched.
 
 ## Requirement trace
 
