@@ -92,6 +92,23 @@ describe('realtime reconnect state', () => {
     expect(selected.needsBackfill).toBe(false);
   });
 
+  it('returns to the last known live time after applying a historical backfill', () => {
+    const caughtUpLive = applyBackfillPage(state(), backfill([event(1), event(2)]));
+    const historical = selectHistoricalTime(caughtUpLive, 45);
+    const historicalPage = backfill([event(0)], {
+      snapshot: snapshot(2, 0, 0, 45),
+      events: { ...backfill([]).events, selectedTimeSeconds: 45, throughSequence: 0, items: [event(0)] },
+    });
+
+    const selected = applyBackfillPage(historical, historicalPage);
+    const returned = returnToLive(selected);
+
+    expect(selected.snapshot.asOfSeconds).toBe(0);
+    expect(returned.mode).toBe('LIVE');
+    expect(returned.selectedTimeSeconds).toBe(120);
+    expect(returned.needsBackfill).toBe(true);
+  });
+
   it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {
     const first = applyBackfillPage(state(), backfill([event(1), event(2)]));
     expect(first.events.map(item => item.sequence)).toEqual([0, 1, 2]);
