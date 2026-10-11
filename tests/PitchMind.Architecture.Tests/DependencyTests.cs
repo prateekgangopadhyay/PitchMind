@@ -168,6 +168,7 @@ public sealed class DependencyTests
                 $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
                 $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
                 $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
                 $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
@@ -181,7 +182,7 @@ public sealed class DependencyTests
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(13, violations.Count);
+            Xunit.Assert.Equal(14, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
@@ -190,6 +191,7 @@ public sealed class DependencyTests
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRate}n", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX = {firstPitchX}m", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate = {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
@@ -368,7 +370,7 @@ public sealed class DependencyTests
             return false;
         }
 
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?)?)(?![A-Za-z0-9_.])"))
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
         {
             if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
                 values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
