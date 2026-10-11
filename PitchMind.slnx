@@ -16,5 +16,6 @@
     <Project Path="tests/PitchMind.Contracts.Tests/PitchMind.Contracts.Tests.csproj" />
     <Project Path="tests/PitchMind.TestFixtures/PitchMind.TestFixtures.csproj" />
     <Project Path="tests/PitchMind.Api.Tests/PitchMind.Api.Tests.csproj" />
+    <Project Path="tests/PitchMind.AgentWorker.Tests/PitchMind.AgentWorker.Tests.csproj" />
   </Folder>
 </Solution>
