@@ -7,6 +7,8 @@ export interface RealtimeTimelineState {
   matchId: string;
   mode: TimelineMode;
   selectedTimeSeconds: number;
+  /** Last canonical LIVE as-of time, preserved while snapshot contains a historical projection. */
+  liveAsOfSeconds?: number;
   canonicalRevision: number;
   throughSequence: number;
   snapshot: CanonicalMatchSnapshot;
@@ -25,7 +27,13 @@ export function selectHistoricalTime(state: RealtimeTimelineState, selectedTimeS
 }
 
 export function returnToLive(state: RealtimeTimelineState): RealtimeTimelineState {
-  return { ...state, mode: 'LIVE', selectedTimeSeconds: state.snapshot.asOfSeconds, hasNewMatchUpdate: false, needsBackfill: true };
+  return {
+    ...state,
+    mode: 'LIVE',
+    selectedTimeSeconds: state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
+    hasNewMatchUpdate: false,
+    needsBackfill: true,
+  };
 }
 
 /** Cursor messages are wake-ups only. A selected historical view is never moved by live traffic. */
@@ -95,6 +103,9 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
     ...state,
     mode: state.mode,
     selectedTimeSeconds: state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : response.snapshot.asOfSeconds,
+    liveAsOfSeconds: state.mode === 'LIVE'
+      ? response.snapshot.asOfSeconds
+      : state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
     canonicalRevision: response.snapshot.canonicalRevision,
     throughSequence: pageThrough,
     snapshot: response.snapshot,
