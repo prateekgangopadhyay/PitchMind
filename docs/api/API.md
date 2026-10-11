@@ -12,7 +12,7 @@ Public route prefix `/api/v1`; JSON camelCase; timestamps match selected-time co
 | GET | `/api/v1/matches` | **CURRENT** | One entire offline `FixtureResponse` (`schemaVersion` is not claimed); unpaginated; returns events/frames as part of fixture |
 | GET | `/api/v1/matches/{matchId}/state?atSeconds=N` | **CURRENT** | Deterministic event-prefix projection: score, phase/period, observed possession, active roster, yellow-card counts and selected sampled frame |
 | GET | `/api/v1/matches/{matchId}/events?atSeconds=N` | **CURRENT** | Time-bounded offline synthetic event wrapper array |
-| GET | `/api/v1/matches/{matchId}/insights?atSeconds=N` | **CURRENT** | At most one simulated pressure-sequence candidate after its full outcome; `press-sequence-v2` is explicitly unapproved and non-publishable |
+| GET | `/api/v1/matches/{matchId}/insights?atSeconds=N` | **CURRENT** | At most one simulated pressure-sequence candidate after its full outcome; `press-sequence-v3` is explicitly unapproved and non-publishable |
 | GET | `/api/v1/matches/{matchId}/evidence/{insightId}?atSeconds=N` | **CURRENT** | Selected-time evidence conditions, 7 event IDs, frame IDs and limitations |
 | POST | `/api/v1/matches/{matchId}/analyst` | **CURRENT** | `{insightId,atSeconds,audience:'fan'|'analyst'}`; deterministic-fallback ONLY, 30/IP/min and 4KiB body cap |
 

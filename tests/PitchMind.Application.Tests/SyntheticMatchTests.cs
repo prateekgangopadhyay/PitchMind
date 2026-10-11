@@ -16,14 +16,14 @@ public sealed class SyntheticMatchTests
         Assert.Equal("harbour", service.GetState(4680).PossessionTeamId);
         var insight = service.GetInsights(5400).Single();
         Assert.Equal("simulated", insight.Classification);
-        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("press-sequence-v3", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
         Assert.False(insight.Publishable);
         Assert.Null(insight.CanonicalRevision);
         Assert.Equal(5400, insight.SelectedTimeSeconds);
         Assert.Equal(190, insight.ThroughSequence);
         Assert.Equal("synthetic-v2", insight.SourceVersion);
-        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v3", StringComparison.Ordinal));
         Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }

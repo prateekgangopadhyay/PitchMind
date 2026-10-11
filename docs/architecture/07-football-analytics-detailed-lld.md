@@ -75,17 +75,17 @@ Canonical pitch coordinate system = metres, configured length/width (demo 105 ×
 Event taxonomy includes kickoff, period transition, pass (attempt/complete/incomplete/blocked), carry, reception, pressure attempt, tackle, interception, turnover, ball recovery, shot, goal, foul, card, substitution, offside, set piece and full time where available in feed. Preserve unknown provider event type, quarantine unsupported semantics; never infer it from string fragments.
 Per event require participants valid at that time, same match and period, supported outcome, coordinates within pitch and possession transition evidence. Goal must reconcile score: shots do not imply goals, own goal attributed under explicit rules, disallowed/VAR correction append new revision.
 
-## E. Tactical mechanism engine: `press-sequence-v2` design
+## E. Tactical mechanism engine: `press-sequence-v3` design
 A **press** is observable pressure that constrains ball carrier space/options; a **trap** requires credible channeling/containment and response; high regain/shot can follow press without proving causality.
 Use staged immutable condition evaluations:
 1. **Eligibility / trigger:** opponent controlled build-up from goalkeeper/CB, phase classified, source IDs and time; a back-pass is eligibility only, not press.
 2. **Pressure exposure:** player-to-carrier separation within governed metres, stable frame timestamps, availability of defender approach trajectory if dense enough; no body orientation inference. Named presser must belong to other team.
-3. **Opponent response:** ball action while exposed; supported sequence within `maxResponseMs`, stable sequence/period/possession; pass long/side/failed or dribble; response not proof of forcing.
-4. **Regain:** reviewed possession-control event of pressing team, high-zone determined in pressing-team relative coordinates and approved boundary, within `maxRegainMs`.
+3. **Opponent response:** ball action while exposed; supported sequence within `maxResponseMs`, stable sequence/period/possession; pass long/side/failed or dribble; response not proof of forcing. For this local demo, a turnover or any completed pass before the tagged incomplete response invalidates the candidate.
+4. **Regain:** reviewed possession-control event of pressing team, high-zone determined in pressing-team relative coordinates and approved boundary, within `maxRegainMs`. The local demo suppresses a candidate if any turnover or completed pass intervenes between the incomplete response and the tagged regain; it cannot verify canonical possession.
 5. **Exploitation:** same possession, ordered progression/cutback, optional shot and goal, within `maxOutcomeMs`; a goal can strengthen outcome but cannot establish strategy.
 6. **Counterexamples and limitations:** press outside exposure window, wrong participant, opponent wins possession, missing frame, incomplete tracking, cross-half boundary, event gap, mislabeled pass, simple turnover without coordinated pressure.
 Every stage records `{name,passed,observed,threshold,coverage,evidenceRefs,exclusionReason}`. Scenarios and thresholds come from versioned football policy JSON reviewed by Product Owner and analyst (not unversioned C# literals). Detector output is `evidence-supported-pattern` unless stronger proof is reviewed; never label inferred coach intention as observed fact.
-**Current `press-sequence-v1`** requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. It is a **demonstration-specific policy**, not league-calibrated universal football truth.
+**Current local `press-sequence-v3`** requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. It suppresses a candidate if a turnover interrupts the pressure→response or response→regain window, if any team completes a pass before the expected incomplete response, or if any team completes a pass before the expected regain. This is a conservative continuity guard over the synthetic fixture's event labels; it does not establish control, pressure causation, or a league-calibrated football threshold. The policy remains `unapproved-demo` and non-publishable.
 
 ```mermaid
 flowchart TD

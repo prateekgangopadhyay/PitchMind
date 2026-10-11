@@ -8,8 +8,8 @@ public sealed class PressSequencePolicy
 {
     private PressSequencePolicy() { }
 
-    public static PressSequencePolicy UnapprovedDemoV2 { get; } = new();
-    public string Version => "press-sequence-v2";
+    public static PressSequencePolicy UnapprovedDemoV3 { get; } = new();
+    public string Version => "press-sequence-v3";
     public string ReviewStatus => "unapproved-demo";
     public int MaximumTriggerToOutcomeSeconds => 25;
     public int MaximumPressToResponseSeconds => 10;
@@ -47,7 +47,7 @@ public static class PressSequenceDetector
         PressSequencePolicy? policy = null)
     {
         ArgumentNullException.ThrowIfNull(input);
-        policy ??= PressSequencePolicy.UnapprovedDemoV2;
+        policy ??= PressSequencePolicy.UnapprovedDemoV3;
         Validate(input, policy);
 
         // Spatial distances are metres only when the fixture declares stadium metres.
@@ -64,12 +64,19 @@ public static class PressSequenceDetector
                 pressure.TeamId == trigger.TeamId || pressure.RelatedPlayerId != trigger.RelatedPlayerId)
                 continue;
 
-            var response = FindNext(input, pressure, "pressured-pass", policy.MaximumPressToResponseSeconds);
+            // A completed pass interrupts the direct pressure-to-error response chain.
+            var response = FindNext(input, pressure, "pressured-pass", policy.MaximumPressToResponseSeconds,
+                item => item.Event.Type == MatchEventType.Turnover ||
+                    (item.Event.Type == MatchEventType.Pass && item.Outcome == "complete"));
             if (response is null || response.Event.Type != MatchEventType.Pass || response.TeamId != trigger.TeamId ||
                 response.PlayerId != trigger.RelatedPlayerId || response.Outcome != "incomplete")
                 continue;
 
-            var regain = FindNext(input, response, "high-regain", policy.MaximumResponseToRegainSeconds);
+            // Once the error occurs, any intervening turnover or completed pass means
+            // possession/control changed before the candidate high-regain event.
+            var regain = FindNext(input, response, "high-regain", policy.MaximumResponseToRegainSeconds,
+                item => item.Event.Type == MatchEventType.Turnover ||
+                    (item.Event.Type == MatchEventType.Pass && item.Outcome == "complete"));
             if (regain is null || regain.Event.Type != MatchEventType.Turnover || regain.TeamId != pressure.TeamId ||
                 regain.Outcome != "won")
                 continue;
@@ -117,6 +124,7 @@ public static class PressSequenceDetector
                 $"exploitation: completed cutback {cutback.Event.EventId:D} followed by shot {shot.Event.EventId:D}",
                 $"outcome: goal event {goal.Event.EventId:D} at {goal.Event.ClockSeconds}s; sequence ends {goal.Event.ClockSeconds - trigger.Event.ClockSeconds}s after trigger",
                 $"coverage: {requiredFrameClocks.Length} distinct event-time frames include the pressure participants",
+                "continuity: no intervening turnover or contradictory completed pass before the response or regain",
                 $"selected-time: all evidence is at or before {input.SelectedTimeSeconds}s; through sequence {input.ThroughSequence}",
                 $"policy: {policy.Version} ({policy.ReviewStatus}); publication approval is absent"
             });
@@ -142,11 +150,19 @@ public static class PressSequenceDetector
     }
 
     private static SimulationEvent? FindNext(PressSequenceInput input, SimulationEvent after, string action,
-        int maximumDelaySeconds)
+        int maximumDelaySeconds, Func<SimulationEvent, bool>? invalidatesBeforeMatch = null)
     {
-        return input.Events.FirstOrDefault(candidate => candidate.Event.Sequence > after.Event.Sequence &&
-            candidate.Event.Period == after.Event.Period && candidate.Event.ClockSeconds >= after.Event.ClockSeconds &&
-            candidate.Event.ClockSeconds - after.Event.ClockSeconds <= maximumDelaySeconds && candidate.Action == action);
+        foreach (var candidate in input.Events)
+        {
+            if (candidate.Event.Sequence <= after.Event.Sequence || candidate.Event.Period != after.Event.Period ||
+                candidate.Event.ClockSeconds < after.Event.ClockSeconds)
+                continue;
+            if (candidate.Event.ClockSeconds - after.Event.ClockSeconds > maximumDelaySeconds) break;
+            if (candidate.Action == action) return candidate;
+            if (invalidatesBeforeMatch?.Invoke(candidate) == true) return null;
+        }
+
+        return null;
     }
 
     private static void Validate(PressSequenceInput input, PressSequencePolicy policy)

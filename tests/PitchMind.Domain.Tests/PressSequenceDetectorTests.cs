@@ -16,7 +16,7 @@ public sealed class PressSequenceDetectorTests
 
         var insight = Assert.Single(PressSequenceDetector.Detect(input));
 
-        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("press-sequence-v3", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
         Assert.False(insight.Publishable);
         Assert.Equal(ScenarioGoalSeconds, insight.ClockSeconds);
@@ -142,6 +142,41 @@ public sealed class PressSequenceDetectorTests
     }
 
     [Fact]
+    public void CompletedBuildUpPassBetweenPressureAndErrorInvalidatesCandidate()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var pressure = fixture.Events.Single(item => item.Action == "press-arrival");
+        var trigger = fixture.Events.Single(item => item.Action == "back-pass");
+        var events = InsertAfter(fixture, pressure, 3295, PitchMind.Domain.Events.MatchEventType.Pass,
+            trigger.TeamId, trigger.RelatedPlayerId!, "ordinary-pass", "complete");
+
+        Assert.Empty(PressSequenceDetector.Detect(CreateInput(fixture, ScenarioGoalSeconds, events: events)));
+    }
+
+    [Fact]
+    public void InterveningTurnoverBetweenErrorAndRegainInvalidatesCandidate()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var response = fixture.Events.Single(item => item.Action == "pressured-pass");
+        var pressure = fixture.Events.Single(item => item.Action == "press-arrival");
+        var events = InsertAfter(fixture, response, 3298, PitchMind.Domain.Events.MatchEventType.Turnover,
+            pressure.TeamId, pressure.PlayerId, "unrelated-turnover", "won");
+
+        Assert.Empty(PressSequenceDetector.Detect(CreateInput(fixture, ScenarioGoalSeconds, events: events)));
+    }
+
+    [Fact]
+    public void CompletedOpponentPassBetweenErrorAndRegainInvalidatesCandidate()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var response = fixture.Events.Single(item => item.Action == "pressured-pass");
+        var events = InsertAfter(fixture, response, 3298, PitchMind.Domain.Events.MatchEventType.Pass,
+            response.TeamId, response.PlayerId, "ordinary-pass", "complete");
+
+        Assert.Empty(PressSequenceDetector.Detect(CreateInput(fixture, ScenarioGoalSeconds, events: events)));
+    }
+
+    [Fact]
     public void RejectsSkippedSequenceInClaimedCompletePrefix()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
@@ -219,5 +254,32 @@ public sealed class PressSequenceDetectorTests
             Array.AsReadOnly((frames ?? fixture.Frames)
                 .Where(frame => frame.ClockSeconds <= selectedTimeSeconds)
                 .ToArray()));
+    }
+
+    private static IReadOnlyList<SimulationEvent> InsertAfter(SyntheticFixture fixture, SimulationEvent anchor,
+        int clockSeconds, PitchMind.Domain.Events.MatchEventType type, string teamId, string playerId,
+        string action, string outcome)
+    {
+        var events = fixture.Events.ToList();
+        var index = events.FindIndex(item => item.Event.EventId == anchor.Event.EventId);
+        var sequence = anchor.Event.Sequence + 1;
+        var inserted = anchor with
+        {
+            Event = anchor.Event with
+            {
+                EventId = Guid.NewGuid(),
+                Sequence = sequence,
+                Type = type,
+                ClockSeconds = clockSeconds
+            },
+            TeamId = teamId,
+            PlayerId = playerId,
+            Action = action,
+            Outcome = outcome
+        };
+        for (var i = index + 1; i < events.Count; i++)
+            events[i] = events[i] with { Event = events[i].Event with { Sequence = events[i].Event.Sequence + 1 } };
+        events.Insert(index + 1, inserted);
+        return Array.AsReadOnly(events.ToArray());
     }
 }
