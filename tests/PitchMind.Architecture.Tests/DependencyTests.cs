@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -63,7 +64,8 @@ public sealed class DependencyTests
         var root = FindRepositoryRoot();
         var productionFiles = EnumerateProductionSourceFiles(root);
         var fixtureDataMarkers = ReadFixtureDataMarkers(root);
-        var violations = FindFixtureDataMarkers(productionFiles, fixtureDataMarkers)
+        var numericFixtureMarkers = ReadFixtureNumericMarkers(root);
+        var violations = FindFixtureDataMarkers(productionFiles, fixtureDataMarkers, numericFixtureMarkers)
             .Select(item => $"{Path.GetRelativePath(root, item.Path)}:{item.LineNumber}: {item.Line.Trim()}")
             .ToArray();
 
@@ -119,6 +121,48 @@ public sealed class DependencyTests
 
             Xunit.Assert.Single(violations);
             Xunit.Assert.Equal(source, violations[0].Path);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsCandidateClockAndSequenceLiterals()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var finalEvent = feed.RootElement[feed.RootElement.GetArrayLength() - 1];
+        var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
+        var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
+        var finalSequence = finalEvent.GetProperty("sequence").GetInt32();
+        var finalClockSeconds = finalEvent.GetProperty("clockSeconds").GetInt32();
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            File.WriteAllText(source,
+                $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
+                $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
+                $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
+                $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
+                "const unrelatedPageSize = 25;");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
         }
         finally
         {
@@ -198,14 +242,81 @@ public sealed class DependencyTests
         }
     }
 
+    private static IReadOnlyDictionary<string, IReadOnlySet<string>> ReadFixtureNumericMarkers(string root)
+    {
+        var markers = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        if (!File.Exists(feedPath))
+        {
+            throw new FileNotFoundException("The candidate synthetic feed is required to check production source for match-time literals.", feedPath);
+        }
+
+        using var stream = File.OpenRead(feedPath);
+        using var document = JsonDocument.Parse(stream);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("The candidate synthetic feed must be a JSON array for the production-source guard.");
+        }
+
+        foreach (var sourceEvent in document.RootElement.EnumerateArray())
+        {
+            AddNumberProperty(sourceEvent, "sequence", markers);
+            AddNumberProperty(sourceEvent, "clockSeconds", markers);
+        }
+
+        return markers.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlySet<string>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
+    {
+        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+        {
+            return;
+        }
+
+        if (!markers.TryGetValue(name, out var values))
+        {
+            values = new HashSet<string>(StringComparer.Ordinal);
+            markers.Add(name, values);
+        }
+
+        values.Add(property.GetRawText());
+    }
+
     private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
         IEnumerable<string> files,
-        IReadOnlySet<string> markers)
+        IReadOnlySet<string> markers,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers = null)
     {
         return files
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
-            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)))
+            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)) ||
+                ContainsNumericFixtureMarker(item.Line, numericMarkers))
             .ToArray();
+    }
+
+    private static bool ContainsNumericFixtureMarker(
+        string line,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers)
+    {
+        if (numericMarkers is null || numericMarkers.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?[0-9]+(?:\.[0-9]+)?)(?![0-9.])"))
+        {
+            if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
+                values.Contains(match.Groups["value"].Value))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     [Xunit.Fact]
