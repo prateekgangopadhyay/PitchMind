@@ -320,6 +320,48 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_FailsClosedWhenNumericAliasesAreShadowed()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var candidateClock = feed.RootElement[0].GetProperty("clockSeconds").GetRawText();
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-shadowed-alias-guard-");
+        try
+        {
+            var tsxSource = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
+            File.WriteAllText(tsxSource,
+                $"const observedClock = {candidateClock};\n" +
+                "{ const observedClock = 987654321; }\n" +
+                "const payload = { clockSeconds: observedClock };");
+            File.WriteAllText(csharpSource,
+                "class Fixture {\n" +
+                $"  static readonly int observedClock = {candidateClock};\n" +
+                "  void Render() {\n" +
+                "    { var observedClock = 987654321; }\n" +
+                "    var payload = new { clockSeconds = observedClock };\n" +
+                "  }\n" +
+                "}");
+
+            var violations = FindFixtureDataMarkers(
+                [tsxSource, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(2, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("clockSeconds: observedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = observedClock", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
     {
         var sourceRoots = new[]
@@ -486,7 +528,7 @@ public sealed class DependencyTests
             if (numericMarkers is not null && numericMarkers.Count > 0)
             {
                 var source = File.ReadAllText(path);
-                var numericAliases = ReadNumericAliases(source);
+                var numericAliases = ReadNumericAliases(source, out var ambiguousNumericAliases);
                 var propertyPattern =
                     @"(?:(?<quote>[""'])(?<quotedName>[A-Za-z_][A-Za-z0-9_]*)\k<quote>|\[\s*[""'](?<indexedName>[A-Za-z_][A-Za-z0-9_]*)[""']\s*\]|(?<plainName>[A-Za-z_][A-Za-z0-9_]*))\s*[:=]\s*(?:(?<value>" + SourceNumericLiteralPattern + @")(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)|(?<alias>@?[A-Za-z_$][A-Za-z0-9_$]*))(?![A-Za-z0-9_.])";
                 foreach (Match match in Regex.Matches(source, propertyPattern))
@@ -496,12 +538,17 @@ public sealed class DependencyTests
                         : match.Groups["indexedName"].Success
                             ? match.Groups["indexedName"].Value
                             : match.Groups["plainName"].Value;
+                    var aliasName = match.Groups["alias"].Value.TrimStart('@');
+                    var ambiguousAlias = match.Groups["alias"].Success &&
+                        numericMarkers.ContainsKey(propertyName) &&
+                        ambiguousNumericAliases.Contains(aliasName);
                     var numericValue = match.Groups["value"].Success
                         ? NormalizeNumericLiteral(match.Groups["value"].Value)
-                        : numericAliases.GetValueOrDefault(match.Groups["alias"].Value.TrimStart('@'));
-                    if (numericValue is not null &&
+                        : numericAliases.GetValueOrDefault(aliasName);
+                    var matchesCandidateValue = numericValue is not null &&
                         numericMarkers.TryGetValue(propertyName, out var values) &&
-                        values.Contains(numericValue))
+                        values.Contains(numericValue);
+                    if (ambiguousAlias || matchesCandidateValue)
                     {
                         matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
                     }
@@ -515,7 +562,7 @@ public sealed class DependencyTests
         return violations;
     }
 
-    private static IReadOnlyDictionary<string, string> ReadNumericAliases(string source)
+    private static IReadOnlyDictionary<string, string> ReadNumericAliases(string source, out IReadOnlySet<string> ambiguousAliases)
     {
         const string numericSuffix = @"(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?";
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -523,6 +570,12 @@ public sealed class DependencyTests
             @"(?:\b(?:const|let|var)\s+|\b(?:(?:public|private|protected|internal|static|readonly|const|var)\s+)*(?:[\w<>,?.\[\]]+\s+))(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=;\r\n]+)?\s*=\s*(?:(?<value>" + SourceNumericLiteralPattern + @")" + numericSuffix + @"|(?<reference>@?[A-Za-z_$][A-Za-z0-9_$]*))(?![A-Za-z0-9_.])",
             RegexOptions.CultureInvariant);
         var declarations = declaration.Matches(source);
+        var ambiguousNames = declarations
+            .Cast<Match>()
+            .GroupBy(match => match.Groups["name"].Value.TrimStart('@'), StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
 
         for (var pass = 0; pass < declarations.Count; pass++)
         {
@@ -542,6 +595,11 @@ public sealed class DependencyTests
                 if (value is not null)
                 {
                     var name = match.Groups["name"].Value.TrimStart('@');
+                    if (ambiguousNames.Contains(name))
+                    {
+                        continue;
+                    }
+
                     if (!aliases.TryGetValue(name, out var existing) || existing != value)
                     {
                         aliases[name] = value;
@@ -556,6 +614,7 @@ public sealed class DependencyTests
             }
         }
 
+        ambiguousAliases = ambiguousNames;
         return aliases;
     }
 
