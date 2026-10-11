@@ -21,7 +21,7 @@ export interface RealtimeAccessTokenProvider {
   getAccessToken(): Promise<string | null>;
 }
 
-export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'unavailable';
+export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'unavailable' | 'fallback' | 'refresh-failed';
 
 export interface RealtimeConnection {
   on(methodName: string, callback: (...args: unknown[]) => void): void;
@@ -92,10 +92,12 @@ export class MatchRealtimeClient {
     this.started = true;
     const generation = ++this.lifecycleGeneration;
     this.lifecycleAbortController = new AbortController();
+    let canonicalRefreshSucceeded = false;
     try {
       this.assertAuthBoundary();
       this.setStatus('connecting');
       await this.refreshFromCanonicalStore(generation);
+      canonicalRefreshSucceeded = true;
       if (!this.isActive(generation)) return;
       const negotiation = await this.negotiate(generation);
       if (!this.isActive(generation) || !negotiation) return;
@@ -138,7 +140,7 @@ export class MatchRealtimeClient {
       await this.subscribeAndBackfill(negotiation.cursor, generation, connection);
     } catch {
       if (this.isActive(generation)) {
-        this.setStatus('unavailable');
+        this.setStatus(canonicalRefreshSucceeded ? 'fallback' : 'unavailable');
         await this.disposeConnection();
       }
     }
@@ -170,6 +172,20 @@ export class MatchRealtimeClient {
         !this.transportConnected || !this.subscriptionReady) return;
     const state = this.options.getState();
     if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
+  }
+
+  /** Explicit durable HTTP fallback for viewers when SignalR is unavailable. */
+  async refreshFallback(): Promise<void> {
+    try {
+      await this.refreshFromCanonicalStore();
+      if (!this.stopped && this.connection === null) this.setStatus('fallback');
+    } catch (error) {
+      if (!this.stopped) {
+        this.markDisconnected();
+        this.setStatus('refresh-failed');
+      }
+      throw error;
+    }
   }
 
   private async requireAccessToken(): Promise<string> {

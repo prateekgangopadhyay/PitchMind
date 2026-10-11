@@ -20,6 +20,8 @@ function statusText(status: RealtimeStatus): string {
     case 'reconnecting': return 'Connection interrupted. Reconnecting…';
     case 'disconnected': return 'Match updates disconnected';
     case 'unavailable': return 'Live updates unavailable. Sign in and retry.';
+    case 'fallback': return 'Live updates unavailable. Match data can be refreshed manually.';
+    case 'refresh-failed': return 'Canonical refresh failed. Match data may be out of date.';
   }
 }
 
@@ -42,6 +44,7 @@ export function RealtimeMatchUpdates({ state, onStateChange }: {
   const latestChange = useRef(onStateChange);
   const client = useRef<MatchRealtimeClient | null>(null);
   const [status, setStatus] = useState<RealtimeStatus>(hasAuthProvider ? 'connecting' : 'unavailable');
+  const [refreshingFallback, setRefreshingFallback] = useState(false);
   const previousTimeContext = useRef(`${state.mode}:${state.selectedTimeSeconds}`);
 
   latestState.current = state;
@@ -79,19 +82,35 @@ export function RealtimeMatchUpdates({ state, onStateChange }: {
         const staleState = markRealtimeDisconnected(latestState.current);
         latestState.current = staleState;
         latestChange.current(staleState);
-        setStatus('disconnected');
+        setStatus('refresh-failed');
       });
     }
     previousTimeContext.current = currentTimeContext;
   }, [state.mode, state.selectedTimeSeconds]);
 
   const retry = () => { void client.current?.retry(); };
+  const refreshFallback = async () => {
+    const activeClient = client.current;
+    if (!activeClient || refreshingFallback) return;
+    setRefreshingFallback(true);
+    try {
+      await activeClient.refreshFallback();
+    } catch {
+      // The client marks the canonical view stale and reports the failed fallback.
+    } finally {
+      setRefreshingFallback(false);
+    }
+  };
   const returnLive = () => onStateChange(returnToLive(state));
 
   return <section className="realtime-status" aria-label="Live match update status">
     <p role="status" aria-live="polite" aria-atomic="true">{statusText(status)}</p>
-    {(status === 'unavailable' || status === 'disconnected') && hasAuthProvider &&
+    {(status === 'unavailable' || status === 'disconnected' || status === 'refresh-failed') && hasAuthProvider &&
       <button type="button" onClick={retry}>Retry live connection</button>}
+    {(status === 'fallback' || status === 'disconnected' || status === 'refresh-failed') && hasAuthProvider &&
+      <button type="button" onClick={() => void refreshFallback()} disabled={refreshingFallback}>
+        {refreshingFallback ? 'Refreshing match data…' : 'Refresh match data'}
+      </button>}
     {!hasAuthProvider && <p>Live updates require the host application’s signed-in identity.</p>}
     {state.mode === 'HISTORICAL' && <div className="new-match-updates">
       <span role="status" aria-live="polite" aria-atomic="true">{state.hasNewMatchUpdate
