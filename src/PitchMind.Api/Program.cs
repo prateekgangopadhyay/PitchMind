@@ -41,9 +41,17 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
     var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
     if (!string.IsNullOrWhiteSpace(postgresConnectionString))
     {
-        builder.Services.AddSingleton(NpgsqlDataSource.Create(postgresConnectionString));
+        var dataSource = NpgsqlDataSource.Create(postgresConnectionString);
+        builder.Services.AddSingleton(dataSource);
         builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
         builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+        if (localRealtimeEnabled && LocalPostgresConnectionPolicy.IsLoopbackConnectionString(postgresConnectionString))
+        {
+            builder.Services.AddSingleton<PostgresOutboxDispatcher>();
+            builder.Services.AddHostedService<OutboxDispatchWorker>(services => new OutboxDispatchWorker(
+                cancellationToken => services.GetRequiredService<PostgresOutboxDispatcher>().DispatchOneAsync(cancellationToken),
+                services.GetRequiredService<ILogger<OutboxDispatchWorker>>()));
+        }
     }
     else
     {
