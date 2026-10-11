@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,22 @@ from pathlib import Path
 ENVIRONMENTS = ("dev", "stage", "prod")
 REQUIRED_PROFILE_KEYS = ("environment", "enableAdvancedAnalytics", "enableDevFoundation")
 OPTIONAL_PROFILE_KEYS = ("virtualNetworkCidr",)
+
+
+def _validate_dev_network_cidr(value: object) -> list[str]:
+    """Check the DEV address space against the /24 subnet indexes in networking.bicep."""
+    if not isinstance(value, str):
+        return ["dev virtualNetworkCidr must be an IPv4 CIDR string"]
+    try:
+        network = ipaddress.ip_network(value, strict=True)
+    except ValueError:
+        return ["dev virtualNetworkCidr must be a canonical IPv4 CIDR network"]
+    if not isinstance(network, ipaddress.IPv4Network):
+        return ["dev virtualNetworkCidr must be an IPv4 CIDR network"]
+    if network.prefixlen > 22:
+        return ["dev virtualNetworkCidr must be /22 or larger to contain subnet indexes 1 and 2 as /24s"]
+    # Prefix <= /22 guarantees indexes 1 and 2 exist for cidrSubnet(..., 24, index).
+    return []
 
 
 def _bicepparam_values(path: Path) -> dict[str, object]:
@@ -75,6 +92,13 @@ def validate_profiles(repo_root: Path) -> list[str]:
                 errors.append(f"{environment} profile disagrees on {key} between .json and .bicepparam")
         if environment == "dev" and ("virtualNetworkCidr" not in json_values or "virtualNetworkCidr" not in source_values):
             errors.append("dev profile must explicitly provide virtualNetworkCidr in both parameter files")
+        if environment == "dev":
+            for profile_name, values in (("JSON", json_values), (".bicepparam", source_values)):
+                if "virtualNetworkCidr" in values:
+                    errors.extend(
+                        f"dev {profile_name} profile: {error}"
+                        for error in _validate_dev_network_cidr(values["virtualNetworkCidr"])
+                    )
         if json_values.get("environment") != environment or source_values.get("environment") != environment:
             errors.append(f"{environment} profile must explicitly target its own environment")
         expected_foundation = environment == "dev"

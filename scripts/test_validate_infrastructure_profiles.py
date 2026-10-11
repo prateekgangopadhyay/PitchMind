@@ -69,6 +69,53 @@ class InfrastructureProfileValidationTests(unittest.TestCase):
         self.assertTrue(any("stage" in error and "presence of optional parameter virtualNetworkCidr" in error for error in errors))
         self.assertTrue(any("stage" in error and "DEV-only parameter virtualNetworkCidr" in error for error in errors))
 
+    def _set_dev_cidr(self, value: str) -> None:
+        import json
+
+        profile = self.root / "infra/environments/dev.json"
+        parsed = json.loads(profile.read_text(encoding="utf-8"))
+        parsed["parameters"]["virtualNetworkCidr"]["value"] = value
+        profile.write_text(json.dumps(parsed), encoding="utf-8")
+        params = self.root / "infra/environments/dev.bicepparam"
+        source = params.read_text(encoding="utf-8")
+        source = source.replace("param virtualNetworkCidr = '10.42.0.0/16'", f"param virtualNetworkCidr = '{value}'")
+        params.write_text(source, encoding="utf-8")
+
+    def test_valid_minimum_vnet_prefix_supports_both_planned_subnets(self) -> None:
+        self._set_dev_cidr("10.42.0.0/22")
+
+        errors = validate_profiles(self.root)
+
+        self.assertEqual([], errors)
+
+    def test_vnet_too_small_for_subnet_index_two_is_rejected(self) -> None:
+        self._set_dev_cidr("10.42.0.0/23")
+
+        errors = validate_profiles(self.root)
+
+        self.assertTrue(any("must be /22 or larger" in error for error in errors))
+
+    def test_noncanonical_cidr_with_host_bits_is_rejected(self) -> None:
+        self._set_dev_cidr("10.42.0.1/16")
+
+        errors = validate_profiles(self.root)
+
+        self.assertTrue(any("canonical IPv4 CIDR" in error for error in errors))
+
+    def test_ipv6_cidr_is_rejected(self) -> None:
+        self._set_dev_cidr("2001:db8::/32")
+
+        errors = validate_profiles(self.root)
+
+        self.assertTrue(any("must be an IPv4 CIDR network" in error for error in errors))
+
+    def test_malformed_cidr_is_rejected(self) -> None:
+        self._set_dev_cidr("not-a-network")
+
+        errors = validate_profiles(self.root)
+
+        self.assertTrue(any("canonical IPv4 CIDR" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
