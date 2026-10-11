@@ -14,7 +14,8 @@ const cursor = (lastSequence = 0): RealtimeCursorV1 => ({
 });
 
 const initialState = (): RealtimeTimelineState => ({
-  matchId, mode: 'LIVE', selectedTimeSeconds: 60, canonicalRevision: 2, throughSequence: 0,
+  matchId, mode: 'LIVE', selectedTimeSeconds: 60, observedLiveRevision: 2, observedLiveSequence: 0,
+  canonicalRevision: 2, throughSequence: 0,
   snapshot: { matchId, canonicalRevision: 2, selectedTimeSeconds: 5400, asOfSeconds: 60,
     throughSequence: 0, algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64),
     stateSha256: 'b'.repeat(64), provenance: 'synthetic', period: 1, phase: 'firsthalf',
