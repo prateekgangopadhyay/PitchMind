@@ -281,6 +281,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             record_coordinate(name, event.get(name))
 
         position_names: set[tuple[str, str, int]] = set()
+        position_team_identities: set[tuple[str, str]] = set()
         for position_index, position in enumerate(event["playerPositions"]):
             if not isinstance(position, dict) or any(key not in position for key in POSITION_REQUIRED):
                 raise CandidateValidationError(f"Malformed position record at event {index}, position {position_index}")
@@ -293,6 +294,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                 raise CandidateValidationError(f"Position team name maps to multiple IDs at event {index}, position {position_index}")
             position_team_names_by_id[position_team_id] = position_team_name
             position_team_ids_by_name[position_team_name] = position_team_id
+            position_team_identities.add((position_team_id, position_team_name))
             if not isinstance(position["playerName"], str) or not position["playerName"].strip():
                 raise CandidateValidationError(f"Missing source player label at event {index}, position {position_index}")
             if not isinstance(position["position"], str) or not position["position"].strip():
@@ -318,6 +320,11 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                     raise CandidateValidationError(f"Invalid raw player metric type at event {index}, position {position_index}")
                 metric_counts[metric] += 1
             position_count += 1
+
+        if (team_id, team_name) not in position_team_identities:
+            raise CandidateValidationError(
+                f"Event team identity is absent from its attached position frame at source index {index}"
+            )
 
     if len(match_ids) != match_policy.get("expectedMatchCount"):
         raise CandidateValidationError("Distinct match count differs from manifest")

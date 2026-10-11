@@ -100,6 +100,7 @@ class CandidateValidationTests(unittest.TestCase):
         away = event("33333333-3333-4333-8333-333333333333", 2, 12, "FullTime")
         away["teamId"] = away_id
         away["teamName"] = "Synthetic Away"
+        away["playerPositions"] = [position(away_id, "Synthetic Away", "Alex Smith", 7)]
         frame_with_both_teams = {
             **self.events[0],
             "playerPositions": [
@@ -131,6 +132,35 @@ class CandidateValidationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate player row in frame"):
             validator.validate_source(payload, test_manifest(events, payload))
+
+    def test_event_team_must_appear_in_its_attached_position_frame(self):
+        home_id = self.events[0]["teamId"]
+        away_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        events = [
+            {
+                **self.events[0],
+                "playerPositions": [position(away_id, "Synthetic Away")],
+            },
+            {
+                **self.events[1],
+                "eventType": "Pass",
+                "teamId": away_id,
+                "teamName": "Synthetic Away",
+                "playerPositions": [
+                    position(home_id, "Synthetic Home"),
+                    position(away_id, "Synthetic Away", "Alex Smith", 7),
+                ],
+            },
+        ]
+        payload = json.dumps(events, separators=(",", ":")).encode()
+        manifest = test_manifest(events, payload)
+        manifest["match"]["expectedTeamCount"] = 2
+
+        with self.assertRaisesRegex(
+            validator.CandidateValidationError,
+            "Event team identity is absent from its attached position frame",
+        ):
+            validator.validate_source(payload, manifest)
 
     def test_rejects_sequence_gaps_and_clock_regression(self):
         invalid_sequence = [self.events[0], {**self.events[1], "sequence": 3}]
