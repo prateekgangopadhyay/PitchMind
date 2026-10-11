@@ -19,15 +19,44 @@ param containerAppsSubnetCidr string
 param postgresSubnetCidr string
 param privateEndpointsSubnetCidr string
 
-@description('Resource ID of the private Storage account to connect for Blob feed artifacts. Its public network access must be disabled before this candidate is used.')
+@description('Subscription ID containing the existing Storage account. The account and its network policy must be reviewed before this candidate is used.')
+@minLength(36)
+@maxLength(36)
+param storageSubscriptionId string
+@description('Resource group containing the existing Storage account.')
 @minLength(1)
-param storageAccountResourceId string
-@description('Resource ID of the private Key Vault used by the canonical workload.')
+@maxLength(90)
+param storageResourceGroupName string
+@description('Name of the existing Storage account to connect for Blob feed artifacts.')
+@minLength(3)
+@maxLength(24)
+param storageAccountName string
+
+@description('Subscription ID containing the existing Key Vault. The vault and its network policy must be reviewed before this candidate is used.')
+@minLength(36)
+@maxLength(36)
+param keyVaultSubscriptionId string
+@description('Resource group containing the existing Key Vault.')
 @minLength(1)
-param keyVaultResourceId string
-@description('Resource ID of the private Event Hubs namespace used by the telemetry workload.')
+@maxLength(90)
+param keyVaultResourceGroupName string
+@description('Name of the existing Key Vault used by the canonical workload.')
+@minLength(3)
+@maxLength(24)
+param keyVaultName string
+
+@description('Subscription ID containing the existing Event Hubs namespace. The namespace and its network policy must be reviewed before this candidate is used.')
+@minLength(36)
+@maxLength(36)
+param eventHubsSubscriptionId string
+@description('Resource group containing the existing Event Hubs namespace.')
 @minLength(1)
-param eventHubsNamespaceResourceId string
+@maxLength(90)
+param eventHubsResourceGroupName string
+@description('Name of the existing Event Hubs namespace used by the telemetry workload.')
+@minLength(6)
+@maxLength(50)
+param eventHubsNamespaceName string
 
 @description('Existing Log Analytics workspace created by infra/main.bicep.')
 param logAnalyticsWorkspaceName string = 'pm-dev-logs'
@@ -59,6 +88,24 @@ var containerAppsEnvironmentName = '${resourcePrefix}-cae'
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
   name: logAnalyticsWorkspaceName
+}
+
+// Existing resources are declared with fixed Azure resource types so callers
+// provide scope/name inputs instead of opaque, unchecked resource IDs. This
+// does not verify resource existence or disable the target's public access.
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: storageAccountName
+  scope: resourceGroup(storageSubscriptionId, storageResourceGroupName)
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: keyVaultName
+  scope: resourceGroup(keyVaultSubscriptionId, keyVaultResourceGroupName)
+}
+
+resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
+  name: eventHubsNamespaceName
+  scope: resourceGroup(eventHubsSubscriptionId, eventHubsResourceGroupName)
 }
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = if (deployCanonicalTopology) {
@@ -195,7 +242,7 @@ resource storagePrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' 
       {
         name: 'storage-blob'
         properties: {
-          privateLinkServiceId: storageAccountResourceId
+          privateLinkServiceId: storageAccount.id
           groupIds: ['blob']
         }
       }
@@ -231,7 +278,7 @@ resource keyVaultPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01'
       {
         name: 'key-vault'
         properties: {
-          privateLinkServiceId: keyVaultResourceId
+          privateLinkServiceId: keyVault.id
           groupIds: ['vault']
         }
       }
@@ -267,7 +314,7 @@ resource eventHubsPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01
       {
         name: 'event-hubs'
         properties: {
-          privateLinkServiceId: eventHubsNamespaceResourceId
+          privateLinkServiceId: eventHubsNamespace.id
           groupIds: ['namespace']
         }
       }
