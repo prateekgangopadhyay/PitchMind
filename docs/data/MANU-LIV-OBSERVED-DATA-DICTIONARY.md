@@ -24,6 +24,17 @@
 
 The JSON root is an array with 2,199 event objects and 48,048 event-attached player-position objects. Each event has a `metadata` object. The tables cover every object of each type in the pinned file.
 
+### Event-attached position-row frequency
+
+This table counts rows in each event's `playerPositions` array. It is event-array coverage only; it is not a time-based sampling frequency or evidence of continuous tracking.
+
+| Position rows in one event | Event records |
+|---:|---:|
+| 21 | 330 |
+| 22 | 1,869 |
+
+Time-based position cadence remains **UNSPECIFIED / UNVERIFIED** because the source clock unit and time semantics are not established.
+
 ### Event object fields
 
 | Field | Observed JSON type (count) | Missing keys | Explicit nulls | Distinct non-null values | Numeric min–max |
