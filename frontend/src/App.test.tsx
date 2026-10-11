@@ -146,6 +146,7 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Simulated EPL-context match');
     expect(container.textContent).toContain('Canonical revision 4');
     expect(container.textContent).toContain('shot');
+    expect(container.querySelector('#selected-time')?.getAttribute('aria-valuetext')).toBe('55 minutes 9 seconds');
     expect(observedRequests).toHaveLength(3);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');
