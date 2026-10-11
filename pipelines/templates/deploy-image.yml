@@ -26,4 +26,11 @@ steps:
       az containerapp update --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" --name "$PITCHMIND_DEV_APP_NAME" --image "$image" --output none
       fqdn=$(az containerapp show --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" --name "$PITCHMIND_DEV_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)
       test -n "$fqdn"
-      python3 scripts/api-smoke.py "https://$fqdn"
+      echo "##vso[task.setvariable variable=PITCHMIND_DEV_FQDN]$fqdn"
+- task: Bash@3
+  displayName: Smoke deployed DEV endpoint outside the Azure CLI task
+  env:
+    PITCHMIND_DEV_FQDN: $(PITCHMIND_DEV_FQDN)
+  inputs:
+    targetType: inline
+    script: python3 scripts/api-smoke.py "https://$PITCHMIND_DEV_FQDN"

@@ -17,14 +17,26 @@ _VALIDATION_TEMPLATE_PATHS = (
 )
 
 
-def _validate_pipeline_policy(pipeline, build_template, deploy_template, validation_template_overrides=None):
+def _validate_pipeline_policy(
+    pipeline,
+    build_template,
+    deploy_template,
+    validation_template_overrides=None,
+    release_helper_overrides=None,
+):
     validation_templates = {
         name: (ROOT / "pipelines" / name).read_text()
         for name in _VALIDATION_TEMPLATE_PATHS
     }
     if validation_template_overrides:
         validation_templates.update(validation_template_overrides)
-    validate_pipeline_policy(pipeline, build_template, deploy_template, validation_templates)
+    release_helpers = {
+        path: (ROOT / path).read_text()
+        for path in ("scripts/validate_release_identity_inputs.py", "scripts/api-smoke.py")
+    }
+    if release_helper_overrides:
+        release_helpers.update(release_helper_overrides)
+    validate_pipeline_policy(pipeline, build_template, deploy_template, validation_templates, release_helpers)
 
 
 class IdentityBaselineTests(unittest.TestCase):
@@ -150,6 +162,24 @@ class IdentityBaselineTests(unittest.TestCase):
         )
         with self.subTest(mutation="registry name is not a string parameter"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(unsafe_parameter_type, build_template, deploy_template)
+
+    def test_policy_pins_release_helper_sources(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+        helper_mutations = {
+            "identity validator bypass": {
+                "scripts/validate_release_identity_inputs.py": "def main():\n    return 0\n"
+            },
+            "smoke helper adds Azure mutation": {
+                "scripts/api-smoke.py": "import subprocess\nsubprocess.run(['az', 'group', 'delete', '--name', 'target'])\n"
+            },
+        }
+        for mutation, overrides in helper_mutations.items():
+            with self.subTest(mutation=mutation), self.assertRaises(PipelinePolicyError):
+                _validate_pipeline_policy(
+                    pipeline, build_template, deploy_template, release_helper_overrides=overrides
+                )
 
     def test_policy_mutations_reject_default_on_and_pull_request_delivery(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()

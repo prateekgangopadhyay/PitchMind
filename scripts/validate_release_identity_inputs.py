@@ -21,6 +21,12 @@ _ACR_NAME = re.compile(r"^[a-z0-9]{5,50}$")
 _IMAGE_REPOSITORY = re.compile(r"^[a-z0-9]+(?:[._/-][a-z0-9]+)*$")
 _RESOURCE_GROUP = re.compile(r"^[A-Za-z0-9._()-]{1,90}$")
 _CONTAINER_APP = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])$")
+_APPROVED_RELEASE_TARGET = {
+    "registry_name": "pmdev4iwntkatliy6sacr",
+    "image_repository": "pitchmind",
+    "resource_group": "rg-pitchmind-dev-001",
+    "app_name": "pm-dev-api",
+}
 
 
 def _validate_connection_name(value: str | None) -> str:
@@ -61,6 +67,14 @@ def validate_release_resource_inputs(
     _validate_resource_input(image_repository, label="Image repository", pattern=_IMAGE_REPOSITORY, max_length=255)
     _validate_resource_input(resource_group, label="Resource group", pattern=_RESOURCE_GROUP, max_length=90)
     _validate_resource_input(app_name, label="Container app name", pattern=_CONTAINER_APP, max_length=32)
+    actual = {
+        "registry_name": registry_name,
+        "image_repository": image_repository,
+        "resource_group": resource_group,
+        "app_name": app_name,
+    }
+    if actual != _APPROVED_RELEASE_TARGET:
+        raise IdentityInputError("Release resource names must match the approved DEV target")
 
 
 def main() -> int:

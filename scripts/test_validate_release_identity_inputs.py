@@ -56,6 +56,12 @@ class ReleaseIdentityInputTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(validator.IdentityInputError):
                 validator.validate_release_resource_inputs(*values)
 
+    def test_rejects_valid_syntax_for_an_unapproved_dev_target(self):
+        with self.assertRaisesRegex(validator.IdentityInputError, "approved DEV target"):
+            validator.validate_release_resource_inputs(
+                "pmdev4iwntkatliy6sacr", "pitchmind", "rg-another-project-dev", "pm-dev-api"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

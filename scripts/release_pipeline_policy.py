@@ -5,8 +5,8 @@ DevOps federation, RBAC, protected-environment configuration, or owner approval.
 """
 from __future__ import annotations
 
-import re
 import hashlib
+import re
 from typing import Any
 
 import yaml
@@ -43,7 +43,9 @@ _ALLOWED_AZ_BICEP = {"version", "build", "build-params"}
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
 _BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
-_DEPLOY_SCRIPT_SHA256 = "28577f73b5910af3c6e078bfd252d601f1bbd194ac105920389a394ec2a6693c"
+_DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
+_IDENTITY_VALIDATOR_SHA256 = "ee59274bcd79a8318d4cff64ffdd452381e4271159d307d2161ce42e14fe361a"
+_API_SMOKE_SHA256 = "0d5e09fc928d3036efe6e3dae989b306236be926693748ab1c9c13ef1d40d4cd"
 
 
 def validate_pipeline_policy(
@@ -51,6 +53,7 @@ def validate_pipeline_policy(
     build_template: str,
     deploy_template: str,
     validation_templates: dict[str, str],
+    release_helpers: dict[str, str],
 ) -> None:
     """Reject policy weakening by inspecting active YAML mappings and steps."""
     pipeline_doc = _load_yaml(pipeline, "pipeline")
@@ -157,6 +160,7 @@ def validate_pipeline_policy(
         kind="deploy",
         expected_connection="${{ parameters.devDeploymentServiceConnection }}",
     )
+    _assert_release_helpers(release_helpers)
     if build_call["parameters"].get("registryName") != "${{ parameters.registryName }}" or \
             build_call["parameters"].get("imageRepository") != "pitchmind":
         raise PipelinePolicyError("BuildRelease must pass only the reviewed registry and image repository")
@@ -253,8 +257,9 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
             parameters != expected_parameters:
         raise PipelinePolicyError(f"The {kind} release template parameters must remain on the reviewed allowlist")
 
-    if not isinstance(steps, list) or len(steps) != 2:
-        raise PipelinePolicyError(f"The {kind} release template may contain only its two reviewed steps")
+    expected_step_count = 2 if kind == "build" else 3
+    if not isinstance(steps, list) or len(steps) != expected_step_count:
+        raise PipelinePolicyError(f"The {kind} release template may contain only its reviewed steps")
     if kind == "build":
         task = steps[0]
         expected_env = {
@@ -273,6 +278,17 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
         if steps[0] != {"download": "current", "artifact": "release"}:
             raise PipelinePolicyError("The deployment template may only download the reviewed release artifact")
         task = steps[1]
+        smoke_step = steps[2]
+        if smoke_step != {
+            "task": "Bash@3",
+            "displayName": "Smoke deployed DEV endpoint outside the Azure CLI task",
+            "env": {"PITCHMIND_DEV_FQDN": "$(PITCHMIND_DEV_FQDN)"},
+            "inputs": {
+                "targetType": "inline",
+                "script": 'python3 scripts/api-smoke.py "https://$PITCHMIND_DEV_FQDN"',
+            },
+        }:
+            raise PipelinePolicyError("The DEV endpoint smoke must run only in its reviewed post-deploy Bash step")
         expected_env = {
             "PITCHMIND_DEV_RESOURCE_GROUP": "${{ parameters.resourceGroup }}",
             "PITCHMIND_DEV_APP_NAME": "${{ parameters.appName }}",
@@ -295,6 +311,19 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
     actual_script_hash = hashlib.sha256(inputs["inlineScript"].encode("utf-8")).hexdigest()
     if actual_script_hash != expected_script_hash:
         raise PipelinePolicyError(f"The {kind} inline AzureCLI script changed without a reviewed policy pin")
+
+
+def _assert_release_helpers(release_helpers: dict[str, str]) -> None:
+    expected_hashes = {
+        "scripts/validate_release_identity_inputs.py": _IDENTITY_VALIDATOR_SHA256,
+        "scripts/api-smoke.py": _API_SMOKE_SHA256,
+    }
+    if set(release_helpers) != set(expected_hashes):
+        raise PipelinePolicyError("The release helper source set must remain on the reviewed allowlist")
+    for helper_path, expected_hash in expected_hashes.items():
+        actual_hash = hashlib.sha256(release_helpers[helper_path].encode("utf-8")).hexdigest()
+        if actual_hash != expected_hash:
+            raise PipelinePolicyError(f"Release helper {helper_path} changed without a reviewed policy pin")
 
 
 def _require_manual_approval(
