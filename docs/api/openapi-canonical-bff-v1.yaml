@@ -4,10 +4,12 @@ info:
   version: 1.0.0
   description: >-
     PostgreSQL-backed, selected-time read contracts. These routes are separate from
-    the fixture-backed demo API. Authentication is not yet implemented; cloud exposure
-    is blocked pending EP06-S04 or an explicitly approved synthetic public-read boundary.
+    the fixture-backed demo API. Azure runtime profiles require an Entra authority,
+    audience, signature and lifetime validation. Roles are fan, analyst and admin.
 servers:
   - url: /
+security:
+  - entraBearer: []
 paths:
   /api/v1/canonical/fixtures:
     get:
@@ -26,6 +28,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalMatchPage' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/summary:
     get:
@@ -41,6 +46,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/events:
@@ -59,6 +67,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalEventPage' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/insights:
@@ -77,6 +88,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalInsightPage' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/insights/{insightId}:
@@ -97,11 +111,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalInsight' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/evidence/{insightId}:
     get:
       operationId: getCanonicalInsightEvidence
+      x-required-roles: [analyst, admin]
       parameters:
         - $ref: '#/components/parameters/MatchId'
         - name: insightId
@@ -117,11 +135,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalEvidence' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/replay:
     get:
       operationId: getCanonicalReplayPage
+      x-required-roles: [analyst, admin]
       parameters:
         - $ref: '#/components/parameters/MatchId'
         - $ref: '#/components/parameters/AtSeconds'
@@ -135,6 +157,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalReplay' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/key-moments:
@@ -150,7 +175,15 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ApiProblem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
 components:
+  securitySchemes:
+    entraBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     MatchId:
       name: matchId
