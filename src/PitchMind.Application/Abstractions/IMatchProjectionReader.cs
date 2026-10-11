@@ -5,6 +5,7 @@ namespace PitchMind.Application.Abstractions;
 
 public sealed record SelectedMatchProjection(
     MatchState State,
+    long? CanonicalRevision,
     int Revision,
     long AsOfSequence,
     int AsOfClockSeconds,
@@ -17,6 +18,10 @@ public interface IMatchProjectionReader
 {
     Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds, int? maximumRevision,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads a projection from one exact canonical admission revision and reducer version.</summary>
+    Task<SelectedMatchProjection?> GetAtCanonicalRevisionAsync(MatchId matchId, long canonicalRevision,
+        int selectedSeconds, string algorithmVersion, CancellationToken cancellationToken);
 
     IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection, int selectedSeconds,
         CancellationToken cancellationToken);

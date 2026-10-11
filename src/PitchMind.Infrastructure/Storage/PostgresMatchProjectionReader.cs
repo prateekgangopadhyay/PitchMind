@@ -19,32 +19,52 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
         int? maximumRevision, CancellationToken cancellationToken)
     {
+        if (maximumRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumRevision));
+        return await ReadAtAsync(matchId, selectedSeconds, maximumRevision, null, null, cancellationToken);
+    }
+
+    public async Task<SelectedMatchProjection?> GetAtCanonicalRevisionAsync(MatchId matchId, long canonicalRevision,
+        int selectedSeconds, string algorithmVersion, CancellationToken cancellationToken)
+    {
+        if (canonicalRevision <= 0) throw new ArgumentOutOfRangeException(nameof(canonicalRevision));
+        if (string.IsNullOrWhiteSpace(algorithmVersion)) throw new ArgumentException("Algorithm version is required.", nameof(algorithmVersion));
+        return await ReadAtAsync(matchId, selectedSeconds, null, canonicalRevision, algorithmVersion, cancellationToken);
+    }
+
+    private async Task<SelectedMatchProjection?> ReadAtAsync(MatchId matchId, int selectedSeconds,
+        int? maximumRevision, long? canonicalRevision, string? algorithmVersion, CancellationToken cancellationToken)
+    {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
         if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
-        if (maximumRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumRevision));
 
         await using var command = dataSource.CreateCommand("""
-            SELECT revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256,
+            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256,
                    state_sha256, state_json::text
             FROM pitchmind.match_projections
             WHERE match_id = $1 AND as_of_clock_seconds <= $2
               AND ($3::integer IS NULL OR revision <= $3)
+              AND ($4::bigint IS NULL OR canonical_revision = $4)
+              AND ($5::text IS NULL OR algorithm_version = $5)
             ORDER BY as_of_clock_seconds DESC, as_of_sequence DESC, revision DESC
             LIMIT 1
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(selectedSeconds);
         command.Parameters.AddWithValue((object?)maximumRevision ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)canonicalRevision ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)algorithmVersion ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
-        var revision = reader.GetInt32(0);
-        var asOfSequence = reader.GetInt64(1);
-        var asOfClock = reader.GetInt32(2);
-        var algorithmVersion = reader.GetString(3);
-        var sourceHash = reader.GetString(4).Trim();
-        var storedStateHash = reader.GetString(5).Trim();
-        var stateJson = reader.GetString(6);
+        // Legacy projections intentionally retain NULL: migration cannot invent admission provenance.
+        long? selectedCanonicalRevision = reader.IsDBNull(0) ? null : reader.GetInt64(0);
+        var revision = reader.GetInt32(1);
+        var asOfSequence = reader.GetInt64(2);
+        var asOfClock = reader.GetInt32(3);
+        var selectedAlgorithmVersion = reader.GetString(4);
+        var sourceHash = reader.GetString(5).Trim();
+        var storedStateHash = reader.GetString(6).Trim();
+        var stateJson = reader.GetString(7);
         var state = JsonSerializer.Deserialize<MatchState>(stateJson, JsonOptions)
             ?? throw new InvalidDataException("Persisted match projection is empty.");
         var canonicalStateJson = JsonSerializer.Serialize(state, JsonOptions);
@@ -54,7 +74,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         if (state.MatchId != matchId.ToString() || state.LastSequence != asOfSequence || state.ClockSeconds != asOfClock)
             throw new InvalidDataException("Persisted projection metadata does not match its state.");
 
-        return new SelectedMatchProjection(state, revision, asOfSequence, asOfClock, algorithmVersion, sourceHash, storedStateHash);
+        return new SelectedMatchProjection(state, selectedCanonicalRevision, revision, asOfSequence, asOfClock,
+            selectedAlgorithmVersion, sourceHash, storedStateHash);
     }
 
     public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection,
@@ -102,9 +123,10 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             SELECT as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_sha256,
                    state_json::text
             FROM pitchmind.match_projections
-            WHERE match_id = $1 AND revision = $2
+            WHERE match_id = $1 AND canonical_revision IS NOT DISTINCT FROM $2::bigint AND revision = $3
             """);
         command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue((object?)projection.CanonicalRevision ?? DBNull.Value);
         command.Parameters.AddWithValue(projection.Revision);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -127,7 +149,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
 
         var suppliedStateJson = JsonSerializer.Serialize(projection.State, JsonOptions);
         var suppliedHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(suppliedStateJson)));
-        if (projection.AsOfSequence != sequence || projection.AsOfClockSeconds != clock ||
+        if ((projection.CanonicalRevision.HasValue && projection.CanonicalRevision.Value <= 0) ||
+            projection.AsOfSequence != sequence || projection.AsOfClockSeconds != clock ||
             projection.AlgorithmVersion != algorithmVersion || projection.SourceSha256.Trim() != sourceHash ||
             projection.StateSha256.Trim() != stateHash || suppliedHash != stateHash)
             throw new InvalidDataException("Supplied projection does not match its persisted revision.");

@@ -644,6 +644,7 @@ public sealed class PostgresLedgerTests
         var beforeGoal = await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None);
         Assert.NotNull(beforeGoal);
         Assert.Equal(2, beforeGoal.Revision);
+        Assert.Equal(2, beforeGoal.CanonicalRevision);
         Assert.Equal(0, beforeGoal.State.HomeScore);
         Assert.Equal(3308, beforeGoal.AsOfClockSeconds);
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
@@ -659,12 +660,29 @@ public sealed class PostgresLedgerTests
         Assert.NotNull(pinned);
         Assert.Equal(2, pinned.Revision);
         Assert.Equal(0, pinned.State.HomeScore);
+        var canonicalPinned = await reader.GetAtCanonicalRevisionAsync(matchId, 2, 3309, "aggregate-v1", CancellationToken.None);
+        Assert.NotNull(canonicalPinned);
+        Assert.Equal(pinned.CanonicalRevision, canonicalPinned.CanonicalRevision);
+        Assert.Equal(pinned.Revision, canonicalPinned.Revision);
+        Assert.Equal(0, canonicalPinned.State.HomeScore);
         await Assert.ThrowsAsync<InvalidDataException>(() => ReadSelected(reader,
             beforeGoal with { AsOfSequence = beforeGoal.AsOfSequence + 1 }, 3309));
         Assert.Equal(beforeGoal.StateSha256,
             (await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None))!.StateSha256);
         var drainer = new PostgresOutboxDispatcher(source, new CountingPublisher());
         for (var i = 0; i < 3; i++) Assert.Equal(OutboxDispatchResult.Published, await drainer.DispatchOneAsync(CancellationToken.None));
+
+        // Version 3 intentionally leaves legacy admission provenance NULL; point-in-time reads remain supported.
+        await using (var legacyProjection = source.CreateCommand(
+            "UPDATE pitchmind.match_projections SET canonical_revision = NULL WHERE match_id = $1 AND revision = 2"))
+        {
+            legacyProjection.Parameters.AddWithValue(matchId.Value);
+            Assert.Equal(1, await legacyProjection.ExecuteNonQueryAsync());
+        }
+        var legacy = await reader.GetAtAsync(matchId, 3308, 2, CancellationToken.None);
+        Assert.NotNull(legacy);
+        Assert.Null(legacy.CanonicalRevision);
+        Assert.Equal(new long[] { 0, 1 }, (await ReadSelected(reader, legacy, 3308)).Select(e => e.Sequence));
     }
 
     [PostgresIntegrationFact]

@@ -18,6 +18,8 @@ flowchart LR
 
 The current PostgreSQL adapters persist events and projection provenance, and the EP04-S03 local slice atomically writes aggregate-derived event/projection/outbox records. A PostgreSQL dispatcher and same-database consumer inbox are implemented as unregistered primitives; there is no API/EventWorker integration or cloud broker adapter, so this does not provide a live ingestion path. The earlier Central India ACA prototype serves the offline fixture-backed API only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
 
+The EP09-S01 local slice adds an exact canonical-revision read contract and a fail-open cache-aside wrapper for immutable snapshots. Its cache port has no concrete Redis adapter or DI/configuration yet because the current Redis package could not be restored in the restricted local environment. This is not evidence of a Redis-backed current path; event-window reads remain PostgreSQL reads.
+
 ## TARGET — canonical Azure platform
 
 ```mermaid
