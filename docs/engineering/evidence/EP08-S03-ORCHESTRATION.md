@@ -4,6 +4,17 @@
 **Stack:** EP08-S04 claim-trust branch → EP08-S02 Foundry adapter branch
 **Scope verdict:** CHANGES REQUIRED — local deterministic workflow evidence only; story acceptance remains open.
 
+## Current-base restack verification (2026-10-12)
+
+The four EP08-S03 commits were replayed onto exact EP08-S04 PR #51 head `612f844e025b371158d9700f393ab22223031048`; restack verification is recorded at local commit `142a976ecb0d24b2ac3b77f996c6c80f9349819e` on `codex/ep08-s03-restacked`. The latest base added required source-version/provenance fields to the context packet, so the AgentWorker test fixture was corrected before this run.
+
+- `dotnet test tests/PitchMind.AgentWorker.Tests/PitchMind.AgentWorker.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false`: **27 passed, 0 failed, 0 skipped**.
+- `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false`: **66 passed, 0 failed, 0 skipped**.
+- `tests/PitchMind.Infrastructure.Tests` on an isolated UUID-named database in the existing local PostgreSQL service: **18 passed, 0 failed, 0 skipped**. The disposable database was dropped afterward. The repository harness could not be used directly because this checkout had no `docker/.env`; no existing application database was used.
+- Council operating-model validation passed (12 epics, 59 stories, 28 Council skills, acyclic routing); design-skill registry self-test and `git diff --check` passed.
+
+A solution-wide build was **not established**: the no-restore build found missing NuGet assets in unrelated API/Contracts/EventWorker projects, and the subsequent restore was canceled after stalling without progress. The three affected story test projects compiled and passed. GitHub CI, live Foundry evaluation, authenticated runtime composition, human review and PO acceptance remain unverified. No Azure resources or deployments were touched.
+
 ## Requirement trace
 
 | Acceptance requirement | Implemented evidence | Current result / limitation |
