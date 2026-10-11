@@ -101,6 +101,16 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [reducedMotion]);
 
   useEffect(() => {
+    if (!view || typeof window === 'undefined') return;
+    const targetId = window.location.hash.slice(1);
+    if (!/^canonical-(event|frame)-\d+$/.test(targetId)) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.focus();
+    target.scrollIntoView?.({ block: 'center' });
+  }, [view]);
+
+  useEffect(() => {
     if (!playing) return;
     if (selectedSeconds >= 5400) { setPlaying(false); return; }
     if (canonicalSelectedSeconds !== selectedSeconds || canonicalRevision === undefined) return;
@@ -110,9 +120,16 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [playing, matchId, selectedSeconds, canonicalRevision, canonicalSelectedSeconds]);
 
   const snapshot = view?.snapshot;
-  const selectedFrame = view?.trackingFrames?.items.at(-1) ?? null;
+  const requestedFrameSequence = typeof window === 'undefined'
+    ? null
+    : /^#canonical-frame-(\d+)$/.exec(window.location.hash)?.[1] ?? null;
+  const selectedFrame = requestedFrameSequence === null
+    ? view?.trackingFrames?.items.at(-1) ?? null
+    : view?.trackingFrames?.items.find(frame => frame.sequence === Number(requestedFrameSequence)) ?? null;
   const pitch = selectedFrame ? pitchCoordinates(selectedFrame) : null;
-  const trackingMessage = view?.trackingStatus || (view?.trackingFrames?.items.length
+  const trackingMessage = view?.trackingStatus || (requestedFrameSequence !== null && !selectedFrame
+    ? 'The linked observed frame is not present at this selected time. No other frame is substituted.'
+    : view?.trackingFrames?.items.length
     ? pitch ? `Observed frame ${selectedFrame?.frameId} at ${clock(selectedSeconds)} · period ${selectedFrame?.period}. No positions are interpolated.`
       : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
     : `No observed tracking frame is recorded at ${clock(selectedSeconds)}. Positions are not estimated.`);
@@ -165,9 +182,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     <title>{`${player.teamId} · ${player.playerId}`}</title>
                   </g>)}
                 </svg>
-                <p id="pitch-description" className="pitch-caption" role="status" aria-live="polite" aria-atomic="true">
-                  Observed frame {selectedFrame.frameId} at {clock(selectedSeconds)} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m. Numbered player positions are listed below.
-                </p>
+                <div id={`canonical-frame-${selectedFrame.sequence}`} tabIndex={-1}>
+                  <p id="pitch-description" className="pitch-caption" role="status" aria-live="polite" aria-atomic="true">
+                    Observed frame {selectedFrame.frameId} at {clock(selectedSeconds)} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m. Numbered player positions are listed below.
+                  </p>
+                </div>
                 <div className="position-table-details">
                   <table>
                     <caption>Pitch view coordinates at {clock(selectedSeconds)} · {pitch.attackTeamId} attacks right · sequence {selectedFrame.sequence}</caption>
@@ -184,7 +203,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               <h2 id="timeline-title">Recorded events</h2>
               <p>Choose an event to inspect its exact recorded time.</p>
               {view.events.items.length === 0 ? <p className="empty">No recorded events are visible at this time.</p>
-                : <ol className="canonical-events">{view.events.items.map(event => <li key={`${event.sequence}:${event.eventId}`}>
+                : <ol className="canonical-events">{view.events.items.map(event => <li id={`canonical-event-${event.sequence}`} tabIndex={-1} key={`${event.sequence}:${event.eventId}`}>
                   <button type="button" className="canonical-event" aria-label={`Select ${eventLabel(event.type)} at ${clock(event.clockSeconds)}, sequence ${event.sequence}`}
                     onClick={() => { setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.canonicalRevision); }}>
                     <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>

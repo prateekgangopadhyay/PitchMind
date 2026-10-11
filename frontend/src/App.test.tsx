@@ -267,6 +267,53 @@ it('exposes observed positions as a screen-reader table and keeps event and time
   }
 });
 
+it('opens a frame evidence deep link on the exact observed frame and focuses its nonvisual account', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, asOfSeconds: 3308, throughSequence: 20,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const frame = (sequence: number, frameId: string) => ({
+    frameId, sequence, canonicalRevision: 4, period: 2, clockSeconds: 3308, coordinateVersion: 'pitch-v1',
+    sourceSha256: 'a'.repeat(64), quality: { coverage: 'observed' },
+    frame: {
+      schemaVersion: 1, matchId, frameId, sequence,
+      matchTime: { period: 2, elapsedSeconds: 3308, sourceClockValue: 3308, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed' },
+      coordinateSystem: { lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{ teamId: 'team-a', direction: 'right' }] },
+      ball: { x: 52.5, y: 34 }, players: [{ playerId: `player-${sequence}`, teamId: 'team-a', position: { x: sequence, y: 20 } }],
+      source: { providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: frameId, sourceSequence: sequence,
+        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test' }
+    }
+  });
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-frame-18`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503, json: async () => ({ status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test' }) };
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false }
+        : parsed.pathname.endsWith('/frames') ? { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [frame(18, 'source-frame'), frame(19, 'later-same-time-frame')], hasMore: false }
+          : { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false };
+    return { ok: true, json: async () => body };
+  }));
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Observed frame source-frame at 55:08');
+    expect(container.textContent).not.toContain('Observed frame later-same-time-frame');
+    expect(document.activeElement?.id).toBe('canonical-frame-18');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('keeps selected-time scrubbing available and disables auto replay when reduced motion is preferred', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);

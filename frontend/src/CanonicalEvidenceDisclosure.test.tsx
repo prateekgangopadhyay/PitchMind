@@ -85,9 +85,48 @@ describe('Canonical evidence disclosure', () => {
       expect(container.textContent).toContain('synthetic-approved');
       expect(container.textContent).toContain('press-detector-v2');
       expect(container.querySelector('summary')?.textContent).toContain('Why? Inspect evidence for 55:08');
+      const sourceLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19"]');
+      expect(sourceLink?.tagName).toBe('A');
+      expect(sourceLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-event-19`);
       const summary = container.querySelector('summary')!;
       summary.focus();
       expect(document.activeElement).toBe(summary);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it('links each supported event and frame source to its selected-time replay target', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const sourcedInsight: CanonicalInsight = {
+      ...insight,
+      evidence: [
+        { kind: 'event', id: 'event-source-1', relation: 'supports' },
+        { kind: 'frame', id: 'frame-source-2', relation: 'supports' }
+      ]
+    };
+    const sourcedEvidence: CanonicalEvidence = {
+      insight: sourcedInsight,
+      items: [
+        { kind: 'event', id: 'event-source-1', relation: 'supports', sequence: 19,
+          clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } },
+        { kind: 'frame', id: 'frame-source-2', relation: 'supports', sequence: 18,
+          clockSeconds: 3308, period: 2, payload: { frameId: 'frame-source-2' } }
+      ]
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => response(sourcedEvidence)));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const { root } = renderEvidence(container, 3308, sourcedInsight);
+    try {
+      await openDisclosure(container);
+      await settle();
+      const eventLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19"]');
+      const frameLink = container.querySelector('a[aria-label="Open frame frame-source-2 at 55:08, sequence 18"]');
+      expect(eventLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-event-19`);
+      expect(frameLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-frame-18`);
+      expect(eventLink?.tagName).toBe('A');
+      expect(frameLink?.tagName).toBe('A');
     } finally {
       await act(async () => root.unmount());
     }

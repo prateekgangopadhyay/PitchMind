@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, request } from './api';
 import type { CanonicalEvidence, CanonicalEvidencePayload, CanonicalInsight } from './api';
+import { contextHref } from './routes';
 
 type EvidenceState =
   | { key: string; status: 'loading' }
@@ -68,15 +69,20 @@ function EvidenceDetails({ evidence }: { evidence: CanonicalEvidence }) {
       : <>
         <p>{insight.summary}</p>
         <ul className="evidence-list" aria-label="Source evidence">
-          {evidence.items.map(item => <EvidenceRow key={`${item.kind}:${item.id}:${item.sequence}`} item={item} />)}
+          {evidence.items.map(item => <EvidenceRow key={`${item.kind}:${item.id}:${item.sequence}`} item={item} insight={insight} />)}
         </ul>
       </>}
   </div>;
 }
 
-function EvidenceRow({ item }: { item: CanonicalEvidencePayload }) {
+function EvidenceRow({ item, insight }: { item: CanonicalEvidencePayload; insight: CanonicalInsight }) {
+  const target = item.kind === 'event' ? `canonical-event-${item.sequence}` : `canonical-frame-${item.sequence}`;
+  const replayHref = contextHref(`/replay/${encodeURIComponent(insight.matchId)}`, insight.matchId,
+    item.clockSeconds, insight.canonicalRevision);
   return <li>
-    <strong>{item.kind} {item.id}</strong> · {item.relation}
+    <a href={`${replayHref}#${target}`} aria-label={`Open ${item.kind} ${item.id} at ${clock(item.clockSeconds)}, sequence ${item.sequence}`}>
+      {item.kind} {item.id}
+    </a> · {item.relation}
     <span> · <time dateTime={`PT${item.clockSeconds}S`}>{clock(item.clockSeconds)}</time> · period {item.period} · sequence {item.sequence}</span>
   </li>;
 }
