@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
 SCRIPT = Path(__file__).with_name("audit_manu_liv_candidate_quality.py")
@@ -70,6 +71,57 @@ def report_for(events, domain_source="public enum MatchEventType { Pass, Goal, P
 
 
 class CandidateQualityAuditTests(unittest.TestCase):
+    def test_report_output_cannot_alias_and_overwrite_source_or_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+            domain_source = root / "MatchEvent.cs"
+            source_bytes = json.dumps([event(1)], separators=(",", ":")).encode()
+            source.write_bytes(source_bytes)
+            manifest_bytes = json.dumps({
+                "source": {
+                    "path": source.name,
+                    "sha256": audit.sha256(source_bytes).hexdigest(),
+                    "byteSize": len(source_bytes),
+                    "expectedEventCount": 1,
+                },
+                "coordinates": {"status": "unverified"},
+                "playerMetrics": {"status": "unvalidated"},
+                "canonicalization": {"mappingStatus": "not_approved"},
+            }).encode()
+            manifest.write_bytes(manifest_bytes)
+            domain_source.write_text("public enum MatchEventType { Pass }", encoding="utf-8")
+
+            for protected_path, protected_bytes in ((source, source_bytes), (manifest, manifest_bytes)):
+                with self.subTest(protected=protected_path.name, alias="direct"):
+                    self.assertEqual(self._run_audit(source, manifest, domain_source, protected_path), 2)
+                    self.assertEqual(protected_path.read_bytes(), protected_bytes)
+
+                for alias_kind in ("symlink", "hardlink"):
+                    alias = root / f"{protected_path.name}-{alias_kind}-alias"
+                    try:
+                        if alias_kind == "symlink":
+                            alias.symlink_to(protected_path)
+                        else:
+                            alias.hardlink_to(protected_path)
+                    except (OSError, NotImplementedError) as exc:
+                        self.skipTest(f"{alias_kind} aliases are unavailable: {exc}")
+                    with self.subTest(protected=protected_path.name, alias=alias_kind):
+                        self.assertEqual(self._run_audit(source, manifest, domain_source, alias), 2)
+                        self.assertEqual(protected_path.read_bytes(), protected_bytes)
+
+    @staticmethod
+    def _run_audit(source: Path, manifest: Path, domain_source: Path, output: Path) -> int:
+        import contextlib
+        import io
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            return audit.main([
+                "--source", str(source), "--manifest", str(manifest),
+                "--domain-source", str(domain_source), "--output", str(output),
+            ])
+
     def test_coordinate_range_is_reported_without_assigning_units(self):
         row = event(1, positions=[position(x=0, y=100)])
         row["pitchX"] = 100.0

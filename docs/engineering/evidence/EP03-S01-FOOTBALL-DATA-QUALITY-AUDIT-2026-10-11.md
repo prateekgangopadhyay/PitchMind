@@ -10,13 +10,17 @@ The audit script reads every source event, checks the manifest-pinned bytes, rep
 
 | Check | Command | Result |
 |---|---|---|
-| Audit script tests | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_audit_manu_liv_candidate_quality -v` | **7 passed, 0 failed**. Covers pinned hash rejection, raw coordinate ranges without unit assignment, metric variation without semantic claims, exact-name-only mapping comparison, score-chain handling including an unparseable goal score, and red-card source-frame presence. |
-| All-event quality audit | `python3 scripts/audit_manu_liv_candidate_quality.py --output /private/tmp/ep03-s01-football-quality-audit.json` | Exit 0; measured all 2,199 records and 48,048 attached positions. Output copied to the machine-readable report linked above. |
-| Candidate structural validator | `python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-integrity-after-quality-audit.json` | Exit 0; source remains `structurally_valid_candidate_blocked_for_canonicalization`. |
+| Audit script tests | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_audit_manu_liv_candidate_quality -v` | **8 passed, 0 failed**. Covers pinned hash rejection, raw coordinate ranges without unit assignment, metric variation without semantic claims, exact-name-only mapping comparison, score-chain handling including an unparseable goal score, red-card source-frame presence, and output alias rejection. |
+| All-event quality audit | `PYTHONDONTWRITEBYTECODE=1 python3 scripts/audit_manu_liv_candidate_quality.py --output /private/tmp/ep03-s01-quality-audit-after-output-protection.json` | Exit 0; measured all 2,199 records and 48,048 attached positions. Output copied to the machine-readable report linked above. |
+| Candidate structural validator | `PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/ep03-s01-candidate-integrity-after-output-protection.json` | Exit 0; source remains `structurally_valid_candidate_blocked_for_canonicalization`. |
 | Existing candidate validator regression | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | **25 passed, 0 failed**. |
 | Source-agnostic profiler regression | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_profile_simulation_feed -v` | **5 passed, 0 failed**. |
 | Council routing/operating model | `node scripts/validate_operating_model.mjs` | Passed: 12 epics, 59 stories, 28 Council skills, 3 design skills, zero cycles, two approval gates. |
 | Patch hygiene | `git diff --check` | Passed. |
+
+### Report output overwrite protection
+
+Before reading audit inputs or writing a report, the CLI rejects output paths that resolve to the pinned candidate source or manifest. It checks resolved paths (including symlink targets) and existing-file identity (including hard links); if identity cannot be safely checked, it fails closed. Regression tests exercise direct, symlink, and hard-link aliases for both protected files and verify their original bytes remain unchanged. An independent review reproduced the source-overwrite case with `--output data/simulations/manu-liv-match-dataset.json`; this guard prevents it. A report may be written to a separate path, whose parent directory is created as needed.
 
 ## Measured source observations
 

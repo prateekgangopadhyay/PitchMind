@@ -31,6 +31,16 @@ class AuditError(ValueError):
     """The pinned source or audit inputs are invalid."""
 
 
+def _aliases_existing_file(left: Path, right: Path) -> bool:
+    """Detect resolved-path and hard-link aliases to a protected input."""
+    try:
+        if left.resolve() == right.resolve():
+            return True
+        return left.exists() and right.exists() and left.samefile(right)
+    except OSError as exc:
+        raise AuditError("Cannot safely verify report output path") from exc
+
+
 def _is_number(value: Any) -> bool:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return False
@@ -322,18 +332,24 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("data/simulations/manu-liv-match-dataset.json"))
     parser.add_argument("--manifest", type=Path, default=Path("data/simulations/manu-liv-candidate-manifest.json"))
     parser.add_argument("--domain-source", type=Path, default=Path(CANONICAL_ENUM))
     parser.add_argument("--output", type=Path, help="Write JSON report here; stdout when omitted")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
+        if args.output and (
+            _aliases_existing_file(args.output, args.source)
+            or _aliases_existing_file(args.output, args.manifest)
+        ):
+            raise AuditError("Report output must not overwrite the source or manifest")
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         result = audit_data(args.source.read_bytes(), manifest, args.domain_source.read_text(encoding="utf-8"))
         rendered = json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
         if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(rendered, encoding="utf-8")
         else:
             sys.stdout.write(rendered)
