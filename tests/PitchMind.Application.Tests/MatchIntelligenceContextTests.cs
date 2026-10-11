@@ -24,14 +24,14 @@ public sealed class MatchIntelligenceContextTests
         Assert.Equal(1, packet.Score.Away);
         Assert.Equal("synthetic-source-v1", packet.SourceVersion);
         Assert.Equal("owner-confirmed-synthetic", packet.Provenance);
-        Assert.Contains("untrusted", packet.SourceMetadataTrustBoundary, StringComparison.Ordinal);
+        Assert.Equal(MatchIntelligenceTrustBoundaries.CanonicalEvidence, packet.SourceMetadataTrustBoundary);
         Assert.Equal(JsonSerializer.SerializeToUtf8Bytes(packet).Length, packet.SerializedSizeBytes);
         Assert.Equal(MatchIntelligenceClaimCategory.EvidenceSupportedPattern, packet.Claim.Category);
         Assert.Contains("do not claim causation", packet.Claim.UseConstraint, StringComparison.Ordinal);
-        Assert.Contains("untrusted", packet.Claim.TextTrustBoundary, StringComparison.Ordinal);
+        Assert.Equal(MatchIntelligenceTrustBoundaries.CanonicalEvidence, packet.Claim.TextTrustBoundary);
         var evidence = Assert.Single(packet.Evidence);
         Assert.Equal("event-1", evidence.Id);
-        Assert.Contains("untrusted", evidence.TrustBoundary);
+        Assert.Equal(MatchIntelligenceTrustBoundaries.CanonicalEvidence, evidence.TrustBoundary);
         Assert.InRange(packet.SerializedSizeBytes, 1, 32_768);
         Assert.Contains(packet.Unknowns, unknown => unknown.Contains("coach intent", StringComparison.Ordinal));
     }
