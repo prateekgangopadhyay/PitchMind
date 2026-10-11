@@ -134,6 +134,18 @@ internal static class ApiSecurity
             endpoint.DisplayName ?? "unknown", context.Response.StatusCode, actor, context.TraceIdentifier);
     }
 
+    public static string GetRateLimitPartitionKey(HttpContext context)
+    {
+        var subject = context.User.FindFirstValue("sub");
+        if (context.User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(subject))
+        {
+            var subjectHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subject))).ToLowerInvariant();
+            return $"subject:{subjectHash}";
+        }
+
+        return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+    }
+
     public static string[] GetConfiguredCorsOrigins(IConfiguration configuration, IHostEnvironment environment)
     {
         var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
