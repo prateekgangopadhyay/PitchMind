@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><ProjectReference Include="../PitchMind.Application/PitchMind.Application.csproj" /></ItemGroup>
   <ItemGroup><PackageReference Include="Npgsql" Version="10.0.3" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="PitchMind.Infrastructure.Tests" /></ItemGroup>
 </Project>
