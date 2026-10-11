@@ -45,6 +45,26 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(first.SourceSha256, differentSeed.SourceSha256);
     }
 
+    [Fact] public void FixtureHashCoversExactEmbeddedBytesIncludingUtf8Bom()
+    {
+        var sourceBytes = ReadDefinitionBytes();
+        var withBom = Encoding.UTF8.Preamble.ToArray().Concat(sourceBytes).ToArray();
+
+        var fixture = SyntheticFixtureGenerator.GenerateFromDefinitionBytes(withBom);
+        var expectedHash = Convert.ToHexString(SHA256.HashData(withBom)).ToLowerInvariant();
+
+        Assert.Equal(SyntheticFixtureGenerator.Generate().Events, fixture.Events);
+        Assert.Equal(expectedHash, fixture.SourceSha256);
+        Assert.NotEqual(Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant(), fixture.SourceSha256);
+    }
+
+    [Fact] public void FixtureRejectsMalformedUtf8DefinitionBytes()
+    {
+        var sourceBytes = ReadDefinitionBytes().Concat(new byte[] { 0xC3, 0x28 }).ToArray();
+
+        Assert.Throws<DecoderFallbackException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionBytes(sourceBytes));
+    }
+
     [Fact] public void ScenarioIncludesPeriodsCardsSubstitutionAndLegalScoreTransitions()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
@@ -149,6 +169,15 @@ public sealed class SyntheticFixtureTests
             .GetManifestResourceStream("PitchMind.Domain.Simulation.synthetic-fixture-v2.json")!;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static byte[] ReadDefinitionBytes()
+    {
+        using var stream = typeof(SyntheticFixtureGenerator).Assembly
+            .GetManifestResourceStream("PitchMind.Domain.Simulation.synthetic-fixture-v2.json")!;
+        using var content = new MemoryStream();
+        stream.CopyTo(content);
+        return content.ToArray();
     }
 
     private static string Fingerprint(SyntheticFixture fixture)

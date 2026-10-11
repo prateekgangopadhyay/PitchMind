@@ -133,10 +133,10 @@ public static class TacticalEvidenceGraphValidator
             string.IsNullOrWhiteSpace(graph.Uncertainty) || graph.Conditions is null)
             throw new ArgumentException("Evidence graph metadata is invalid.", nameof(graph));
 
-        var nodes = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
-        if (nodes.Count == 0 || !nodes.TryGetValue(graph.ClaimNodeId, out var claim) ||
-            claim.Kind != "claim" || !IsClaimTruthClass(claim.TruthClass))
+        var claims = graph.Nodes.Where(node => node.Kind == "claim").ToArray();
+        if (claims.Length != 1 || claims[0].Id != graph.ClaimNodeId || !IsClaimTruthClass(claims[0].TruthClass))
             throw new InvalidDataException("The graph must have one identified claim with a supported truth class.");
+        var nodes = graph.Nodes.ToDictionary(node => node.Id, StringComparer.Ordinal);
         if (graph.Nodes.Any(node => string.IsNullOrWhiteSpace(node.Id) || node.SourceVersion != graph.SourceVersion ||
             node.SourceSha256 != graph.SourceSha256 ||
             node.CanonicalRevision != graph.CanonicalRevision || node.ClockSeconds is int clock &&
@@ -178,21 +178,29 @@ public static class TacticalEvidenceGraphValidator
 
         if (graph.Publishable)
         {
-            if (claim.TruthClass == "hypothesis")
-                throw new InvalidDataException("A hypothesis cannot be published as a supported tactical claim.");
             if (graph.Conditions.Count == 0 || graph.Conditions.Any(condition => !condition.Passed))
                 throw new InvalidDataException("A publishable claim requires recorded conditions that all pass.");
-            var claimHasSourceEvidence = graph.Edges.Any(edge => edge.FromNodeId == graph.ClaimNodeId &&
-                edge.Relation == "derived_from" && (nodes[edge.ToNodeId].Kind is "event" or "frame")) ||
-                graph.Edges.Any(claimEdge => claimEdge.FromNodeId == graph.ClaimNodeId &&
-                    claimEdge.Relation == "derived_from" && nodes[claimEdge.ToNodeId].Kind == "metric" &&
-                    graph.Edges.Any(metricEdge => metricEdge.FromNodeId == claimEdge.ToNodeId &&
-                        metricEdge.Relation == "derived_from" && (nodes[metricEdge.ToNodeId].Kind is "event" or "frame")));
             if (graph.Provenance != "canonical" || graph.CanonicalRevision is null ||
-                graph.PolicyStatus != "approved" || !claimHasSourceEvidence)
+                graph.PolicyStatus != "approved")
                 throw new InvalidDataException("A publishable claim requires approved policy and revisioned canonical source evidence.");
+
+            foreach (var claim in claims)
+            {
+                if (claim.TruthClass == "hypothesis")
+                    throw new InvalidDataException("A hypothesis cannot be published as a supported tactical claim.");
+                if (!HasSourceEvidence(claim.Id, graph.Edges, nodes))
+                    throw new InvalidDataException("A publishable claim requires approved policy and revisioned canonical source evidence.");
+            }
         }
     }
+
+    private static bool HasSourceEvidence(string claimNodeId, IReadOnlyList<TacticalEvidenceEdge> edges,
+        IReadOnlyDictionary<string, TacticalEvidenceNode> nodes) =>
+        edges.Any(edge => edge.FromNodeId == claimNodeId && edge.Relation == "derived_from" &&
+            (nodes[edge.ToNodeId].Kind is "event" or "frame")) ||
+        edges.Any(claimEdge => claimEdge.FromNodeId == claimNodeId && claimEdge.Relation == "derived_from" &&
+            nodes[claimEdge.ToNodeId].Kind == "metric" && edges.Any(metricEdge => metricEdge.FromNodeId == claimEdge.ToNodeId &&
+                metricEdge.Relation == "derived_from" && (nodes[metricEdge.ToNodeId].Kind is "event" or "frame")));
 
     private static bool IsSha256(string value) => value is { Length: 64 } &&
         value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');

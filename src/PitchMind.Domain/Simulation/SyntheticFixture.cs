@@ -67,17 +67,23 @@ public static class SyntheticFixtureGenerator
 
     public static SyntheticFixture Generate(int seed = 42)
     {
-        var json = LoadDefinitionJson();
-        var definition = JsonSerializer.Deserialize<FixtureDefinition>(json, JsonOptions)
-            ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
-        return GenerateFromDefinition(definition, seed, ComputeSourceSha256(json));
+        var bytes = LoadDefinitionBytes();
+        return GenerateFromDefinitionBytes(bytes, seed);
     }
 
     internal static SyntheticFixture GenerateFromDefinitionJson(string json, int seed = 42)
     {
+        ArgumentNullException.ThrowIfNull(json);
+        return GenerateFromDefinitionBytes(Encoding.UTF8.GetBytes(json), seed);
+    }
+
+    internal static SyntheticFixture GenerateFromDefinitionBytes(byte[] sourceBytes, int seed = 42)
+    {
+        ArgumentNullException.ThrowIfNull(sourceBytes);
+        var json = DecodeDefinitionJson(sourceBytes);
         var definition = JsonSerializer.Deserialize<FixtureDefinition>(json, JsonOptions)
             ?? throw new InvalidOperationException("Synthetic fixture definition is empty.");
-        return GenerateFromDefinition(definition, seed, ComputeSourceSha256(json));
+        return GenerateFromDefinition(definition, seed, ComputeSourceSha256(sourceBytes));
     }
 
     private static SyntheticFixture GenerateFromDefinition(FixtureDefinition definition, int seed, string sourceSha256)
@@ -128,16 +134,25 @@ public static class SyntheticFixtureGenerator
             home, away, Array.AsReadOnly(ordered), Array.AsReadOnly(frames)) { SourceSha256 = sourceSha256 };
     }
 
-    private static string LoadDefinitionJson()
+    private static byte[] LoadDefinitionBytes()
     {
         using var stream = typeof(SyntheticFixtureGenerator).Assembly.GetManifestResourceStream(DefinitionResource)
             ?? throw new InvalidOperationException($"Embedded fixture definition '{DefinitionResource}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
+        using var content = new MemoryStream();
+        stream.CopyTo(content);
+        return content.ToArray();
     }
 
-    private static string ComputeSourceSha256(string json) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
+    private static string DecodeDefinitionJson(byte[] sourceBytes)
+    {
+        ReadOnlySpan<byte> jsonBytes = sourceBytes;
+        if (jsonBytes.StartsWith(Encoding.UTF8.Preamble))
+            jsonBytes = jsonBytes[Encoding.UTF8.Preamble.Length..];
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(jsonBytes);
+    }
+
+    private static string ComputeSourceSha256(ReadOnlySpan<byte> sourceBytes) =>
+        Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant();
 
     private static void ValidateDefinition(FixtureDefinition definition)
     {

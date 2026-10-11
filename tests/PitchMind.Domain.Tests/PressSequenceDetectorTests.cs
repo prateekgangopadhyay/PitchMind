@@ -84,6 +84,29 @@ public sealed class PressSequenceDetectorTests
         var mismatchedNode = unsupported with { TruthClass = "pattern", SourceSha256 = new string('b', 64) };
         var mismatchedGraph = unsupportedGraph with { Nodes = new[] { mismatchedNode } };
         Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(mismatchedGraph));
+
+        var supportedClaim = unsupported with { TruthClass = "pattern" };
+        var secondaryUnsupportedClaim = unsupported with { Id = "claim:secondary" };
+        var multipleClaimsGraph = unsupportedGraph with
+        {
+            ClaimNodeId = supportedClaim.Id,
+            Nodes = new[] { supportedClaim, secondaryUnsupportedClaim }
+        };
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(multipleClaimsGraph));
+    }
+
+    [Fact]
+    public void GraphMustContainExactlyOneClaimNode()
+    {
+        var claim = new TacticalEvidenceNode("claim:one", "claim", "pattern", "claim", null, null,
+            10, 1, "synthetic-v2", SourceHash, null, null, null);
+        var extraClaim = claim with { Id = "claim:two" };
+        var graph = new TacticalEvidenceGraph("match", "synthetic-v2", SourceHash, "synthetic", null,
+            10, 1, "press-sequence-v2", "unapproved-demo", false, claim.Id,
+            new[] { claim, extraClaim }, Array.Empty<TacticalEvidenceEdge>(), "Uncalibrated.",
+            new[] { new TacticalEvidenceCondition("test", true, "observed", null, Array.Empty<string>(), null) });
+
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(graph));
     }
 
     [Fact]
