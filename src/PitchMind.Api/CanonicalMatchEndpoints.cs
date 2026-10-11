@@ -105,7 +105,7 @@ internal static class CanonicalMatchEndpoints
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
+                projection.AsOfSequence, 100, cancellationToken);
             return insight is null
                 ? Problem(context, StatusCodes.Status404NotFound, "INSIGHT_UNAVAILABLE", "No persisted insight is available at the selected time.")
                 : Results.Ok(ToInsight(insight, selectedTime));
@@ -124,11 +124,11 @@ internal static class CanonicalMatchEndpoints
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
+                projection.AsOfSequence, 100, cancellationToken);
             if (insight is null)
                 return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No persisted evidence is available at the selected time.");
             var evidence = await insights.ReadEvidenceAtAsync(new MatchId(canonicalMatchId), insightId, projection.Revision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
+                projection.AsOfSequence, 100, 65_536, cancellationToken);
             if (evidence is null)
                 return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No complete persisted evidence is available at the selected time.");
             var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,

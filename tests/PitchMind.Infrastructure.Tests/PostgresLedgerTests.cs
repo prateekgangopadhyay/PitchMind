@@ -656,13 +656,13 @@ public sealed class PostgresLedgerTests
         Assert.Equal("synthetic-test", visible.Provenance);
         Assert.Equal(update.SourceSha256, visible.SourceSha256);
         Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.Revision, 0,
-            projection.AsOfSequence, CancellationToken.None));
+            projection.AsOfSequence, 100, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
-            projection.AsOfSequence, CancellationToken.None));
+            projection.AsOfSequence, 100, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
-            projection.AsOfSequence, CancellationToken.None));
+            projection.AsOfSequence, 100, CancellationToken.None));
         var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
-            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+            projection.Revision, 0, projection.AsOfSequence, 100, 65_536, CancellationToken.None);
         var framePayload = Assert.Single(validFrameEvidence!);
         Assert.Equal(validFrameId, framePayload.Id);
         Assert.Equal(0, framePayload.Sequence);
@@ -670,10 +670,10 @@ public sealed class PostgresLedgerTests
         Assert.Equal(1, framePayload.Period);
         Assert.Equal("{}", framePayload.PayloadJson);
         var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
-            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+            projection.Revision, 0, projection.AsOfSequence, 100, 65_536, CancellationToken.None);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
-            projection.AsOfSequence, CancellationToken.None));
+            projection.AsOfSequence, 100, 65_536, CancellationToken.None));
 
         // Evidence visible to the later projection still cannot support an insight persisted earlier.
         var laterProjection = await projectionReader.GetAtAsync(matchId, 10, null, CancellationToken.None);
@@ -682,9 +682,9 @@ public sealed class PostgresLedgerTests
         foreach (var futureInsightId in new[] { futureEventInsightId, futureFrameInsightId })
         {
             Assert.Null(await insightReader.GetAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
-                laterProjection.AsOfSequence, CancellationToken.None));
+                laterProjection.AsOfSequence, 100, CancellationToken.None));
             Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
-                laterProjection.AsOfSequence, CancellationToken.None));
+                laterProjection.AsOfSequence, 100, 65_536, CancellationToken.None));
         }
         var laterPage = await insightReader.ReadAtAsync(matchId, laterProjection.Revision, 10, laterProjection.AsOfSequence,
             null, null, 10, CancellationToken.None);

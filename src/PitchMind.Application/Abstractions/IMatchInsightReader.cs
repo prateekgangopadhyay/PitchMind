@@ -39,8 +39,9 @@ public interface IMatchInsightReader
         long? afterSequence, string? afterInsightId, int limit, CancellationToken cancellationToken);
 
     Task<PersistedMatchInsight?> GetAtAsync(MatchId matchId, string insightId, int maximumRevision, int selectedSeconds,
-        long throughSequence, CancellationToken cancellationToken);
+        long throughSequence, int maximumEvidenceItems, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
-        int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken);
+        int maximumRevision, int selectedSeconds, long throughSequence, int maximumItems, int maximumItemBytes,
+        CancellationToken cancellationToken);
 }

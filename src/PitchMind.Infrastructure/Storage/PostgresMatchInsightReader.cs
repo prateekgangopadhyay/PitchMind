@@ -76,23 +76,32 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
     }
 
     public async Task<PersistedMatchInsight?> GetAtAsync(MatchId matchId, string insightId, int maximumRevision, int selectedSeconds,
-        long throughSequence, CancellationToken cancellationToken)
+        long throughSequence, int maximumEvidenceItems, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(insightId) || insightId.Length > 256)
             throw new ArgumentException("Insight ID must contain 1 to 256 characters.", nameof(insightId));
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
+        if (maximumEvidenceItems is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(maximumEvidenceItems));
         await using var command = dataSource.CreateCommand("""
             SELECT i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
                    i.summary, m.source_version, m.provenance, p.source_sha256,
-                   COALESCE(jsonb_agg(jsonb_build_object(
-                       'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
-                       ORDER BY e.evidence_kind, e.evidence_id)
-                       FILTER (WHERE e.insight_id IS NOT NULL), '[]'::jsonb)::text AS evidence
+                   COALESCE((
+                       SELECT jsonb_agg(jsonb_build_object(
+                           'kind', bounded.evidence_kind, 'id', bounded.evidence_id, 'relation', bounded.relation)
+                           ORDER BY bounded.evidence_kind, bounded.evidence_id)
+                       FROM (
+                           SELECT evidence_kind, evidence_id, relation
+                           FROM pitchmind.insight_evidence
+                           WHERE insight_id = i.insight_id
+                           ORDER BY evidence_kind, evidence_id
+                           LIMIT $6
+                       ) bounded
+                   ), '[]'::jsonb)::text AS evidence
             FROM pitchmind.insights i
             JOIN pitchmind.matches m ON m.match_id = i.match_id
             JOIN pitchmind.match_projections p ON p.match_id = i.match_id AND p.revision = i.revision
-            LEFT JOIN pitchmind.insight_evidence e ON e.insight_id = i.insight_id
             WHERE i.match_id = $1 AND i.insight_id = $2 AND i.revision <= $3 AND i.as_of_sequence <= $4
+              AND (SELECT count(*) FROM pitchmind.insight_evidence all_refs WHERE all_refs.insight_id = i.insight_id) <= $6
               AND EXISTS (
                   SELECT 1 FROM pitchmind.insight_evidence valid
                   WHERE valid.insight_id = i.insight_id AND (
@@ -118,24 +127,27 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                           WHERE tf.match_id = i.match_id AND tf.frame_id = unsupported.evidence_id
                             AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $5))
               )
-            GROUP BY i.insight_id, i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class,
-                     i.summary, m.source_version, m.provenance, p.source_sha256
+
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(insightId);
         command.Parameters.AddWithValue(maximumRevision);
         command.Parameters.AddWithValue(throughSequence);
         command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(maximumEvidenceItems);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadInsight(reader) : null;
     }
 
     public async Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
-        int maximumRevision, int selectedSeconds, long throughSequence, CancellationToken cancellationToken)
+        int maximumRevision, int selectedSeconds, long throughSequence, int maximumItems, int maximumItemBytes,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(insightId) || insightId.Length > 256)
             throw new ArgumentException("Insight ID must contain 1 to 256 characters.", nameof(insightId));
         Validate(matchId, maximumRevision, selectedSeconds, throughSequence, null, null, 1);
+        if (maximumItems is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(maximumItems));
+        if (maximumItemBytes is < 256 or > 65_536) throw new ArgumentOutOfRangeException(nameof(maximumItemBytes));
         await using var command = dataSource.CreateCommand("""
             WITH refs AS (
                 SELECT i.insight_id, i.as_of_sequence, e.evidence_kind, e.evidence_id, e.relation,
@@ -144,6 +156,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                 FROM pitchmind.insights i
                 JOIN pitchmind.insight_evidence e ON e.insight_id = i.insight_id
                 WHERE i.match_id = $1 AND i.insight_id = $2 AND i.revision <= $3 AND i.as_of_sequence <= $4
+                ORDER BY e.evidence_kind, e.evidence_id
+                LIMIT $6
             )
             SELECT refs.evidence_kind, refs.evidence_id, refs.relation, refs.total_count,
                    COALESCE(me.sequence, tf.sequence) AS evidence_sequence,
@@ -159,6 +173,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                        AND me.sequence <= $4 AND me.sequence <= refs.as_of_sequence AND me.clock_seconds <= $5
                    OR refs.evidence_kind = 'frame' AND tf.frame_id IS NOT NULL
                        AND tf.sequence <= $4 AND tf.sequence <= refs.as_of_sequence AND tf.clock_seconds <= $5)
+              AND octet_length(COALESCE(me.payload::text, tf.payload::text)) <= $7
             ORDER BY refs.evidence_kind, refs.evidence_id
             """);
         command.Parameters.AddWithValue(matchId.Value);
@@ -166,6 +181,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         command.Parameters.AddWithValue(maximumRevision);
         command.Parameters.AddWithValue(throughSequence);
         command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(maximumItems + 1);
+        command.Parameters.AddWithValue(maximumItemBytes);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var items = new List<PersistedCanonicalEvidenceItem>();
@@ -176,7 +193,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             items.Add(new PersistedCanonicalEvidenceItem(reader.GetString(0), reader.GetString(1), reader.GetString(2),
                 reader.GetInt64(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetString(7)));
         }
-        if (items.Count == 0 || totalCount != items.Count) return null;
+        if (items.Count == 0 || items.Count > maximumItems || totalCount != items.Count) return null;
         return Array.AsReadOnly(items.ToArray());
     }
 
