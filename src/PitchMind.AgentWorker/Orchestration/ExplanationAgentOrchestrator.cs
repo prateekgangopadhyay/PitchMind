@@ -201,10 +201,6 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
             return Result(ExplanationWorkflowStatus.Unavailable, "ContextUnavailable");
         }
         var packet = contextResult.Packet;
-        identity = packet;
-        contextIds = packet?.Evidence is null ? Array.Empty<string>() : packet.Evidence
-            .Where(item => item is not null && !string.IsNullOrWhiteSpace(item.Id))
-            .Select(item => item.Id).ToArray();
         if (!contextResult.Succeeded || packet is null)
         {
             var failure = contextResult.Failure?.ToString() ?? "ContextUnavailable";
@@ -219,6 +215,8 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
                 contextFingerprint, contextIds, Array.Empty<string>(), curatorTimer.ElapsedMilliseconds, curatorFailure));
             return Result(ExplanationWorkflowStatus.Rejected, curatorFailure);
         }
+        identity = packet;
+        contextIds = packet.Evidence.Select(item => item.Id).ToArray();
         handoffs.Add(Handoff(1, ExplanationAgentRole.EvidenceCurator, ExplanationHandoffStatus.Succeeded,
             contextFingerprint, contextIds, contextIds, curatorTimer.ElapsedMilliseconds));
 
@@ -277,9 +275,8 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
                 return Result(ExplanationWorkflowStatus.Unavailable, failure);
             }
 
-            var candidateEvidenceIds = CandidateEvidenceIds(generated.Candidate);
             handoffs.Add(Handoff(2, ExplanationAgentRole.FootballNarrator, ExplanationHandoffStatus.Succeeded,
-                contextFingerprint, contextIds, candidateEvidenceIds, narratorTimer.ElapsedMilliseconds,
+                contextFingerprint, contextIds, Array.Empty<string>(), narratorTimer.ElapsedMilliseconds,
                 inputTokens: generated.Candidate.InputTokens, outputTokens: generated.Candidate.OutputTokens));
 
             var verifierTimer = Stopwatch.StartNew();
@@ -289,14 +286,14 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
             {
                 var failure = verified.Failure?.ToString() ?? "VerificationRejected";
                 handoffs.Add(Handoff(3, ExplanationAgentRole.ClaimVerifier, ExplanationHandoffStatus.Rejected,
-                    contextFingerprint, candidateEvidenceIds, Array.Empty<string>(), verifierTimer.ElapsedMilliseconds, failure));
+                    contextFingerprint, contextIds, Array.Empty<string>(), verifierTimer.ElapsedMilliseconds, failure));
                 return Result(ExplanationWorkflowStatus.Rejected, failure);
             }
 
             var safeEvidenceIds = verified.Explanation.Claims.SelectMany(x => x.EvidenceIds)
                 .Distinct(StringComparer.Ordinal).ToArray();
             handoffs.Add(Handoff(3, ExplanationAgentRole.ClaimVerifier, ExplanationHandoffStatus.Succeeded,
-                contextFingerprint, candidateEvidenceIds, safeEvidenceIds, verifierTimer.ElapsedMilliseconds));
+                contextFingerprint, contextIds, safeEvidenceIds, verifierTimer.ElapsedMilliseconds));
             _logger.LogInformation("Grounded explanation workflow completed; workflowId={WorkflowId} revision={Revision} selectedTime={SelectedTime} handoffs={HandoffCount} inputTokens={InputTokens} outputTokens={OutputTokens}",
                 workflowId, packet.CanonicalRevision, packet.SelectedTimeSeconds, handoffs.Count,
                 generated.Candidate.InputTokens, generated.Candidate.OutputTokens);
@@ -367,10 +364,6 @@ public sealed class ExplanationAgentOrchestrator : IDisposable
         int? inputTokens = null, int? outputTokens = null) =>
         new(sequence, role, status, fingerprint, Array.AsReadOnly(inputIds.ToArray()),
             Array.AsReadOnly(outputIds.ToArray()), elapsed, failure, inputTokens, outputTokens);
-
-    private static string[] CandidateEvidenceIds(CandidateExplanation candidate) =>
-        candidate.Claims?.Where(claim => claim?.EvidenceIds is not null).SelectMany(claim => claim.EvidenceIds)
-            .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
 
     private static bool IsSha256(string value) => value is { Length: 64 } &&
         value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');

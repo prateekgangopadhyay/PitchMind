@@ -36,7 +36,7 @@ public sealed class ExplanationAgentOrchestratorTests
     }
 
     [Fact]
-    public async Task GenerateAsync_RejectsVerifierFailureWithoutExposingCandidateText()
+    public async Task GenerateAsync_RejectsVerifierFailureWithoutExposingUnverifiedContent()
     {
         const string unsupportedText = "A future goal made the coach change shape.";
         var generator = new StubGenerator((_, _) => Task.FromResult(ExplanationGenerationResult.Success(Candidate(unsupportedText, "future-event"))));
@@ -48,6 +48,7 @@ public sealed class ExplanationAgentOrchestratorTests
         Assert.Equal(ExplanationWorkflowStatus.Rejected, result.Status);
         Assert.Null(result.Explanation);
         Assert.DoesNotContain(unsupportedText, JsonSerializer.Serialize(result));
+        Assert.DoesNotContain("future-event", JsonSerializer.Serialize(result));
         Assert.Equal(ExplanationAgentRole.ClaimVerifier, result.Trace.Handoffs[^1].Role);
         Assert.Equal(ExplanationHandoffStatus.Rejected, result.Trace.Handoffs[^1].Status);
         Assert.Equal("UnsupportedEvidenceReference", result.Trace.FailureCode);
@@ -68,6 +69,7 @@ public sealed class ExplanationAgentOrchestratorTests
 
         Assert.Equal(ExplanationWorkflowStatus.Rejected, result.Status);
         Assert.Equal("InvalidContext", result.Trace.FailureCode);
+        Assert.DoesNotContain("event-1", JsonSerializer.Serialize(result));
         Assert.Single(result.Trace.Handoffs);
         Assert.Equal(0, generator.Calls);
     }
