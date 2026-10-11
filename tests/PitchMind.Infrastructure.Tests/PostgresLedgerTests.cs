@@ -563,13 +563,14 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task PointInTimeProjectionIsMissingForUnknownMatchAndBoundsInvalidTime()
+    public async Task PointInTimeProjectionIsMissingForUnknownMatchAndAllowsAddedTime()
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var reader = new PostgresMatchProjectionReader(source);
         Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, null, CancellationToken.None));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, null, CancellationToken.None));
+        Assert.Null(await reader.GetAtAsync(MatchId.New(), 5761, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), -1, null, CancellationToken.None));
     }
 
     [PostgresIntegrationFact]
