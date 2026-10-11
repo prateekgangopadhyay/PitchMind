@@ -183,6 +183,7 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, IRealtime
             throw new HubException("Realtime subscription rate limit exceeded.");
         if (!subscriptionTracker.TryReserve(Context.Items, matchId, out var isNew))
             throw new HubException("Realtime match subscription limit exceeded.");
+        var groupAddAttempted = false;
         try
         {
             var decision = await access.CheckAsync(Context.User ?? new ClaimsPrincipal(), matchId,
@@ -190,19 +191,25 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, IRealtime
             if (decision.Status != MatchRealtimeAccessStatus.Allowed)
                 throw new HubException("Match subscription is not authorized.");
 
+            groupAddAttempted = true;
             await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
                 .ConfigureAwait(false);
         }
         catch
         {
-            if (!isNew)
+            if (!isNew || groupAddAttempted)
             {
                 try
                 {
                     await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
                         .ConfigureAwait(false);
                 }
-                catch { /* Keep the original subscription failure; disconnect also clears group membership. */ }
+                catch
+                {
+                    // Keep the slot reserved until disconnect clears any possibly retained group membership.
+                    Context.Abort();
+                    throw;
+                }
             }
             subscriptionTracker.Release(Context.Items, matchId);
             throw;

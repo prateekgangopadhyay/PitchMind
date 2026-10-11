@@ -282,6 +282,57 @@ public sealed class AuthorizationAbuseControlTests
         Assert.True(isNew);
     }
 
+    [Fact]
+    public async Task Partial_group_add_failure_removes_membership_and_releases_the_reserved_slot()
+    {
+        var access = new CountingRealtimeAccessPolicy();
+        var context = new TestHubCallerContext();
+        var groups = new RecordingGroupManager { FailAddAfterAdd = true };
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10),
+            new RealtimeHubSubscriptionTracker(1))
+        {
+            Context = context,
+            Groups = groups,
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => hub.SubscribeToMatch(Guid.Parse(MatchId)));
+        Assert.Equal(1, groups.RemoveCount);
+        groups.FailAddAfterAdd = false;
+
+        await hub.SubscribeToMatch(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+
+        Assert.Equal(2, groups.AddCount);
+        Assert.Equal(2, access.CheckCount);
+        Assert.Equal(0, context.AbortCount);
+    }
+
+    [Fact]
+    public async Task Failed_group_cleanup_aborts_and_keeps_the_slot_until_disconnect()
+    {
+        var allowed = true;
+        var access = new CountingRealtimeAccessPolicy(_ => allowed);
+        var tracker = new RealtimeHubSubscriptionTracker(1);
+        var context = new TestHubCallerContext();
+        var groups = new RecordingGroupManager { FailRemove = true };
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10), tracker)
+        {
+            Context = context,
+            Groups = groups,
+        };
+        var first = Guid.Parse(MatchId);
+        var second = Guid.Parse("22222222-2222-4222-8222-222222222222");
+
+        await hub.SubscribeToMatch(first);
+        allowed = false;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => hub.SubscribeToMatch(first));
+
+        Assert.Equal(1, context.AbortCount);
+        Assert.False(tracker.TryReserve(context.Items, second, out _));
+        await hub.OnDisconnectedAsync(null);
+        Assert.True(tracker.TryReserve(context.Items, second, out var isNew));
+        Assert.True(isNew);
+    }
+
     private sealed class CountingRealtimeAccessPolicy(Func<Guid, bool>? isAllowed = null) : IMatchRealtimeAccessPolicy
     {
         public int CheckCount { get; private set; }
@@ -298,28 +349,33 @@ public sealed class AuthorizationAbuseControlTests
 
     private sealed class TestHubCallerContext : HubCallerContext
     {
+        public int AbortCount { get; private set; }
         public override string ConnectionId => "test-connection";
         public override string? UserIdentifier => "test-user";
         public override ClaimsPrincipal? User { get; } = new(new ClaimsIdentity("test"));
         public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
         public override IFeatureCollection Features { get; } = new FeatureCollection();
         public override CancellationToken ConnectionAborted => CancellationToken.None;
-        public override void Abort() { }
+        public override void Abort() => AbortCount++;
     }
 
     private sealed class RecordingGroupManager : IGroupManager
     {
         public int AddCount { get; private set; }
         public int RemoveCount { get; private set; }
+        public bool FailAddAfterAdd { get; set; }
+        public bool FailRemove { get; set; }
         public Task AddToGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
         {
             AddCount++;
+            if (FailAddAfterAdd) throw new InvalidOperationException("Simulated partial group add failure.");
             return Task.CompletedTask;
         }
 
         public Task RemoveFromGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
         {
             RemoveCount++;
+            if (FailRemove) throw new InvalidOperationException("Simulated group removal failure.");
             return Task.CompletedTask;
         }
     }
