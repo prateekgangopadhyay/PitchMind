@@ -18,6 +18,10 @@ The **FIRST PRIORITY is to continue building functional product increments as qu
 
 Use the repository CodeGraph MCP configuration and [operator guide](../engineering/CODEGRAPH-INTEGRATION.md) where a trusted local engine is available. Before high-blast-radius changes, query symbol/edit context, caller/dependency impact and relevant tests; for every stacked PR compare `codegraph_pr_context` to its **actual base**. Share bounded impact findings and concrete test commands across working agents. Graph results supplement but never substitute for source inspection, real tests, independent review or Product Owner acceptance. If CodeGraph is absent, stale, broken or slow, **fall back immediately** to ordinary code inspection and continue delivery. Do not delay product implementation to wait for indexing.
 
+## UI craftsmanship without slowing parallel engineering
+
+For EP07 and EP08-S06, load the five `docs/design/DESIGN-SKILL-REGISTRY.json` design specialists as relevant: Taste for initial structure, Impeccable for critique/polish, Emil for affordance/motion quality, Vercel for UI accessibility/usability and Awesome for independent screenshots. Scope comments to the actual changed UI and do not hold unrelated delivery work while awaiting optional Impeccable installers or nonessential animation. Existing React/Vite/CSS, truthful canonical football data, keyboard/focus/reduced motion, screenshots and real tests always take precedence.
+
 ## Truth, environments, security and acceptance
 
 - Preserve Hexagonal/Clean Architecture, Domain's zero-external-dependency rule, versioned contracts, selected-time/revision correctness and independent evidence provenance. Never invent match/player/score/tracking facts or infer the unapproved source feed's clock, coordinates, event mappings or rights.

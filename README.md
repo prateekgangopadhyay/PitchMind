@@ -14,6 +14,7 @@ Azure-native football intelligence, rebuilt from an evidence-first architecture.
 - [Football analytics detailed LLD](docs/architecture/07-football-analytics-detailed-lld.md)
 - [Simulation JSON onboarding — source present, not yet certified](docs/data/SIMULATION-FEED-CONTRACT.md)
 - [Frontend seven-screen requirements](docs/engineering/FRONTEND-SCREEN-CONTRACTS.md)
+- [Five frontend design skills — Taste, Impeccable, Emil, Vercel & Awesome](docs/design/FRONTEND-DESIGN-DELIVERY.md)
 - [Quality/release gates](docs/engineering/QA-RELEASE-GATES.md)
 - [Architecture and C4](docs/architecture/README.md)
 - [Architecture decision records](docs/adr/README.md)
