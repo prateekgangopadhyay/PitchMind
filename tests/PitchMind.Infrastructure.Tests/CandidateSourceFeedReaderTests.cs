@@ -186,6 +186,54 @@ public sealed class CandidateSourceFeedReaderTests
         Assert.Equal(maximumBytes + 1, stream.BytesReturned);
     }
 
+    [Fact]
+    public async Task IncrementalSourceReaderRejectsGrowthAfterInitialLengthCheckAtCapPlusOne()
+    {
+        const int maximumBytes = 8;
+        var source = new GrowthAfterOpenStream(Encoding.UTF8.GetBytes(new string('x', 1_024)), initialLength: 4);
+        using var bounded = new CandidateSourceFeedReader.BoundedHashingReadStream(source, maximumBytes);
+        var buffer = new byte[32];
+
+        await Assert.ThrowsAsync<InvalidDataException>(async () =>
+        {
+            while (await bounded.ReadAsync(buffer.AsMemory()) != 0) { }
+        });
+
+        Assert.Equal(maximumBytes + 1, source.BytesReturned);
+    }
+
+    [Fact]
+    public async Task RejectsEventNestingBeyondTheExplicitJsonDepthLimit()
+    {
+        var nested = "1";
+        for (var depth = 0; depth < 65; depth++) nested = "{\"child\":" + nested + "}";
+        var source = "[{\"eventId\":\"e\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\",\"nested\":" + nested + "]";
+        var fixture = await Fixture.CreateAsync(source, eventCountOverride: 1, teamCountOverride: 1);
+        try
+        {
+            await Assert.ThrowsAsync<System.Text.Json.JsonException>(() => new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task RejectsNonWhitespaceAfterTheEventArray()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"e\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            await File.AppendAllTextAsync(fixture.SourcePath, "false");
+            await Assert.ThrowsAsync<System.Text.Json.JsonException>(() => new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData(5762, 1)]
     [InlineData(-1, 1)]
@@ -349,7 +397,7 @@ public sealed class CandidateSourceFeedReaderTests
         public string ManifestPath { get; }
         public string SourceSha256 { get; }
 
-        public static async Task<Fixture> CreateAsync(string source)
+        public static async Task<Fixture> CreateAsync(string source, int eventCountOverride = -1, int teamCountOverride = -1)
         {
             var directory = Path.Combine(Path.GetTempPath(), "pitchmind-candidate-reader-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
@@ -358,7 +406,9 @@ public sealed class CandidateSourceFeedReaderTests
             var bytes = Encoding.UTF8.GetBytes(source);
             var sha = Convert.ToHexStringLower(SHA256.HashData(bytes));
             await File.WriteAllBytesAsync(sourcePath, bytes);
-            await File.WriteAllTextAsync(manifestPath, Manifest(sha, bytes.Length, CountEvents(source), CountTeams(source)));
+            var eventCount = eventCountOverride >= 0 ? eventCountOverride : CountEvents(source);
+            var teamCount = teamCountOverride >= 0 ? teamCountOverride : CountTeams(source);
+            await File.WriteAllTextAsync(manifestPath, Manifest(sha, bytes.Length, eventCount, teamCount));
             return new Fixture(directory, sourcePath, manifestPath, sha);
         }
 

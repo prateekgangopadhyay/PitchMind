@@ -13,6 +13,11 @@ public sealed class CandidateSourceFeedReader
     private const int MaximumSourceBytes = 50_000_000;
     private const int MaximumManifestBytes = 262_144;
     private const int MaximumEvents = 100_000;
+    private const int MaximumJsonDepth = 64;
+    private static readonly JsonSerializerOptions SourceJsonOptions = new()
+    {
+        MaxDepth = MaximumJsonDepth
+    };
 
     public async Task<CandidateSourceFeed> ReadAsync(
         string sourcePath,
@@ -31,33 +36,35 @@ public sealed class CandidateSourceFeedReader
         RejectDuplicateProperties(manifestDocument.RootElement, "manifest");
         var manifest = ReadManifest(manifestDocument.RootElement);
 
-        var sourceBytes = await ReadBoundedBytesAsync(
+        if (manifest.ExpectedEventCount > MaximumEvents)
+            throw new InvalidDataException("Candidate source exceeds the event limit.");
+
+        await using var sourceFile = new FileStream(
             sourcePath,
-            MaximumSourceBytes,
-            "Candidate source",
-            cancellationToken);
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81_920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (sourceFile.Length <= 0 || sourceFile.Length > MaximumSourceBytes)
+            throw new InvalidDataException("Candidate source is empty or exceeds the bounded reader size.");
 
-        var actualSha256 = Convert.ToHexStringLower(SHA256.HashData(sourceBytes));
-        if (sourceBytes.LongLength != manifest.ByteSize || actualSha256 != manifest.Sha256)
-            throw new InvalidDataException("Candidate source bytes do not match the manifest-pinned size and SHA-256.");
-
-        using var sourceDocument = JsonDocument.Parse(sourceBytes);
-        var root = sourceDocument.RootElement;
-        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0 || root.GetArrayLength() > MaximumEvents)
-            throw new InvalidDataException("Candidate source must be a non-empty JSON array within the event limit.");
-        if (root.GetArrayLength() != manifest.ExpectedEventCount)
-            throw new InvalidDataException("Candidate event count differs from the manifest.");
-
-        var events = new List<CandidateSourceEnvelope>(root.GetArrayLength());
+        using var sourceStream = new BoundedHashingReadStream(sourceFile, MaximumSourceBytes);
+        var events = new List<CandidateSourceEnvelope>(manifest.ExpectedEventCount);
         var eventIds = new HashSet<string>(StringComparer.Ordinal);
         var matchIds = new HashSet<string>(StringComparer.Ordinal);
         var teamIds = new HashSet<string>(StringComparer.Ordinal);
         var eventTypeCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         var previousSequence = manifest.SequenceStart - 1;
         long? previousClockSeconds = null;
-        foreach (var sourceEvent in root.EnumerateArray())
+        await foreach (var sourceEvent in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(
+            sourceStream,
+            SourceJsonOptions,
+            cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (events.Count >= MaximumEvents)
+                throw new InvalidDataException("Candidate source exceeds the event limit.");
             if (sourceEvent.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Every candidate event must be a JSON object.");
             RejectDuplicateProperties(sourceEvent, "candidate event");
@@ -103,6 +110,18 @@ public sealed class CandidateSourceFeedReader
             previousClockSeconds = clockSeconds;
         }
 
+        if (events.Count == 0)
+            throw new InvalidDataException("Candidate source must be a non-empty JSON array within the event limit.");
+        if (events.Count != manifest.ExpectedEventCount)
+            throw new InvalidDataException("Candidate event count differs from the manifest.");
+
+        // Ensure the full source, including trailing JSON whitespace, was consumed before
+        // accepting the digest. The deserializer rejects non-whitespace trailing content.
+        await sourceStream.DrainAsync(cancellationToken);
+        var actualSha256 = sourceStream.GetSha256();
+        if (sourceStream.BytesRead != manifest.ByteSize || actualSha256 != manifest.Sha256)
+            throw new InvalidDataException("Candidate source bytes do not match the manifest-pinned size and SHA-256.");
+
         if (previousSequence != manifest.SequenceEnd)
             throw new InvalidDataException("Candidate source sequence end differs from the manifest.");
         if (matchIds.Count != manifest.ExpectedMatchCount)
@@ -125,8 +144,104 @@ public sealed class CandidateSourceFeedReader
             manifest.Provenance,
             manifest.RedistributionPermission,
             actualSha256,
-            sourceBytes.LongLength,
+            sourceStream.BytesRead,
             events.AsReadOnly());
+    }
+
+    /// <summary>
+    /// Hashes a sequential source as the JSON reader consumes it while refusing to expose
+    /// more than the configured byte cap. The underlying FileStream remains caller-owned.
+    /// </summary>
+    internal sealed class BoundedHashingReadStream(Stream inner, int maximumBytes) : Stream
+    {
+        private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        private bool _hashFinalized;
+
+        public long BytesRead { get; private set; }
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var allowed = AllowedReadLength(count);
+            var read = inner.Read(buffer, offset, allowed);
+            Record(buffer.AsSpan(offset, read));
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var allowed = AllowedReadLength(buffer.Length);
+            var read = inner.Read(buffer[..allowed]);
+            Record(buffer[..read]);
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var allowed = AllowedReadLength(buffer.Length);
+            var read = await inner.ReadAsync(buffer[..allowed], cancellationToken);
+            Record(buffer.Span[..read]);
+            return read;
+        }
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken) => ReadArrayAsync(buffer, offset, count, cancellationToken);
+
+        private async Task<int> ReadArrayAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            var allowed = AllowedReadLength(count);
+            var read = await inner.ReadAsync(buffer.AsMemory(offset, allowed), cancellationToken);
+            Record(buffer.AsSpan(offset, read));
+            return read;
+        }
+
+        public async Task DrainAsync(CancellationToken cancellationToken)
+        {
+            var buffer = new byte[4_096];
+            while (await ReadAsync(buffer.AsMemory(), cancellationToken) != 0) { }
+        }
+
+        public string GetSha256()
+        {
+            if (_hashFinalized) throw new InvalidOperationException("Source digest has already been finalized.");
+            _hashFinalized = true;
+            return Convert.ToHexStringLower(_hash.GetHashAndReset());
+        }
+
+        private int AllowedReadLength(int requested)
+        {
+            if (requested < 0) throw new ArgumentOutOfRangeException(nameof(requested));
+            // Permit one overflow byte solely to detect file growth after the initial size check.
+            return (int)Math.Min(requested, maximumBytes - BytesRead + 1);
+        }
+
+        private void Record(ReadOnlySpan<byte> bytes)
+        {
+            if (BytesRead + bytes.Length > maximumBytes)
+                throw new InvalidDataException("Candidate source is empty or exceeds the bounded reader size.");
+            _hash.AppendData(bytes);
+            BytesRead += bytes.Length;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _hash.Dispose();
+            base.Dispose(disposing);
+        }
+
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static async Task<byte[]> ReadBoundedBytesAsync(
