@@ -1,7 +1,7 @@
 # EP07-S06 design and frontend review evidence
 
 **Result:** UNVERIFIED — local implementation and static review only; visual and accessibility release gates remain open.
-**Implementation commit:** `2075113c87ea6388404bd4cb4502ca8decbf3e5f`
+**Implementation commit:** `bd088a8646e02ee77a185355526066335d53a6d7`
 **Parent:** exact PR #79 head `6dabf182378c617daa230fd0da6212fb1998bd86`
 **Worktree/branch:** `/private/tmp/pitchmind-ep07-s06-restack`, `codex/ep07-s06-resilient-ux`
 **Story/screen:** EP07-S06, canonical Match / Replay
@@ -41,7 +41,7 @@ Taste was applied within the existing React/Vite/TypeScript and CSS stack: dark 
 - `node scripts/design-slop-scan.mjs frontend/src/CanonicalMatchPage.tsx` — passed, 0 warnings.
 - `git diff --check` — passed on the final source and documentation candidate before commit.
 
-The four new Vitest cases cover optional insight outage with score/events retained, audience-detail invariance, event focus through PR #73's evidence deep link, and required-summary retry without demo substitution. Vitest/jsdom does not prove a real keyboard-only journey.
+The four new Vitest cases cover optional insight outage with score/events retained, audience-detail invariance, event focus through PR #73's evidence deep link, and required-summary retry without demo substitution plus focus restoration after success. Vitest/jsdom does not prove a real keyboard-only journey.
 
 ## Awesome Design review and release gate
 
