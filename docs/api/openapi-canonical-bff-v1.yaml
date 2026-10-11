@@ -144,6 +144,7 @@ paths:
         - $ref: '#/components/parameters/MatchId'
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/Cursor'
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 25, default: 12 }
@@ -336,13 +337,14 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidencePayload' } }
     CanonicalTrackingFramePage:
       type: object
-      required: [matchId, canonicalRevision, selectedTimeSeconds, throughSequence, items, hasMore]
+      required: [matchId, canonicalRevision, selectedTimeSeconds, throughSequence, items, nextCursor, hasMore]
       properties:
         matchId: { type: string, format: uuid }
         canonicalRevision: { type: integer, minimum: 1 }
         selectedTimeSeconds: { type: integer, minimum: 0, maximum: 5400 }
         throughSequence: { type: integer, minimum: -1 }
         items: { type: array, maxItems: 25, items: { $ref: '#/components/schemas/CanonicalTrackingFrame' } }
+        nextCursor: { type: [string, 'null'], maxLength: 2048, description: Opaque continuation bound to match, selected time, revision, source hash and the last (sequence, frameId) key. }
         hasMore: { type: boolean }
     CanonicalTrackingFrame:
       type: object

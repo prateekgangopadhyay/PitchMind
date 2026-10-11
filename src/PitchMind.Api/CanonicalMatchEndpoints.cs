@@ -155,7 +155,7 @@ internal static class CanonicalMatchEndpoints
         });
 
         match.MapGet("/frames", async (
-            string matchId, int? atSeconds, int? revision, int? limit,
+            string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
             IMatchProjectionReader projections, IMatchTrackingReader tracking, HttpContext context,
             CancellationToken cancellationToken) =>
         {
@@ -165,13 +165,21 @@ internal static class CanonicalMatchEndpoints
             var pageSize = limit ?? 12;
             if (pageSize is < 1 or > 25)
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 25.");
-            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, revision, cancellationToken);
+            var decodedCursor = cursor is null ? null : CanonicalCursorCodec.DecodeFrame(cursor, canonicalMatchId, selectedTime, revision);
+            var maximumRevision = decodedCursor?.CanonicalRevision ?? revision;
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, maximumRevision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var page = await tracking.ReadAtAsync(projection, selectedTime, pageSize, cancellationToken);
+            if (decodedCursor is not null) CanonicalCursorCodec.ValidateFrameProjection(decodedCursor, projection);
+            var page = await tracking.ReadAtAsync(projection, selectedTime, decodedCursor?.AfterSequence,
+                decodedCursor?.AfterFrameId, pageSize, cancellationToken);
             var items = page.Frames.Select(frame => ToTrackingFrame(frame, canonicalMatchId, selectedTime, projection)).ToArray();
+            var nextCursor = page.HasMore && page.NextAfterSequence is { } afterSequence && page.NextAfterFrameId is { } afterFrameId
+                ? CanonicalCursorCodec.EncodeFrame(canonicalMatchId, selectedTime, projection.Revision,
+                    projection.SourceSha256, afterSequence, afterFrameId)
+                : null;
             return Results.Ok(new CanonicalTrackingFramePageResponse(canonicalMatchId.ToString("D"), projection.Revision,
-                selectedTime, projection.AsOfSequence, Array.AsReadOnly(items), page.HasMore));
+                selectedTime, projection.AsOfSequence, Array.AsReadOnly(items), nextCursor, page.HasMore));
         });
 
         match.MapGet("/key-moments", (string matchId, int? atSeconds, int? revision, HttpContext context) =>

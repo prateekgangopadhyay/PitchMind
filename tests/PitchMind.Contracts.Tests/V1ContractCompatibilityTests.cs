@@ -174,7 +174,7 @@ public sealed class V1ContractCompatibilityTests
             """, Json)!;
         var trackingFrame = new CanonicalTrackingFrameResponse("frame", 42, 3, 2, 3308, "pitch-v1",
             new string('a', 64), quality.RootElement.Clone(), trackingFramePayload);
-        var trackingPage = new CanonicalTrackingFramePageResponse("match", 4, 3308, 42, new[] { trackingFrame }, false);
+        var trackingPage = new CanonicalTrackingFramePageResponse("match", 4, 3308, 42, new[] { trackingFrame }, null, false);
 
         AssertJsonProperties(card, "matchId", "canonicalRevision", "asOfSeconds", "throughSequence", "phase",
             "homeScore", "awayScore", "provenance", "algorithmVersion", "sourceSha256");

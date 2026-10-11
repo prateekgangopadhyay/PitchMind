@@ -274,6 +274,7 @@ public sealed record CanonicalTrackingFramePageResponse(
     int SelectedTimeSeconds,
     long ThroughSequence,
     IReadOnlyList<CanonicalTrackingFrameResponse> Items,
+    string? NextCursor,
     bool HasMore);
 
 public sealed record CanonicalReplayResponse(

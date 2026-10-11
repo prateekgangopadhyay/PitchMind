@@ -28,7 +28,8 @@ public sealed record PersistedTrackingFrame(
     string SourceSha256,
     string PayloadJson);
 
-public sealed record PersistedTrackingFramePage(IReadOnlyList<PersistedTrackingFrame> Frames, bool HasMore);
+public sealed record PersistedTrackingFramePage(IReadOnlyList<PersistedTrackingFrame> Frames,
+    long? NextAfterSequence, string? NextAfterFrameId, bool HasMore);
 
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader
@@ -49,6 +50,7 @@ public interface IMatchProjectionReader
 /// <summary>Reads immutable tracking frames visible at the selected time and projection watermark.</summary>
 public interface IMatchTrackingReader
 {
-    Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds, int limit,
+    Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds, long? afterSequence,
+        string? afterFrameId, int limit,
         CancellationToken cancellationToken);
 }

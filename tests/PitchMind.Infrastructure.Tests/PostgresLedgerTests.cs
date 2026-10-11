@@ -666,25 +666,47 @@ public sealed class PostgresLedgerTests
         }
         await AddFrame("future-sequence", 1, 0, 1, update.SourceSha256);
         await AddFrame("future-time", 0, 1, 1, update.SourceSha256);
+        for (var index = 0; index < 30; index++)
+            await AddFrame($"zpage-{index:D3}", 0, 0, 1, update.SourceSha256);
 
         var reader = new PostgresMatchTrackingReader(source);
-        var firstPage = await reader.ReadAtAsync(projection, 0, 1, CancellationToken.None);
+        var firstPage = await reader.ReadAtAsync(projection, 0, null, null, 1, CancellationToken.None);
         Assert.True(firstPage.HasMore);
         Assert.Equal("observed-a", Assert.Single(firstPage.Frames).FrameId);
-        var allVisible = await reader.ReadAtAsync(projection, 0, 10, CancellationToken.None);
+        Assert.Equal(0, firstPage.NextAfterSequence);
+        Assert.Equal("observed-a", firstPage.NextAfterFrameId);
+        var tiedSequenceContinuation = await reader.ReadAtAsync(projection, 0, firstPage.NextAfterSequence,
+            firstPage.NextAfterFrameId, 1, CancellationToken.None);
+        Assert.Equal("observed-b", Assert.Single(tiedSequenceContinuation.Frames).FrameId);
+
+        var firstLargePage = await reader.ReadAtAsync(projection, 0, null, null, 25, CancellationToken.None);
+        Assert.True(firstLargePage.HasMore);
+        Assert.Equal(25, firstLargePage.Frames.Count);
+        Assert.NotNull(firstLargePage.NextAfterSequence);
+        Assert.NotNull(firstLargePage.NextAfterFrameId);
+        var secondLargePage = await reader.ReadAtAsync(projection, 0, firstLargePage.NextAfterSequence,
+            firstLargePage.NextAfterFrameId, 25, CancellationToken.None);
+        Assert.False(secondLargePage.HasMore);
+        Assert.Equal(7, secondLargePage.Frames.Count);
+        Assert.Equal(32, firstLargePage.Frames.Concat(secondLargePage.Frames).Select(frame => frame.FrameId).Distinct().Count());
+        Assert.Equal(Enumerable.Range(0, 30).Select(index => $"zpage-{index:D3}"),
+            firstLargePage.Frames.Concat(secondLargePage.Frames).Where(frame => frame.FrameId.StartsWith("zpage-"))
+                .Select(frame => frame.FrameId));
+
+        var allVisible = await reader.ReadAtAsync(projection, 0, null, null, 100, CancellationToken.None);
         Assert.False(allVisible.HasMore);
-        Assert.Equal(new[] { "observed-a", "observed-b" }, allVisible.Frames.Select(frame => frame.FrameId));
+        Assert.Equal(32, allVisible.Frames.Count);
         Assert.DoesNotContain(allVisible.Frames, frame => frame.FrameId == "unversioned");
         // This schema binds one immutable source identity to a match; presenting a selection from
         // another source must not return any of the source-A frame rows.
         var mismatchedSourceProjection = await reader.ReadAtAsync(projection with { SourceSha256 = alternateSourceHash },
-            0, 10, CancellationToken.None);
+            0, null, null, 100, CancellationToken.None);
         Assert.Empty(mismatchedSourceProjection.Frames);
 
         var revisionTwo = await projectionReader.GetAtAsync(matchId, 0, 2, CancellationToken.None);
         Assert.NotNull(revisionTwo);
         Assert.Equal(2, revisionTwo.Revision);
-        var revisionTwoFrames = await reader.ReadAtAsync(revisionTwo, 0, 10, CancellationToken.None);
+        var revisionTwoFrames = await reader.ReadAtAsync(revisionTwo, 0, null, null, 100, CancellationToken.None);
         Assert.Contains(revisionTwoFrames.Frames, frame => frame.FrameId == "later-revision" && frame.CanonicalRevision == 2);
         Assert.DoesNotContain(revisionTwoFrames.Frames, frame => frame.SourceSha256 != revisionTwo.SourceSha256);
     }
@@ -739,18 +761,41 @@ public sealed class PostgresLedgerTests
         var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
         var metricInsightId = $"metric-{Guid.NewGuid():N}";
         var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
+        var unversionedFrameInsightId = $"unversioned-frame-{Guid.NewGuid():N}";
+        var malformedFrameInsightId = $"malformed-frame-{Guid.NewGuid():N}";
         var validFrameId = $"frame-{Guid.NewGuid():N}";
         var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
-        foreach (var (frameId, sequence) in new[] { (validFrameId, 0L), (futureFrameId, 1L) })
+        var unversionedFrameId = $"unversioned-{Guid.NewGuid():N}";
+        var malformedFrameId = $"malformed-{Guid.NewGuid():N}";
+        var validFramePayload = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            matchId = matchId.ToString(),
+            frameId = validFrameId,
+            sequence = 0,
+            matchTime = new { period = 1, elapsedSeconds = 0 },
+            source = new { sourceSha256 = update.SourceSha256 }
+        });
+        var malformedFramePayload = validFramePayload.Replace(validFrameId, "other-frame", StringComparison.Ordinal);
+        foreach (var (frameId, sequence, canonicalRevision, payload) in new[]
+                 {
+                     (validFrameId, 0L, (int?)1, validFramePayload),
+                     (futureFrameId, 1L, (int?)2, validFramePayload.Replace(validFrameId, futureFrameId, StringComparison.Ordinal)),
+                     (unversionedFrameId, 0L, (int?)null, validFramePayload.Replace(validFrameId, unversionedFrameId, StringComparison.Ordinal)),
+                     (malformedFrameId, 0L, (int?)1, malformedFramePayload)
+                 })
         {
             await using var frame = source.CreateCommand("""
-                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
-                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4, '{}'::jsonb)
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, canonical_revision, period, clock_seconds,
+                    coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, $4, 1, 0, 'pitch-v1', '{}'::jsonb, $5, $6::jsonb)
                 """);
             frame.Parameters.AddWithValue(matchId.Value);
             frame.Parameters.AddWithValue(frameId);
             frame.Parameters.AddWithValue(sequence);
+            frame.Parameters.AddWithValue((object?)canonicalRevision ?? DBNull.Value);
             frame.Parameters.AddWithValue(update.SourceSha256);
+            frame.Parameters.AddWithValue(payload);
             await frame.ExecuteNonQueryAsync();
         }
         await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
@@ -758,6 +803,8 @@ public sealed class PostgresLedgerTests
         await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString());
         await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric");
         await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId);
+        await AddInsight(unversionedFrameInsightId, "derived", "frame", unversionedFrameId);
+        await AddInsight(malformedFrameInsightId, "derived", "frame", malformedFrameId);
 
         var projectionReader = new PostgresMatchProjectionReader(source);
         var projection = await projectionReader.GetAtAsync(matchId, 0, null, CancellationToken.None);
@@ -778,6 +825,10 @@ public sealed class PostgresLedgerTests
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, unversionedFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, malformedFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
         var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
             projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
         var framePayload = Assert.Single(validFrameEvidence!);
@@ -785,11 +836,16 @@ public sealed class PostgresLedgerTests
         Assert.Equal(0, framePayload.Sequence);
         Assert.Equal(0, framePayload.ClockSeconds);
         Assert.Equal(1, framePayload.Period);
-        Assert.Equal("{}", framePayload.PayloadJson);
+        using (var framePayloadDocument = JsonDocument.Parse(framePayload.PayloadJson))
+            Assert.Equal(validFrameId, framePayloadDocument.RootElement.GetProperty("frameId").GetString());
         var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
             projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, unversionedFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, malformedFrameInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
 
         // Evidence visible to the later projection still cannot support an insight persisted earlier.
