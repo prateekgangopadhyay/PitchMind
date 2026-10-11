@@ -1,7 +1,9 @@
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using System.Text.Json;
 using Xunit;
 namespace PitchMind.Application.Tests;
 public sealed class SyntheticMatchTests
@@ -210,6 +212,279 @@ public sealed class SyntheticMatchTests
         Assert.Throws<ArgumentException>(() => KeyMomentGenerator.Generate(fixture.MatchId, fixture.Version,
             fixture.Provenance, null, 5400, fixture.Events[^1].Event.Sequence - 1, fixture.Home.Id, fixture.Home.Name,
             fixture.Away.Id, fixture.Away.Name, fixture.Events, Array.Empty<TacticalInsight>()));
+    }
+
+    [Fact] public void GoldenReplayCatalogHasVersionedPositiveAndNegativeDetectionOutcomes()
+    {
+        using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "press-sequence-goldens-v1.json")));
+        var root = catalog.RootElement;
+        Assert.Equal("press-sequence-goldens-v1", root.GetProperty("catalogVersion").GetString());
+        Assert.Equal(SyntheticFixtureGenerator.Version, root.GetProperty("sourceFixtureVersion").GetString());
+        Assert.Equal(PressSequencePolicy.UnapprovedDemoV2.Version, root.GetProperty("detectorVersion").GetString());
+        Assert.Equal("synthetic", root.GetProperty("provenance").GetString());
+
+        var snapshot = new SyntheticMatchService().GetState(5400);
+        var selectedState = new MatchState(snapshot.MatchId, snapshot.ClockSeconds, snapshot.Period,
+            snapshot.Phase, snapshot.HomeScore, snapshot.AwayScore, snapshot.PossessionTeamId,
+            snapshot.HomeActivePlayers, snapshot.AwayActivePlayers, snapshot.Players, snapshot.LastSequence, snapshot.Provenance);
+        foreach (var golden in root.GetProperty("cases").EnumerateArray())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(golden.GetProperty("rationale").GetString()));
+            var fixture = SyntheticFixtureGenerator.Generate();
+            var mutation = golden.GetProperty("mutation").GetString();
+            if (mutation == "complete-response")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "pressured-pass" ? item with { Outcome = "complete" } : item).ToArray() };
+            else if (mutation == "wrong-regain-team")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "high-regain" ? item with { TeamId = fixture.Away.Id } : item).ToArray() };
+            else if (mutation == "missing-pressure-frame")
+                fixture = fixture with { Frames = fixture.Frames.Where(frame => frame.ClockSeconds != 3293).ToArray() };
+            else if (mutation == "missing-pressure-presser")
+                fixture = fixture with { Frames = fixture.Frames.Select(frame => frame.ClockSeconds == 3293
+                    ? frame with { Players = frame.Players.Where(player => player.PlayerId != "harbour-10").ToArray() }
+                    : frame).ToArray() };
+            else if (mutation == "response-gap-exceeds-policy")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action switch
+                {
+                    "pressured-pass" => item with { Event = item.Event with { ClockSeconds = 3304, OccurredAt = item.Event.OccurredAt.AddSeconds(8) } },
+                    "high-regain" => item with { Event = item.Event with { ClockSeconds = 3305, OccurredAt = item.Event.OccurredAt.AddSeconds(6) } },
+                    "cutback" => item with { Event = item.Event with { ClockSeconds = 3308, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    "shot" => item with { Event = item.Event with { ClockSeconds = 3312, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    "goal" when item.Event.ClockSeconds == 3309 => item with { Event = item.Event with { ClockSeconds = 3313, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    _ => item
+                }).ToArray() };
+            else if (mutation == "duplicate-source-event-id")
+            {
+                var originalIndex = fixture.Events.ToList().FindIndex(item => item.Action == "press-arrival");
+                var items = fixture.Events.ToList();
+                items.Insert(originalIndex + 1, items[originalIndex] with
+                {
+                    Event = items[originalIndex].Event with { Sequence = items[originalIndex].Event.Sequence + 1 }
+                });
+                fixture = fixture with { Events = items.Select((item, index) => item with
+                    { Event = item.Event with { Sequence = index } }).ToArray() };
+            }
+            else if (mutation == "pressure-period-boundary")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "press-arrival" ? item with { Event = item.Event with { Period = 1 } } : item).ToArray() };
+            else Assert.Equal("none", mutation);
+
+            var input = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null, 5400,
+                fixture.Events[^1].Event.Sequence, fixture.Home.Id, fixture.Home.Name, fixture.Away.Id, fixture.Away.Name,
+                "stadium-metres", fixture.PitchLengthMetres, fixture.PitchWidthMetres, fixture.Events, fixture.Frames)
+            {
+                SelectedState = selectedState,
+                SourceSha256 = fixture.SourceSha256
+            };
+            if (golden.TryGetProperty("expectedFailure", out var expectedFailure))
+            {
+                Assert.Equal("duplicate-source-event-id", expectedFailure.GetString());
+                Assert.Throws<InvalidDataException>(() => PressSequenceDetector.Detect(input));
+                continue;
+            }
+
+            var insights = PressSequenceDetector.Detect(input);
+            Assert.Equal(golden.GetProperty("expectedInsightCount").GetInt32(), insights.Count);
+            Assert.All(insights, insight =>
+            {
+                Assert.Equal("simulated", insight.Classification);
+                Assert.Equal("synthetic", insight.EvidenceGraph!.Provenance);
+                Assert.Equal("unapproved-demo", insight.PolicyStatus);
+                Assert.False(insight.Publishable);
+                Assert.False(insight.EvidenceGraph.Publishable);
+            });
+        }
+    }
+
+    [Fact] public void MechanismReplayCoversBothTeamsAcrossBothHalvesAsSimulatedEvidence()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var sourceInsight = new SyntheticMatchService(fixture).GetInsights(5400).Single();
+        var sourceEvents = sourceInsight.EventIds.Select(id => fixture.Events.Single(item => item.Event.EventId == id))
+            .OrderBy(item => item.Event.Sequence).ToArray();
+        var sourceFrames = sourceInsight.FrameIds.Select(id => fixture.Frames.Single(frame => frame.Id == id))
+            .OrderBy(frame => frame.ClockSeconds).ToArray();
+        var sourceStart = sourceEvents[0].Event.ClockSeconds;
+
+        foreach (var (pressingHome, period) in new[] { (true, 1), (true, 2), (false, 1), (false, 2) })
+        {
+            var targetStart = period == 1 ? 900 : 3600;
+            var mirrored = (period == 1) ^ !pressingHome;
+            string Team(string id) => pressingHome ? id : id == fixture.Home.Id ? fixture.Away.Id : fixture.Home.Id;
+            string Player(string id)
+            {
+                if (pressingHome) return id;
+                if (id.StartsWith("harbour-", StringComparison.Ordinal)) return "ridge-" + id["harbour-".Length..];
+                if (id.StartsWith("ridge-", StringComparison.Ordinal)) return "harbour-" + id["ridge-".Length..];
+                return id;
+            }
+
+            var events = sourceEvents.Select(item =>
+            {
+                var clock = targetStart + item.Event.ClockSeconds - sourceStart;
+                return item with
+                {
+                    Event = item.Event with
+                    {
+                        ClockSeconds = clock,
+                        Period = period,
+                        OccurredAt = item.Event.OccurredAt.AddSeconds(clock - item.Event.ClockSeconds)
+                    },
+                    TeamId = Team(item.TeamId),
+                    PlayerId = Player(item.PlayerId),
+                    RelatedPlayerId = item.RelatedPlayerId is null ? null : Player(item.RelatedPlayerId)
+                };
+            }).ToArray();
+            var frames = sourceFrames.Select(frame =>
+            {
+                var clock = targetStart + frame.ClockSeconds - sourceStart;
+                return frame with
+                {
+                    ClockSeconds = clock,
+                    BallX = mirrored ? fixture.PitchLengthMetres - frame.BallX : frame.BallX,
+                    Players = frame.Players.Select(player => player with
+                    {
+                        TeamId = Team(player.TeamId),
+                        PlayerId = Player(player.PlayerId),
+                        X = mirrored ? fixture.PitchLengthMetres - player.X : player.X
+                    }).ToArray()
+                };
+            }).ToArray();
+            var selectedTime = events[^1].Event.ClockSeconds;
+            var state = new MatchState(fixture.MatchId, selectedTime, period,
+                period == 1 ? MatchPhase.FirstHalf : MatchPhase.SecondHalf,
+                0, 0, null, 11, 11, Array.Empty<MatchPlayerState>(), events[^1].Event.Sequence, fixture.Provenance);
+            var input = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null,
+                selectedTime, events[^1].Event.Sequence, fixture.Home.Id, fixture.Home.Name,
+                fixture.Away.Id, fixture.Away.Name, "stadium-metres", fixture.PitchLengthMetres,
+                fixture.PitchWidthMetres, events, frames) { SelectedState = state, SourceSha256 = fixture.SourceSha256 };
+
+            var insight = Assert.Single(PressSequenceDetector.Detect(input));
+            Assert.Equal(pressingHome ? "home" : "away", insight.Context!.TeamRole);
+            Assert.Equal(period == 1 ? "FirstHalf" : "SecondHalf", insight.Context.MatchPhase);
+            Assert.Equal("simulated", insight.Classification);
+            Assert.False(insight.Publishable);
+            var evidence = new TacticalEvidence(insight, events, frames, "fixed synthetic stadium metres",
+                insight.Conditions, ["Synthetic-only replay case; no publication approval."]);
+            var replay = MechanismReplayBuilder.Build(evidence, events[^1].Event.Sequence);
+            var replayAgain = MechanismReplayBuilder.Build(evidence, events[^1].Event.Sequence);
+
+            Assert.Equal(replay.Id, replayAgain.Id);
+            Assert.Equal("synthetic", replay.Provenance);
+            Assert.Equal("unapproved-demo", replay.PolicyStatus);
+            Assert.False(replay.Publishable);
+            Assert.Equal(insight.EventIds, replay.MechanismEventIds);
+            Assert.Equal(insight.FrameIds, replay.FrameIds);
+            Assert.All(replay.Events, item => Assert.True(item.Event.ClockSeconds <= replay.SelectedTimeSeconds));
+            Assert.All(replay.Frames, frame => Assert.True(frame.ClockSeconds <= replay.SelectedTimeSeconds));
+        }
+    }
+
+    [Fact] public void MirroringPitchCoordinatesPreservesTheSameMechanismAndEvidenceIdentity()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var expected = new SyntheticMatchService(fixture).GetInsights(5400).Single();
+        var mirrored = fixture with
+        {
+            Frames = fixture.Frames.Select(frame => frame with
+            {
+                BallX = fixture.PitchLengthMetres - frame.BallX,
+                Players = frame.Players.Select(player => player with { X = fixture.PitchLengthMetres - player.X }).ToArray()
+            }).ToArray()
+        };
+        var actual = new SyntheticMatchService(mirrored).GetInsights(5400).Single();
+
+        Assert.Equal(expected.Id, actual.Id);
+        Assert.Equal(expected.EventIds, actual.EventIds);
+        Assert.Equal(expected.FrameIds, actual.FrameIds);
+        Assert.Equal(expected.Conditions, actual.Conditions);
+    }
+
+    [Fact] public void MechanismRemainsValidForTheAwayRoleAndFirstHalfClockSemantics()
+    {
+        var service = new SyntheticMatchService();
+        var fixture = service.Fixture;
+        var canonicalInsight = service.GetInsights(5400).Single();
+        var canonicalState = service.GetState(5400);
+        var swappedFrames = fixture.Frames.Select(frame => frame with
+        {
+            BallX = fixture.PitchLengthMetres - frame.BallX,
+            Players = frame.Players.Select(player => player with { X = fixture.PitchLengthMetres - player.X }).ToArray()
+        }).ToArray();
+        var swappedState = new MatchState(canonicalState.MatchId, canonicalState.ClockSeconds, canonicalState.Period,
+            canonicalState.Phase, canonicalState.AwayScore, canonicalState.HomeScore,
+            canonicalState.PossessionTeamId,
+            canonicalState.AwayActivePlayers, canonicalState.HomeActivePlayers,
+            canonicalState.Players,
+            canonicalState.LastSequence, canonicalState.Provenance);
+        var awayInput = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null, 5400,
+            fixture.Events[^1].Event.Sequence, fixture.Away.Id, fixture.Away.Name, fixture.Home.Id, fixture.Home.Name,
+            "stadium-metres", fixture.PitchLengthMetres, fixture.PitchWidthMetres, fixture.Events, swappedFrames)
+        {
+            SelectedState = swappedState,
+            SourceSha256 = fixture.SourceSha256
+        };
+        var awayInsight = Assert.Single(PressSequenceDetector.Detect(awayInput));
+        Assert.Equal("away", awayInsight.Context!.TeamRole);
+        Assert.Equal(canonicalInsight.EventIds, awayInsight.EventIds);
+
+        var sourceMechanismEvents = canonicalInsight.EventIds.Select(id => fixture.Events.Single(item => item.Event.EventId == id))
+            .OrderBy(item => item.Event.Sequence).ToArray();
+        var sourceStart = sourceMechanismEvents[0].Event.ClockSeconds;
+        const int firstHalfStart = 600;
+        var firstHalfEvents = sourceMechanismEvents.Select(item => item with
+        {
+            Event = item.Event with { ClockSeconds = firstHalfStart + item.Event.ClockSeconds - sourceStart, Period = 1 }
+        }).ToArray();
+        var firstHalfFrames = fixture.Frames.Where(frame => canonicalInsight.FrameIds.Contains(frame.Id)).Select(frame => frame with
+        {
+            ClockSeconds = firstHalfStart + frame.ClockSeconds - sourceStart
+        }).OrderBy(frame => frame.ClockSeconds).ToArray();
+        var firstHalfSelected = firstHalfEvents[^1].Event.ClockSeconds;
+        var priorState = service.GetState(3309);
+        var firstHalfState = new MatchState(priorState.MatchId, firstHalfSelected, 1, MatchPhase.FirstHalf,
+            priorState.HomeScore, priorState.AwayScore, priorState.PossessionTeamId, priorState.HomeActivePlayers,
+            priorState.AwayActivePlayers, priorState.Players, firstHalfEvents[^1].Event.Sequence, priorState.Provenance);
+        var firstHalfInput = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null,
+            firstHalfSelected, firstHalfEvents[^1].Event.Sequence, fixture.Home.Id, fixture.Home.Name,
+            fixture.Away.Id, fixture.Away.Name, "stadium-metres", fixture.PitchLengthMetres,
+            fixture.PitchWidthMetres, firstHalfEvents, firstHalfFrames)
+        {
+            SelectedState = firstHalfState,
+            SourceSha256 = fixture.SourceSha256
+        };
+        var firstHalfInsight = Assert.Single(PressSequenceDetector.Detect(firstHalfInput));
+        Assert.Equal("FirstHalf", firstHalfInsight.Context!.MatchPhase);
+        Assert.Equal(canonicalInsight.EventIds, firstHalfInsight.EventIds);
+        Assert.All(firstHalfInsight.FrameIds, frameId => Assert.Contains(firstHalfFrames, frame => frame.Id == frameId && frame.ClockSeconds <= firstHalfSelected));
+    }
+
+    [Fact] public void MechanismReplayExportsOnlySelectedEvidenceAndStableParticipantPositions()
+    {
+        var service = new SyntheticMatchService();
+        var insight = service.GetInsights(3309).Single();
+        var first = service.GetMechanismReplay(insight.Id, 3309)!;
+        var second = service.GetMechanismReplay(insight.Id, 3309)!;
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(insight.EventIds, first.MechanismEventIds);
+        Assert.Equal(first.EvidenceGraph.Nodes.Where(node => node.Kind == "event").Select(node => node.EventId).Order(), first.EventIds.Order().Select(id => (Guid?)id));
+        Assert.Equal(insight.FrameIds, first.FrameIds);
+        Assert.Equal(insight.EvidenceGraph!.ClaimNodeId, first.EvidenceGraph.ClaimNodeId);
+        Assert.Equal(insight.EvidenceGraph.Nodes.Select(node => node.Id), first.EvidenceGraph.Nodes.Select(node => node.Id));
+        Assert.Equal(insight.EvidenceGraph.Edges, first.EvidenceGraph.Edges);
+        Assert.Equal(3309, first.SelectedTimeSeconds);
+        Assert.All(first.Events, item => Assert.True(item.Event.ClockSeconds <= first.SelectedTimeSeconds));
+        Assert.All(first.Frames, frame => Assert.True(frame.ClockSeconds <= first.SelectedTimeSeconds));
+        Assert.Contains(first.Events[1].PlayerId, first.ParticipantIds);
+        Assert.Contains(first.Frames.SelectMany(frame => frame.Players), position => first.ParticipantIds.Contains(position.PlayerId));
+        Assert.False(first.Publishable);
+    }
+
+    [Fact] public void ReplayIsUnavailableBeforeTheCompleteEvidenceExists()
+    {
+        var service = new SyntheticMatchService();
+        var insightId = service.GetInsights(3309).Single().Id;
+        Assert.Null(service.GetMechanismReplay(insightId, 3308));
+        Assert.Null(service.GetMechanismReplay("unknown", 5400));
     }
 
     [Fact] public void SuccessfulCirculationDoesNotBecomePressingTrap()

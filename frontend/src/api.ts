@@ -18,6 +18,12 @@ export interface KeyMoment {
   policyVersion: string; policyStatus: string; publishable: boolean;
   eventIds: string[]; frameIds: string[]; evidenceClaimNodeIds: string[];
 }
+export interface MechanismReplay {
+  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
+  selectedTimeSeconds: number; throughSequence: number; startSeconds: number; endSeconds: number;
+  detectorVersion: string; policyStatus: string; publishable: boolean; eventIds: string[]; mechanismEventIds: string[]; frameIds: string[];
+  participantIds: string[]; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; evidenceGraph: EvidenceGraph; limitations: string[];
+}
 export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
 export interface Evidence { insight: Insight; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; conditions: string[]; limitations: string[] }
 export interface Explanation { insightId: string; clockSeconds: number; audience: string; source: string; text: string; eventIds: string[]; limitations: string[] }

@@ -121,6 +121,29 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void Mechanism_replay_contract_preserves_selected_evidence_and_limits()
+    {
+        var service = new PitchMind.Application.Matches.SyntheticMatchService();
+        var insight = service.GetInsights(3309).Single();
+        var replay = service.GetMechanismReplay(insight.Id, 3309)!.ToResponse();
+
+        AssertJsonProperties(replay, "id", "matchId", "sourceVersion", "provenance", "canonicalRevision",
+            "selectedTimeSeconds", "throughSequence", "startSeconds", "endSeconds", "detectorVersion",
+            "policyStatus", "publishable", "eventIds", "mechanismEventIds", "frameIds", "participantIds", "events", "frames", "coordinateConvention",
+            "evidenceGraph", "limitations");
+        Assert.Equal(insight.EventIds, replay.MechanismEventIds);
+        Assert.Equal(
+            replay.EvidenceGraph.Nodes.Where(node => node.Kind == "event").Select(node => node.EventId).Order().ToArray(),
+            replay.EventIds.Select(id => (Guid?)id).Order().ToArray());
+        Assert.Equal(insight.FrameIds, replay.FrameIds);
+        Assert.Equal(3309, replay.SelectedTimeSeconds);
+        Assert.All(replay.Frames, frame => Assert.Equal(replay.CoordinateConvention, frame.CoordinateConvention));
+        Assert.All(replay.Events, item => Assert.True(item.Event.ClockSeconds <= replay.SelectedTimeSeconds));
+        Assert.All(replay.Frames, item => Assert.True(item.ClockSeconds <= replay.SelectedTimeSeconds));
+        Assert.False(replay.Publishable);
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
         var source = SyntheticFixtureGenerator.Generate();

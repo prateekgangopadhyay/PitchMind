@@ -65,6 +65,8 @@ match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Res
 match.MapGet("/key-moments", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetKeyMoments(atSeconds ?? 0).Select(moment => moment.ToResponse())));
 match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
     matches.GetEvidence(insightId, atSeconds ?? 0) is { } evidence ? Results.Ok(evidence.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"));
+match.MapGet("/evidence/{insightId}/replay", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
+    matches.GetMechanismReplay(insightId, atSeconds ?? 0) is { } replay ? Results.Ok(replay.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Replay unavailable at selected time"));
 match.MapPost("/analyst", (AnalystRequest request, SyntheticMatchService matches, HttpContext context) =>
     matches.Explain(request.InsightId, request.AtSeconds, request.Audience ?? "fan") is { } explanation ? Results.Ok(explanation.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"))
     .RequireRateLimiting("analyst");
