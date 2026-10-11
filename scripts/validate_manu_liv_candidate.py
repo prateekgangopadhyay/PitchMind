@@ -117,8 +117,14 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             or any(not _is_integer(period) or period < 1 for period in expected_periods)
             or len(set(expected_periods)) != len(expected_periods)):
         raise CandidateValidationError("Manifest expectedPeriods must be a non-empty list of unique positive integers")
-    if not isinstance(match_policy.get("sourceClockUnit"), str) or not match_policy["sourceClockUnit"].strip():
-        raise CandidateValidationError("Manifest sourceClockUnit must be a non-empty string")
+    clock_unit = match_policy.get("sourceClockUnit")
+    clock_unit_status = match_policy.get("sourceClockUnitStatus")
+    if clock_unit_status not in ("verified", "unverified"):
+        raise CandidateValidationError("Manifest sourceClockUnitStatus must be verified or unverified")
+    if clock_unit_status == "verified" and (not isinstance(clock_unit, str) or not clock_unit.strip()):
+        raise CandidateValidationError("A verified manifest sourceClockUnit must be a non-empty string")
+    if clock_unit_status == "unverified" and clock_unit is not None:
+        raise CandidateValidationError("An unverified manifest sourceClockUnit must be null")
     if (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64
             or any(char not in "0123456789abcdef" for char in source["sha256"])):
         raise CandidateValidationError("Manifest source sha256 must be a lowercase 64-character hexadecimal string")
@@ -388,7 +394,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "matchCount": len(match_ids),
         "teamCount": len(team_names_by_id),
         "sourceSequence": {"first": events[0]["sequence"], "last": events[-1]["sequence"], "preserved": True},
-        "sourceClock": {"unit": match_policy["sourceClockUnit"], "first": events[0]["clockSeconds"],
+        "sourceClock": {"unit": match_policy.get("sourceClockUnit"),
+                        "unitStatus": match_policy["sourceClockUnitStatus"],
+                        "first": events[0]["clockSeconds"],
                         "last": events[-1]["clockSeconds"], "preservedWithoutNormalization": True},
         "sourceEventIdLedgerSha256": sha256(bytes(source_ids_ledger)).hexdigest(),
         "orderedEventRecordsSha256": sha256(bytes(ordered_records_ledger)).hexdigest(),

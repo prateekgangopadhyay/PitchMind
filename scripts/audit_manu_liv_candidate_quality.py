@@ -240,7 +240,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     coordinates_policy = manifest.get("coordinates", {})
     metrics_policy = manifest.get("playerMetrics", {})
     team_names = sorted({event.get("teamName") for event in events})
-    total_clock_elapsed = clocks[-1] - clocks[0] if len(clocks) > 1 else 0
+    clock_value_span = clocks[-1] - clocks[0] if len(clocks) > 1 else 0
 
     return {
         "auditVersion": "1.0.0",
@@ -279,12 +279,13 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
                 manifest.get("source", {}).get("sequenceStart", sequences[0]) + len(sequences))),
             "periodCounts": {str(period): periods[period] for period in sorted(periods)},
             "clockUnitDeclaredByManifest": manifest.get("match", {}).get("sourceClockUnit"),
+            "clockUnitStatusByManifest": manifest.get("match", {}).get("sourceClockUnitStatus"),
             "clockStart": clocks[0],
             "clockEnd": clocks[-1],
             "clockRegressions": clock_regressions,
             "adjacentEqualClockPairs": equal_clock_pairs,
             "medianAdjacentClockDelta": statistics.median(clock_deltas) if clock_deltas else None,
-            "elapsedRangeSecondsFromSourceValues": total_clock_elapsed,
+            "clockValueSpan": clock_value_span,
             "markers": [{key: value for key, value in row.items() if key != "index"} for row in marker_rows],
             "interpretation": "Source-order and clock observations only; provider clock policy, tie semantics, and period meaning are not established.",
         },
@@ -322,7 +323,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
             "Which physical unit, pitch dimensions, coordinate origin, axis direction, and attack orientation apply to every coordinate field? Does orientation change by period?",
             "Are coordinates positions at event time, event start/end locations, or another sample? What are frame cadence and missing-value semantics?",
             "What are the units, formulas, observation windows, and valid ranges for speed, distanceCovered, heatIndex, passAccuracy, touches, stamina, and heartRate? Which are cumulative, per-event, or simulated labels?",
-            "What does clockSeconds represent across periods, added time, repeated timestamps, half-time, and the 5761-second full-time marker?",
+            "What does clockSeconds represent across periods, added time, repeated timestamps, half-time, and the 5761 clock-value full-time marker?",
             "What are the provider definitions and qualifiers for each of the 19 event types, including shot, foul, pressure, progressive/line-breaking actions, recovery, loss, cards, and substitutions?",
             "How are score components ordered by team, and how are own goals, disallowed goals, corrections, or scorer changes represented?",
             "Are the source name/jersey pairs stable player identities, and what roster/substitution/card rules produced the 12 source labels per team?",

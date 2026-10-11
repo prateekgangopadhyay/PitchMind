@@ -12,12 +12,12 @@
 
 - Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls and count values as JSON values.
 - Numeric ranges are raw values only. Coordinate units, axis/origin/orientation, attack direction, and pitch dimensions are **UNSPECIFIED / UNVERIFIED**. No conversion or distance inference is supported.
-- `clockSeconds` is an integer field with manifest-declared unit `seconds`; whether it denotes elapsed match time, period-local time, stoppage-time policy, and the meaning of period markers are **UNSPECIFIED / UNVERIFIED**.
+- `clockSeconds` is an integer field; the source unit is **UNSPECIFIED / UNVERIFIED**. The `Seconds` suffix is part of the field name and is not an authoritative data dictionary. Whether values denote elapsed match time, period-local time, stoppage time, or the meaning of period markers is also unverified.
 - Player metric definitions, units, calculation windows, sampling cadence, identity stability, validity, and real-world status are **UNSPECIFIED / UNVERIFIED**. Do not present these values as measured player performance or biometrics.
 - Source event labels are preserved as labels. Event semantics and source-to-domain mappings are **UNSPECIFIED / UNVERIFIED**; the manifest explicitly has no approved mappings. Exact label equality is not semantic equivalence.
 - Score snapshot component order/team-side mapping and canonical score authority are **UNSPECIFIED / UNVERIFIED**. The source’s score strings are not certified match facts.
 - Football realism is **UNVERIFIED**. Counts are observations, not a plausibility or rules verdict. `playerPositions` is event-attached and does not establish continuous tracking.
-- This dictionary preserves source identifiers, sequence, timestamps, coordinates, and ordering as-is. It performs no canonical imports, transformations, or value conversions.
+- This dictionary preserves source identifiers, sequence, raw clock-field values, coordinates, and ordering as-is. It performs no canonical imports, transformations, or value conversions.
 
 ## Record structure
 

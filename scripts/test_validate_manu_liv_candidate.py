@@ -45,7 +45,8 @@ def test_manifest(events: list[dict], payload: bytes) -> dict:
             "independentRightsPrivacyReview": "pending",
         },
         "match": {
-            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "seconds",
+            "expectedMatchCount": 1, "expectedTeamCount": 1,
+            "sourceClockUnit": None, "sourceClockUnitStatus": "unverified",
             "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
             "sourceClockEnd": events[-1]["clockSeconds"],
         },
@@ -64,6 +65,19 @@ class CandidateValidationTests(unittest.TestCase):
         ]
         self.payload = json.dumps(self.events, separators=(",", ":")).encode()
         self.manifest = test_manifest(self.events, self.payload)
+
+    def test_unverified_clock_unit_is_preserved_as_unknown(self):
+        result = validator.validate_source(self.payload, test_manifest(self.events, self.payload))
+        self.assertEqual(result["sourceClock"]["unit"], None)
+        self.assertEqual(result["sourceClock"]["unitStatus"], "unverified")
+        self.assertEqual(result["sourceClock"]["first"], 0)
+        self.assertEqual(result["sourceClock"]["last"], 12)
+
+    def test_unverified_clock_unit_cannot_claim_a_unit(self):
+        manifest = test_manifest(self.events, self.payload)
+        manifest["match"]["sourceClockUnit"] = "seconds"
+        with self.assertRaisesRegex(validator.CandidateValidationError, "must be null"):
+            validator.validate_source(self.payload, manifest)
 
     def test_preserves_order_and_reproduces_source_digests_without_mapping(self):
         first = validator.validate_source(self.payload, self.manifest)

@@ -4,7 +4,7 @@
 
 **Reproducibility check (2026-10-08):** `python3 scripts/profile_simulation_feed.py data/simulations/manu-liv-match-dataset.json --output <outside-repository-report>` completed with status `profiled_not_validated`, 28,601,013 bytes and SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`. `git hash-object` returned the blob SHA above. The profiler is metadata-only and deliberately does not validate football semantics or ingest the source.
 
-**Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON itself still has no provenance/rights manifest, and this declaration does not resolve the clock policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
+**Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON has no embedded provenance/rights manifest. No authoritative source data dictionary was supplied; this owner declaration does not resolve clock units/policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
 
 ## Observed source statistics
 | Property | Observed value |
@@ -14,7 +14,7 @@
 | Event count | 2,199 |
 | Distinct matches | one, `matchId=b2c3d4e5-f6a7-8901-bcde-f12345678901` |
 | Source sequence | 1..2199, contiguous and ascending, no duplicated event IDs observed |
-| Match clock | 0..5761 seconds (96:01), nondecreasing |
+| `clockSeconds` raw field values | 0..5761, nondecreasing. Unit and elapsed/period-local/stoppage-time semantics are **UNSPECIFIED / UNVERIFIED**; the field-name suffix is not source authority. |
 | Periods | 1: 1035 records, 2: 1164 records |
 | Teams | Manchester United: 1123 event records; Liverpool: 1076 |
 | Events titled Goal | 6: 3 United, 3 Liverpool; final score 3–3 |
@@ -44,7 +44,7 @@
 **Football quality concern:** 124 shot events and 254 fouls in a single match are not a plausible ordinary professional match profile. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
 
 ## Clock, coordinate and identity conversion — REQUIRED
-- Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.**
+- Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.** The candidate field is named `clockSeconds`, but its unit and clock semantics remain unverified until supported by a source-owner data dictionary.
 - Conversion should map `sourceSequence 1..2199` to canonical 0..2198 or explicitly version a 1-based contract; preserve original sequence separately. Do not mutate source event IDs.
 - Determine pitch axis/attacking-direction convention and whether x/y values are percentages. Only after this is confirmed should `xMetres = xNormalized * pitchLengthMetres / 100` and `yMetres = yNormalized * pitchWidthMetres / 100` be applied, using **manifest-defined pitch dimensions**. Never blindly map `pitchY=98` into 68 metre bounds or calculate a 3-metre presser distance on unitless points.
 - Current `SyntheticMatchService` treats fulltime as exactly 5400 and would reject events after; adapt clock/stoppage semantics to 5761 without using wall-clock to reconstruct game state.
