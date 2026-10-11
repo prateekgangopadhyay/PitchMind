@@ -57,6 +57,29 @@ stages:
         test -f docs/architecture/06-target-azure-hld.md
         test -f docs/architecture/07-football-analytics-detailed-lld.md
       displayName: Verify source-feed preflight and planning artifacts
+    - bash: |
+        set -euo pipefail
+        python3 scripts/test_secret_scan.py -v
+        python3 scripts/test_generate_sbom.py -v
+      displayName: Test secret scanning and source SBOM tools
+    - bash: |
+        set -euo pipefail
+        bash scripts/secret-scan.sh
+      displayName: Fail on detected repository secrets
+    - bash: |
+        set -euo pipefail
+        mkdir -p "$(Build.ArtifactStagingDirectory)/security"
+        PITCHMIND_SBOM_VERSION="$(Build.SourceVersion)" \
+          bash scripts/generate-sbom.sh . "$(Build.ArtifactStagingDirectory)/security/pitchmind-source.spdx.json"
+      condition: succeededOrFailed()
+      displayName: Generate SPDX source SBOM
+    - task: PublishBuildArtifacts@1
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: $(Build.ArtifactStagingDirectory)/security
+        ArtifactName: security-evidence
+        publishLocation: Container
+      displayName: Publish SPDX source SBOM artifact
   - job: Backend
     displayName: .NET 10 build and tests
     steps:
