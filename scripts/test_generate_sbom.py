@@ -40,6 +40,44 @@ class GenerateSbomTests(unittest.TestCase):
         self.assertTrue(document["SPDXID"].startswith("SPDXRef-"))
         self.assertIn("packages", document)
 
+    def test_output_inside_source_is_rejected_without_creating_directories(self):
+        with tempfile.TemporaryDirectory(prefix="pitchmind-sbom-path-") as temp_dir:
+            source = pathlib.Path(temp_dir, "source")
+            source.mkdir()
+            output = source / "generated" / "pitchmind.spdx.json"
+
+            result = subprocess.run(
+                ["bash", str(GENERATOR), str(source), str(output)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertFalse(output.parent.exists())
+
+    def test_existing_symlink_output_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="pitchmind-sbom-symlink-") as temp_dir:
+            root = pathlib.Path(temp_dir)
+            source = root / "source"
+            source.mkdir()
+            target = root / "target.spdx.json"
+            target.write_text("preserve", encoding="utf-8")
+            output = root / "alias.spdx.json"
+            output.symlink_to(target)
+
+            result = subprocess.run(
+                ["bash", str(GENERATOR), str(source), str(output)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "preserve")
+
 
 if __name__ == "__main__":
     unittest.main()

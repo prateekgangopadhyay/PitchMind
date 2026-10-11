@@ -25,7 +25,6 @@ secret-history scan or an image SBOM. The release path still needs an SBOM tied
 to the immutable image digest before any release approval. This change does not
 enable, provision, or deploy any Azure stage.
 
-Gitleaks `v8.30.1` is not used because its [upstream tracker](https://github.com/gitleaks/gitleaks/issues/2170)
-documents a report of no findings for matching rules; the selected `v8.29.1`
-release is therefore tested against the canary instead of trusting a version
-string alone.
+We pin and regression-test Gitleaks `v8.29.1`. An [upstream v8.30.1 report](https://github.com/gitleaks/gitleaks/issues/2170)
+used an example token containing a default stopword, so it does not establish
+an engine regression. Our synthetic canary avoids those stopwords.
