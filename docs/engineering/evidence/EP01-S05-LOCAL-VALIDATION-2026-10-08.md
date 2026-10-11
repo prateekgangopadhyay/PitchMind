@@ -55,3 +55,17 @@ These dependency advisories are current at the execution date and should be reru
 | Diff and shell syntax | `git diff --check`; `bash -n scripts/validate-all.sh` | Passed. |
 
 The aggregate run still skips all five PostgreSQL tests; isolated PostgreSQL evidence remains in the earlier section of this file. No Azure DevOps run, required branch check, deliberate-failure gate, hosted clean-runner result, secret scanner, full threat-model execution, accessibility run, or performance/load test was observed. This local run is not Product Owner acceptance. No Azure resource or deployment action was performed.
+
+## 2026-10-12 current-main integration revalidation
+
+The PR feature branch was rebased without conflicts onto current `origin/main` at `6932cfea490cd8c9257dfb88bc9091219f12cd40`. The tested code revision is `93007332c7fc9b576333883cf3cb37325ccfbccf`; it is a descendant of that exact main revision, and the local branch contains ten feature commits and zero commits behind main.
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| Focused NuGet report parser tests | `python3 -m unittest discover -s scripts -p 'test_check_nuget_vulnerabilities.py' -v` | Passed 7/7. |
+| Feed profiler tests | `python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v` | Passed 5/5. |
+| Council route and approval validation | `node scripts/validate_operating_model.mjs`; `node scripts/validate_operating_model.mjs --self-test`; `node scripts/test_design_skills.mjs` | All passed. The operating-model validator reported 12 epics, 59 stories, 28 Council skills, zero dependency cycles, and two approval gates. |
+| Exact-main diff whitespace validation | `git diff --check origin/main...HEAD` | Passed before the evidence-only documentation update. |
+| Complete local quality script | `./scripts/validate-all.sh` | Started at the tested code revision. The command emitted no output while its first step, `dotnet restore PitchMind.slnx`, was running. A cancellation request did not return during observation. Restore/build/tests and all later script stages are therefore unverified on this rebased head; no aggregate pass is claimed. |
+
+The preceding 2026-10-09 full local quality-script and isolated PostgreSQL results apply to their recorded older feature revisions only. They do not establish current-main aggregate validation. This integration rebase does not constitute story acceptance; independent review and Product Owner acceptance remain pending. No Azure command, resource mutation, deployment, PR-ready transition, or PR merge was performed.
