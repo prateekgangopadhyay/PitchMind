@@ -80,8 +80,13 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   const requestedTime = state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : 5400;
   if (response.snapshot.selectedTimeSeconds !== requestedTime)
     throw new Error('Backfill response does not match the currently selected match time.');
-  if (response.snapshot.canonicalRevision < state.canonicalRevision ||
-      (state.mode === 'LIVE' && response.snapshot.canonicalRevision < state.observedLiveRevision))
+  const sameSelectedContext = response.snapshot.selectedTimeSeconds === state.snapshot.selectedTimeSeconds;
+  const olderThanAppliedTimeline = sameSelectedContext && (
+    response.snapshot.canonicalRevision < state.canonicalRevision ||
+    (response.snapshot.canonicalRevision === state.canonicalRevision &&
+      response.snapshot.throughSequence < state.snapshot.throughSequence));
+  if (olderThanAppliedTimeline) return state;
+  if (state.mode === 'LIVE' && response.snapshot.canonicalRevision < state.observedLiveRevision)
     return { ...state, needsBackfill: true };
 
   const revisionReset = response.revisionChanged || response.replayRequired || response.snapshot.canonicalRevision !== state.canonicalRevision;
@@ -91,7 +96,8 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   const bySequence = new Map<number, CanonicalLedgerEvent>();
   const byEventId = new Map<string, CanonicalLedgerEvent>();
   for (const event of [...base, ...response.events.items]) {
-    if (event.matchId !== state.matchId || event.clockSeconds > response.snapshot.selectedTimeSeconds)
+    if (event.matchId !== state.matchId || event.clockSeconds > response.snapshot.selectedTimeSeconds ||
+        event.sequence > response.snapshot.throughSequence)
       throw new Error('Backfill contains an event outside the selected match context.');
     const sequenceMatch = bySequence.get(event.sequence);
     const idMatch = byEventId.get(event.eventId);
@@ -123,7 +129,8 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
     : response.snapshot.canonicalRevision > state.observedLiveRevision ? -1 : state.observedLiveSequence;
   const responseBehindObservedCursor = state.mode === 'LIVE' &&
     (response.snapshot.canonicalRevision < observedLiveRevision ||
-      (response.snapshot.canonicalRevision === observedLiveRevision && pageThrough < observedLiveSequence));
+      (response.snapshot.canonicalRevision === observedLiveRevision &&
+        response.snapshot.throughSequence < observedLiveSequence));
   return {
     ...state,
     mode: state.mode,
