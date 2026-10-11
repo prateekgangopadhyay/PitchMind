@@ -1,6 +1,8 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Named volumes persist data. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 16 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Named volumes persist data. **These are development-only containers**; Azure environments use managed Azure services.
+
+Compose keeps the PostgreSQL service on `postgres:16-alpine` and names its local volume `pitchmind_postgres_data`, matching the image major version and volume name reported for the existing local database. The Compose configuration tests check these values offline. No data migration or runtime verification is included in PR #117, and no existing volume is changed by its config or tests.
 
 From the repository root:
 
