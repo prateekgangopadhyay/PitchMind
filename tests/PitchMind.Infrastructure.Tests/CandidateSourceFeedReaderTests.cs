@@ -351,6 +351,34 @@ public sealed class CandidateSourceFeedReaderTests
         }
     }
 
+    [Fact]
+    public async Task CancellationStopsSourceParsingWhileWaitingForMoreBytes()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"e\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var sourceBytes = await File.ReadAllBytesAsync(fixture.SourcePath);
+            var manifestBytes = await File.ReadAllBytesAsync(fixture.ManifestPath);
+            await using var source = new BlockAfterFirstByteStream(sourceBytes);
+            using var cancellation = new CancellationTokenSource();
+
+            var read = new CandidateSourceFeedReader().ReadAsync(
+                source,
+                sourceBytes.Length,
+                manifestBytes,
+                cancellation.Token);
+
+            await source.SecondReadStarted.WaitAsync(TimeSpan.FromSeconds(5));
+            cancellation.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
     private static string RawProperty(string rawJson, string name)
     {
         using var document = System.Text.Json.JsonDocument.Parse(rawJson);
@@ -458,5 +486,48 @@ public sealed class CandidateSourceFeedReaderTests
             BytesReturned += count;
             return ValueTask.FromResult(count);
         }
+    }
+
+    private sealed class BlockAfterFirstByteStream(byte[] content) : Stream
+    {
+        private readonly TaskCompletionSource _secondReadStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _readCount;
+        private bool _firstByteRead;
+
+        public Task SecondReadStarted => _secondReadStarted.Task;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => content.Length;
+        public override long Position { get => _firstByteRead ? 1 : 0; set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _readCount) == 1)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (buffer.IsEmpty) return 0;
+                buffer.Span[0] = content[0];
+                _firstByteRead = true;
+                return 1;
+            }
+
+            _secondReadStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadArrayAsync(buffer, offset, count, cancellationToken);
+
+        private async Task<int> ReadArrayAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            await ReadAsync(buffer.AsMemory(offset, count), cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override int Read(Span<byte> buffer) => throw new NotSupportedException();
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

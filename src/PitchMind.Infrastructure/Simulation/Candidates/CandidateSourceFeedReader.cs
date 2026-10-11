@@ -32,13 +32,6 @@ public sealed class CandidateSourceFeedReader
             MaximumManifestBytes,
             "Candidate manifest",
             cancellationToken);
-        using var manifestDocument = JsonDocument.Parse(manifestBytes);
-        RejectDuplicateProperties(manifestDocument.RootElement, "manifest");
-        var manifest = ReadManifest(manifestDocument.RootElement);
-
-        if (manifest.ExpectedEventCount > MaximumEvents)
-            throw new InvalidDataException("Candidate source exceeds the event limit.");
-
         await using var sourceFile = new FileStream(
             sourcePath,
             FileMode.Open,
@@ -46,7 +39,25 @@ public sealed class CandidateSourceFeedReader
             FileShare.Read,
             bufferSize: 81_920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        if (sourceFile.Length <= 0 || sourceFile.Length > MaximumSourceBytes)
+        return await ReadAsync(sourceFile, sourceFile.Length, manifestBytes, cancellationToken);
+    }
+
+    internal async Task<CandidateSourceFeed> ReadAsync(
+        Stream sourceFile,
+        long sourceLength,
+        byte[] manifestBytes,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFile);
+        ArgumentNullException.ThrowIfNull(manifestBytes);
+
+        using var manifestDocument = JsonDocument.Parse(manifestBytes);
+        RejectDuplicateProperties(manifestDocument.RootElement, "manifest");
+        var manifest = ReadManifest(manifestDocument.RootElement);
+
+        if (manifest.ExpectedEventCount > MaximumEvents)
+            throw new InvalidDataException("Candidate source exceeds the event limit.");
+        if (sourceLength <= 0 || sourceLength > MaximumSourceBytes)
             throw new InvalidDataException("Candidate source is empty or exceeds the bounded reader size.");
 
         using var sourceStream = new BoundedHashingReadStream(sourceFile, MaximumSourceBytes);
