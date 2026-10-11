@@ -257,7 +257,11 @@ it('shows the latest persisted insight as the explanation for the exact selected
 it('aborts stale insight cursor pages when the selected match time changes', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   let resolveStalePage: ((response: {ok: boolean; json: () => Promise<unknown>}) => void) | undefined;
+  let resolveCursorStarted: (() => void) | undefined;
+  let resolveNewTimeRequested: (() => void) | undefined;
   let stalePageSignal: AbortSignal | undefined;
+  const cursorStarted = new Promise<void>(resolve => { resolveCursorStarted = resolve; });
+  const newTimeRequested = new Promise<void>(resolve => { resolveNewTimeRequested = resolve; });
   const stalePage = new Promise<{ok: boolean; json: () => Promise<unknown>}>(resolve => { resolveStalePage = resolve; });
   const snapshotFor = (seconds: number) => ({
     matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, asOfSeconds: seconds, throughSequence: 19,
@@ -271,10 +275,12 @@ it('aborts stale insight cursor pages when the selected match time changes', asy
     const parsed = new URL(url, 'http://localhost');
     const seconds = Number(parsed.searchParams.get('atSeconds'));
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    if (seconds === 3310 && parsed.pathname.endsWith('/insights')) resolveNewTimeRequested?.();
     if (parsed.pathname.endsWith('/summary')) return {ok: true, json: async () => snapshotFor(seconds)};
     if (parsed.pathname.endsWith('/events')) return {ok: true, json: async () => ({matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, throughSequence: 19, items: [], nextCursor: null, hasMore: false})};
     if (seconds === 3309 && parsed.searchParams.has('cursor')) {
       stalePageSignal = init?.signal as AbortSignal;
+      resolveCursorStarted?.();
       return stalePage;
     }
     return {ok: true, json: async () => seconds === 3309
@@ -286,20 +292,22 @@ it('aborts stale insight cursor pages when the selected match time changes', asy
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
-    await act(async () => { root.render(createElement(App)); await new Promise(resolve => setTimeout(resolve, 10)); });
+    await act(async () => { root.render(createElement(App)); });
+    await cursorStarted;
     expect(stalePageSignal, JSON.stringify(vi.mocked(fetch).mock.calls.map(([url]) => url))).toBeDefined();
     await act(async () => {
       window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3310&revision=4`);
       window.dispatchEvent(new PopStateEvent('popstate'));
-      await new Promise(resolve => setTimeout(resolve, 0));
     });
+    await newTimeRequested;
+    await act(async () => { await Promise.resolve(); });
     expect(stalePageSignal?.aborted).toBe(true);
     expect(container.querySelector('.selected-time-explanation')?.textContent).toContain('Explanation at 55:10');
     await act(async () => {
       resolveStalePage?.({ok: true, json: async () => ({matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
         {insightId: 'stale-latest', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Stale explanation must not replace the selected time.', evidence: []}
       ], nextCursor: null, hasMore: false})});
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await Promise.resolve();
     });
     expect(container.querySelector('.selected-time-explanation')?.textContent).toContain('Explanation at 55:10');
     expect(container.textContent).not.toContain('Stale explanation must not replace the selected time.');
