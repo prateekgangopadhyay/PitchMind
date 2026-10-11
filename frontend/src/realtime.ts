@@ -9,6 +9,9 @@ export interface RealtimeTimelineState {
   selectedTimeSeconds: number;
   /** Last canonical LIVE as-of time, preserved while snapshot contains a historical projection. */
   liveAsOfSeconds?: number;
+  /** Highest LIVE revision/sequence observed, kept separate from the selected historical page. */
+  observedLiveRevision: number;
+  observedLiveSequence: number;
   canonicalRevision: number;
   throughSequence: number;
   snapshot: CanonicalMatchSnapshot;
@@ -41,16 +44,23 @@ export function observeRealtimeCursor(state: RealtimeTimelineState, cursor: Real
   if (cursor.kind !== 'matchUpdated' || cursor.schemaVersion !== 1 || cursor.matchId !== state.matchId ||
       !Number.isInteger(cursor.canonicalRevision) || cursor.canonicalRevision < 1 ||
       !Number.isSafeInteger(cursor.lastSequence) || cursor.lastSequence < 0 ||
-      cursor.canonicalRevision < state.canonicalRevision)
+      cursor.canonicalRevision < state.canonicalRevision ||
+      cursor.canonicalRevision < state.observedLiveRevision ||
+      (cursor.canonicalRevision === state.observedLiveRevision && cursor.lastSequence <= state.observedLiveSequence))
     return state;
 
   const revisionChanged = cursor.canonicalRevision > state.canonicalRevision;
   const sequenceAdvanced = cursor.canonicalRevision === state.canonicalRevision && cursor.lastSequence > state.throughSequence;
+  const observed = {
+    observedLiveRevision: cursor.canonicalRevision,
+    observedLiveSequence: cursor.lastSequence,
+  };
   if (state.mode === 'HISTORICAL')
-    return revisionChanged || sequenceAdvanced ? { ...state, hasNewMatchUpdate: true } : state;
+    return { ...state, ...observed, hasNewMatchUpdate: true };
 
   return {
     ...state,
+    ...observed,
     needsBackfill: state.needsBackfill || revisionChanged || sequenceAdvanced,
     reconnecting: false,
   };
@@ -107,6 +117,12 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
     liveAsOfSeconds: state.mode === 'LIVE'
       ? response.snapshot.asOfSeconds
       : state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
+    observedLiveRevision: state.mode === 'LIVE'
+      ? response.snapshot.canonicalRevision
+      : Math.max(state.observedLiveRevision, response.snapshot.canonicalRevision),
+    observedLiveSequence: state.mode === 'LIVE'
+      ? response.snapshot.throughSequence
+      : response.snapshot.canonicalRevision > state.observedLiveRevision ? -1 : state.observedLiveSequence,
     canonicalRevision: response.snapshot.canonicalRevision,
     throughSequence: pageThrough,
     snapshot: response.snapshot,
