@@ -28,7 +28,12 @@ _AZURE_MUTATION_MARKERS = re.compile(
 )
 
 
-def validate_pipeline_policy(pipeline: str, build_template: str, deploy_template: str) -> None:
+def validate_pipeline_policy(
+    pipeline: str,
+    build_template: str,
+    deploy_template: str,
+    validation_templates: dict[str, str],
+) -> None:
     """Reject release-pipeline source edits that weaken identity and PR gates."""
     pipeline = _without_yaml_comments(pipeline)
     build_template = _without_yaml_comments(build_template)
@@ -54,6 +59,23 @@ def validate_pipeline_policy(pipeline: str, build_template: str, deploy_template
     validate_stage = _root_stage_block(pipeline, "Validate")
     if _AZURE_MUTATION_MARKERS.search(validate_stage):
         raise PipelinePolicyError("Azure mutations must remain inside the guarded release stage block")
+    expected_validation_templates = {
+        "templates/validate-dotnet.yml",
+        "templates/validate-frontend.yml",
+        "templates/validate-infra.yml",
+    }
+    validation_template_names = set(re.findall(r"(?m)^\s*- template:\s*([^\s]+)\s*$", validate_stage))
+    if validation_template_names != expected_validation_templates:
+        raise PipelinePolicyError("Validation stage template references must remain on the reviewed allowlist")
+    for template_name in validation_template_names:
+        template_source = validation_templates.get(template_name)
+        if template_source is None:
+            raise PipelinePolicyError(f"Missing source for validation template {template_name}")
+        template_source = _without_yaml_comments(template_source)
+        if re.search(r"(?m)^\s*- template:", template_source):
+            raise PipelinePolicyError("Nested validation templates require an explicit policy review")
+        if _AZURE_MUTATION_MARKERS.search(template_source):
+            raise PipelinePolicyError(f"Azure mutations are not allowed in validation template {template_name}")
     for stage in _DELIVERY_STAGES:
         if len(re.findall(rf"(?m)^  - stage: {re.escape(stage)}\s*$", conditional_block)) != 1:
             raise PipelinePolicyError(f"{stage} must be nested under the opt-in release condition")
@@ -132,7 +154,15 @@ def _conditional_block(pipeline: str, condition: str) -> str:
 def _without_yaml_comments(source: str) -> str:
     """Strip YAML comments while preserving hashes inside quoted scalars."""
     cleaned_lines: list[str] = []
+    block_scalar_parent_indent: int | None = None
     for line in source.splitlines():
+        indentation = len(line) - len(line.lstrip())
+        if block_scalar_parent_indent is not None:
+            if not line.strip() or indentation > block_scalar_parent_indent:
+                cleaned_lines.append("")
+                continue
+            block_scalar_parent_indent = None
+
         quote: str | None = None
         escaped = False
         index = 0
@@ -157,5 +187,8 @@ def _without_yaml_comments(source: str) -> str:
                 line = line[:index]
                 break
             index += 1
-        cleaned_lines.append(line.rstrip())
+        cleaned = line.rstrip()
+        cleaned_lines.append(cleaned)
+        if re.search(r":\s*[|>](?:[+-]\d?|\d[+-]?|)\s*$", cleaned):
+            block_scalar_parent_indent = indentation
     return "\n".join(cleaned_lines)

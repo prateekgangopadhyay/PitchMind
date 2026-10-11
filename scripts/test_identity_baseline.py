@@ -10,6 +10,21 @@ import unittest
 from scripts.release_pipeline_policy import PipelinePolicyError, validate_pipeline_policy
 
 ROOT = Path(__file__).resolve().parents[1]
+_VALIDATION_TEMPLATE_PATHS = (
+    "templates/validate-dotnet.yml",
+    "templates/validate-frontend.yml",
+    "templates/validate-infra.yml",
+)
+
+
+def _validate_pipeline_policy(pipeline, build_template, deploy_template, validation_template_overrides=None):
+    validation_templates = {
+        name: (ROOT / "pipelines" / name).read_text()
+        for name in _VALIDATION_TEMPLATE_PATHS
+    }
+    if validation_template_overrides:
+        validation_templates.update(validation_template_overrides)
+    validate_pipeline_policy(pipeline, build_template, deploy_template, validation_templates)
 
 
 class IdentityBaselineTests(unittest.TestCase):
@@ -75,7 +90,7 @@ class IdentityBaselineTests(unittest.TestCase):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
-        validate_pipeline_policy(pipeline, build_template, deploy_template)
+        _validate_pipeline_policy(pipeline, build_template, deploy_template)
 
     def test_policy_mutations_reject_default_on_and_pull_request_delivery(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -84,7 +99,7 @@ class IdentityBaselineTests(unittest.TestCase):
 
         default_on = pipeline.replace("default: false", "default: true", 1)
         with self.subTest(mutation="delivery default enabled"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(default_on, build_template, deploy_template)
+            _validate_pipeline_policy(default_on, build_template, deploy_template)
 
         pr_eligible = pipeline.replace(
             "ne(variables['Build.Reason'], 'PullRequest')",
@@ -92,7 +107,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="owner approval stage PR condition"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pr_eligible, build_template, deploy_template)
+            _validate_pipeline_policy(pr_eligible, build_template, deploy_template)
 
         pr_eligible_build = pipeline.replace(
             "ne(variables['Build.Reason'], 'PullRequest')",
@@ -100,7 +115,7 @@ class IdentityBaselineTests(unittest.TestCase):
             2,
         )
         with self.subTest(mutation="build stage PR condition"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pr_eligible_build, build_template, deploy_template)
+            _validate_pipeline_policy(pr_eligible_build, build_template, deploy_template)
 
         unguarded_deploy = pipeline.replace(
             "  - stage: DeployDev\n    dependsOn: OwnerApprovalOfReleaseDigest",
@@ -108,7 +123,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="DEV deployment bypasses guarded release chain"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
+            _validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
 
     def test_policy_mutations_reject_comment_only_release_guards(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -121,7 +136,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="opt-in expression exists only as a comment"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(commented_opt_in, build_template, deploy_template)
+            _validate_pipeline_policy(commented_opt_in, build_template, deploy_template)
 
         commented_conditions = pipeline.replace(
             "    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
@@ -129,7 +144,7 @@ class IdentityBaselineTests(unittest.TestCase):
             2,
         )
         with self.subTest(mutation="main and PR conditions exist only as comments"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(commented_conditions, build_template, deploy_template)
+            _validate_pipeline_policy(commented_conditions, build_template, deploy_template)
 
     def test_policy_mutations_reject_swapped_or_reused_connection_wiring(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -142,7 +157,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="build uses deployment connection"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pipeline, swapped_build, deploy_template)
+            _validate_pipeline_policy(pipeline, swapped_build, deploy_template)
 
         swapped_deploy = deploy_template.replace(
             "azureSubscription: ${{ parameters.devDeploymentServiceConnection }}",
@@ -150,7 +165,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="deployment uses ACR connection"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pipeline, build_template, swapped_deploy)
+            _validate_pipeline_policy(pipeline, build_template, swapped_deploy)
 
         scalar_spoof = build_template.replace(
             "azureSubscription: ${{ parameters.acrPushServiceConnection }}",
@@ -158,7 +173,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="connection text in displayName cannot spoof task input"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pipeline, scalar_spoof, deploy_template)
+            _validate_pipeline_policy(pipeline, scalar_spoof, deploy_template)
 
         pass_through_spoof = pipeline.replace(
             "          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
@@ -166,7 +181,23 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="connection text in displayName cannot spoof template parameter"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(pass_through_spoof, build_template, deploy_template)
+            _validate_pipeline_policy(pass_through_spoof, build_template, deploy_template)
+
+        block_scalar_spoof = build_template.replace(
+            "  displayName: Build immutable application image and release manifest\n  inputs:\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            "  displayName: |\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}\n  inputs:\n    azureSubscription: ${{ parameters.devDeploymentServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="connection text in block scalar cannot spoof task input"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(pipeline, block_scalar_spoof, deploy_template)
+
+        pass_through_block_scalar = pipeline.replace(
+            "        parameters:\n          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
+            "        displayName: |\n          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}\n        parameters:\n          acrPushServiceConnection: ${{ parameters.devDeploymentServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="connection text in block scalar cannot spoof template parameter"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(pass_through_block_scalar, build_template, deploy_template)
 
     def test_policy_rejects_unrecognized_unguarded_azure_mutation(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -179,7 +210,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="new root delivery stage outside opt-in"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(direct_stage, build_template, deploy_template)
+            _validate_pipeline_policy(direct_stage, build_template, deploy_template)
 
         extra_guarded_stage = pipeline.replace(
             "  - stage: OwnerApprovalBeforeAzureMutation",
@@ -187,7 +218,7 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="unrecognized release stage inside opt-in"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(extra_guarded_stage, build_template, deploy_template)
+            _validate_pipeline_policy(extra_guarded_stage, build_template, deploy_template)
 
         mutation_in_validation = pipeline.replace(
             "- stage: Validate\n",
@@ -195,7 +226,23 @@ class IdentityBaselineTests(unittest.TestCase):
             1,
         )
         with self.subTest(mutation="Azure CLI task outside the guarded release block"), self.assertRaises(PipelinePolicyError):
-            validate_pipeline_policy(mutation_in_validation, build_template, deploy_template)
+            _validate_pipeline_policy(mutation_in_validation, build_template, deploy_template)
+
+        with self.subTest(mutation="Azure mutation hidden in allowed validation template"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(
+                pipeline,
+                build_template,
+                deploy_template,
+                {"templates/validate-infra.yml": "steps:\n- task: AzureCLI@2\n"},
+            )
+
+        new_validation_template = pipeline.replace(
+            "- template: templates/validate-infra.yml",
+            "- template: templates/unreviewed-validation.yml",
+            1,
+        )
+        with self.subTest(mutation="unreviewed validation template indirection"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(new_validation_template, build_template, deploy_template)
 
 
 if __name__ == "__main__":
