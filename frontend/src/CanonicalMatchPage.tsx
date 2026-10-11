@@ -66,6 +66,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           <div className="match-context-controls">
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
+              aria-valuetext={`${Math.floor(selectedSeconds / 60)} minutes ${selectedSeconds % 60} seconds`}
               onChange={event => replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision)} />
             <span>{clock(selectedSeconds)}</span>
           </div>
