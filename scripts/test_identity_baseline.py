@@ -50,15 +50,17 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertNotIn("azureServiceConnection", pipeline + build_template + deploy_template)
         self.assertIn("python3 scripts/validate_release_identity_inputs.py", pipeline)
         validation_job = pipeline.index("- job: ValidateReleaseIdentityInputs")
-        approval_job = pipeline.index("- job: AwaitExplicitOwnerApproval")
+        approval_job = pipeline.index("- deployment: AwaitExplicitOwnerApproval")
         approval_job_end = pipeline.index("\n  - stage: BuildRelease", approval_job)
         approval_job_text = pipeline[approval_job:approval_job_end]
         self.assertLess(validation_job, approval_job)
         self.assertIn("vmImage: ubuntu-latest", pipeline[validation_job:approval_job])
-        self.assertIn("pool: server", approval_job_text)
         self.assertIn("dependsOn: ValidateReleaseIdentityInputs", approval_job_text)
+        self.assertIn("environment: pitchmind-release-authorization", approval_job_text)
+        self.assertIn("pool: server", approval_job_text)
+        self.assertIn("dependsOn: AwaitExplicitOwnerApproval", approval_job_text)
         self.assertIn("- task: ManualValidation@0", approval_job_text)
-        self.assertIn("users with Queue builds permission", pipeline)
+        self.assertIn("This pause does not establish approver identity.", approval_job_text)
 
     def test_key_vault_module_declares_rbac_without_local_grants(self):
         # This assertion is intentionally limited to the module itself; it is

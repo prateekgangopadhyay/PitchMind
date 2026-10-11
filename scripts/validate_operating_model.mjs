@@ -29,6 +29,106 @@ function acyclic(items) {
   return visited.size;
 }
 
+function assertDeploymentSafety(pipeline) {
+  assert.match(pipeline, /^- name: enableDevDelivery\r?\n  type: boolean\r?\n  default: false\s*$/m,
+    'DEV delivery must remain opt-in by default');
+  const releaseHeader = '- ${{ if eq(parameters.enableDevDelivery, true) }}:';
+  const releaseIndex = pipeline.indexOf(releaseHeader);
+  assert.ok(releaseIndex >= 0, 'Release stages must be nested under the explicit opt-in template condition');
+  const releaseStages = pipeline.slice(releaseIndex + releaseHeader.length);
+  assert.match(releaseStages, /^\r?\n  - stage: OwnerApprovalBeforeAzureMutation/m,
+    'The first release stage must be nested under the opt-in condition');
+  assert.doesNotMatch(releaseStages, /^- stage:/m,
+    'No release stage may escape the opt-in condition');
+  const stageBlock = (name) => {
+    const header = `  - stage: ${name}`;
+    const start = releaseStages.indexOf(header);
+    assert.ok(start >= 0, `Missing release stage ${name}`);
+    const next = releaseStages.indexOf('\n  - stage: ', start + header.length);
+    return releaseStages.slice(start, next < 0 ? undefined : next);
+  };
+  const preMutationGate = stageBlock('OwnerApprovalBeforeAzureMutation');
+  const digestGate = stageBlock('OwnerApprovalOfReleaseDigest');
+  assert.equal((releaseStages.match(/^      - task: ManualValidation@0$/gm) || []).length, 2,
+    'The two approval stages must retain explicit human consent pauses');
+
+  const orderedStages = [
+    'OwnerApprovalBeforeAzureMutation',
+    'BuildRelease',
+    'OwnerApprovalOfReleaseDigest',
+    'DeployDev'
+  ];
+  for (const stage of orderedStages) {
+    assert.equal((pipeline.match(new RegExp(`^  - stage: ${stage}$`, 'gm')) || []).length, 1,
+      `${stage} must appear exactly once under the opt-in condition`);
+  }
+  assert.doesNotMatch(pipeline.slice(0, releaseIndex), /^- stage: (OwnerApprovalBeforeAzureMutation|BuildRelease|OwnerApprovalOfReleaseDigest|DeployDev)$/m,
+    'No release stage may appear before the opt-in condition');
+  let priorIndex = -1;
+  for (const stage of orderedStages) {
+    const index = releaseStages.indexOf(`stage: ${stage}`);
+    assert.ok(index > priorIndex, `Release stage order is unsafe at ${stage}`);
+    priorIndex = index;
+  }
+
+  assert.match(releaseStages, /- stage: BuildRelease\r?\n    dependsOn: OwnerApprovalBeforeAzureMutation\r?\n    condition: and\(succeeded\(\), eq\(variables\['Build\.SourceBranch'\], 'refs\/heads\/main'\), ne\(variables\['Build\.Reason'\], 'PullRequest'\)\)/,
+    'Image build must depend on pre-mutation approval and a main non-PR run');
+  assert.match(releaseStages, /- stage: OwnerApprovalOfReleaseDigest\r?\n    dependsOn: BuildRelease\r?\n    condition: succeeded\(\)/,
+    'Digest approval must depend on the release image build');
+  assert.match(releaseStages, /- stage: DeployDev\r?\n    dependsOn: OwnerApprovalOfReleaseDigest[\s\S]*?deployment: Dev[\s\S]*?environment: pitchmind-dev/,
+    'DEV deployment must depend on digest approval and the protected environment');
+  for (const [name, block] of [['pre-mutation', preMutationGate], ['digest', digestGate]]) {
+    const environment = name === 'pre-mutation' ? 'pitchmind-release-authorization' : 'pitchmind-release-digest-authorization';
+    assert.match(block, new RegExp(`- deployment: [^\\n]+\\n[\\s\\S]*?environment: ${environment}(?:\\r?\\n|$)`),
+      `The ${name} approval stage must pause on its dedicated protected Azure DevOps Environment`);
+    assert.equal((block.match(/^      - task: ManualValidation@0$/gm) || []).length, 1,
+      `The ${name} approval stage must retain one human consent pause`);
+    assert.match(block, /^          onTimeout: reject$/m,
+      `The ${name} human consent pause must reject on timeout`);
+    assert.match(block, /This pause does not establish approver identity/,
+      `The ${name} human consent pause must disclose that it is not an identity control`);
+  }
+  assert.match(preMutationGate, /no Azure mutation occurs in this stage/,
+    'Pre-mutation authorization stage must not perform an Azure mutation');
+  const preMutationScript = preMutationGate.match(/^            - bash: \|\r?\n([\s\S]*?)^              displayName: Record pre-mutation authorization gate/m);
+  assert.ok(preMutationScript, 'Pre-mutation stage must retain its inspected inert authorization step');
+  assert.equal(preMutationScript[1].trim(), "echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'",
+    'Pre-mutation stage may only emit its inert authorization message');
+  assert.equal((preMutationGate.match(/^            - /gm) || []).length, 1,
+    'Pre-mutation deployment job must not gain additional execution steps');
+  assert.match(digestGate, /digest and DEV change must match the approved release manifest/,
+    'Digest authorization stage must bind approval to the release manifest');
+}
+
+function deploymentSafetySelfTest(pipeline) {
+  assertDeploymentSafety(pipeline);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('default: false', 'default: true')), /opt-in/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('environment: pitchmind-release-authorization', 'environment: unprotected-release')),
+    /pre-mutation approval stage must pause on its dedicated protected Azure DevOps Environment/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('environment: pitchmind-release-digest-authorization', 'environment: unprotected-digest')),
+    /digest approval stage must pause on its dedicated protected Azure DevOps Environment/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('      - task: ManualValidation@0', '      - task: ManualCheck@0')),
+    /two approval stages must retain explicit human consent pauses/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace(
+    "                echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'",
+    "                echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'\n                az acr push --name unsafe"
+  )), /Pre-mutation stage may only emit its inert authorization message/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('- ${{ if eq(parameters.enableDevDelivery, true) }}:\n', '')),
+    /nested under the explicit opt-in template condition/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('  - stage: DeployDev', '- stage: DeployDev')),
+    /escape the opt-in condition/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('    dependsOn: OwnerApprovalOfReleaseDigest', '    dependsOn: BuildRelease')),
+    /digest approval and the protected environment/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('    dependsOn: BuildRelease\n    condition: succeeded()', '    dependsOn: Validate\n    condition: succeeded()')),
+    /Digest approval must depend on the release image build/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('- stage: Validate', '- stage: BuildRelease\n- stage: Validate')),
+    /No release stage may appear before the opt-in condition/);
+  const unsafeOrder = pipeline.replace('stage: BuildRelease', 'stage: TemporaryBuildRelease')
+    .replace('stage: OwnerApprovalOfReleaseDigest', 'stage: BuildRelease')
+    .replace('stage: TemporaryBuildRelease', 'stage: OwnerApprovalOfReleaseDigest');
+  assert.throws(() => assertDeploymentSafety(unsafeOrder), /stage order is unsafe/);
+}
+
 function check() {
   const reg = parse('docs/operating-model/COUNCIL-SKILL-REGISTRY.json');
   const design = parse('docs/design/DESIGN-SKILL-REGISTRY.json');
@@ -118,17 +218,18 @@ function check() {
   assert.ok(existsSync(path.join(root,'docs/data/MANU-LIV-SOURCE-PROFILE.md')), 'Missing source profiling');
   assert.ok(existsSync(path.join(root,'data/simulations/manu-liv-match-dataset.json')), 'Actual JSON not found');
   const pipeline=read('pipelines/azure-pipelines.yml');
-  assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
+  assertDeploymentSafety(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
   assert.equal(counts.P0,49); assert.equal(counts.P1,7); assert.equal(counts.P2,3);
-  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
+  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2,releaseEnvironmentBindings:2};
 }
 
 if (process.argv.includes('--self-test')) {
   assert.equal(acyclic([{storyId:'A',dependsOn:[]},{storyId:'B',dependsOn:['A']}]),2);
   assert.throws(()=>acyclic([{storyId:'A',dependsOn:['B']},{storyId:'B',dependsOn:['A']}]),/cycle/);
   assert.throws(()=>acyclic([{storyId:'A',dependsOn:['UNKNOWN']}]),/Unknown/);
-  console.log('PASS: dependency DAG self-test');
+  deploymentSafetySelfTest(read('pipelines/azure-pipelines.yml'));
+  console.log('PASS: dependency DAG and DEV release safety self-tests');
 } else {
   try { console.log('PASS: Council skill/story/architecture/approval contract',JSON.stringify(check())); }
   catch(error) { console.error('FAIL:',error.message); process.exitCode=1; }
