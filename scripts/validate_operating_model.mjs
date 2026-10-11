@@ -90,7 +90,8 @@ function check() {
   }
   for (const file of ['docs/design/PITCHMIND-DESIGN-SYSTEM.md',
     'docs/design/FRONTEND-DESIGN-DELIVERY.md','docs/design/VENDOR-SOURCES.md',
-    'docs/design/vendor/taste-skill-LICENSE.txt','scripts/test_design_skills.mjs']) {
+    'docs/design/vendor/taste-skill-LICENSE.txt',
+    'docs/design/vendor/emil-design-eng-LICENSE.txt','scripts/test_design_skills.mjs']) {
     assert.ok(existsSync(path.join(root,file)), 'Missing design governance or test '+file);
   }
   for (const role of ['ui-ux-engineer','lead-frontend-engineer','accessibility-engineer','qa-architect']) {
