@@ -59,6 +59,26 @@ describe('realtime reconnect state', () => {
     expect(next.snapshot.canonicalRevision).toBe(2);
   });
 
+  it('ignores duplicate and stale cursors when deciding whether newer match state exists', () => {
+    const historical = selectHistoricalTime(state(), 45);
+    const duplicate = observeRealtimeCursor(historical, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 0,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    const stale = observeRealtimeCursor(historical, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 1, lastSequence: 99,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+
+    expect(duplicate.hasNewMatchUpdate).toBe(false);
+    expect(stale).toBe(historical);
+    const live = state();
+    expect(observeRealtimeCursor(live, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 0,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    })).toMatchObject({ throughSequence: 0, needsBackfill: false, reconnecting: false });
+  });
+
   it('switches to the latest observed match clock only on explicit return to live', () => {
     const live = returnToLive(selectHistoricalTime(state(), 45));
     expect(live.mode).toBe('LIVE');

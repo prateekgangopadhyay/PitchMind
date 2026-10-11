@@ -26,7 +26,7 @@ The local canonical BFF reads persisted projections, ledger events, insights and
 
 ```mermaid
 flowchart LR
-  Browser["Authenticated browser"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  Browser["React browser client (authentication pending)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
   BFF -->|read selected revision| PG["Docker PostgreSQL"]
   PG --> Outbox["Committed projection outbox"]
   Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]

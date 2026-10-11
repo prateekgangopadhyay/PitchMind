@@ -40,14 +40,15 @@ export function returnToLive(state: RealtimeTimelineState): RealtimeTimelineStat
 export function observeRealtimeCursor(state: RealtimeTimelineState, cursor: RealtimeCursorV1): RealtimeTimelineState {
   if (cursor.kind !== 'matchUpdated' || cursor.schemaVersion !== 1 || cursor.matchId !== state.matchId ||
       !Number.isInteger(cursor.canonicalRevision) || cursor.canonicalRevision < 1 ||
-      !Number.isSafeInteger(cursor.lastSequence) || cursor.lastSequence < 0)
+      !Number.isSafeInteger(cursor.lastSequence) || cursor.lastSequence < 0 ||
+      cursor.canonicalRevision < state.canonicalRevision)
     return state;
 
+  const revisionChanged = cursor.canonicalRevision > state.canonicalRevision;
+  const sequenceAdvanced = cursor.canonicalRevision === state.canonicalRevision && cursor.lastSequence > state.throughSequence;
   if (state.mode === 'HISTORICAL')
-    return { ...state, hasNewMatchUpdate: true };
+    return revisionChanged || sequenceAdvanced ? { ...state, hasNewMatchUpdate: true } : state;
 
-  const revisionChanged = cursor.canonicalRevision !== state.canonicalRevision;
-  const sequenceAdvanced = cursor.lastSequence > state.throughSequence;
   return {
     ...state,
     needsBackfill: state.needsBackfill || revisionChanged || sequenceAdvanced,
