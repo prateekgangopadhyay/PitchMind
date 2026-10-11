@@ -138,20 +138,39 @@ public sealed class RealtimeApiTests
         Assert.Equal("SIGNALR_UNAVAILABLE", body.RootElement.GetProperty("code").GetString());
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(bool local) => new WebApplicationFactory<Program>()
+    [Fact]
+    public async Task Missing_realtime_provider_fails_closed_in_development_local_runtime()
+    {
+        using var factory = CreateFactory(local: true, configureRealtimeProvider: false);
+        Assert.IsType<UnavailableRealtimeConnectionNegotiator>(factory.Services.GetRequiredService<IRealtimeConnectionNegotiator>());
+        Assert.Empty(factory.Services.GetServices<IOutboxPublisher>());
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", "fan");
+
+        using var response = await client.PostAsJsonAsync("/api/v1/realtime/negotiate",
+            new { matchId = MatchId, clientRevision = (int?)null });
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(bool local, bool configureRealtimeProvider = true) => new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(local ? "Development" : "Production");
             builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.EnvironmentKey,
                 local ? "Development" : "Production");
             builder.UseSetting("Runtime:Profile", local ? "local" : "azure");
-            builder.UseSetting("Realtime:Provider", local ? "local" : "azure");
-            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["Runtime:Profile"] = local ? "local" : "azure",
-                    ["Realtime:Provider"] = local ? "local" : "azure"
-                }));
+            var testSettings = new Dictionary<string, string?>
+            {
+                ["Runtime:Profile"] = local ? "local" : "azure"
+            };
+            if (configureRealtimeProvider)
+            {
+                var provider = local ? "local" : "azure";
+                builder.UseSetting("Realtime:Provider", provider);
+                testSettings["Realtime:Provider"] = provider;
+            }
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(testSettings));
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IMatchProjectionReader>();
