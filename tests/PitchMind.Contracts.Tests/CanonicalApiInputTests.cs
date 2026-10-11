@@ -6,13 +6,17 @@ using Xunit;
 
 namespace PitchMind.Contracts.Tests;
 
-public sealed class CanonicalApiInputTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CanonicalApiInputTests : IDisposable
 {
     private readonly HttpClient client;
+    private readonly WebApplicationFactory<Program> factory = ApiTestHost.CreateFactory();
 
-    public CanonicalApiInputTests(WebApplicationFactory<Program> factory)
+    public CanonicalApiInputTests() => client = ApiTestHost.CreateClient(factory);
+
+    public void Dispose()
     {
-        client = factory.CreateClient();
+        client.Dispose();
+        factory.Dispose();
     }
 
     [Theory]

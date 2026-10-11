@@ -4,10 +4,13 @@ info:
   version: 1.0.0
   description: >-
     PostgreSQL-backed, selected-time read contracts. These routes are separate from
-    the fixture-backed demo API. Authentication is not yet implemented; cloud exposure
-    is blocked pending EP06-S04 or an explicitly approved synthetic public-read boundary.
+    the fixture-backed demo API. A validated bearer token with the fan, analyst, or
+    admin role is required. Full evidence payloads additionally require analyst or
+    admin. Non-local runtime startup requires configured HTTPS issuer and audience.
 servers:
   - url: /
+security:
+  - bearerAuth: []
 paths:
   /api/v1/canonical/fixtures:
     get:
@@ -20,6 +23,8 @@ paths:
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Latest persisted match projections.
           content:
@@ -35,6 +40,8 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Persisted state projection at the selected time.
           content:
@@ -53,6 +60,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Sequence-ordered canonical event page bounded by selected time.
           content:
@@ -88,6 +97,8 @@ paths:
           schema: { type: integer, minimum: 1 }
         - $ref: '#/components/parameters/Limit'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Durable selected-time snapshot and bounded ordered catch-up page.
           content:
@@ -106,6 +117,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Persisted insights with resolvable selected-time evidence.
           content:
@@ -126,6 +139,8 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: One persisted insight with resolvable selected-time evidence.
           content:
@@ -146,6 +161,8 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Persisted insight with complete event/frame evidence visible at the selected time and sequence.
           content:
@@ -164,6 +181,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Point-in-time persisted snapshot and event page.
           content:
@@ -180,6 +199,8 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '400':
           description: Invalid match identifier, selected time, or revision; returns sanitized Problem Details.
           content:
@@ -207,17 +228,28 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/RealtimeNegotiateRequestV1' }
       responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '200':
           description: Local SignalR transport details and the canonical head cursor.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RealtimeNegotiateResponseV1' }
         '400': { $ref: '#/components/responses/Problem' }
-        '401': { $ref: '#/components/responses/Problem' }
-        '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
 components:
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ApiProblem' }
+    Forbidden:
+      description: Authenticated caller does not have a role allowed for this operation.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ApiProblem' }
   securitySchemes:
     bearerAuth:
       type: http

@@ -160,9 +160,13 @@ public sealed class RealtimeApiTests
             builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.EnvironmentKey,
                 local ? "Development" : "Production");
             builder.UseSetting("Runtime:Profile", local ? "local" : "azure");
+            builder.UseSetting("Authentication:Issuer", "https://login.example.test/tenant/v2.0");
+            builder.UseSetting("Authentication:Audience", "api://pitchmind");
             var testSettings = new Dictionary<string, string?>
             {
-                ["Runtime:Profile"] = local ? "local" : "azure"
+                ["Runtime:Profile"] = local ? "local" : "azure",
+                ["Authentication:Issuer"] = "https://login.example.test/tenant/v2.0",
+                ["Authentication:Audience"] = "api://pitchmind"
             };
             if (configureRealtimeProvider)
             {

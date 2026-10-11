@@ -8,7 +8,9 @@ internal static class CanonicalMatchEndpoints
 {
     public static IEndpointRouteBuilder MapCanonicalMatchEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/v1/canonical/fixtures", async (
+        var canonical = app.MapGroup("/api/v1/canonical")
+            .RequireAuthorization(ApiSecurityConfiguration.MatchReadPolicy);
+        canonical.MapGet("/fixtures", async (
             string? afterMatchId, int? limit, IMatchProjectionReader projections, HttpContext context,
             CancellationToken cancellationToken) =>
         {
@@ -30,7 +32,7 @@ internal static class CanonicalMatchEndpoints
                 hasMore ? items[^1].MatchId : null, hasMore));
         });
 
-        var match = app.MapGroup("/api/v1/canonical/matches/{matchId}");
+        var match = canonical.MapGroup("/matches/{matchId}");
         match.MapGet("/summary", async (
             string matchId, int? atSeconds, int? revision, IMatchProjectionReader projections,
             HttpContext context, CancellationToken cancellationToken) =>
@@ -159,7 +161,7 @@ internal static class CanonicalMatchEndpoints
             var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,
                 item.Sequence, item.ClockSeconds, item.Period, ParsePayload(item.PayloadJson))).ToArray();
             return Results.Ok(new CanonicalEvidenceResponse(ToInsight(insight, selectedTime), Array.AsReadOnly(items)));
-        });
+        }).RequireAuthorization(ApiSecurityConfiguration.EvidenceReadPolicy);
 
         match.MapGet("/replay", async (
             string matchId, int? atSeconds, int? revision, string? cursor, int? limit,

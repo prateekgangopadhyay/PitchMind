@@ -27,7 +27,7 @@ public sealed class CanonicalBackfillTests
     {
         var reader = new ProjectionReader(revision: 5);
         using var factory = CreateFactory(reader);
-        using var client = factory.CreateClient();
+        using var client = ApiTestHost.CreateClient(factory);
 
         using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=1&revision=4&atSeconds=120&limit=1");
 
@@ -48,7 +48,7 @@ public sealed class CanonicalBackfillTests
     {
         var reader = new ProjectionReader(revision: 5);
         using var factory = CreateFactory(reader);
-        using var client = factory.CreateClient();
+        using var client = ApiTestHost.CreateClient(factory);
 
         using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=0&revision=5&atSeconds=120&limit=2");
 
@@ -68,7 +68,7 @@ public sealed class CanonicalBackfillTests
     {
         var reader = new ProjectionReader(revision: 5);
         using var factory = CreateFactory(reader);
-        using var client = factory.CreateClient();
+        using var client = ApiTestHost.CreateClient(factory);
 
         using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=7&revision=5&atSeconds=120&limit=2");
 
@@ -89,7 +89,7 @@ public sealed class CanonicalBackfillTests
         int revision, int limit)
     {
         using var factory = CreateFactory(new ProjectionReader(revision: 5));
-        using var client = factory.CreateClient();
+        using var client = ApiTestHost.CreateClient(factory);
 
         using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence={afterSequence}&revision={revision}&atSeconds={atSeconds}&limit={limit}");
 
@@ -99,9 +99,9 @@ public sealed class CanonicalBackfillTests
     }
 
     private static WebApplicationFactory<Program> CreateFactory(ProjectionReader reader) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        ApiTestHost.CreateFactory("Production", "azure", "https://login.example.test/tenant/v2.0", "api://pitchmind")
+            .WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Production");
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<IMatchProjectionReader>();

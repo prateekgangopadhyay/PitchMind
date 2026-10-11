@@ -86,6 +86,7 @@ flowchart TB
 ```
 
 ## Runtime, data and code invariants
+- The API validates JWT signature, HTTPS OIDC issuer metadata, issuer, audience, lifetime, expiration, and allowed RS256 signing algorithm for non-local profiles. Canonical reads require `fan`/`analyst`/`admin`; full stored evidence requires `analyst`/`admin`. Demo fixture routes exist only in Development/local. Frontend token acquisition, Entra registration and role assignment, CORS/CSP, and canonical GET throttling remain outside this candidate.
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
 - `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
 - PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.

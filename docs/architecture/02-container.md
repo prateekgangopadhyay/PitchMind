@@ -18,13 +18,13 @@ flowchart LR
   J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. If the PostgreSQL read adapter is absent, those routes return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Authentication for these canonical routes is still an EP06-S04 gate; they must not be exposed through a cloud ingress before that boundary is implemented or an approved public-synthetic boundary exists. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
+The fixture-backed demo routes still use `SyntheticMatchService` and are mapped only in `Development` with `Runtime:Profile=local`; other profiles do not expose them. `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence, and requires a validated bearer JWT with a role allowed by its route policy. If the PostgreSQL read adapter is absent, an authorized request returns 503 and never falls back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Non-local startup requires configured HTTPS issuer and audience; OIDC metadata/signing-key retrieval and real Entra role assignment are not integration-verified. CORS, CSP, and canonical-route rate limiting are not implemented in this slice. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
 
 ## LOCAL — reconnect and catch-up slice (EP06-S03 candidate)
 
 ```mermaid
 flowchart LR
-  Browser["React browser client (authentication pending)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  Browser["React browser client (bearer token integration pending)"] -->|authorized snapshot + bounded backfill| BFF["JWT + role-protected Canonical BFF"]
   BFF -->|read selected revision| PG["Docker PostgreSQL"]
   PG --> Outbox["Committed projection outbox"]
   Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]
@@ -33,7 +33,7 @@ flowchart LR
   Browser -. "gap, reconnect or revision change" .-> BFF
 ```
 
-The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, `Realtime:Provider=local` is explicit, and PostgreSQL uses a single approved loopback host. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The new canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch or a client sequence ahead of the durable head forces replay from sequence -1. This slice does not certify a connected browser journey: the current application has no production authentication scheme or integrated SignalR browser client, and the canonical event producer/feed adapter remains separately gated.
+The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, `Realtime:Provider=local` is explicit, and PostgreSQL uses a single approved loopback host. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The new canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch or a client sequence ahead of the durable head forces replay from sequence -1. This slice does not certify a connected browser journey: API bearer validation and role policies are present as a local candidate, while frontend token acquisition, production Entra app registration/role assignment, integrated SignalR browser client, and the canonical event producer/feed adapter remain separately gated.
 
 ## TARGET — canonical Azure platform
 

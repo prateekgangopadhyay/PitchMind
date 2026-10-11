@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <ProjectReference Include="../PitchMind.Application/PitchMind.Application.csproj" />
     <ProjectReference Include="../PitchMind.Infrastructure/PitchMind.Infrastructure.csproj" />
     <ProjectReference Include="../PitchMind.Contracts/PitchMind.Contracts.csproj" />

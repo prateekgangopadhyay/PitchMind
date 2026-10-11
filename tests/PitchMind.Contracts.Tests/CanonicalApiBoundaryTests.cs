@@ -13,11 +13,11 @@ using Xunit;
 
 namespace PitchMind.Contracts.Tests;
 
-public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CanonicalApiBoundaryTests : IDisposable
 {
-    private readonly WebApplicationFactory<Program> factory;
+    private readonly WebApplicationFactory<Program> factory = ApiTestHost.CreateFactory();
 
-    public CanonicalApiBoundaryTests(WebApplicationFactory<Program> factory) => this.factory = factory;
+    public void Dispose() => factory.Dispose();
 
     [Theory]
     [InlineData("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", 120, null)]
@@ -26,7 +26,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
     public async Task Event_cursor_cannot_be_reused_for_another_match_time_or_revision(
         string cursorMatchId, int cursorTime, int? requestedRevision)
     {
-        using var client = factory.CreateClient();
+        using var client = ApiTestHost.CreateClient(factory);
         var cursor = EncodeCursor(cursorMatchId, cursorTime, revision: 2, afterSequence: 10);
         var matchId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
         var revisionQuery = requestedRevision is null ? string.Empty : $"&revision={requestedRevision}";
@@ -50,7 +50,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
             services.RemoveAll<IMatchProjectionReader>();
             services.AddSingleton<IMatchProjectionReader>(reader);
         }));
-        using var client = testFactory.CreateClient();
+        using var client = ApiTestHost.CreateClient(testFactory);
         using var cancellation = new CancellationTokenSource();
         var request = client.GetAsync(
             "/api/v1/canonical/matches/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/summary?atSeconds=120",
@@ -73,7 +73,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
             services.RemoveAll<IMatchProjectionReader>();
             services.AddSingleton<IMatchProjectionReader>(reader);
         }));
-        using var client = testFactory.CreateClient();
+        using var client = ApiTestHost.CreateClient(testFactory);
         var cursor = EncodeCursor("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 120, revision: 2, afterSequence: 10);
 
         using var response = await client.GetAsync(

@@ -6,12 +6,30 @@ using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using Npgsql;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 
 var builder = WebApplication.CreateBuilder(args);
+var runtimeProfile = builder.Configuration["Runtime:Profile"];
+var localDemoRoutesEnabled = string.Equals(builder.Environment.EnvironmentName, "Development", StringComparison.OrdinalIgnoreCase) &&
+    string.Equals(runtimeProfile?.Trim(), "local", StringComparison.OrdinalIgnoreCase);
+var jwtSettings = ApiSecurityConfiguration.ResolveJwtSettings(
+    localDemoRoutesEnabled, runtimeProfile, builder.Configuration);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
-builder.Services.AddAuthentication();
-builder.Services.AddAuthorization();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options => ApiSecurityConfiguration.ConfigureJwtBearer(options, jwtSettings));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(ApiSecurityConfiguration.MatchReadPolicy, policy =>
+        policy.RequireAuthenticatedUser().RequireRole("fan", "analyst", "admin"));
+    options.AddPolicy(ApiSecurityConfiguration.EvidenceReadPolicy, policy =>
+        policy.RequireAuthenticatedUser().RequireRole("analyst", "admin"));
+    options.AddPolicy(ApiSecurityConfiguration.OperationsAdminPolicy, policy =>
+        policy.RequireAuthenticatedUser().RequireRole("admin"));
+});
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationResultHandler>();
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
 var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
     builder.Environment.EnvironmentName,
@@ -63,8 +81,6 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 var app = builder.Build();
-app.UseAuthentication();
-app.UseAuthorization();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
@@ -112,31 +128,36 @@ app.Use(async (context, next) =>
             throw;
     }
 });
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
-if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
-app.MapGet("/api/v1/matches", (SyntheticMatchService matches) => Results.Ok(new[] { matches.Fixture.ToResponse() }));
-var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
-match.AddEndpointFilter(async (context, next) =>
+if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization(ApiSecurityConfiguration.MatchReadPolicy);
+if (localDemoRoutesEnabled)
 {
-    var matches = context.HttpContext.RequestServices.GetRequiredService<SyntheticMatchService>();
-    var id = Guid.Parse(context.HttpContext.Request.RouteValues["matchId"]!.ToString()!);
-    return id.ToString() == matches.Fixture.MatchId ? await next(context) : ApiProblem(context.HttpContext, StatusCodes.Status404NotFound, "MATCH_NOT_FOUND", "Match not found");
-});
-match.MapGet("/state", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetState(atSeconds ?? 0).ToResponse()));
-match.MapGet("/events", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetEvents(atSeconds ?? 0).Select(item => item.ToResponse())));
-match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetInsights(atSeconds ?? 0).Select(insight => insight.ToResponse())));
-match.MapGet("/key-moments", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetKeyMoments(atSeconds ?? 0).Select(moment => moment.ToResponse())));
-match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
-    matches.GetEvidence(insightId, atSeconds ?? 0) is { } evidence ? Results.Ok(evidence.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"));
-match.MapGet("/evidence/{insightId}/replay", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
-    matches.GetMechanismReplay(insightId, atSeconds ?? 0) is { } replay ? Results.Ok(replay.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Replay unavailable at selected time"));
-match.MapPost("/analyst", (AnalystRequest request, SyntheticMatchService matches, HttpContext context) =>
-    matches.Explain(request.InsightId, request.AtSeconds, request.Audience ?? "fan") is { } explanation ? Results.Ok(explanation.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"))
-    .RequireRateLimiting("analyst");
+    app.MapGet("/api/v1/matches", (SyntheticMatchService matches) => Results.Ok(new[] { matches.Fixture.ToResponse() }));
+    var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
+    match.AddEndpointFilter(async (context, next) =>
+    {
+        var matches = context.HttpContext.RequestServices.GetRequiredService<SyntheticMatchService>();
+        var id = Guid.Parse(context.HttpContext.Request.RouteValues["matchId"]!.ToString()!);
+        return id.ToString() == matches.Fixture.MatchId ? await next(context) : ApiProblem(context.HttpContext, StatusCodes.Status404NotFound, "MATCH_NOT_FOUND", "Match not found");
+    });
+    match.MapGet("/state", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetState(atSeconds ?? 0).ToResponse()));
+    match.MapGet("/events", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetEvents(atSeconds ?? 0).Select(item => item.ToResponse())));
+    match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetInsights(atSeconds ?? 0).Select(insight => insight.ToResponse())));
+    match.MapGet("/key-moments", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetKeyMoments(atSeconds ?? 0).Select(moment => moment.ToResponse())));
+    match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
+        matches.GetEvidence(insightId, atSeconds ?? 0) is { } evidence ? Results.Ok(evidence.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"));
+    match.MapGet("/evidence/{insightId}/replay", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
+        matches.GetMechanismReplay(insightId, atSeconds ?? 0) is { } replay ? Results.Ok(replay.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Replay unavailable at selected time"));
+    match.MapPost("/analyst", (AnalystRequest request, SyntheticMatchService matches, HttpContext context) =>
+        matches.Explain(request.InsightId, request.AtSeconds, request.Audience ?? "fan") is { } explanation ? Results.Ok(explanation.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"))
+        .RequireRateLimiting("analyst");
+}
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();
@@ -147,3 +168,28 @@ static IResult ApiProblem(HttpContext context, int status, string code, string t
 
 public partial class Program { }
 public sealed record AnalystRequest(string InsightId, int AtSeconds, string? Audience);
+
+internal sealed class ApiAuthorizationResultHandler : IAuthorizationMiddlewareResultHandler
+{
+    private readonly AuthorizationMiddlewareResultHandler defaultHandler = new();
+
+    public async Task HandleAsync(RequestDelegate next, HttpContext context, AuthorizationPolicy policy,
+        PolicyAuthorizationResult authorizeResult)
+    {
+        if (authorizeResult.Challenged || authorizeResult.Forbidden)
+        {
+            var unauthorized = authorizeResult.Challenged;
+            context.Response.StatusCode = unauthorized ? StatusCodes.Status401Unauthorized : StatusCodes.Status403Forbidden;
+            if (unauthorized)
+                context.Response.Headers.WWWAuthenticate = "Bearer";
+            var problem = new ApiProblemResponse("about:blank", unauthorized ? "Authentication required" : "Role is not authorized for this action",
+                context.Response.StatusCode, unauthorized ? "UNAUTHORIZED" : "FORBIDDEN", context.TraceIdentifier,
+                Instance: context.Request.Path);
+            await Results.Json(problem, statusCode: context.Response.StatusCode,
+                contentType: "application/problem+json").ExecuteAsync(context);
+            return;
+        }
+
+        await defaultHandler.HandleAsync(next, context, policy, authorizeResult);
+    }
+}
