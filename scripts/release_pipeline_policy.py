@@ -40,6 +40,35 @@ _OTHER_MUTATORS = re.compile(
     re.IGNORECASE,
 )
 _ALLOWED_AZ_BICEP = {"version", "build", "build-params"}
+# Azure Pipelines accepts shortcut steps such as `bash:` in addition to
+# explicit `task:` mappings. Pin every reviewed validation shortcut so an
+# unreviewed executable step cannot hide behind a harmless-looking mapping.
+_ALLOWED_VALIDATION_SHORTCUTS = {
+    "Validate repository and Compose configuration": (
+        None,
+        "27961490586c31846e75cea5aa0ae3190faa65b8406088f56c607e989f212930",
+    ),
+    "Verify source-feed preflight and planning artifacts": (
+        None,
+        "6a908bcbe1f8adac680370f2c079bcb2a72659891cbd10f42f159b3ff6d71cae",
+    ),
+    "Docker Compose health and real PostgreSQL integration": (
+        None,
+        "382734eb1d0ad67f555626c142f50de3cdf304f3be4af1db147014fc619d2c0f",
+    ),
+    "Restore, build and test solution": (
+        None,
+        "5210c237553e8c79df0fcdddd298d78aaac313b7695402dd41ff02a9174bb16c",
+    ),
+    "Frontend install, build, test and lint": (
+        "frontend",
+        "117e46fd100f8e85f9a24097ead65c537a2ac18d6064142c5caa18061860f063",
+    ),
+    "Compile DEV/STAGE/PROD Bicep and check environment isolation (no deployment)": (
+        None,
+        "bc4f1bc719c77ae6f85fe74adda462c6b369f18edd7a426ea1eae84da8ecee25",
+    ),
+}
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
 _BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
@@ -469,7 +498,85 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
             raise PipelinePolicyError("DeployDev template parameters must remain on the reviewed allowlist")
 
 
+def _assert_validation_step_shapes(node: Any, label: str) -> None:
+    """Allow only reviewed validation step forms and pinned shortcut scripts."""
+    def validate_steps(value: Any) -> None:
+        if isinstance(value, dict):
+            if "steps" in value:
+                steps = value["steps"]
+                if not isinstance(steps, list):
+                    raise PipelinePolicyError(f"Validation steps must be a sequence in {label}")
+                for step in steps:
+                    _assert_validation_step(step, label)
+            for child in value.values():
+                validate_steps(child)
+        elif isinstance(value, list):
+            for child in value:
+                validate_steps(child)
+
+    validate_steps(node)
+
+
+def _assert_validation_step(step: Any, label: str) -> None:
+    if not isinstance(step, dict):
+        raise PipelinePolicyError(f"Unreviewed validation step shape in {label}")
+    if set(step) == {"checkout"} and step["checkout"] == "self":
+        return
+    if set(step) == {"template"} and step["template"] in _VALIDATION_TEMPLATES:
+        return
+    if "bash" in step:
+        if set(step) not in ({"bash", "displayName"}, {"bash", "displayName", "workingDirectory"}):
+            raise PipelinePolicyError(f"Unreviewed Bash shortcut fields are not allowed in {label}")
+        display_name = step.get("displayName")
+        reviewed = _ALLOWED_VALIDATION_SHORTCUTS.get(display_name)
+        if reviewed is None:
+            raise PipelinePolicyError(f"Unreviewed Bash shortcut is not allowed in {label}")
+        expected_directory, expected_hash = reviewed
+        if step.get("workingDirectory") != expected_directory:
+            raise PipelinePolicyError(f"Bash shortcut working directory changed in {label}")
+        script = step.get("bash")
+        if not isinstance(script, str) or hashlib.sha256(script.encode("utf-8")).hexdigest() != expected_hash:
+            raise PipelinePolicyError(f"Bash shortcut script changed without a reviewed policy pin in {label}")
+        return
+
+    task_name = step.get("task")
+    if task_name not in _ALLOWED_VALIDATION_TASKS:
+        raise PipelinePolicyError(f"Unreviewed validation step shape in {label}")
+    task_fields = {
+        "UseDotNet@2": frozenset({"task", "inputs"}),
+        "NodeTool@0": frozenset({"task", "inputs"}),
+        "PublishTestResults@2": frozenset({"task", "inputs"}),
+    }
+    base_fields = task_fields[task_name]
+    allowed_fields = {base_fields, base_fields | {"displayName"}}
+    if task_name == "PublishTestResults@2":
+        allowed_fields |= {fields | {"condition"} for fields in tuple(allowed_fields)}
+    if frozenset(step) not in allowed_fields:
+        raise PipelinePolicyError(f"Unreviewed {task_name} step fields are not allowed in {label}")
+    inputs = step.get("inputs")
+    if not isinstance(inputs, dict) or ("displayName" in step and not isinstance(step["displayName"], str)):
+        raise PipelinePolicyError(f"{task_name} must have reviewed display and input mappings in {label}")
+    if task_name == "UseDotNet@2" and inputs != {"packageType": "sdk", "version": "10.0.x"}:
+        raise PipelinePolicyError(f"UseDotNet inputs changed without a policy review in {label}")
+    if task_name == "NodeTool@0" and inputs != {"versionSpec": "22.x"}:
+        raise PipelinePolicyError(f"NodeTool inputs changed without a policy review in {label}")
+    if task_name == "PublishTestResults@2":
+        allowed_inputs = {
+            "testResultsFormat",
+            "testResultsFiles",
+            "failTaskOnFailedTests",
+            "failTaskOnMissingResultsFile",
+        }
+        if set(inputs) != allowed_inputs or inputs.get("testResultsFormat") not in {"VSTest", "JUnit"} or \
+                not isinstance(inputs.get("testResultsFiles"), str) or inputs.get("failTaskOnFailedTests") is not True or \
+                inputs.get("failTaskOnMissingResultsFile") is not True:
+            raise PipelinePolicyError(f"PublishTestResults inputs changed without a policy review in {label}")
+        if "condition" in step and step["condition"] != "succeededOrFailed()":
+            raise PipelinePolicyError(f"PublishTestResults condition changed without a policy review in {label}")
+
+
 def _assert_validation_only(node: Any, label: str) -> None:
+    _assert_validation_step_shapes(node, label)
     for task in _find_values(node, "task"):
         if isinstance(task, str) and task.startswith("Azure"):
             raise PipelinePolicyError(f"Azure task {task} is not allowed in {label}")

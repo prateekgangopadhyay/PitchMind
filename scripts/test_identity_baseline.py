@@ -381,6 +381,24 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="connection under template env cannot spoof parameters"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(wrong_template_parent, build_template, deploy_template)
 
+    def test_policy_rejects_azure_mutation_hidden_in_unreviewed_bash_shortcut(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        injected_shortcut = (
+            "    - bash: python3 -c \"import subprocess; "
+            "subprocess.run(['az','group','delete','--name','unapproved'], check=True)\"\n"
+            "      displayName: Unreviewed validation shortcut\n"
+        )
+        candidate = pipeline.replace(
+            "    - checkout: self\n    - bash: |",
+            "    - checkout: self\n" + injected_shortcut + "    - bash: |",
+            1,
+        )
+        with self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(pipeline=candidate, build_template=build_template, deploy_template=deploy_template)
+
     def test_policy_rejects_unrecognized_unguarded_azure_mutation(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
