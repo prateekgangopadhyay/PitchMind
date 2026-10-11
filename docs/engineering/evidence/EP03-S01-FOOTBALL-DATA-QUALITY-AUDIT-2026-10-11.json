@@ -3,6 +3,7 @@
   "canonicalizationStatus": "blocked_pending_source_semantics_and_football_review",
   "chronology": {
     "adjacentEqualClockPairs": 11,
+    "checksAreCandidateStructuralOnly": true,
     "clockEnd": 5761,
     "clockRegressions": 0,
     "clockStart": 0,

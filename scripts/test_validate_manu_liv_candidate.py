@@ -47,6 +47,7 @@ def test_manifest(events: list[dict], payload: bytes) -> dict:
         "match": {
             "expectedMatchCount": 1, "expectedTeamCount": 1,
             "sourceClockUnit": None, "sourceClockUnitStatus": "unverified",
+            "clockAndPeriodChecks": "candidate-file-structural-regression-only",
             "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
             "sourceClockEnd": events[-1]["clockSeconds"],
         },
@@ -72,6 +73,8 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(result["sourceClock"]["unitStatus"], "unverified")
         self.assertEqual(result["sourceClock"]["first"], 0)
         self.assertEqual(result["sourceClock"]["last"], 12)
+        self.assertEqual(result["clockAndPeriodChecks"], "candidate-file-structural-regression-only")
+        self.assertFalse(result["clockAndPeriodSemanticsValidated"])
 
     def test_unverified_clock_unit_cannot_claim_a_unit(self):
         manifest = test_manifest(self.events, self.payload)
@@ -250,7 +253,7 @@ class CandidateValidationTests(unittest.TestCase):
 
     def test_rejects_malformed_manifest_types_without_leaking_type_errors(self):
         malformed = {**self.manifest, "match": {**self.manifest["match"], "expectedPeriods": "12"}}
-        with self.assertRaisesRegex(validator.CandidateValidationError, "expectedPeriods"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "period labels"):
             validator.validate_source(self.payload, malformed)
         malformed_count = {**self.manifest, "source": {**self.manifest["source"], "expectedEventCount": "2"}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "must be integers"):
@@ -270,7 +273,7 @@ class CandidateValidationTests(unittest.TestCase):
             "HalfTime": {"clockSeconds": 20, "period": 1},
             "FullTime": {"clockSeconds": 20, "period": 2},
         }
-        with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "period-label ordering changed"):
             validator.validate_source(payload, manifest)
 
     def test_rejects_half_time_marker_with_implausible_clock_and_period_crossing(self):
@@ -291,7 +294,7 @@ class CandidateValidationTests(unittest.TestCase):
             "HalfTime": {"clockSeconds": 2700, "period": 2},
             "FullTime": {"clockSeconds": 12, "period": 2},
         }
-        with self.assertRaisesRegex(validator.CandidateValidationError, "marker clock or period"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "marker-label row values"):
             validator.validate_source(payload, manifest)
 
     def test_requires_explicit_event_policy_for_same_clock_period_two_event_before_half_time(self):
@@ -314,7 +317,7 @@ class CandidateValidationTests(unittest.TestCase):
             "HalfTime": {"clockSeconds": 10, "period": 2},
             "FullTime": {"clockSeconds": 12, "period": 2},
         }
-        with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "period-label ordering around the marker"):
             validator.validate_source(payload, manifest)
         manifest["match"]["allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker"] = ["Pass"]
         self.assertEqual(validator.validate_source(payload, manifest)["status"],
@@ -329,7 +332,7 @@ class CandidateValidationTests(unittest.TestCase):
             "FullTime": {"clockSeconds": 12, "period": 2},
         }
         manifest["match"]["allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker"] = ["Pass"]
-        with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "period-label ordering around the marker"):
             validator.validate_source(payload, manifest)
 
     def test_rejects_manifest_drift_and_unapproved_truth_changes(self):
@@ -354,7 +357,7 @@ class CandidateValidationTests(unittest.TestCase):
         for missing_marker in ("HalfTime", "FullTime"):
             incomplete = json.loads(json.dumps(manifest))
             del incomplete["match"]["requiredEventMarkers"][missing_marker]
-            with self.assertRaisesRegex(validator.CandidateValidationError, "must pin clock and period"):
+            with self.assertRaisesRegex(validator.CandidateValidationError, "must pin raw values"):
                 validator.validate_source(self.payload, incomplete)
 
     def test_two_period_manifest_cannot_remove_both_period_end_declarations(self):
@@ -367,7 +370,7 @@ class CandidateValidationTests(unittest.TestCase):
         }
         del manifest["match"]["requiredEventCounts"]["HalfTime"]
         del manifest["match"]["requiredEventMarkers"]["HalfTime"]
-        with self.assertRaisesRegex(validator.CandidateValidationError, "must require exactly one HalfTime"):
+        with self.assertRaisesRegex(validator.CandidateValidationError, "require one row for each HalfTime"):
             validator.validate_source(self.payload, manifest)
 
     def test_rejects_nonfinite_source_values(self):

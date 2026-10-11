@@ -116,7 +116,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     if (not isinstance(expected_periods, list) or not expected_periods
             or any(not _is_integer(period) or period < 1 for period in expected_periods)
             or len(set(expected_periods)) != len(expected_periods)):
-        raise CandidateValidationError("Manifest expectedPeriods must be a non-empty list of unique positive integers")
+        raise CandidateValidationError("Candidate period labels must be a non-empty list of unique positive integers")
     clock_unit = match_policy.get("sourceClockUnit")
     clock_unit_status = match_policy.get("sourceClockUnitStatus")
     if clock_unit_status not in ("verified", "unverified"):
@@ -125,6 +125,10 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         raise CandidateValidationError("A verified manifest sourceClockUnit must be a non-empty string")
     if clock_unit_status == "unverified" and clock_unit is not None:
         raise CandidateValidationError("An unverified manifest sourceClockUnit must be null")
+    if match_policy.get("clockAndPeriodChecks") != "candidate-file-structural-regression-only":
+        raise CandidateValidationError(
+            "Clock and period checks must be explicitly scoped to candidate-file structural regression only"
+        )
     if (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64
             or any(char not in "0123456789abcdef" for char in source["sha256"])):
         raise CandidateValidationError("Manifest source sha256 must be a lowercase 64-character hexadecimal string")
@@ -139,21 +143,21 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     required_event_markers = match_policy.get("requiredEventMarkers", {})
     pinned_period_end_markers = {"HalfTime", "FullTime"} if {1, 2}.issubset(expected_periods) else set()
     if pinned_period_end_markers and any(required_event_counts.get(event_type) != 1 for event_type in pinned_period_end_markers):
-        raise CandidateValidationError("Two-period manifests must require exactly one HalfTime and FullTime marker")
+        raise CandidateValidationError("Two-label candidate profiles require one row for each HalfTime and FullTime source label")
     allowed_same_clock_period2_types = match_policy.get("allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker", [])
     if (not isinstance(allowed_same_clock_period2_types, list)
             or any(not isinstance(event_type, str) or not event_type for event_type in allowed_same_clock_period2_types)
             or len(set(allowed_same_clock_period2_types)) != len(allowed_same_clock_period2_types)):
-        raise CandidateValidationError("Manifest same-clock half-time event policy must be a unique list of event types")
+        raise CandidateValidationError("Candidate same-clock source-row policy must be a unique list of event labels")
     allowed_same_clock_period2_types = set(allowed_same_clock_period2_types)
     if (not isinstance(required_event_markers, dict)
             or any(not isinstance(event_type, str) or not isinstance(marker, dict)
                    or not _is_integer(marker.get("clockSeconds"))
                    or not _is_integer(marker.get("period")) or marker["period"] not in expected_periods
                    for event_type, marker in required_event_markers.items())):
-        raise CandidateValidationError("Manifest requiredEventMarkers must map event names to integer clock and period")
+        raise CandidateValidationError("Candidate marker rows must map source labels to integer clock values and period labels")
     if not pinned_period_end_markers.issubset(required_event_markers):
-        raise CandidateValidationError("Manifest must pin clock and period for each required halftime/fulltime marker")
+        raise CandidateValidationError("Candidate structural profile must pin raw values for each required marker label")
     source_event_types = manifest.get("canonicalization", {}).get("sourceEventTypes") if isinstance(manifest.get("canonicalization"), dict) else None
     if (not isinstance(source_event_types, list) or not source_event_types
             or any(not isinstance(value, str) or not value.strip() for value in source_event_types)
@@ -249,9 +253,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         if isinstance(clock, bool) or not isinstance(clock, int) or clock < previous_clock:
             raise CandidateValidationError(f"Source clock is not an ordered integer at source index {index}")
         if not _is_integer(period) or period not in expected_periods:
-            raise CandidateValidationError(f"Unsupported source period at source index {index}")
+            raise CandidateValidationError(f"Source period label is absent from candidate profile at source index {index}")
         if period < previous_period:
-            raise CandidateValidationError(f"Source period regressed at source index {index}")
+            raise CandidateValidationError(f"Source period-label ordering changed at source index {index}")
         previous_clock = clock
         previous_period = period
         event_type = event["eventType"]
@@ -339,16 +343,16 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     if position_team_names_by_id != team_names_by_id:
         raise CandidateValidationError("Position frame team identities do not reconcile to event team identities")
     if sorted(periods) != sorted(match_policy.get("expectedPeriods", [])):
-        raise CandidateValidationError("Observed period set differs from manifest")
+        raise CandidateValidationError("Observed source period-label set differs from candidate profile")
     expected_markers = manifest.get("match", {}).get("requiredEventCounts", {})
     if any(event_counts.get(event_type, 0) != count for event_type, count in expected_markers.items()):
-        raise CandidateValidationError("Required period-end source markers differ from manifest")
+        raise CandidateValidationError("Required source marker-label counts differ from candidate profile")
     marker_positions: dict[str, tuple[int, dict[str, Any]]] = {}
     for event_type, expected in required_event_markers.items():
         observed = [(index, event) for index, event in enumerate(events) if event["eventType"] == event_type]
         if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockSeconds"]
                 or observed[0][1]["period"] != expected["period"]):
-            raise CandidateValidationError(f"Required source marker clock or period differs from manifest: {event_type}")
+            raise CandidateValidationError(f"Pinned source marker-label row values differ from candidate profile: {event_type}")
         marker_positions[event_type] = observed[0]
     half_time = marker_positions.get("HalfTime")
     full_time = marker_positions.get("FullTime")
@@ -356,22 +360,22 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         half_index, half_event = half_time
         full_index, full_event = full_time
         if half_index >= full_index or half_event["clockSeconds"] > full_event["clockSeconds"]:
-            raise CandidateValidationError("Half-time must precede full-time in source sequence and clock")
+            raise CandidateValidationError("Pinned marker-label ordering/value pattern changed in source sequence")
         if any((event["period"] == 1 and index > half_index)
                or (event["period"] == 2 and index < half_index and
                    (event["clockSeconds"] < half_event["clockSeconds"] or
                     event["clockSeconds"] == half_event["clockSeconds"] and
                     event["eventType"] not in allowed_same_clock_period2_types))
                for index, event in enumerate(events)):
-            raise CandidateValidationError("Source event periods cross the half-time marker")
+            raise CandidateValidationError("Pinned source period-label ordering around the marker changed")
         if not any(event["eventType"] == "KickOff" and event["period"] == 2
                    and index > half_index and event["clockSeconds"] >= half_event["clockSeconds"]
                    for index, event in enumerate(events)):
-            raise CandidateValidationError("Second-period kickoff must follow the half-time marker")
+            raise CandidateValidationError("Pinned period-label/KickOff source-row pattern changed")
     if events[-1]["eventType"] != "FullTime":
-        raise CandidateValidationError("Final source record must retain the full-time marker")
+        raise CandidateValidationError("Final source record no longer carries the pinned FullTime label")
     if events[0]["clockSeconds"] != match_policy.get("sourceClockStart") or events[-1]["clockSeconds"] != match_policy.get("sourceClockEnd"):
-        raise CandidateValidationError("Source clock boundaries differ from manifest")
+        raise CandidateValidationError("Raw source clock-field boundary values differ from candidate profile")
     if events[0]["sequence"] != source.get("sequenceStart") or events[-1]["sequence"] != source.get("sequenceEnd"):
         raise CandidateValidationError("Source sequence boundaries differ from manifest")
     declared_types = set(source_event_types)
@@ -398,6 +402,8 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
                         "unitStatus": match_policy["sourceClockUnitStatus"],
                         "first": events[0]["clockSeconds"],
                         "last": events[-1]["clockSeconds"], "preservedWithoutNormalization": True},
+        "clockAndPeriodChecks": "candidate-file-structural-regression-only",
+        "clockAndPeriodSemanticsValidated": False,
         "sourceEventIdLedgerSha256": sha256(bytes(source_ids_ledger)).hexdigest(),
         "orderedEventRecordsSha256": sha256(bytes(ordered_records_ledger)).hexdigest(),
         "eventCounts": dict(sorted(event_counts.items())),

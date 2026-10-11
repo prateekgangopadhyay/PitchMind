@@ -272,6 +272,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
         },
         "chronology": {
             "eventCount": len(events),
+            "checksAreCandidateStructuralOnly": manifest.get("match", {}).get("clockAndPeriodChecks") == "candidate-file-structural-regression-only",
             "sequenceStart": sequences[0],
             "sequenceEnd": sequences[-1],
             "sequenceContiguousFromManifestStart": sequences == list(range(

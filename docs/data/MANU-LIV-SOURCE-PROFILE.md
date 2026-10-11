@@ -15,7 +15,7 @@
 | Distinct matches | one, `matchId=b2c3d4e5-f6a7-8901-bcde-f12345678901` |
 | Source sequence | 1..2199, contiguous and ascending, no duplicated event IDs observed |
 | `clockSeconds` raw field values | 0..5761, nondecreasing. Unit and elapsed/period-local/stoppage-time semantics are **UNSPECIFIED / UNVERIFIED**; the field-name suffix is not source authority. |
-| Periods | 1: 1035 records, 2: 1164 records |
+| Raw `period` labels | 1: 1035 records, 2: 1164 records. Labels are preserved; their domain meaning is unverified. |
 | Teams | Manchester United: 1123 event records; Liverpool: 1076 |
 | Events titled Goal | 6: 3 United, 3 Liverpool; final score 3–3 |
 | Other major events | 2 substitutions; 1 red card; half/full time markers |
@@ -45,6 +45,7 @@
 
 ## Clock, coordinate and identity conversion — REQUIRED
 - Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.** The candidate field is named `clockSeconds`, but its unit and clock semantics remain unverified until supported by a source-owner data dictionary.
+- Candidate-manifest checks pin clock order, period labels, and marker row values only as regression guards for this exact source file. They are not approved time/period semantics and do not establish the meaning of the source event labels.
 - Conversion should map `sourceSequence 1..2199` to canonical 0..2198 or explicitly version a 1-based contract; preserve original sequence separately. Do not mutate source event IDs.
 - Determine pitch axis/attacking-direction convention and whether x/y values are percentages. Only after this is confirmed should `xMetres = xNormalized * pitchLengthMetres / 100` and `yMetres = yNormalized * pitchWidthMetres / 100` be applied, using **manifest-defined pitch dimensions**. Never blindly map `pitchY=98` into 68 metre bounds or calculate a 3-metre presser distance on unitless points.
 - Current `SyntheticMatchService` treats fulltime as exactly 5400 and would reject events after; adapt clock/stoppage semantics to 5761 without using wall-clock to reconstruct game state.

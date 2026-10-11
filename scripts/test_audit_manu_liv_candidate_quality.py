@@ -60,7 +60,8 @@ def report_for(events, domain_source="public enum MatchEventType { Pass, Goal, P
         "status": "candidate_not_canonical",
         "source": {"path": "fixture.json", "sha256": audit.sha256(data).hexdigest(),
                    "byteSize": len(data), "expectedEventCount": len(events)},
-        "match": {"sourceClockUnit": None, "sourceClockUnitStatus": "unverified", "sequenceStart": 1},
+        "match": {"sourceClockUnit": None, "sourceClockUnitStatus": "unverified",
+                  "clockAndPeriodChecks": "candidate-file-structural-regression-only", "sequenceStart": 1},
         "coordinates": {"unit": None, "axisConvention": None, "pitchDimensionsMetres": None,
                         "status": "unverified"},
         "playerMetrics": {"status": "unvalidated", "unitsAndValidity": "unverified",
@@ -76,6 +77,7 @@ class CandidateQualityAuditTests(unittest.TestCase):
         self.assertIsNone(report["chronology"]["clockUnitDeclaredByManifest"])
         self.assertEqual(report["chronology"]["clockUnitStatusByManifest"], "unverified")
         self.assertEqual(report["chronology"]["clockValueSpan"], 0)
+        self.assertTrue(report["chronology"]["checksAreCandidateStructuralOnly"])
 
     def test_report_output_cannot_alias_and_overwrite_source_or_manifest(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
