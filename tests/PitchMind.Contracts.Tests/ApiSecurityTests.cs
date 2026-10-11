@@ -1,11 +1,67 @@
 using System.Net;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
 
 public sealed class ApiSecurityTests
 {
+    [Fact]
+    public async Task Jwt_bearer_validation_rejects_wrong_issuer_audience_expiry_and_signature()
+    {
+        const string issuer = "https://issuer.test.local/tenant/v2.0";
+        const string audience = "api://pitchmind-test";
+        using var signingKey = RSA.Create(2048);
+        using var foreignKey = RSA.Create(2048);
+        using var factory = ApiTestHost.CreateJwtFactory(issuer, audience, signingKey);
+        using var client = factory.CreateClient();
+
+        using var validFan = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken(issuer, audience, signingKey, "fan"));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, validFan.StatusCode);
+
+        using var wrongIssuer = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken("https://attacker.test.local/", audience, signingKey, "fan"));
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongIssuer.StatusCode);
+
+        using var wrongAudience = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken(issuer, "api://another-api", signingKey, "fan"));
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongAudience.StatusCode);
+
+        using var expired = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken(issuer, audience, signingKey, "fan", DateTime.UtcNow.AddMinutes(-10)));
+        Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
+
+        using var invalidSignature = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken(issuer, audience, foreignKey, "fan"));
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidSignature.StatusCode);
+    }
+
+    [Fact]
+    public async Task Jwt_bearer_roles_are_applied_after_cryptographic_validation()
+    {
+        const string issuer = "https://issuer.test.local/tenant/v2.0";
+        const string audience = "api://pitchmind-test";
+        using var signingKey = RSA.Create(2048);
+        using var factory = ApiTestHost.CreateJwtFactory(issuer, audience, signingKey);
+        using var client = factory.CreateClient();
+        var evidence = "/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/evidence/press-1?atSeconds=0";
+
+        using var missingRole = await SendBearer(client, "/api/v1/canonical/fixtures",
+            CreateToken(issuer, audience, signingKey));
+        Assert.Equal(HttpStatusCode.Forbidden, missingRole.StatusCode);
+
+        using var fanEvidence = await SendBearer(client, evidence, CreateToken(issuer, audience, signingKey, "fan"));
+        Assert.Equal(HttpStatusCode.Forbidden, fanEvidence.StatusCode);
+
+        using var analystEvidence = await SendBearer(client, evidence, CreateToken(issuer, audience, signingKey, "analyst"));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, analystEvidence.StatusCode);
+    }
+
     [Fact]
     public async Task Canonical_routes_reject_anonymous_and_unapproved_roles()
     {
@@ -94,5 +150,24 @@ public sealed class ApiSecurityTests
             PitchMind.Api.ApiSecurityConfiguration.ResolveJwtSettings(false, "production", configuration));
 
         Assert.Contains("absolute HTTPS URI", error.Message, StringComparison.Ordinal);
+    }
+
+    private static string CreateToken(string issuer, string audience, RSA signingKey, string? role = null,
+        DateTime? expiresUtc = null)
+    {
+        var claims = new List<Claim> { new("sub", "local-security-test") };
+        if (role is not null) claims.Add(new Claim("roles", role));
+        var expiry = expiresUtc ?? DateTime.UtcNow.AddMinutes(5);
+        var notBefore = expiry < DateTime.UtcNow ? expiry.AddMinutes(-5) : DateTime.UtcNow.AddMinutes(-1);
+        var token = new JwtSecurityToken(issuer, audience, claims, notBefore, expiry,
+            new SigningCredentials(new RsaSecurityKey(signingKey), SecurityAlgorithms.RsaSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static async Task<HttpResponseMessage> SendBearer(HttpClient client, string route, string token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, route);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
     }
 }

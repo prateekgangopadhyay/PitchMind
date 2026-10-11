@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -8,6 +10,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 
 namespace PitchMind.Contracts.Tests;
 
@@ -37,6 +42,36 @@ internal static class ApiTestHost
                 })
                 .AddScheme<AuthenticationSchemeOptions, TestRoleAuthenticationHandler>("test", _ => { }));
         });
+
+    public static WebApplicationFactory<Program> CreateJwtFactory(string issuer, string audience, RSA signingKey)
+    {
+        var oidc = new OpenIdConnectConfiguration { Issuer = issuer };
+        oidc.SigningKeys.Add(new RsaSecurityKey(signingKey));
+        var configurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(oidc);
+        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting(WebHostDefaults.EnvironmentKey, "Production");
+            builder.UseSetting("Runtime:Profile", "azure");
+            builder.UseSetting("Authentication:Issuer", issuer);
+            builder.UseSetting("Authentication:Audience", audience);
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Runtime:Profile"] = "azure",
+                    ["Authentication:Issuer"] = issuer,
+                    ["Authentication:Audience"] = audience
+                }));
+            builder.ConfigureTestServices(services => services.PostConfigure<JwtBearerOptions>(
+                JwtBearerDefaults.AuthenticationScheme, options =>
+                {
+                    // Keep discovery local while exercising production token-validation parameters.
+                    options.Authority = null;
+                    options.MetadataAddress = string.Empty;
+                    options.ConfigurationManager = configurationManager;
+                }));
+        });
+    }
 
     public static HttpClient CreateClient(WebApplicationFactory<Program> factory, string role = "fan")
     {
