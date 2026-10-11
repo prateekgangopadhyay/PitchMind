@@ -2,6 +2,7 @@
 """Checks that the pinned Syft wrapper emits a valid SPDX JSON document."""
 
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -31,6 +32,7 @@ class GenerateSbomTests(unittest.TestCase):
                 text=True,
                 timeout=120,
                 check=False,
+                env={**os.environ, "PITCHMIND_SBOM_VERSION": "fixture-1.0.0"},
             )
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -39,6 +41,14 @@ class GenerateSbomTests(unittest.TestCase):
         self.assertEqual(document["spdxVersion"], "SPDX-2.3")
         self.assertTrue(document["SPDXID"].startswith("SPDXRef-"))
         self.assertIn("packages", document)
+        self.assertTrue(document["packages"], "SBOM must contain at least one package")
+        self.assertIn(
+            ("pitchmind-source", "fixture-1.0.0"),
+            {
+                (package["name"], package.get("versionInfo"))
+                for package in document["packages"]
+            },
+        )
 
     def test_output_inside_source_is_rejected_without_creating_directories(self):
         with tempfile.TemporaryDirectory(prefix="pitchmind-sbom-path-") as temp_dir:

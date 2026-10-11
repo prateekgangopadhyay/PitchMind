@@ -7,8 +7,12 @@ The runner uses [Gitleaks v8.29.1](https://github.com/gitleaks/gitleaks/releases
 (`sha256:aa036a2f4bdfe3cc3c55fa4326308efabb4a6be498c883c864fd1d0d5585438a`). It
 mounts source read-only, disables container networking, and redacts any finding
 from console output. It fails when the scanner reports a finding or cannot run.
-The pinned version is exercised by a clean fixture and an ephemeral, synthetic
-token-shaped canary in `scripts/test_secret_scan.py`.
+The pinned version is exercised by a clean fixture and ephemeral, synthetic
+token-shaped canaries in `scripts/test_secret_scan.py`. The wrapper supplies
+the scanner's built-in default rules through `GITLEAKS_CONFIG_TOML`, so a
+repository `.gitleaks.toml` cannot replace those rules. It also passes
+`--ignore-gitleaks-allow`, preventing inline comments from suppressing findings.
+Regressions exercise both bypass attempts through the production wrapper.
 
 `bash scripts/generate-sbom.sh <source-directory> <output-spdx-json>` generates
 an SPDX 2.3 source SBOM with [Syft](https://github.com/anchore/syft) `v1.54.1`, pinned by digest
@@ -28,3 +32,9 @@ enable, provision, or deploy any Azure stage.
 We pin and regression-test Gitleaks `v8.29.1`. An [upstream v8.30.1 report](https://github.com/gitleaks/gitleaks/issues/2170)
 used an example token containing a default stopword, so it does not establish
 an engine regression. Our synthetic canary avoids those stopwords.
+
+## Dependency severity policy
+
+The local and Azure pipeline npm audit gates use `--audit-level=low`, npm's
+lowest advisory severity. Any reported low, moderate, high, or critical
+advisory fails. This repository has no severity exception policy.

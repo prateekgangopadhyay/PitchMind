@@ -8,7 +8,8 @@ dotnet test PitchMind.slnx --no-build -c Release
 (
   cd frontend
   if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
-  npm audit --audit-level=high
+  # Low is the minimum npm advisory severity; fail on any reported severity.
+  npm audit --audit-level=low
   npm run build
   npm test
   npm run lint

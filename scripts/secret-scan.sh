@@ -21,12 +21,18 @@ if ! docker image inspect "$gitleaks_image" >/dev/null 2>&1; then
   docker pull "$gitleaks_image" >/dev/null
 fi
 
+# Supply the pinned tool's built-in rules through the runner environment. This
+# prevents a repository-local .gitleaks.toml from replacing them. The scanner
+# also ignores all inline gitleaks:allow comments below.
+trusted_gitleaks_config=$'[extend]\nuseDefault = true\n'
+
 exec docker run --rm \
   --network=none \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
+  -e "GITLEAKS_CONFIG_TOML=$trusted_gitleaks_config" \
   -v "${scan_source}:/scan:ro" \
   -w /scan \
   "$gitleaks_image" \
-  dir --redact --no-banner --no-color /scan
+  dir --ignore-gitleaks-allow --redact --no-banner --no-color /scan
