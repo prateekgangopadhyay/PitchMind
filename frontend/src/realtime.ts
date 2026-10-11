@@ -21,7 +21,7 @@ export interface RealtimeTimelineState {
 export function selectHistoricalTime(state: RealtimeTimelineState, selectedTimeSeconds: number): RealtimeTimelineState {
   if (!Number.isInteger(selectedTimeSeconds) || selectedTimeSeconds < 0 || selectedTimeSeconds > 5400)
     throw new RangeError('Selected match time must be between 0 and 5400 seconds.');
-  return { ...state, mode: 'HISTORICAL', selectedTimeSeconds, hasNewMatchUpdate: false };
+  return { ...state, mode: 'HISTORICAL', selectedTimeSeconds, hasNewMatchUpdate: false, needsBackfill: true };
 }
 
 export function returnToLive(state: RealtimeTimelineState): RealtimeTimelineState {
@@ -58,8 +58,14 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
       response.snapshot.selectedTimeSeconds !== response.events.selectedTimeSeconds)
     throw new Error('Backfill snapshot and event page do not share one match-time revision.');
 
-  const reset = response.revisionChanged || response.replayRequired || response.snapshot.canonicalRevision !== state.canonicalRevision;
-  const base = reset ? [] : state.events;
+  const requestedTime = state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : 5400;
+  if (response.snapshot.selectedTimeSeconds !== requestedTime)
+    throw new Error('Backfill response does not match the currently selected match time.');
+
+  const revisionReset = response.revisionChanged || response.replayRequired || response.snapshot.canonicalRevision !== state.canonicalRevision;
+  const timeContextChanged = response.snapshot.selectedTimeSeconds !== state.snapshot.selectedTimeSeconds;
+  const replaceTimeline = revisionReset || timeContextChanged;
+  const base = replaceTimeline ? [] : state.events;
   const bySequence = new Map<number, CanonicalLedgerEvent>();
   const byEventId = new Map<string, CanonicalLedgerEvent>();
   for (const event of [...base, ...response.events.items]) {
@@ -74,8 +80,8 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   }
 
   const events = [...bySequence.values()].sort((left, right) => left.sequence - right.sequence);
-  const expectedStart = reset ? 0 : state.throughSequence + 1;
-  const newEvents = events.filter(event => event.sequence > (reset ? -1 : state.throughSequence));
+  const expectedStart = replaceTimeline ? 0 : state.throughSequence + 1;
+  const newEvents = events.filter(event => event.sequence > (replaceTimeline ? -1 : state.throughSequence));
   if (newEvents.length > 0 && newEvents[0].sequence !== expectedStart)
     return { ...state, needsBackfill: true, reconnecting: true };
   for (let index = 1; index < newEvents.length; index++) {
@@ -83,7 +89,7 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
       return { ...state, needsBackfill: true, reconnecting: true };
   }
 
-  const pageThrough = events.at(-1)?.sequence ?? (reset ? -1 : state.throughSequence);
+  const pageThrough = events.at(-1)?.sequence ?? (replaceTimeline ? -1 : state.throughSequence);
   const caughtUp = !response.events.hasMore && pageThrough >= response.snapshot.throughSequence;
   return {
     ...state,
@@ -91,7 +97,7 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
     selectedTimeSeconds: state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : response.snapshot.asOfSeconds,
     canonicalRevision: response.snapshot.canonicalRevision,
     throughSequence: pageThrough,
-    snapshot: state.mode === 'HISTORICAL' ? state.snapshot : response.snapshot,
+    snapshot: response.snapshot,
     events,
     nextCursor: response.events.nextCursor,
     hasMore: response.events.hasMore,
@@ -107,8 +113,9 @@ export function markRealtimeDisconnected(state: RealtimeTimelineState): Realtime
 
 export function buildTimelineBackfillPath(state: RealtimeTimelineState): string {
   const atSeconds = state.mode === 'LIVE' ? 5400 : state.selectedTimeSeconds;
+  const selectedContextChanged = atSeconds !== state.snapshot.selectedTimeSeconds;
   const query = new URLSearchParams({
-    afterSequence: String(state.throughSequence),
+    afterSequence: String(selectedContextChanged ? -1 : state.throughSequence),
     atSeconds: String(atSeconds),
     revision: String(state.canonicalRevision),
     limit: '100',
