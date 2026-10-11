@@ -339,7 +339,7 @@ it('keeps selected-time scrubbing available and disables auto replay when reduce
     await act(async () => { root.render(createElement(App)); });
     expect(container.querySelector('#selected-time')).not.toBeNull();
     expect(container.textContent).toContain('Automatic replay is off under reduced motion');
-    expect(container.querySelector('button[aria-pressed]')).toBeNull();
+    expect(container.querySelector('.match-context-controls button[aria-pressed]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -589,6 +589,169 @@ it('aborts and ignores a pending cursor page when Home is refreshed', async () =
     expect(container.textContent).toContain(refreshedId);
     expect(container.textContent).not.toContain(staleId);
     expect(container.textContent).not.toContain(firstId);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+function canonicalSnapshot(matchId: string, selectedTimeSeconds: number, throughSequence: number) {
+  return {
+    matchId, canonicalRevision: 4, selectedTimeSeconds, asOfSeconds: selectedTimeSeconds, throughSequence,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+}
+
+function canonicalPage(matchId: string, selectedTimeSeconds: number, throughSequence: number, items: unknown[]) {
+  return {matchId, canonicalRevision: 4, selectedTimeSeconds, throughSequence, items, nextCursor: null, hasMore: false};
+}
+
+it('keeps score and recorded events visible when optional insight service is unavailable', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    const unavailable = {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (url.pathname.endsWith('/insights') || url.pathname.endsWith('/frames') || url.pathname.endsWith('/key-moments')) return unavailable;
+    if (url.pathname.endsWith('/summary')) return {ok: true, json: async () => canonicalSnapshot(matchId, 3309, 19)};
+    const events = [{eventId: 'event-19', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}];
+    return {ok: true, json: async () => canonicalPage(matchId, 3309, 19, events)};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Canonical revision 4');
+    expect(container.textContent).toContain('Goal');
+    expect(container.textContent).toContain('Saved insights service is temporarily unavailable.');
+    expect(container.textContent).toContain('AI explanations are not connected; match facts remain available without them.');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('changes explanation detail for Fan and Analyst without changing persisted facts', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const insight = {
+    insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+    throughSequence: 19, sourceVersion: 'source-v1', provenance: 'synthetic-approved', sourceSha256: 'c'.repeat(64),
+    detectorVersion: 'pattern-v1', truthClass: 'interpretation', summary: 'A stored pattern is classified as an interpretation.',
+    conditions: {sampleSize: 11, observed: true}, limitations: ['Sparse frame coverage'],
+    evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    const unavailable = {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (url.pathname.endsWith('/frames') || url.pathname.endsWith('/key-moments')) return unavailable;
+    if (url.pathname.endsWith('/summary')) return {ok: true, json: async () => canonicalSnapshot(matchId, 3309, 19)};
+    if (url.pathname.endsWith('/insights')) return {ok: true, json: async () => canonicalPage(matchId, 3309, 19, [insight])};
+    if (url.pathname.endsWith('/events')) return {ok: true, json: async () => canonicalPage(matchId, 3309, 19, [])};
+    return {ok: false, status: 404, json: async () => ({})};
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    const summary = container.querySelector('.canonical-insights > li > p')?.textContent;
+    expect(summary).toBe(insight.summary);
+    expect(container.textContent).not.toContain('sampleSize');
+    const analystButton = [...container.querySelectorAll<HTMLButtonElement>('.audience-mode button')].find(button => button.textContent === 'Analyst')!;
+    await act(async () => { analystButton.click(); });
+    expect(analystButton.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.canonical-insights > li > p')?.textContent).toBe(summary);
+    expect(container.textContent).toContain('Detector pattern-v1');
+    expect(container.textContent).toContain('sampleSize');
+    expect(container.textContent).toContain('Sparse frame coverage');
+    const fanButton = [...container.querySelectorAll<HTMLButtonElement>('.audience-mode button')].find(button => button.textContent === 'Fan')!;
+    await act(async () => { fanButton.click(); });
+    expect(fanButton.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.canonical-insights > li > p')?.textContent).toBe(summary);
+    expect(container.querySelector('.analyst-insight-detail')).toBeNull();
+    expect(fetchMock.mock.calls.some(([input]) => new URL(String(input), 'http://localhost').pathname.endsWith('/analyst'))).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('restores focus to the cited event when following evidence into replay', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const insight = {
+    insightId: 'insight-press', matchId, canonicalRevision: 4, selectedTimeSeconds: 3300,
+    throughSequence: 18, sourceVersion: 'source-v1', provenance: 'synthetic-approved', sourceSha256: 'c'.repeat(64),
+    detectorVersion: 'pattern-v1', truthClass: 'interpretation', summary: 'Stored insight.', conditions: {}, limitations: null,
+    evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
+  };
+  const event = {eventId: 'event-18', matchId, sequence: 18, type: 'pass', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'};
+  const evidence = {insight, items: [{kind: 'event', id: 'event-18', relation: 'supports', sequence: 18, clockSeconds: 3300, period: 2, payload: event}]};
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3300&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    const unavailable = {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (url.pathname.endsWith('/frames') || url.pathname.endsWith('/key-moments')) return unavailable;
+    if (url.pathname.endsWith('/summary')) return {ok: true, json: async () => canonicalSnapshot(matchId, 3300, 18)};
+    if (url.pathname.endsWith('/events')) return {ok: true, json: async () => canonicalPage(matchId, 3300, 18, [event])};
+    if (url.pathname.endsWith('/insights')) return {ok: true, json: async () => canonicalPage(matchId, 3300, 18, [insight])};
+    if (url.pathname.endsWith('/evidence/insight-press')) return {ok: true, json: async () => evidence};
+    return {ok: false, status: 404, json: async () => ({})};
+  }));
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    const disclosure = container.querySelector<HTMLDetailsElement>('.canonical-evidence-disclosure')!;
+    await act(async () => { disclosure.open = true; disclosure.dispatchEvent(new Event('toggle')); });
+    const citationLink = [...container.querySelectorAll<HTMLAnchorElement>('.canonical-evidence-content a')]
+      .find(link => link.textContent?.includes('event-18'))!;
+    expect(citationLink.getAttribute('href')).toContain('#canonical-event-18');
+    const target = new URL(citationLink.href);
+    await act(async () => {
+      window.history.replaceState(null, '', `${target.pathname}${target.search}${target.hash}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect((document.activeElement as HTMLElement).id).toBe('canonical-event-18');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('offers retry after required canonical summary failure without substituting demo data', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  let summaryRequests = 0;
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/summary') && ++summaryRequests === 1)
+      return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    const unavailable = {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
+    if (url.pathname.endsWith('/frames') || url.pathname.endsWith('/key-moments')) return unavailable;
+    if (url.pathname.endsWith('/summary')) return {ok: true, json: async () => canonicalSnapshot(matchId, 3309, 19)};
+    return {ok: true, json: async () => canonicalPage(matchId, 3309, 19, [])};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Canonical match data service is temporarily unavailable.');
+    await act(async () => { container.querySelector<HTMLButtonElement>('#canonical-match-retry')!.click(); });
+    expect(container.textContent).toContain('Canonical revision 4');
+    expect(summaryRequests).toBe(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

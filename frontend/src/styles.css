@@ -122,6 +122,12 @@ button, select { min-height: 44px; }
 .load-more { min-height:44px; }
 .match-context-controls { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.9rem; margin:1.25rem 0; color:var(--pm-text-secondary); }
 .match-context-controls input { width:100%; min-width:0; accent-color:var(--pm-accent); }
+.audience-mode { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; margin:.75rem 0; padding:.75rem 0; border-block:1px solid var(--pm-border); }
+.audience-mode > span { font-weight:700; }
+.audience-mode > button { min-height:44px; touch-action:manipulation; }
+.audience-mode > p { flex:1 0 100%; margin:0; color:var(--pm-text-secondary); }
+.analyst-insight-detail { display:grid; gap:.35rem; min-width:0; }
+.analyst-insight-detail pre { max-width:100%; overflow-wrap:anywhere; white-space:pre-wrap; }
 .canonical-events { margin:0; padding:0; list-style:none; }
 .canonical-events li { padding:0; border-top:1px solid var(--pm-border); }
 .canonical-events time { color:var(--pm-accent); font-variant-numeric:tabular-nums; }
@@ -163,6 +169,8 @@ button, select { min-height: 44px; }
   .pitch-dashboard > :last-child { grid-column:auto; }
 }
 @media(max-width:640px) {
+  .audience-mode { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .audience-mode > span, .audience-mode > p { grid-column:1/-1; }
   .home-heading-row { align-items:stretch; flex-direction:column; gap:.5rem; }
   .phase-filter { min-width:0; }
   .match-context-controls { grid-template-columns:1fr auto; gap:.3rem .75rem; }
