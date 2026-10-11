@@ -41,3 +41,7 @@ Use these links to open each specialist's **PitchMind audit instructions** and t
 The **Awesome Design audit rubrics** are also available directly in this repository: [anti-slop rubric](../design/vendor/awesome-anti-slop-rubric.md), [AI UI quality rubric](../design/vendor/awesome-ai-ui-quality-rubric.md), and [premium generation gate](../design/vendor/awesome-premium-generation-gate.md).
 
 For audit records and execution, use the [source-only baseline UI audit](../design/BASELINE-UI-AUDIT.md) and [per-screen frontend audit workflow](../design/FRONTEND-DESIGN-DELIVERY.md). The baseline audit is explicitly partial; final visual/accessibility acceptance requires rendered-screen evidence, relevant tests and independent review. [Source attribution and licenses](../design/VENDOR-SOURCES.md) document the pinned versions.
+
+## Accelerated delivery and CodeGraph
+
+The active [AI execution directive](AI-EXECUTION-DIRECTIVE.md) preserves all 59 existing story routes while prioritizing parallel P0 development **and** dependency-safe incremental integration into `main`. The [CodeGraph setup and usage guide](../engineering/CODEGRAPH-INTEGRATION.md) describes optional read-only graph context, cross-agent blast-radius handoffs and real stacked-PR base comparisons. It does not add a Council role, substitute for independent acceptance, create a GitHub Actions pipeline or waive Azure approvals.
