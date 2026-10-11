@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -246,6 +247,79 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsCandidateFootballNumbersHiddenBehindLocalAliases()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var candidateClock = firstEvent.GetProperty("clockSeconds").GetRawText();
+        var candidatePitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var candidateSequence = firstEvent.GetProperty("sequence").GetInt32();
+        var hexadecimalSequence = "0x" + candidateSequence.ToString("X", CultureInfo.InvariantCulture);
+        var binarySequence = "0b" + Convert.ToString(candidateSequence, 2);
+        var octalSequence = "0o" + Convert.ToString(candidateSequence, 8);
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-alias-numeric-guard-");
+        try
+        {
+            var tsxSource = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
+            var javascriptSource = Path.Combine(sourceRoot.FullName, "App.js");
+            File.WriteAllText(tsxSource,
+                $"const observedClock = {candidateClock};\n" +
+                "const firstClockAlias = observedClock;\n" +
+                "const secondClockAlias = firstClockAlias;\n" +
+                "const timeline = { clockSeconds: secondClockAlias };\n" +
+                $"const observedCoordinate: number = {candidatePitchX};\n" +
+                "const point = { pitchX: observedCoordinate };\n" +
+                $"const hexSequence = {{ sequence: {hexadecimalSequence} }};\n" +
+                $"const binarySequence = {{ sequence: {binarySequence} }};\n" +
+                $"const octalSequence = {{ sequence: {octalSequence} }};");
+            File.WriteAllText(csharpSource,
+                $"var observedClock = {candidateClock};\n" +
+                "var firstClockAlias = observedClock;\n" +
+                "var secondClockAlias = firstClockAlias;\n" +
+                "var timeline = new { clockSeconds = secondClockAlias };\n" +
+                $"decimal observedCoordinate = {candidatePitchX}m;\n" +
+                "var point = new { pitchX = observedCoordinate };\n" +
+                $"var hexSequence = new {{ sequence = {hexadecimalSequence} }};\n" +
+                $"var binarySequence = new {{ sequence = {binarySequence} }};");
+            File.WriteAllText(javascriptSource,
+                $"const firstAlias = {candidateClock};\n" +
+                "const secondAlias = firstAlias;\n" +
+                "const thirdAlias = secondAlias;\n" +
+                "const timeline = { clockSeconds: thirdAlias };\n" +
+                $"const hexSequence = {{ sequence: {hexadecimalSequence} }};\n" +
+                $"const binarySequence = {{ sequence: {binarySequence} }};\n" +
+                $"const octalSequence = {{ sequence: {octalSequence} }};");
+
+            var violations = FindFixtureDataMarkers(
+                [tsxSource, csharpSource, javascriptSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(13, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("clockSeconds: secondClockAlias", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("pitchX: observedCoordinate", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("0x", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("0b", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("0o", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = secondClockAlias", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("pitchX = observedCoordinate", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("0x", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("0b", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("clockSeconds: thirdAlias", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("0o", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
     {
         var sourceRoots = new[]
@@ -412,16 +486,22 @@ public sealed class DependencyTests
             if (numericMarkers is not null && numericMarkers.Count > 0)
             {
                 var source = File.ReadAllText(path);
-                foreach (Match match in Regex.Matches(source,
-                    "(?:(?<quote>[\\\"'])(?<quotedName>[A-Za-z_][A-Za-z0-9_]*)\\k<quote>|\\[\\s*[\\\"'](?<indexedName>[A-Za-z_][A-Za-z0-9_]*)[\\\"']\\s*\\]|(?<plainName>[A-Za-z_][A-Za-z0-9_]*))\\s*[:=]\\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\\.(?:[0-9](?:_?[0-9])*)?)?|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
+                var numericAliases = ReadNumericAliases(source);
+                var propertyPattern =
+                    @"(?:(?<quote>[""'])(?<quotedName>[A-Za-z_][A-Za-z0-9_]*)\k<quote>|\[\s*[""'](?<indexedName>[A-Za-z_][A-Za-z0-9_]*)[""']\s*\]|(?<plainName>[A-Za-z_][A-Za-z0-9_]*))\s*[:=]\s*(?:(?<value>" + SourceNumericLiteralPattern + @")(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)|(?<alias>@?[A-Za-z_$][A-Za-z0-9_$]*))(?![A-Za-z0-9_.])";
+                foreach (Match match in Regex.Matches(source, propertyPattern))
                 {
                     var propertyName = match.Groups["quotedName"].Success
                         ? match.Groups["quotedName"].Value
                         : match.Groups["indexedName"].Success
                             ? match.Groups["indexedName"].Value
                             : match.Groups["plainName"].Value;
-                    if (numericMarkers.TryGetValue(propertyName, out var values) &&
-                        values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
+                    var numericValue = match.Groups["value"].Success
+                        ? NormalizeNumericLiteral(match.Groups["value"].Value)
+                        : numericAliases.GetValueOrDefault(match.Groups["alias"].Value.TrimStart('@'));
+                    if (numericValue is not null &&
+                        numericMarkers.TryGetValue(propertyName, out var values) &&
+                        values.Contains(numericValue))
                     {
                         matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
                     }
@@ -435,10 +515,90 @@ public sealed class DependencyTests
         return violations;
     }
 
-    private static string NormalizeNumericLiteral(string value) =>
-        decimal.TryParse(value.Replace("_", string.Empty, StringComparison.Ordinal), NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
-            ? number.ToString("G29", CultureInfo.InvariantCulture)
+    private static IReadOnlyDictionary<string, string> ReadNumericAliases(string source)
+    {
+        const string numericSuffix = @"(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?";
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var declaration = new Regex(
+            @"(?:\b(?:const|let|var)\s+|\b(?:(?:public|private|protected|internal|static|readonly|const|var)\s+)*(?:[\w<>,?.\[\]]+\s+))(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=;\r\n]+)?\s*=\s*(?:(?<value>" + SourceNumericLiteralPattern + @")" + numericSuffix + @"|(?<reference>@?[A-Za-z_$][A-Za-z0-9_$]*))(?![A-Za-z0-9_.])",
+            RegexOptions.CultureInvariant);
+        var declarations = declaration.Matches(source);
+
+        for (var pass = 0; pass < declarations.Count; pass++)
+        {
+            var changed = false;
+            foreach (Match match in declarations)
+            {
+                string? value = null;
+                if (match.Groups["value"].Success)
+                {
+                    value = NormalizeNumericLiteral(match.Groups["value"].Value);
+                }
+                else if (aliases.TryGetValue(match.Groups["reference"].Value.TrimStart('@'), out var referencedValue))
+                {
+                    value = referencedValue;
+                }
+
+                if (value is not null)
+                {
+                    var name = match.Groups["name"].Value.TrimStart('@');
+                    if (!aliases.TryGetValue(name, out var existing) || existing != value)
+                    {
+                        aliases[name] = value;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed)
+            {
+                break;
+            }
+        }
+
+        return aliases;
+    }
+
+    private const string SourceNumericLiteralPattern = @"-?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)";
+
+    private static string NormalizeNumericLiteral(string value)
+    {
+        var normalized = value.Replace("_", string.Empty, StringComparison.Ordinal);
+        var negative = normalized.StartsWith("-", StringComparison.Ordinal);
+        var digits = negative ? normalized[1..] : normalized;
+        var radix = digits.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? 16
+            : digits.StartsWith("0b", StringComparison.OrdinalIgnoreCase) ? 2
+            : digits.StartsWith("0o", StringComparison.OrdinalIgnoreCase) ? 8
+            : 10;
+
+        if (radix != 10)
+        {
+            var valueDigits = digits[2..];
+            BigInteger number = BigInteger.Zero;
+            foreach (var character in valueDigits)
+            {
+                var digit = character switch
+                {
+                    >= '0' and <= '9' => character - '0',
+                    >= 'a' and <= 'f' => character - 'a' + 10,
+                    >= 'A' and <= 'F' => character - 'A' + 10,
+                    _ => -1
+                };
+                if (digit < 0 || digit >= radix)
+                {
+                    return value;
+                }
+
+                number = (number * radix) + digit;
+            }
+
+            return (negative ? -number : number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+            ? decimalNumber.ToString("G29", CultureInfo.InvariantCulture)
             : value;
+    }
 
     [Xunit.Fact]
     public void Domain_RejectsForgedImplicitFrameworkReferences()
