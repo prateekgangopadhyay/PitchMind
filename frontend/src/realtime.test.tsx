@@ -16,7 +16,8 @@ const event = (sequence: number, clockSeconds = sequence * 60): CanonicalLedgerE
 });
 
 const state = (): RealtimeTimelineState => ({
-  matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, canonicalRevision: 2, throughSequence: 0,
+  matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, observedLiveRevision: 2, observedLiveSequence: 0,
+  canonicalRevision: 2, throughSequence: 0,
   snapshot: snapshot(2, 0, 60, 5400), events: [event(0)], nextCursor: null, hasMore: false,
   needsBackfill: false, hasNewMatchUpdate: false, reconnecting: false,
 });
@@ -60,18 +61,28 @@ describe('realtime reconnect state', () => {
   });
 
   it('ignores duplicate and stale cursors when deciding whether newer match state exists', () => {
-    const historical = selectHistoricalTime(state(), 45);
+    const caughtUpLive = applyBackfillPage(state(), backfill([event(1), event(2)]));
+    const historicalView = selectHistoricalTime(caughtUpLive, 45);
+    const historical = applyBackfillPage(historicalView, backfill([event(0)], {
+      snapshot: snapshot(2, 0, 0, 45),
+      events: { ...backfill([]).events, selectedTimeSeconds: 45, throughSequence: 0, items: [event(0)] },
+    }));
     const duplicate = observeRealtimeCursor(historical, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 0,
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 2,
       serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
     });
     const stale = observeRealtimeCursor(historical, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 1, lastSequence: 99,
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 1,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    const newer = observeRealtimeCursor(historical, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 3,
       serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
     });
 
     expect(duplicate.hasNewMatchUpdate).toBe(false);
     expect(stale).toBe(historical);
+    expect(newer.hasNewMatchUpdate).toBe(true);
     const live = state();
     expect(observeRealtimeCursor(live, {
       kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 0,
