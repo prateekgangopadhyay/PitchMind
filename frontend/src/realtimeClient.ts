@@ -242,6 +242,8 @@ export class MatchRealtimeClient {
       const seenCursors = new Set<string>();
       let lastCursor: string | null = null;
       let stillBehind = false;
+      let observedCursorRetryUsed = false;
+      let previousResponseCursor: { revision: number; sequence: number } | null = null;
 
       for (let pageNumber = 0; pageNumber < MAX_BACKFILL_PAGES_PER_REFRESH; pageNumber++) {
         if (!this.isActive(generation)) return;
@@ -269,6 +271,27 @@ export class MatchRealtimeClient {
         const cursor = page.events.nextCursor;
         if (!page.events.hasMore) {
           stillBehind = next.needsBackfill;
+          const behindObservedLiveCursor = next.mode === 'LIVE' &&
+            (next.canonicalRevision < next.observedLiveRevision ||
+              (next.canonicalRevision === next.observedLiveRevision &&
+                next.throughSequence < next.observedLiveSequence));
+          if (stillBehind && behindObservedLiveCursor) {
+            const cursorAdvanced = previousResponseCursor === null ||
+              next.canonicalRevision > previousResponseCursor.revision ||
+              (next.canonicalRevision === previousResponseCursor.revision &&
+                next.throughSequence > previousResponseCursor.sequence);
+            if (!observedCursorRetryUsed && cursorAdvanced) {
+              // A live cursor can arrive while this request is pending. Fetch once
+              // more so a consumed wake-up cannot leave a quiet client stale.
+              observedCursorRetryUsed = true;
+              previousResponseCursor = { revision: next.canonicalRevision, sequence: next.throughSequence };
+              continue;
+            }
+            // The retry is bounded; preserve the behind marker and expose the
+            // disconnected state instead of spinning on a stale canonical view.
+            this.options.onStateChange({ ...next, needsBackfill: true, reconnecting: true });
+            stillBehind = true;
+          }
           break;
         }
 
