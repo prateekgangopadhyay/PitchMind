@@ -79,6 +79,10 @@ def validate_pipeline_policy(
     for stage_name in ("OwnerApprovalBeforeAzureMutation", "BuildRelease"):
         if stages_by_name[stage_name].get("condition") != main_only_condition:
             raise PipelinePolicyError(f"{stage_name} must be restricted to main and exclude pull-request runs")
+    if stages_by_name["OwnerApprovalBeforeAzureMutation"].get("dependsOn") != "Validate":
+        raise PipelinePolicyError("Pre-mutation owner approval must depend on successful validation")
+    if stages_by_name["BuildRelease"].get("dependsOn") != "OwnerApprovalBeforeAzureMutation":
+        raise PipelinePolicyError("Image build/push must wait for pre-mutation owner approval")
 
     digest_approval = stages_by_name["OwnerApprovalOfReleaseDigest"]
     if digest_approval.get("dependsOn") != "BuildRelease" or digest_approval.get("condition") != "succeeded()":
@@ -86,6 +90,20 @@ def validate_pipeline_policy(
     dev_deployment = stages_by_name["DeployDev"]
     if dev_deployment.get("dependsOn") != "OwnerApprovalOfReleaseDigest" or dev_deployment.get("condition") != "succeeded()":
         raise PipelinePolicyError("DEV deployment must depend on successful digest approval")
+
+    _require_manual_approval(
+        stages_by_name["OwnerApprovalBeforeAzureMutation"],
+        job_name="AwaitExplicitOwnerApproval",
+        depends_on="ValidateReleaseIdentityInputs",
+        instruction_tokens=("explicit repository-owner approval", "this story/change set"),
+    )
+    _require_identity_preflight(stages_by_name["OwnerApprovalBeforeAzureMutation"])
+    _require_manual_approval(
+        digest_approval,
+        job_name="AwaitDigestConfirmation",
+        depends_on=None,
+        instruction_tokens=("release manifest image digest", "explicit owner approval"),
+    )
 
     validate_stage = validate_stages[0]
     referenced_templates = _find_values(validate_stage, "template")
@@ -191,6 +209,61 @@ def _azure_cli_task_connection(template_doc: dict[str, Any]) -> Any:
     if len(matches) != 1:
         raise PipelinePolicyError("Each release template must contain exactly one AzureCLI@2 task")
     return matches[0]
+
+
+def _require_manual_approval(
+    stage: dict[str, Any],
+    *,
+    job_name: str,
+    depends_on: str | None,
+    instruction_tokens: tuple[str, ...],
+) -> None:
+    jobs = _sequence(stage.get("jobs"), f"{stage.get('stage')} jobs")
+    approvals = [job for job in jobs if isinstance(job, dict) and job.get("job") == job_name]
+    if len(approvals) != 1:
+        raise PipelinePolicyError(f"{stage.get('stage')} must contain exactly one {job_name} approval job")
+    approval = approvals[0]
+    if approval.get("pool") != "server":
+        raise PipelinePolicyError(f"{job_name} must be an agentless server-side approval")
+    if depends_on is not None and approval.get("dependsOn") != depends_on:
+        raise PipelinePolicyError(f"{job_name} must follow {depends_on}")
+    steps = _sequence(approval.get("steps"), f"{job_name} steps")
+    tasks = [step for step in steps if isinstance(step, dict) and step.get("task") == "ManualValidation@0"]
+    if len(tasks) != 1:
+        raise PipelinePolicyError(f"{job_name} must contain exactly one ManualValidation@0 task")
+    task = tasks[0]
+    inputs = task.get("inputs")
+    instructions = inputs.get("instructions") if isinstance(inputs, dict) else None
+    if (task.get("timeoutInMinutes") != 1440 or not isinstance(inputs, dict) or
+            inputs.get("onTimeout") != "reject" or not isinstance(instructions, str) or
+            any(token.casefold() not in instructions.casefold() for token in instruction_tokens)):
+        raise PipelinePolicyError(f"{job_name} must have an explicit, rejecting owner approval instruction")
+
+
+def _require_identity_preflight(stage: dict[str, Any]) -> None:
+    jobs = _sequence(stage.get("jobs"), "pre-mutation approval jobs")
+    matching_jobs = [job for job in jobs if isinstance(job, dict) and job.get("job") == "ValidateReleaseIdentityInputs"]
+    if len(matching_jobs) != 1:
+        raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
+    pool = matching_jobs[0].get("pool")
+    if not isinstance(pool, dict) or pool.get("vmImage") != "ubuntu-latest":
+        raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
+    steps = _sequence(matching_jobs[0].get("steps"), "identity preflight steps")
+    tasks = [
+        step for step in steps
+        if isinstance(step, dict) and step.get("task") == "Bash@3" and
+        isinstance(step.get("inputs"), dict) and
+        step["inputs"].get("script") == "python3 scripts/validate_release_identity_inputs.py"
+    ]
+    if len(tasks) != 1:
+        raise PipelinePolicyError("Pre-mutation approval must validate the release identity inputs")
+    environment = tasks[0].get("env")
+    expected = {
+        "PITCHMIND_ACR_PUSH_SERVICE_CONNECTION": "${{ parameters.acrPushServiceConnection }}",
+        "PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION": "${{ parameters.devDeploymentServiceConnection }}",
+    }
+    if not isinstance(environment, dict) or any(environment.get(key) != value for key, value in expected.items()):
+        raise PipelinePolicyError("The identity preflight must receive the distinct connection parameters")
 
 
 def _find_mappings(node: Any) -> list[dict[str, Any]]:

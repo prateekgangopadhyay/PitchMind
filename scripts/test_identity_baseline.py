@@ -66,15 +66,6 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertIn("azureSubscription: ${{ parameters.devDeploymentServiceConnection }}", deploy_template)
         self.assertNotIn("azureServiceConnection", pipeline + build_template + deploy_template)
         self.assertIn("python3 scripts/validate_release_identity_inputs.py", pipeline)
-        validation_job = pipeline.index("- job: ValidateReleaseIdentityInputs")
-        approval_job = pipeline.index("- job: AwaitExplicitOwnerApproval")
-        approval_job_end = pipeline.index("\n  - stage: BuildRelease", approval_job)
-        approval_job_text = pipeline[approval_job:approval_job_end]
-        self.assertLess(validation_job, approval_job)
-        self.assertIn("vmImage: ubuntu-latest", pipeline[validation_job:approval_job])
-        self.assertIn("pool: server", approval_job_text)
-        self.assertIn("dependsOn: ValidateReleaseIdentityInputs", approval_job_text)
-        self.assertIn("- task: ManualValidation@0", approval_job_text)
         self.assertIn("users with Queue builds permission", pipeline)
 
     def test_key_vault_module_declares_rbac_without_local_grants(self):
@@ -124,6 +115,42 @@ class IdentityBaselineTests(unittest.TestCase):
         )
         with self.subTest(mutation="DEV deployment bypasses guarded release chain"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
+
+        build_bypasses_approval = pipeline.replace(
+            "  - stage: BuildRelease\n    dependsOn: OwnerApprovalBeforeAzureMutation",
+            "  - stage: BuildRelease\n    dependsOn: Validate",
+            1,
+        )
+        with self.subTest(mutation="image build bypasses pre-mutation owner approval"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(build_bypasses_approval, build_template, deploy_template)
+
+        approval_bypasses_validation = pipeline.replace(
+            "  - stage: OwnerApprovalBeforeAzureMutation\n    dependsOn: Validate",
+            "  - stage: OwnerApprovalBeforeAzureMutation\n    dependsOn: BuildRelease",
+            1,
+        )
+        with self.subTest(mutation="pre-mutation approval bypasses validation"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(approval_bypasses_validation, build_template, deploy_template)
+
+    def test_policy_requires_both_manual_approval_tasks(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+        task = "- task: ManualValidation@0"
+
+        before_push_missing = pipeline.replace(task, "- task: Bash@3", 1)
+        with self.subTest(mutation="pre-push approval task removed"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(before_push_missing, build_template, deploy_template)
+
+        digest_before, separator, digest_after = pipeline.rpartition(task)
+        self.assertTrue(separator)
+        digest_missing = digest_before + "- task: Bash@3" + digest_after
+        with self.subTest(mutation="digest approval task removed"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(digest_missing, build_template, deploy_template)
+
+        commented_approval = pipeline.replace(task, "# - task: ManualValidation@0", 1)
+        with self.subTest(mutation="approval task survives only as a comment"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(commented_approval, build_template, deploy_template)
 
     def test_policy_mutations_reject_comment_only_release_guards(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
