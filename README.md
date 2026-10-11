@@ -67,3 +67,7 @@ The 59 stories have **work packets and a dependency-driven plan**, but are **not
 
 ### Source and release truth (Council update)
 The file `data/simulations/manu-liv-match-dataset.json` is committed and structurally profiled (2,199 records), but **not** imported into the offline match API, approved for distribution or proven synthetic. Unitless coordinate values, player names, source realism and biometrics-like attributes require review. Existing C# fixture facts are a transitional implementation and violate the future no-hardcoded-football-data acceptance rule. See the role skill index and Story Execution Routing for implementation owners. **Always ask the repository owner to approve the exact DEV change before deploying; PR merge or pipeline resume is not consent.**
+
+## AI-assisted engineering and CodeGraph
+
+For concurrent story implementation and safe integration, see the [59-story execution directive](docs/operating-model/AI-EXECUTION-DIRECTIVE.md) and [optional CodeGraph MCP integration](docs/engineering/CODEGRAPH-INTEGRATION.md). The repository includes `.vscode/mcp.json` and a read-only `scripts/codegraph-pr-context.sh` helper; install the CodeGraph engine locally before use. Azure DevOps remains the sole CI/CD orchestrator, and no Azure resource changes are authorized by this tooling.
