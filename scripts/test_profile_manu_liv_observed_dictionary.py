@@ -17,6 +17,17 @@ assert spec.loader is not None
 spec.loader.exec_module(generator)
 
 
+class ObservedDictionaryFrequencyTests(unittest.TestCase):
+    def test_reports_event_attached_position_row_counts_not_time_cadence(self) -> None:
+        rendered = generator.render(generator.DEFAULT_SOURCE, generator.DEFAULT_MANIFEST)
+
+        self.assertIn("| Position rows in one event | Event records |", rendered)
+        self.assertIn("| 21 | 330 |", rendered)
+        self.assertIn("| 22 | 1,869 |", rendered)
+        self.assertIn("not a time-based sampling frequency", rendered)
+        self.assertIn("Time-based position cadence remains **UNSPECIFIED / UNVERIFIED**", rendered)
+
+
 class ObservedDictionaryOutputProtectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
