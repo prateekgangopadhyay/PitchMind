@@ -1,6 +1,6 @@
 # Publish once. Service connection must use workload identity federation.
 parameters:
-- name: azureServiceConnection
+- name: acrPushServiceConnection
   type: string
 - name: registryName
   type: string
@@ -11,7 +11,7 @@ steps:
 - task: AzureCLI@2
   displayName: Build immutable application image and release manifest
   inputs:
-    azureSubscription: ${{ parameters.azureServiceConnection }}
+    azureSubscription: ${{ parameters.acrPushServiceConnection }}
     scriptType: bash
     scriptLocation: inlineScript
     inlineScript: |

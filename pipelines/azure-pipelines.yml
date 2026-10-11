@@ -3,7 +3,10 @@ parameters:
 - name: enableDevDelivery
   type: boolean
   default: false
-- name: azureServiceConnection
+- name: acrPushServiceConnection
+  type: string
+  default: unconfigured
+- name: devDeploymentServiceConnection
   type: string
   default: unconfigured
 - name: registryName
@@ -96,13 +99,29 @@ stages:
 # validation-only main/PR pipeline CANNOT deploy. Owner approval for the exact story,
 # scope, resource diff, costs, SHA and rollback is mandatory BEFORE ACR push/DEV write.
 # ManualValidation and Azure DevOps Environment checks are defense in depth; their
-# existence does not substitute for explicit approval by the repository owner.
+# existence does not prove owner-only approval. The ManualValidation task can be
+# resumed by users with Queue builds permission; constrain that permission and
+# protected Environment approvers to the repository owner before registering delivery.
 - ${{ if eq(parameters.enableDevDelivery, true) }}:
   - stage: OwnerApprovalBeforeAzureMutation
     dependsOn: Validate
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
     jobs:
+    - job: ValidateReleaseIdentityInputs
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+      - checkout: self
+      - task: Bash@3
+        displayName: Require separate image-push and DEV-deployment identities
+        inputs:
+          targetType: inline
+          script: python3 scripts/validate_release_identity_inputs.py
+        env:
+          PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
+          PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
     - job: AwaitExplicitOwnerApproval
+      dependsOn: ValidateReleaseIdentityInputs
       displayName: Review the approved change set before ACR push or DEV mutation
       pool: server
       timeoutInMinutes: 1440
@@ -126,7 +145,7 @@ stages:
       - checkout: self
       - template: templates/build-image.yml
         parameters:
-          azureServiceConnection: ${{ parameters.azureServiceConnection }}
+          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
           registryName: ${{ parameters.registryName }}
   - stage: OwnerApprovalOfReleaseDigest
     dependsOn: BuildRelease
@@ -160,6 +179,6 @@ stages:
             - checkout: self
             - template: templates/deploy-image.yml
               parameters:
-                azureServiceConnection: ${{ parameters.azureServiceConnection }}
+                devDeploymentServiceConnection: ${{ parameters.devDeploymentServiceConnection }}
                 resourceGroup: ${{ parameters.devResourceGroup }}
                 appName: ${{ parameters.devAppName }}

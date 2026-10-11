@@ -1,7 +1,7 @@
 # Invoke only for configured Azure-backed workloads after validation.
 # Protected STAGE/PROD Environment checks and owner/admin approvals live outside YAML.
 parameters:
-- name: azureServiceConnection
+- name: devDeploymentServiceConnection
   type: string
 - name: resourceGroup
   type: string
@@ -13,7 +13,7 @@ steps:
 - task: AzureCLI@2
   displayName: Deploy the already built digest and prove HTTP smoke
   inputs:
-    azureSubscription: ${{ parameters.azureServiceConnection }}
+    azureSubscription: ${{ parameters.devDeploymentServiceConnection }}
     scriptType: bash
     scriptLocation: inlineScript
     inlineScript: |
