@@ -765,6 +765,44 @@ public sealed class PostgresLedgerTests
         Assert.Equal(evt, Assert.Single(await Read(store, matchId)));
     }
     [PostgresIntegrationFact]
+    public async Task ConcurrentAdjacentSequencesSerializeAndGapRetryPreservesCanonicalOrder()
+    {
+        await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresMatchEventStore(source); var matchId = MatchId.New();
+        var first = Event(matchId);
+        var next = Event(matchId, 1);
+
+        // Two independent connections race for the per-match lock. If sequence 1 wins,
+        // it must be rejected as a gap and become retryable after sequence 0 commits.
+        var outcomes = await Task.WhenAll(
+            CaptureAppendAsync(store, first),
+            CaptureAppendAsync(store, next));
+
+        Assert.Null(outcomes[0]);
+        if (outcomes[1] is { } gap)
+        {
+            Assert.Contains("Sequence conflict, gap or out-of-order event", gap.Message);
+            Assert.Equal(new[] { first }, await Read(store, matchId));
+            await store.AppendAsync(next, CancellationToken.None);
+        }
+
+        Assert.Equal(new[] { first, next }, await Read(store, matchId));
+    }
+
+    private static async Task<InvalidOperationException?> CaptureAppendAsync(PostgresMatchEventStore store, MatchEvent matchEvent)
+    {
+        try
+        {
+            await store.AppendAsync(matchEvent, CancellationToken.None);
+            return null;
+        }
+        catch (InvalidOperationException exception)
+        {
+            return exception;
+        }
+    }
+
+    [PostgresIntegrationFact]
     public async Task SequenceConflictsAndGapsRollbackWithoutChangingLedger()
     {
         await using var source = Source(); await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
