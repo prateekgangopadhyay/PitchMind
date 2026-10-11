@@ -772,21 +772,88 @@ public sealed class PostgresLedgerTests
         var first = Event(matchId);
         var next = Event(matchId, 1);
 
-        // Two independent connections race for the per-match lock. If sequence 1 wins,
-        // it must be rejected as a gap and become retryable after sequence 0 commits.
-        var outcomes = await Task.WhenAll(
-            CaptureAppendAsync(store, first),
-            CaptureAppendAsync(store, next));
-
-        Assert.Null(outcomes[0]);
-        if (outcomes[1] is { } gap)
+        // Hold the per-match advisory lock until sequence 1 is visibly queued. Releasing
+        // the gate makes sequence 1 acquire the lock first on every run, so this test
+        // always exercises the gap-and-retry branch instead of depending on scheduler luck.
+        await using var gateConnection = await source.OpenConnectionAsync();
+        await using var gateTransaction = await gateConnection.BeginTransactionAsync();
+        long lockKey;
+        await using (var keyCommand = new NpgsqlCommand("SELECT hashtextextended($1, 0)", gateConnection, gateTransaction))
         {
-            Assert.Contains("Sequence conflict, gap or out-of-order event", gap.Message);
-            Assert.Equal(new[] { first }, await Read(store, matchId));
-            await store.AppendAsync(next, CancellationToken.None);
+            keyCommand.Parameters.AddWithValue(matchId.ToString());
+            lockKey = (long)(await keyCommand.ExecuteScalarAsync())!;
+        }
+        await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock($1)", gateConnection, gateTransaction))
+        {
+            lockCommand.Parameters.AddWithValue(lockKey);
+            await lockCommand.ExecuteNonQueryAsync();
         }
 
+        var releasePredecessor = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var predecessorAppend = Task.Run(async () =>
+        {
+            await releasePredecessor.Task;
+            await store.AppendAsync(first, CancellationToken.None);
+        });
+        var laterAppend = CaptureAppendAsync(store, next);
+        try
+        {
+            await WaitForAdvisoryLockWaiterAsync(source, lockKey, CancellationToken.None);
+            await gateTransaction.CommitAsync();
+        }
+        catch
+        {
+            try { await gateTransaction.RollbackAsync(); }
+            finally
+            {
+                releasePredecessor.TrySetResult();
+                await predecessorAppend;
+                await laterAppend;
+            }
+            throw;
+        }
+
+        var gap = await laterAppend;
+        try
+        {
+            Assert.NotNull(gap);
+            Assert.Contains("Sequence conflict, gap or out-of-order event", gap.Message);
+            Assert.Empty(await Read(store, matchId));
+            Assert.False(predecessorAppend.IsCompleted);
+        }
+        finally
+        {
+            releasePredecessor.TrySetResult();
+            await predecessorAppend;
+        }
+        await store.AppendAsync(next, CancellationToken.None);
+
         Assert.Equal(new[] { first, next }, await Read(store, matchId));
+    }
+
+    private static async Task WaitForAdvisoryLockWaiterAsync(NpgsqlDataSource source, long lockKey, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (true)
+            {
+                await using var command = source.CreateCommand("""
+                    SELECT count(*) FROM pg_locks
+                    WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+                      AND classid::bigint = (($1::bigint >> 32) & 4294967295)
+                      AND objid::bigint = ($1::bigint & 4294967295)
+                    """);
+                command.Parameters.AddWithValue(lockKey);
+                if ((long)(await command.ExecuteScalarAsync(timeout.Token))! > 0) return;
+                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("The later sequence append did not reach the held per-match advisory lock.");
+        }
     }
 
     private static async Task<InvalidOperationException?> CaptureAppendAsync(PostgresMatchEventStore store, MatchEvent matchEvent)
