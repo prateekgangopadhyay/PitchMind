@@ -22,6 +22,7 @@ flowchart TB
   ProjectionReader["PostgresMatchProjectionReader (selected-time, hash-verified)"] --> DB
   InsightReader["PostgresMatchInsightReader (revision/time/selected-sequence/insight-as-of-bounded evidence + source lineage)"] --> DB
   CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
+  DispatchWorker["OutboxDispatchWorker (Development/local + explicit local provider + loopback PostgreSQL only)"] --> Dispatcher
   Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (local SignalR adapter registered only when Development + Runtime:Profile=local + Realtime:Provider=local are explicit)"]
   Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
