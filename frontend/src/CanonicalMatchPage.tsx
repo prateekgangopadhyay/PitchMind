@@ -67,6 +67,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [matchId, requestedRevision, selectedSeconds]);
 
   const snapshot = view?.snapshot;
+  const selectedTimeInsight = view
+    ? view.insights.items.filter(insight => insight.summary.trim().length > 0)
+      .reduce<CanonicalInsightPage['items'][number] | null>((latest, insight) =>
+        latest === null || insight.throughSequence > latest.throughSequence ? insight : latest, null)
+    : null;
   return <section className="content-page">
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
@@ -80,6 +85,16 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
             <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{phaseLabel(snapshot.phase)}</small></div>
             <span className="score">{snapshot.awayScore}</span><div className="team">Away</div>
+          </section>
+          <section className="panel selected-time-explanation" aria-labelledby="selected-time-explanation-title">
+            <h2 id="selected-time-explanation-title">Explanation at {clock(selectedSeconds)}</h2>
+            {selectedTimeInsight ? <>
+              <p><span className="badge">{selectedTimeInsight.truthClass}</span> Saved insight through sequence {selectedTimeInsight.throughSequence}</p>
+              <p>{selectedTimeInsight.summary}</p>
+              <a href={contextHref(`/insights/${encodeURIComponent(selectedTimeInsight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>
+                Inspect supporting evidence
+              </a>
+            </> : <p className="empty">No saved explanation is available at this selected time.</p>}
           </section>
           <section className="page-state match-provenance" aria-label="Match source and revision">
             <span className="badge">{provenanceLabel(snapshot.provenance)}</span>

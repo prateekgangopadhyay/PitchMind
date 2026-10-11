@@ -80,3 +80,36 @@ No score can waive the missing Key Moments contract/projection, full mobile/cont
 - QA: execute the selected-time golden journey at 55:08/55:09 with API-backed data and retain viewport screenshots.
 - Independent Frontend/UX and Accessibility reviews: pending; Product Owner acceptance: pending.
 - Story remains unaccepted; no Azure calls or changes were made.
+
+## Selected-time saved-insight panel — local follow-up
+
+**Change scope:** local branch `codex/ep07-s03-selected-insight`, based on exact open PR #69 head `600fd5cebba490111d8d9559ce8a641b041f15ff`. The panel renders the persisted insight with the highest validated `throughSequence` from the already context-validated insights page. It preserves the API `truthClass` and `summary`, labels the selected clock, and links to the same match/time/revision. It does not rank this insight as a Key Moment, rewrite it, or claim live updates. Blank summaries stay out of the panel. The existing Key Moments unavailable state remains explicit.
+
+### Taste / interaction decision
+
+The page's score and clock remain first. The new compact explanation panel sits immediately after them, before source details and evidence lists, giving the match question one visible answer without adding motion, data, or a new dependency. Stored claim copy and classification remain paired; the evidence link remains a native anchor. Long source summaries wrap inside the panel.
+
+### Vercel Web Interface Guidelines review
+
+Official guideline snapshot retrieved from `https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md` on 2026-10-12.
+
+- `frontend/src/CanonicalMatchPage.tsx:89-98` — heading level follows the page H1; status class and source summary remain text; empty state is explicit; evidence navigation is a native anchor with selected context — code review pass.
+- `frontend/src/CanonicalMatchPage.tsx:70-74` — explanation selection is derived only from validated insights and chooses the greatest nonnegative sequence cutoff — code review pass; positive DOM regression below.
+- `frontend/src/styles.css:150` — long insight summaries wrap to avoid horizontal overflow — code review pass; narrow viewport not rendered.
+- Browser keyboard/focus, contrast, mobile reflow, axe and screen-reader checks — unverified. A local Vite server started, but the CUA in-app browser refuses visible tabs from this subagent thread; no screenshot was captured.
+
+### Awesome Design review outcome
+
+The three rubric scores and screenshot-grounded anti-slop verdict are **UNVERIFIED** because the changed page could not be rendered in a browser screenshot during this subagent run. No premium score is assigned. Current evaluation is limited to source-level hierarchy, semantic structure, text wrapping, and the DOM regression; these are not visual acceptance evidence.
+
+### Checks actually performed on this local tree
+
+- `cd frontend && npm test -- --run` — 34 passed, 0 failed.
+- `cd frontend && npm run build` — passed.
+- `cd frontend && npm run lint` — passed.
+- `node scripts/validate_operating_model.mjs` — passed (12 epics, 59 stories, 28 Council skills, 3 design skills, 0 cycles, 2 approval gates).
+- `node scripts/test_design_skills.mjs` — passed.
+- `node scripts/design-slop-scan.mjs frontend/src/CanonicalMatchPage.tsx` — passed, 0 warnings.
+- `git diff --check` — passed.
+
+Result: **CHANGES REQUIRED / UNVERIFIED**. This improves the explanation path for persisted insights, but does not complete ranked Key Moments, realtime updates, the full 55:00/55:09 golden journey, browser/accessibility evidence, human independent review, or Product Owner acceptance. No Azure actions were performed.

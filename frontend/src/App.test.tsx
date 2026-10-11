@@ -202,6 +202,45 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
   }
 });
 
+it('shows the latest persisted insight as the explanation for the exact selected time', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
+          {insightId: 'earlier', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 12, detectorVersion: 'press-v1', truthClass: 'derived', summary: 'Earlier saved insight', evidence: [{kind: 'event', id: 'event-12', relation: 'supports'}]},
+          {insightId: 'latest', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'press-v2', truthClass: 'interpretation', summary: 'Persisted explanation at this point.', evidence: [{kind: 'event', id: 'event-19', relation: 'supports'}]}
+        ], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    const explanation = container.querySelector<HTMLElement>('.selected-time-explanation');
+    expect(explanation?.textContent).toContain('Explanation at 55:09');
+    expect(explanation?.textContent).toContain('interpretation');
+    expect(explanation?.textContent).toContain('Saved insight through sequence 19');
+    expect(explanation?.textContent).toContain('Persisted explanation at this point.');
+    expect(explanation?.querySelector('a')?.getAttribute('href'))
+      .toBe(`/insights/latest?matchId=${matchId}&atSeconds=3309&revision=4`);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('rejects events and insights that cross the selected-time sequence', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {

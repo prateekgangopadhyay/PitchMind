@@ -147,3 +147,4 @@ button, select { min-height: 44px; }
   .content-page { padding-top: .75rem; }
   .match-card { align-items: stretch; flex-direction: column; }
 }
+.selected-time-explanation p { overflow-wrap: anywhere; }
