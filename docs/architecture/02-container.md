@@ -16,7 +16,7 @@ flowchart LR
   J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-The current PostgreSQL adapters persist events and projection provenance, and the EP04-S03 local slice atomically writes aggregate-derived event/projection/outbox records. The EventWorker now registers the PostgreSQL dispatcher only under the explicit LOCAL profile and hands deliveries to a durable PostgreSQL sink with stable message-ID/payload idempotency. This proves local persisted dispatch; it is not a broker, and it does not provide a live ingestion path. Azure profiles remain fail-closed until an Azure publisher is implemented. The earlier Central India ACA prototype serves the offline fixture-backed API only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
+The current PostgreSQL adapters persist events and projection provenance, and the EP04-S03 local slice atomically writes aggregate-derived event/projection/outbox records. The EventWorker registers the PostgreSQL dispatcher only under the explicit LOCAL profile and uses a restricted runtime role to hand deliveries to a durable PostgreSQL sink with stable message-ID/payload idempotency. `PitchMind.DbMigrator` is a separate loopback-only local command using the database owner identity; it is never registered in the worker. A fresh local database requires an explicit migration run before dispatch. This proves local persisted dispatch; it is not a broker, and it does not provide a live ingestion path. Azure profiles remain fail-closed until an Azure publisher is implemented. The earlier Central India ACA prototype serves the offline fixture-backed API only. The C# fixture contains football facts and must be removed after the approved feed adapter is integrated.
 
 ## TARGET — canonical Azure platform
 
@@ -64,6 +64,7 @@ flowchart LR
 | `PitchMind.Infrastructure` | Persistence and external adapters | `PitchMind.Application` |
 | `PitchMind.Api` | HTTP composition and endpoints | `PitchMind.Application`, `PitchMind.Infrastructure`, `PitchMind.Contracts` |
 | `PitchMind.EventWorker` | Event-processing host composition | `PitchMind.Application`, `PitchMind.Infrastructure` |
+| `PitchMind.DbMigrator` | Explicit loopback-only LOCAL database migration command | `PitchMind.Infrastructure` |
 | `PitchMind.AgentWorker` | Explanation-worker host composition | `PitchMind.Application` |
 
 **Release state:** The Azure integration arrows above are **proposed**. An existing hosted offline demo does not prove the connectivity represented here, and no new DEV deployment is authorized by this diagram.

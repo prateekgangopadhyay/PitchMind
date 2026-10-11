@@ -30,8 +30,8 @@ def run() -> int:
         port = next(item for item in service["ports"] if int(item["target"]) == 5432)
         if port.get("host_ip") != "127.0.0.1":
             fail("EventWorker requires a loopback-only local PostgreSQL mapping")
-        username = environment["POSTGRES_USER"]
-        password = environment["POSTGRES_PASSWORD"]
+        username = "pitchmind_worker"
+        password = environment["PITCHMIND_WORKER_PASSWORD"]
         database = environment["POSTGRES_DB"]
         host_port = int(port["published"])
     except (KeyError, StopIteration, TypeError, ValueError):

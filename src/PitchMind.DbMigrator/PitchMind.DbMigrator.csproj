@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PitchMind.Infrastructure/PitchMind.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

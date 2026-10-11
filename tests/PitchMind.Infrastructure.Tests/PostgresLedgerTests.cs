@@ -108,6 +108,38 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task FreshDatabaseMigrationMakesOutboxAvailableToDispatcher()
+    {
+        await using var administrativeSource = Source();
+        var databaseName = $"pitchmind_clean_{Guid.NewGuid():N}";
+        await using (var create = administrativeSource.CreateCommand($"CREATE DATABASE \"{databaseName}\""))
+            await create.ExecuteNonQueryAsync();
+
+        try
+        {
+            var connection = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
+            {
+                Database = databaseName
+            };
+            await using var cleanSource = NpgsqlDataSource.Create(connection.ConnectionString);
+            await PostgresSchemaMigrator.ApplyAsync(cleanSource, CancellationToken.None);
+
+            await using (var outbox = cleanSource.CreateCommand("SELECT to_regclass('pitchmind.outbox') IS NOT NULL"))
+                Assert.True((bool)(await outbox.ExecuteScalarAsync())!);
+
+            var publisher = new CountingPublisher();
+            var dispatcher = new PostgresOutboxDispatcher(cleanSource, publisher);
+            Assert.Equal(OutboxDispatchResult.NoMessage, await dispatcher.DispatchOneAsync(CancellationToken.None));
+            Assert.Equal(0, publisher.Publications);
+        }
+        finally
+        {
+            await using var drop = administrativeSource.CreateCommand($"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)");
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [PostgresIntegrationFact]
     public async Task ProjectionAndInsightProvenanceSurviveDataSourceReopen()
     {
         var matchId = Guid.NewGuid();

@@ -8,12 +8,20 @@ if [[ ! -f docker/.env ]]; then
   umask 077
   postgres_password="$(openssl rand -hex 24)"
   redis_password="$(openssl rand -hex 24)"
-  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
+  worker_password="$(openssl rand -hex 24)"
+  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPITCHMIND_WORKER_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$worker_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
 [[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
+if ! grep -q '^PITCHMIND_WORKER_PASSWORD=.' docker/.env; then
+  command -v openssl >/dev/null || { echo "OpenSSL required to create a local worker password" >&2; exit 1; }
+  worker_password="$(openssl rand -hex 24)"
+  printf '\nPITCHMIND_WORKER_PASSWORD=%s\n' "$worker_password" >> docker/.env
+fi
 chmod 600 docker/.env
 docker compose --env-file docker/.env -f docker/compose.yml up -d --wait
 docker compose --env-file docker/.env -f docker/compose.yml exec -T postgres sh -c \
   'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/10-local-outbox-deliveries.sql' >/dev/null
+docker compose --env-file docker/.env -f docker/compose.yml exec -T postgres sh -c \
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/20-local-worker-role.sql' >/dev/null
 echo "Local PostgreSQL and Redis are healthy."
