@@ -204,6 +204,48 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsQuotedAndMultilineNumericPropertyLiterals()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var candidatePitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var candidateClock = firstEvent.GetProperty("clockSeconds").GetRawText();
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-quoted-numeric-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
+            File.WriteAllText(source,
+                "const candidate = {\n" +
+                $"  \"pitchX\":\n    {candidatePitchX},\n" +
+                $"  ['clockSeconds']:\n    {candidateClock}\n" +
+                "};");
+            File.WriteAllText(csharpSource,
+                "var candidate = new Dictionary<string, double> {\n" +
+                $"  [\"pitchX\"] = {candidatePitchX}\n" +
+                "};");
+
+            var violations = FindFixtureDataMarkers(
+                [source, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(3, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Path == source && item.Line.Contains("\"pitchX\"", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == source && item.Line.Contains("['clockSeconds']", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("[\"pitchX\"]", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
     {
         var sourceRoots = new[]
@@ -354,32 +396,43 @@ public sealed class DependencyTests
         IReadOnlySet<string> markers,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers = null)
     {
-        return files
-            .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
-            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)) ||
-                ContainsNumericFixtureMarker(item.Line, numericMarkers))
-            .ToArray();
-    }
-
-    private static bool ContainsNumericFixtureMarker(
-        string line,
-        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers)
-    {
-        if (numericMarkers is null || numericMarkers.Count == 0)
+        var violations = new List<(string Path, string Line, int LineNumber)>();
+        foreach (var path in files)
         {
-            return false;
-        }
-
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
-        {
-            if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
-                values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
+            var lines = File.ReadAllLines(path);
+            var matchingLines = new HashSet<int>();
+            for (var index = 0; index < lines.Length; index++)
             {
-                return true;
+                if (markers.Any(marker => lines[index].Contains(marker, StringComparison.Ordinal)))
+                {
+                    matchingLines.Add(index + 1);
+                }
             }
+
+            if (numericMarkers is not null && numericMarkers.Count > 0)
+            {
+                var source = File.ReadAllText(path);
+                foreach (Match match in Regex.Matches(source,
+                    "(?:(?<quote>[\\\"'])(?<quotedName>[A-Za-z_][A-Za-z0-9_]*)\\k<quote>|\\[\\s*[\\\"'](?<indexedName>[A-Za-z_][A-Za-z0-9_]*)[\\\"']\\s*\\]|(?<plainName>[A-Za-z_][A-Za-z0-9_]*))\\s*[:=]\\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\\.(?:[0-9](?:_?[0-9])*)?)?|\\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
+                {
+                    var propertyName = match.Groups["quotedName"].Success
+                        ? match.Groups["quotedName"].Value
+                        : match.Groups["indexedName"].Success
+                            ? match.Groups["indexedName"].Value
+                            : match.Groups["plainName"].Value;
+                    if (numericMarkers.TryGetValue(propertyName, out var values) &&
+                        values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
+                    {
+                        matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
+                    }
+                }
+            }
+
+            violations.AddRange(matchingLines.Order().Select(lineNumber =>
+                (path, lines[lineNumber - 1], lineNumber)));
         }
 
-        return false;
+        return violations;
     }
 
     private static string NormalizeNumericLiteral(string value) =>
