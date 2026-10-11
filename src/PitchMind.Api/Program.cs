@@ -62,6 +62,7 @@ match.AddEndpointFilter(async (context, next) =>
 match.MapGet("/state", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetState(atSeconds ?? 0).ToResponse()));
 match.MapGet("/events", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetEvents(atSeconds ?? 0).Select(item => item.ToResponse())));
 match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetInsights(atSeconds ?? 0).Select(insight => insight.ToResponse())));
+match.MapGet("/key-moments", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetKeyMoments(atSeconds ?? 0).Select(moment => moment.ToResponse())));
 match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
     matches.GetEvidence(insightId, atSeconds ?? 0) is { } evidence ? Results.Ok(evidence.ToResponse()) : ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time"));
 match.MapPost("/analyst", (AnalystRequest request, SyntheticMatchService matches, HttpContext context) =>
