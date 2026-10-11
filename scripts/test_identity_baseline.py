@@ -152,6 +152,42 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="approval task survives only as a comment"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(commented_approval, build_template, deploy_template)
 
+    def test_policy_rejects_extra_mutation_jobs_or_steps_around_release_approvals(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        mutations = {
+            "extra preflight-stage job": pipeline.replace(
+                "    - job: AwaitExplicitOwnerApproval",
+                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitExplicitOwnerApproval",
+                1,
+            ),
+            "mutation step in preflight job": pipeline.replace(
+                "      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
+                "      - task: AzureCLI@2\n      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
+                1,
+            ),
+            "extra BuildRelease job": pipeline.replace(
+                "    - job: Image\n      steps:",
+                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: Image\n      steps:",
+                1,
+            ),
+            "mutation step in BuildRelease image job": pipeline.replace(
+                "    - job: Image\n      steps:\n      - checkout: self",
+                "    - job: Image\n      steps:\n      - task: AzureCLI@2\n      - checkout: self",
+                1,
+            ),
+            "extra digest-approval job": pipeline.replace(
+                "    - job: AwaitDigestConfirmation",
+                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitDigestConfirmation",
+                1,
+            ),
+        }
+        for mutation, candidate in mutations.items():
+            with self.subTest(mutation=mutation), self.assertRaises(PipelinePolicyError):
+                _validate_pipeline_policy(candidate, build_template, deploy_template)
+
     def test_policy_mutations_reject_comment_only_release_guards(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()

@@ -98,12 +98,17 @@ def validate_pipeline_policy(
         instruction_tokens=("explicit repository-owner approval", "this story/change set"),
     )
     _require_identity_preflight(stages_by_name["OwnerApprovalBeforeAzureMutation"])
+    _require_release_stage_shape(
+        stages_by_name["OwnerApprovalBeforeAzureMutation"],
+        expected_jobs=("ValidateReleaseIdentityInputs", "AwaitExplicitOwnerApproval"),
+    )
     _require_manual_approval(
         digest_approval,
         job_name="AwaitDigestConfirmation",
         depends_on=None,
         instruction_tokens=("release manifest image digest", "explicit owner approval"),
     )
+    _require_release_stage_shape(digest_approval, expected_jobs=("AwaitDigestConfirmation",))
 
     validate_stage = validate_stages[0]
     referenced_templates = _find_values(validate_stage, "template")
@@ -121,6 +126,8 @@ def validate_pipeline_policy(
 
     build_release = stages_by_name["BuildRelease"]
     deploy_stage = stages_by_name["DeployDev"]
+    _require_release_stage_shape(build_release, expected_jobs=("Image",))
+    _require_release_stage_shape(deploy_stage, expected_jobs=("Dev",))
     build_call = _find_one_template_call(build_release, "templates/build-image.yml")
     deploy_call = _find_one_template_call(deploy_stage, "templates/deploy-image.yml")
     if build_call.get("parameters", {}).get("acrPushServiceConnection") != "${{ parameters.acrPushServiceConnection }}":
@@ -223,19 +230,29 @@ def _require_manual_approval(
     if len(approvals) != 1:
         raise PipelinePolicyError(f"{stage.get('stage')} must contain exactly one {job_name} approval job")
     approval = approvals[0]
+    approval_fields = {"job", "displayName", "pool", "timeoutInMinutes", "steps"}
+    if depends_on is not None:
+        approval_fields.add("dependsOn")
+    if set(approval) != approval_fields:
+        raise PipelinePolicyError(f"{job_name} may contain only its reviewed approval fields")
     if approval.get("pool") != "server":
         raise PipelinePolicyError(f"{job_name} must be an agentless server-side approval")
     if depends_on is not None and approval.get("dependsOn") != depends_on:
         raise PipelinePolicyError(f"{job_name} must follow {depends_on}")
     steps = _sequence(approval.get("steps"), f"{job_name} steps")
+    if len(steps) != 1:
+        raise PipelinePolicyError(f"{job_name} may contain only its manual approval task")
     tasks = [step for step in steps if isinstance(step, dict) and step.get("task") == "ManualValidation@0"]
     if len(tasks) != 1:
         raise PipelinePolicyError(f"{job_name} must contain exactly one ManualValidation@0 task")
     task = tasks[0]
+    if set(task) != {"task", "timeoutInMinutes", "inputs"}:
+        raise PipelinePolicyError(f"{job_name} manual approval task may contain only reviewed fields")
     inputs = task.get("inputs")
     instructions = inputs.get("instructions") if isinstance(inputs, dict) else None
     if (task.get("timeoutInMinutes") != 1440 or not isinstance(inputs, dict) or
             inputs.get("onTimeout") != "reject" or not isinstance(instructions, str) or
+            set(inputs) != {"notifyUsers", "instructions", "onTimeout"} or
             any(token.casefold() not in instructions.casefold() for token in instruction_tokens)):
         raise PipelinePolicyError(f"{job_name} must have an explicit, rejecting owner approval instruction")
 
@@ -245,10 +262,14 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     matching_jobs = [job for job in jobs if isinstance(job, dict) and job.get("job") == "ValidateReleaseIdentityInputs"]
     if len(matching_jobs) != 1:
         raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
+    if set(matching_jobs[0]) != {"job", "pool", "steps"}:
+        raise PipelinePolicyError("Identity preflight job may contain only its reviewed fields")
     pool = matching_jobs[0].get("pool")
     if not isinstance(pool, dict) or pool.get("vmImage") != "ubuntu-latest":
         raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
     steps = _sequence(matching_jobs[0].get("steps"), "identity preflight steps")
+    if len(steps) != 2 or steps[0] != {"checkout": "self"}:
+        raise PipelinePolicyError("Identity preflight may contain only checkout and its identity validation task")
     tasks = [
         step for step in steps
         if isinstance(step, dict) and step.get("task") == "Bash@3" and
@@ -257,6 +278,10 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     ]
     if len(tasks) != 1:
         raise PipelinePolicyError("Pre-mutation approval must validate the release identity inputs")
+    if set(tasks[0]) != {"task", "displayName", "inputs", "env"}:
+        raise PipelinePolicyError("Identity preflight task may contain only its reviewed fields")
+    if set(tasks[0]["inputs"]) != {"targetType", "script"} or tasks[0]["inputs"].get("targetType") != "inline":
+        raise PipelinePolicyError("Identity preflight inputs may contain only the reviewed script")
     environment = tasks[0].get("env")
     expected = {
         "PITCHMIND_ACR_PUSH_SERVICE_CONNECTION": "${{ parameters.acrPushServiceConnection }}",
@@ -264,6 +289,64 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     }
     if not isinstance(environment, dict) or any(environment.get(key) != value for key, value in expected.items()):
         raise PipelinePolicyError("The identity preflight must receive the distinct connection parameters")
+    if set(environment) != set(expected):
+        raise PipelinePolicyError("The identity preflight environment may contain only the two reviewed identities")
+
+
+def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[str, ...]) -> None:
+    """Reject unreviewed jobs or steps that could run around the approval chain."""
+    jobs = _sequence(stage.get("jobs"), f"{stage.get('stage')} jobs")
+    if len(jobs) != len(expected_jobs) or any(not isinstance(job, dict) for job in jobs):
+        raise PipelinePolicyError(f"{stage.get('stage')} may contain only its reviewed jobs")
+    actual_names = tuple(job.get("job", job.get("deployment")) for job in jobs)
+    if actual_names != expected_jobs:
+        raise PipelinePolicyError(f"{stage.get('stage')} may contain only its reviewed jobs")
+
+    stage_name = stage.get("stage")
+    if set(stage) != {"stage", "dependsOn", "condition", "jobs"}:
+        raise PipelinePolicyError(f"{stage_name} may contain only reviewed stage fields")
+    if stage_name == "OwnerApprovalBeforeAzureMutation":
+        # The approval stage has a narrowly-scoped preflight followed by one
+        # agentless gate. Their detailed contents are checked separately.
+        return
+    if stage_name == "OwnerApprovalOfReleaseDigest":
+        return
+    if stage_name == "BuildRelease":
+        job = jobs[0]
+        if set(job) != {"job", "steps"}:
+            raise PipelinePolicyError("BuildRelease image job may contain only its reviewed fields")
+        steps = _sequence(job.get("steps"), "BuildRelease image steps")
+        if len(steps) != 2 or steps[0] != {"checkout": "self"}:
+            raise PipelinePolicyError("BuildRelease may contain only checkout and the reviewed image-build template")
+        if not isinstance(steps[1], dict) or steps[1].get("template") != "templates/build-image.yml":
+            raise PipelinePolicyError("BuildRelease may contain only the reviewed image-build template")
+        if set(steps[1]) != {"template", "parameters"}:
+            raise PipelinePolicyError("BuildRelease image template call may not contain unreviewed fields")
+        parameters = steps[1].get("parameters")
+        if not isinstance(parameters, dict) or set(parameters) != {"acrPushServiceConnection", "registryName"}:
+            raise PipelinePolicyError("BuildRelease image template parameters must remain on the reviewed allowlist")
+        return
+    if stage_name == "DeployDev":
+        deployment = jobs[0]
+        if set(deployment) != {"deployment", "environment", "strategy"}:
+            raise PipelinePolicyError("DeployDev job may contain only its reviewed fields")
+        if deployment.get("environment") != "pitchmind-dev":
+            raise PipelinePolicyError("DEV deployment must target the protected pitchmind-dev environment")
+        strategy = deployment.get("strategy")
+        run_once = strategy.get("runOnce") if isinstance(strategy, dict) else None
+        deploy = run_once.get("deploy") if isinstance(run_once, dict) else None
+        steps = deploy.get("steps") if isinstance(deploy, dict) else None
+        if not isinstance(steps, list) or len(steps) != 2 or steps[0] != {"checkout": "self"}:
+            raise PipelinePolicyError("DeployDev may contain only checkout and the reviewed deployment template")
+        if not isinstance(steps[1], dict) or steps[1].get("template") != "templates/deploy-image.yml":
+            raise PipelinePolicyError("DeployDev may contain only the reviewed deployment template")
+        if set(steps[1]) != {"template", "parameters"}:
+            raise PipelinePolicyError("DeployDev template call may not contain unreviewed fields")
+        parameters = steps[1].get("parameters")
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "devDeploymentServiceConnection", "resourceGroup", "appName"
+        }:
+            raise PipelinePolicyError("DeployDev template parameters must remain on the reviewed allowlist")
 
 
 def _find_mappings(node: Any) -> list[dict[str, Any]]:
