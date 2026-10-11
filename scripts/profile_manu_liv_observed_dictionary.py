@@ -146,18 +146,34 @@ def render(source_path: Path, manifest_path: Path) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def _aliases_protected_input(output: Path, protected: Path) -> bool:
+    """Return true for path, symlink, or hard-link aliases; fail closed on I/O errors."""
+    try:
+        if output.resolve() == protected.resolve():
+            return True
+        return output.exists() and protected.exists() and output.samefile(protected)
+    except OSError as exc:
+        raise ValueError("Cannot safely verify output path identity") from exc
+
+
+def write_output(text: str, output: Path, source: Path, manifest: Path) -> None:
+    """Write only when output cannot replace data inputs or this generator."""
+    protected_files = (source, manifest, Path(__file__))
+    if any(_aliases_protected_input(output, protected) for protected in protected_files):
+        raise ValueError("Output must not overwrite the source, manifest, or generator")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text, encoding="utf-8")
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         text = render(args.source, args.manifest)
-        if args.output.resolve() in {args.source.resolve(), args.manifest.resolve()}:
-            raise ValueError("Output must not overwrite the source or manifest")
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(text, encoding="utf-8")
+        write_output(text, args.output, args.source, args.manifest)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     return 0
