@@ -7,6 +7,5 @@ steps:
       az bicep build-params --file "$params" --outfile "$(Agent.TempDirectory)/$(basename "$params").json"
     done
     test ! -f infra/environments/dev.parameters.json
-    grep -q "enableDevFoundation = true" infra/environments/dev.bicepparam
-    grep -q "enableDevFoundation = false" infra/environments/prod.bicepparam
+    python3 -m unittest scripts.test_validate_infrastructure_profiles -v
   displayName: Compile DEV/STAGE/PROD Bicep and check environment isolation (no deployment)
