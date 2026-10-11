@@ -254,6 +254,62 @@ it('shows the latest persisted insight as the explanation for the exact selected
   }
 });
 
+it('aborts stale insight cursor pages when the selected match time changes', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  let resolveStalePage: ((response: {ok: boolean; json: () => Promise<unknown>}) => void) | undefined;
+  let stalePageSignal: AbortSignal | undefined;
+  const stalePage = new Promise<{ok: boolean; json: () => Promise<unknown>}>(resolve => { resolveStalePage = resolve; });
+  const snapshotFor = (seconds: number) => ({
+    matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, asOfSeconds: seconds, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  });
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const parsed = new URL(url, 'http://localhost');
+    const seconds = Number(parsed.searchParams.get('atSeconds'));
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    if (parsed.pathname.endsWith('/summary')) return {ok: true, json: async () => snapshotFor(seconds)};
+    if (parsed.pathname.endsWith('/events')) return {ok: true, json: async () => ({matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, throughSequence: 19, items: [], nextCursor: null, hasMore: false})};
+    if (seconds === 3309 && parsed.searchParams.has('cursor')) {
+      stalePageSignal = init?.signal as AbortSignal;
+      return stalePage;
+    }
+    return {ok: true, json: async () => seconds === 3309
+      ? {matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, throughSequence: 19, items: [
+        {insightId: 'earlier-page', matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, throughSequence: 5, detectorVersion: 'test-v1', truthClass: 'derived', summary: 'Earlier page insight.', evidence: []}
+      ], nextCursor: 'older-page', hasMore: true}
+      : {matchId, canonicalRevision: 4, selectedTimeSeconds: seconds, throughSequence: 19, items: [], nextCursor: null, hasMore: false}};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); await new Promise(resolve => setTimeout(resolve, 10)); });
+    expect(stalePageSignal, JSON.stringify(vi.mocked(fetch).mock.calls.map(([url]) => url))).toBeDefined();
+    await act(async () => {
+      window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3310&revision=4`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(stalePageSignal?.aborted).toBe(true);
+    expect(container.querySelector('.selected-time-explanation')?.textContent).toContain('Explanation at 55:10');
+    await act(async () => {
+      resolveStalePage?.({ok: true, json: async () => ({matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
+        {insightId: 'stale-latest', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Stale explanation must not replace the selected time.', evidence: []}
+      ], nextCursor: null, hasMore: false})});
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(container.querySelector('.selected-time-explanation')?.textContent).toContain('Explanation at 55:10');
+    expect(container.textContent).not.toContain('Stale explanation must not replace the selected time.');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('rejects events and insights that cross the selected-time sequence', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
