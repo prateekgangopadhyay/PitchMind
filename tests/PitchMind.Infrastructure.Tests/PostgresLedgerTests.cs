@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -30,7 +31,40 @@ public sealed class PostgresLedgerTests
     }
     private static MatchEvent Event(MatchId matchId, long sequence = 0) => MatchEvent.Create(Guid.NewGuid(), matchId, sequence,
         MatchEventType.Pass, (int)sequence + 1, 1, DateTimeOffset.UtcNow);
-    private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!);
+    private const string TestDatabasePrefix = "pitchmind_test_";
+
+    private static NpgsqlConnectionStringBuilder IsolatedTestConnectionString(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("PostgreSQL integration tests require PITCHMIND_TEST_POSTGRES.");
+
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        var host = builder.Host;
+        var database = builder.Database;
+        var isLoopbackHost = string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+            (IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address));
+        var hasUniqueTestDatabaseName = database is not null &&
+            database.StartsWith(TestDatabasePrefix, StringComparison.Ordinal) &&
+            Guid.TryParseExact(database[TestDatabasePrefix.Length..], "N", out _);
+        if (!hasUniqueTestDatabaseName || !isLoopbackHost)
+            throw new InvalidOperationException("PostgreSQL integration tests require a loopback host and a unique pitchmind_test_<uuid> database.");
+
+        return builder;
+    }
+
+    private static NpgsqlDataSource Source() => NpgsqlDataSource.Create(IsolatedTestConnectionString(
+        Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!).ConnectionString);
+
+    [Fact]
+    public void IntegrationConnectionRequiresLoopbackAndTestDatabaseName()
+    {
+        const string testDatabase = "pitchmind_test_0123456789abcdef0123456789abcdef";
+        var accepted = IsolatedTestConnectionString($"Host=127.0.0.1;Database={testDatabase}");
+        Assert.Equal(testDatabase, accepted.Database);
+        Assert.Throws<InvalidOperationException>(() => IsolatedTestConnectionString("Host=127.0.0.1;Database=pitchmind"));
+        Assert.Throws<InvalidOperationException>(() => IsolatedTestConnectionString("Host=127.0.0.1;Database=pitchmind_test_shared"));
+        Assert.Throws<InvalidOperationException>(() => IsolatedTestConnectionString("Host=postgres.internal;Database=pitchmind_test_0123456789abcdef0123456789abcdef"));
+    }
 
     private static async Task ClearPendingOutboxForTestAsync(NpgsqlDataSource source)
     {
