@@ -85,6 +85,28 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
         self.assertEqual("pending", profile["agreement"]["status"])
         self.assertTrue(all(value is None for value in profile["agreement"]["acceptanceBudgets"].values()))
 
+    def test_profile_rejects_non_finite_duration(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        template = json.loads((repo_root / "docs/engineering/performance/ep03-s05-load-profile.json").read_text())
+        for duration in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(duration=duration), tempfile.TemporaryDirectory() as directory:
+                profile = json.loads(json.dumps(template))
+                profile["workload"]["durationSeconds"] = duration
+                profile_path = Path(directory) / "profile.json"
+                profile_path.write_text(json.dumps(profile))
+                with self.assertRaisesRegex(HarnessError, "durationSeconds"):
+                    load_profile(profile_path)
+
+    def test_execute_rejects_non_finite_duration_override_without_traceback_or_report(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        profile_path = repo_root / "docs/engineering/performance/ep03-s05-load-profile.json"
+        for duration in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(duration=duration), tempfile.TemporaryDirectory() as directory:
+                output_path = Path(directory) / "report.json"
+                with self.assertRaisesRegex(HarnessError, "Run duration"):
+                    asyncio.run(execute(profile_path, output_path, duration))
+                self.assertFalse(output_path.exists())
+
     def test_profile_rejects_multimatch_partition_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         template = json.loads((repo_root / "docs/engineering/performance/ep03-s05-load-profile.json").read_text())

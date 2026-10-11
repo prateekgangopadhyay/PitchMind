@@ -160,7 +160,12 @@ def load_profile(path: Path) -> dict[str, Any]:
     if isinstance(queue_capacity, bool) or not isinstance(queue_capacity, int) or not 1 <= queue_capacity <= 100_000:
         raise HarnessError("queueCapacityRecords must be an integer from 1 to 100000")
     duration = workload.get("durationSeconds")
-    if duration is not None and (isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration <= 0):
+    if duration is not None and (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(duration)
+        or duration <= 0
+    ):
         raise HarnessError("durationSeconds must be null or a positive number")
     return profile
 
@@ -368,7 +373,7 @@ async def execute(profile_path: Path, output_path: Path, duration_override: floa
     duration = duration_override if duration_override is not None else profile["workload"]["durationSeconds"]
     if duration is None:
         raise HarnessError("workload.durationSeconds is unset; obtain an agreed duration or pass --duration-seconds for explicitly generator-only evidence")
-    if duration <= 0 or duration > 3600:
+    if not math.isfinite(duration) or duration <= 0 or duration > 3600:
         raise HarnessError("Run duration must be greater than 0 and at most 3600 seconds")
     source_path, source_bytes, records = _source_records(profile, repo_root)
     workload = profile["workload"]
