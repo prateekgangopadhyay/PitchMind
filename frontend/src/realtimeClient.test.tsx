@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { CanonicalTimelineBackfill, RealtimeCursorV1 } from './api';
+import type { CanonicalLedgerEvent, CanonicalTimelineBackfill, RealtimeCursorV1 } from './api';
 import { selectHistoricalTime, type RealtimeTimelineState } from './realtime';
 import { MatchRealtimeClient, type RealtimeConnection } from './realtimeClient';
 import { RealtimeAuthProvider, RealtimeMatchUpdates } from './RealtimeMatchUpdates';
@@ -30,6 +30,22 @@ function backfill(atSeconds: number): CanonicalTimelineBackfill {
   return { snapshot, events: { matchId, canonicalRevision: 2, selectedTimeSeconds: atSeconds,
     throughSequence: 0, items: [], nextCursor: null, hasMore: false },
   revisionChanged: false, replayRequired: false, requestedAfterSequence: -1 };
+}
+
+function event(sequence: number): CanonicalLedgerEvent {
+  return { eventId: `event-${sequence}`, matchId, sequence, type: 'Pass', clockSeconds: 60,
+    period: 1, occurredAt: '2026-10-11T12:00:00Z' };
+}
+
+function backfillPage(atSeconds: number, throughSequence: number, items: CanonicalLedgerEvent[],
+  hasMore: boolean, nextCursor: string | null): CanonicalTimelineBackfill {
+  const response = backfill(atSeconds);
+  response.snapshot.throughSequence = throughSequence;
+  response.events.throughSequence = throughSequence;
+  response.events.items = items;
+  response.events.hasMore = hasMore;
+  response.events.nextCursor = nextCursor;
+  return response;
 }
 
 class FakeConnection implements RealtimeConnection {
@@ -133,6 +149,174 @@ describe('MatchRealtimeClient', () => {
     expect(state.hasNewMatchUpdate).toBe(true);
     expect(fetcher.mock.calls.some(([input]) => String(input).includes('atSeconds=45'))).toBe(true);
     await client.stop();
+  });
+
+  it('follows canonical backfill cursors across multiple pages until caught up', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const pageOne = Array.from({ length: 100 }, (_, index) => event(index + 1));
+    const pageTwo = Array.from({ length: 50 }, (_, index) => event(index + 101));
+    let pageCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(150), revisionChanged: false });
+      pageCalls++;
+      if (pageCalls === 1) return Response.json(backfill(5400));
+      if (pageCalls === 2) return Response.json(backfillPage(5400, 150, pageOne, true, 'page-2'));
+      return Response.json(backfillPage(5400, 150, pageTwo, false, null));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: vi.fn(), fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+
+    expect(pageCalls).toBe(3);
+    expect(state.throughSequence).toBe(150);
+    expect(state.events).toHaveLength(150);
+    expect(state.needsBackfill).toBe(false);
+    expect(fetcher.mock.calls[2]?.[0]).toContain('afterSequence=0');
+    expect(fetcher.mock.calls[3]?.[0]).toContain('afterSequence=100');
+    await client.stop();
+  });
+
+  it('stops a hasMore chain when the server makes no cursor progress', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let pageCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(2), revisionChanged: false });
+      pageCalls++;
+      return pageCalls === 1 ? Response.json(backfill(5400)) :
+        Response.json(backfillPage(5400, 2, [], true, null));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+
+    expect(pageCalls).toBe(2);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
+    expect(status).toHaveBeenLastCalledWith('disconnected');
+    await client.stop();
+  });
+
+  it('bounds a progressing catch-up chain and leaves the timeline marked behind', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    let pageCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(200), revisionChanged: false });
+      pageCalls++;
+      if (pageCalls === 1) return Response.json(backfill(5400));
+      const sequence = pageCalls - 1;
+      return Response.json(backfillPage(5400, 200, [event(sequence)], true, `page-${sequence}`));
+    });
+    const status = vi.fn();
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+
+    expect(pageCalls).toBe(101);
+    expect(state.throughSequence).toBe(100);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
+    expect(status).toHaveBeenLastCalledWith('disconnected');
+    await client.stop();
+  });
+
+  it('does not skip a sequence gap when a page claims more events', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(2), revisionChanged: false });
+      if (fetcher.mock.calls.length === 1) return Response.json(backfill(5400));
+      return Response.json(backfillPage(5400, 2, [event(2)], true, 'gap-cursor'));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: vi.fn(), fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(state.throughSequence).toBe(0);
+    expect(state.events).toEqual([]);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
+    await client.stop();
+  });
+
+  it('discards a pending page when selected context changes during catch-up', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    let pageCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(1), revisionChanged: false });
+      pageCalls++;
+      if (pageCalls === 1) return Response.json(backfill(5400));
+      state = selectHistoricalTime(state, 45);
+      return Response.json(backfillPage(5400, 1, [event(1)], false, null));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: vi.fn(), fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+
+    expect(pageCalls).toBe(2);
+    expect(state.mode).toBe('HISTORICAL');
+    expect(state.selectedTimeSeconds).toBe(45);
+    expect(state.events).toEqual([]);
+    await client.stop();
+  });
+
+  it('aborts a continuation request chain when the client stops', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    let resolveSecondPage: ((response: Response) => void) | undefined;
+    let pageCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(2), revisionChanged: false });
+      pageCalls++;
+      if (pageCalls === 1) return Response.json(backfill(5400));
+      if (pageCalls === 2) return Response.json(backfillPage(5400, 2, [event(1)], true, 'page-2'));
+      return new Promise(resolve => { resolveSecondPage = resolve; });
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: vi.fn(), fetcher,
+      connectionFactory: () => connection });
+
+    const startup = client.start();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
+    await client.stop();
+    resolveSecondPage?.(Response.json(backfillPage(5400, 2, [event(2)], false, null)));
+    await startup;
+
+    expect(pageCalls).toBe(3);
+    expect(state.throughSequence).toBe(1);
   });
 });
 

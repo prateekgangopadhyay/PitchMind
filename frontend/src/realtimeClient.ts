@@ -15,6 +15,8 @@ import {
   type RealtimeTimelineState,
 } from './realtime';
 
+const MAX_BACKFILL_PAGES_PER_REFRESH = 100;
+
 export interface RealtimeAccessTokenProvider {
   getAccessToken(): Promise<string | null>;
 }
@@ -207,7 +209,8 @@ export class MatchRealtimeClient {
       if (!this.isActive(generation) || this.connection !== connection) return;
       this.applyCursorWakeup(negotiation.cursor);
       await this.refreshFromCanonicalStore(generation);
-      if (this.isActive(generation)) this.setStatus('connected');
+      if (this.isActive(generation))
+        this.setStatus(this.options.getState().needsBackfill ? 'disconnected' : 'connected');
     } catch {
       if (this.isActive(generation)) this.setStatus('disconnected');
     }
@@ -232,22 +235,59 @@ export class MatchRealtimeClient {
   private refreshFromCanonicalStore(generation = this.lifecycleGeneration): Promise<void> {
     this.backfillQueue = this.backfillQueue.catch(() => undefined).then(async () => {
       if (!this.isActive(generation)) return;
-      const state = this.options.getState();
-      const token = await this.requireAccessToken();
-      if (!this.isActive(generation)) return;
-      const response = await this.fetcher(`/api/v1/${buildTimelineBackfillPath(state)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: this.lifecycleAbortController.signal,
-      });
-      if (!this.isActive(generation)) return;
-      if (!response.ok) throw new Error(`Canonical backfill failed with ${response.status}.`);
-      const page = await response.json() as CanonicalTimelineBackfill;
-      if (!this.isActive(generation)) return;
-      const latest = this.options.getState();
-      // Apply only if match and selected-time context are still the ones that were requested.
-      if (latest.matchId !== state.matchId || latest.mode !== state.mode ||
-          (latest.mode === 'HISTORICAL' && latest.selectedTimeSeconds !== state.selectedTimeSeconds)) return;
-      this.options.onStateChange(applyBackfillPage(latest, page));
+      const context = this.options.getState();
+      const sameContext = (state: RealtimeTimelineState) => state.matchId === context.matchId &&
+        state.mode === context.mode &&
+        (state.mode !== 'HISTORICAL' || state.selectedTimeSeconds === context.selectedTimeSeconds);
+      const seenCursors = new Set<string>();
+      let lastCursor: string | null = null;
+      let stillBehind = false;
+
+      for (let pageNumber = 0; pageNumber < MAX_BACKFILL_PAGES_PER_REFRESH; pageNumber++) {
+        if (!this.isActive(generation)) return;
+        const requestedState = this.options.getState();
+        if (!sameContext(requestedState)) return;
+        const requestedRevision = requestedState.canonicalRevision;
+        const requestedThroughSequence = requestedState.throughSequence;
+        const token = await this.requireAccessToken();
+        if (!this.isActive(generation)) return;
+        const response = await this.fetcher(`/api/v1/${buildTimelineBackfillPath(requestedState)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: this.lifecycleAbortController.signal,
+        });
+        if (!this.isActive(generation)) return;
+        if (!response.ok) throw new Error(`Canonical backfill failed with ${response.status}.`);
+        const page = await response.json() as CanonicalTimelineBackfill;
+        if (!this.isActive(generation)) return;
+        const latest = this.options.getState();
+        // A host-selected time/match change invalidates the in-flight page and all continuation pages.
+        if (!sameContext(latest)) return;
+        const next = applyBackfillPage(latest, page);
+        if (!this.isActive(generation)) return;
+        this.options.onStateChange(next);
+
+        const cursor = page.events.nextCursor;
+        if (!page.events.hasMore) {
+          stillBehind = next.needsBackfill;
+          break;
+        }
+
+        stillBehind = true;
+        const sequenceAdvanced = next.canonicalRevision > requestedRevision ||
+          next.throughSequence > requestedThroughSequence;
+        if (!cursor || seenCursors.has(cursor) || cursor === lastCursor || !sequenceAdvanced) {
+          this.options.onStateChange({ ...next, needsBackfill: true, reconnecting: true });
+          break;
+        }
+        seenCursors.add(cursor);
+        lastCursor = cursor;
+
+        if (pageNumber === MAX_BACKFILL_PAGES_PER_REFRESH - 1)
+          this.options.onStateChange({ ...next, needsBackfill: true, reconnecting: true });
+      }
+
+      if (stillBehind && this.isActive(generation) && this.connection)
+        this.setStatus('disconnected');
     });
     return this.backfillQueue;
   }
