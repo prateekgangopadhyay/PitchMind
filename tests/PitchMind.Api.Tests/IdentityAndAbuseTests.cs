@@ -1,19 +1,26 @@
 using System.Net;
-using System.IdentityModel.Tokens.Jwt;
 using System.Collections.Concurrent;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace PitchMind.Api.Tests;
 
+[CollectionDefinition("ApiEnvironment", DisableParallelization = true)]
+public sealed class ApiEnvironmentCollection { }
+
+[Collection("ApiEnvironment")]
 public sealed class IdentityAndAbuseTests
 {
     [Fact]
@@ -188,6 +195,160 @@ public sealed class IdentityAndAbuseTests
             exception.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task EntraJwtValidationRejectsInvalidClaimsSignaturesAndRolesWithoutRemoteMetadata()
+    {
+        const string issuer = "https://issuer.test.local/tenant/v2.0";
+        const string audience = "api://pitchmind-test";
+        using var signingKey = RSA.Create(2048);
+        using var foreignKey = RSA.Create(2048);
+        using var factory = CreateJwtFactory(issuer, audience, signingKey);
+        using var client = factory.CreateClient();
+        var replay = "/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/replay?atSeconds=0";
+
+        using (var validFanRead = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken(issuer, audience, signingKey, "fan")))
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, validFanRead.StatusCode);
+
+        using (var wrongIssuer = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken("https://attacker.test.local/", audience, signingKey, "fan")))
+            Assert.Equal(HttpStatusCode.Unauthorized, wrongIssuer.StatusCode);
+
+        using (var wrongAudience = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken(issuer, "api://another-api", signingKey, "fan")))
+            Assert.Equal(HttpStatusCode.Unauthorized, wrongAudience.StatusCode);
+
+        using (var expired = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken(issuer, audience, signingKey, "fan", DateTime.UtcNow.AddMinutes(-10))))
+            Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
+
+        using (var invalidSignature = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken(issuer, audience, foreignKey, "fan")))
+            Assert.Equal(HttpStatusCode.Unauthorized, invalidSignature.StatusCode);
+
+        using (var missingRole = await SendBearer(client, "/api/v1/canonical/fixtures",
+                   CreateToken(issuer, audience, signingKey)))
+            Assert.Equal(HttpStatusCode.Forbidden, missingRole.StatusCode);
+
+        using (var fanReplay = await SendBearer(client, replay,
+                   CreateToken(issuer, audience, signingKey, "fan")))
+            Assert.Equal(HttpStatusCode.Forbidden, fanReplay.StatusCode);
+
+        using (var analystReplay = await SendBearer(client, replay,
+                   CreateToken(issuer, audience, signingKey, "analyst")))
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, analystReplay.StatusCode);
+            Assert.Equal("DEPENDENCY_UNAVAILABLE", await ProblemCode(analystReplay));
+        }
+    }
+
+    [Fact]
+    public async Task AzureProfileRejectsPartiallyConfiguredAuthorityAndAudience()
+    {
+        using var factory = CreateAzureFactory(new Dictionary<string, string?>
+        {
+            ["Runtime:Profile"] = "azure",
+            ["Identity:Authority"] = "https://issuer.test.local/tenant/v2.0",
+            ["Identity:Audience"] = null,
+            ["Identity:DevelopmentHeaderAuthEnabled"] = "false"
+        });
+
+        var exception = await Assert.ThrowsAnyAsync<Exception>(async () =>
+        {
+            using var client = factory.CreateClient();
+            using var response = await client.GetAsync("/health");
+        });
+
+        Assert.Contains("must be configured together", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AzureProfileRejectsInsecureAuthorityAndDevelopmentHeaderAuthentication()
+    {
+        var invalidConfigurations = new (Dictionary<string, string?> Values, string ExpectedMessage)[]
+        {
+            (new Dictionary<string, string?>
+            {
+                ["Runtime:Profile"] = "azure",
+                ["Identity:Authority"] = "http://issuer.test.local/tenant/v2.0",
+                ["Identity:Audience"] = "api://pitchmind-test",
+                ["Identity:DevelopmentHeaderAuthEnabled"] = "false"
+            }, "explicit HTTPS Entra authority"),
+            (new Dictionary<string, string?>
+            {
+                ["Runtime:Profile"] = "azure",
+                ["Identity:Authority"] = "https://issuer.test.local/tenant/v2.0",
+                ["Identity:Audience"] = "api://pitchmind-test",
+                ["Identity:DevelopmentHeaderAuthEnabled"] = "true"
+            }, "only in the local Development profile")
+        };
+
+        foreach (var (configuration, expectedMessage) in invalidConfigurations)
+        {
+            using var factory = CreateAzureFactory(configuration);
+            var exception = await Assert.ThrowsAnyAsync<Exception>(async () =>
+            {
+                using var client = factory.CreateClient();
+                using var response = await client.GetAsync("/health");
+            });
+
+            Assert.Contains(expectedMessage, exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private static WebApplicationFactory<Program> CreateJwtFactory(string issuer, string audience, RSA signingKey)
+    {
+        var authorityConfiguration = new OpenIdConnectConfiguration { Issuer = issuer };
+        authorityConfiguration.SigningKeys.Add(new RsaSecurityKey(signingKey));
+        var configurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(authorityConfiguration);
+        return CreateAzureFactory(new Dictionary<string, string?>
+        {
+            ["Runtime:Profile"] = "azure",
+            ["Identity:Authority"] = issuer,
+            ["Identity:Audience"] = audience,
+            ["Identity:DevelopmentHeaderAuthEnabled"] = "false"
+        }).WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                // Keep discovery local while preserving ApiSecurity's production token-validation parameters.
+                options.Authority = null;
+                options.MetadataAddress = string.Empty;
+                options.ConfigurationManager = configurationManager;
+            })));
+    }
+
+    private static WebApplicationFactory<Program> CreateAzureFactory(Dictionary<string, string?> configuration) =>
+        CreateAzureFactoryCore(configuration);
+
+    private static WebApplicationFactory<Program> CreateAzureFactoryCore(Dictionary<string, string?> configuration)
+    {
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Production");
+        Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Production");
+        foreach (var (key, value) in configuration)
+            Environment.SetEnvironmentVariable(key.Replace(":", "__", StringComparison.Ordinal), value);
+        return new WebApplicationFactory<Program>();
+    }
+
+    private static string CreateToken(string issuer, string audience, RSA signingKey, string? role = null,
+        DateTime? expiresUtc = null)
+    {
+        var claims = new List<Claim> { new("sub", "local-security-test") };
+        if (role is not null) claims.Add(new Claim("roles", role));
+        var expiry = expiresUtc ?? DateTime.UtcNow.AddMinutes(5);
+        var notBefore = expiry < DateTime.UtcNow ? expiry.AddMinutes(-5) : DateTime.UtcNow.AddMinutes(-1);
+        var token = new JwtSecurityToken(issuer, audience, claims, notBefore,
+            expiry,
+            new SigningCredentials(new RsaSecurityKey(signingKey), SecurityAlgorithms.RsaSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static async Task<HttpResponseMessage> SendBearer(HttpClient client, string route, string token)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, route);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await client.SendAsync(request);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(bool development = true,
         bool developmentHeaderAuth = true, ILoggerProvider? loggerProvider = null) =>
         CreateConfiguredFactory(development, developmentHeaderAuth, loggerProvider);
@@ -268,6 +429,14 @@ public sealed class IdentityAndAbuseTests
 
     private static SymmetricSecurityKey AzureTestSigningKey() =>
         new(Encoding.UTF8.GetBytes("pitchmind-azure-test-signing-key-32-bytes-min"));
+
+    private static async Task<HttpResponseMessage> SendAs(HttpClient client, string route, string role)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, route);
+        request.Headers.Add("X-Dev-Subject", "qa-user");
+        request.Headers.Add("X-Dev-Roles", role);
+        return await client.SendAsync(request);
+    }
 
     private static async Task<HttpResponseMessage> SendAs(HttpClient client, string route, string role)
     {
