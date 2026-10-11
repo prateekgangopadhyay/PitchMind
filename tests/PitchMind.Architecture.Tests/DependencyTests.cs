@@ -92,6 +92,40 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsEventAndTeamIdsFromCandidateFeed()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var eventId = firstEvent.GetProperty("eventId").GetString();
+        var teamId = firstEvent.GetProperty("teamId").GetString();
+        Xunit.Assert.False(string.IsNullOrWhiteSpace(eventId));
+        Xunit.Assert.False(string.IsNullOrWhiteSpace(teamId));
+
+        var markers = ReadFixtureDataMarkers(root);
+        Xunit.Assert.Contains(eventId!, markers);
+        Xunit.Assert.Contains(teamId!, markers);
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-fixture-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            File.WriteAllText(source, $"const candidateFixture = {{ eventId: '{eventId}', teamId: '{teamId}' }};");
+
+            var violations = FindFixtureDataMarkers([source], markers);
+
+            Xunit.Assert.Single(violations);
+            Xunit.Assert.Equal(source, violations[0].Path);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
     {
         var sourceRoots = new[]
@@ -129,12 +163,12 @@ public sealed class DependencyTests
         using var document = JsonDocument.Parse(stream);
         if (document.RootElement.ValueKind != JsonValueKind.Array)
         {
-            return markers;
+            throw new InvalidDataException("The candidate synthetic feed must be a JSON array for the production-source guard.");
         }
 
         foreach (var sourceEvent in document.RootElement.EnumerateArray())
         {
-            AddStringProperties(sourceEvent, markers, "eventId", "matchId", "teamName", "playerName", "receiverName");
+            AddStringProperties(sourceEvent, markers, "eventId", "matchId", "teamId", "teamName", "playerName", "receiverName");
             if (!sourceEvent.TryGetProperty("playerPositions", out var positions) || positions.ValueKind != JsonValueKind.Array)
             {
                 continue;
@@ -142,7 +176,7 @@ public sealed class DependencyTests
 
             foreach (var position in positions.EnumerateArray())
             {
-                AddStringProperties(position, markers, "teamName", "playerName");
+                AddStringProperties(position, markers, "teamId", "teamName", "playerName");
             }
         }
 
