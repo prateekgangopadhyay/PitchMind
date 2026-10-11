@@ -22,6 +22,12 @@ python3 scripts/ep03_s05_load_harness.py \
 
 The source currently contains one match. Multi-match partition mixes and semantic payload shaping are rejected or unsupported. This harness does not validate source clock, coordinate, player metric, football realism, or canonical mapping semantics. It must not be used to infer ingestion throughput or zero data loss.
 
+## Observed local diagnostic (2026-10-12)
+
+The one-second generator-only diagnostic scheduled and delivered 500 opaque source records to the in-memory discard sink in 0.9984 seconds (500.8 records/second measured locally). The queue high-water mark was 1 of 1,024 records. Source-order IDs/sequences and raw payload bytes were preserved, and the report records their hashes. The exact report is [`EP03-S05-GENERATOR-ONLY-2026-10-12.json`](../evidence/EP03-S05-GENERATOR-ONLY-2026-10-12.json).
+
+These values measure only the local scheduler and in-memory sink. No broker, worker, PostgreSQL, API, or Azure endpoint was exercised; ingestion acceptance, duplicate/quarantine behavior, consumer lag, end-to-end latency, and recovery remain unmeasured. The profile's duration override was diagnostic only; workload agreement and acceptance budgets remain pending. This run does not satisfy the story's burst-ingestion acceptance criteria.
+
 ## Deterministic tests
 
 ```sh
