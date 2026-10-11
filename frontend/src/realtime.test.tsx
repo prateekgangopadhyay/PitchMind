@@ -140,6 +140,33 @@ describe('realtime reconnect state', () => {
     expect(returned.needsBackfill).toBe(true);
   });
 
+  it('does not let an in-flight live backfill erase a newer observed cursor', () => {
+    const revisionUpdate = observeRealtimeCursor(state(), {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 3, lastSequence: 1,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    const olderRevisionPage = backfill([event(1), event(2)]);
+    const afterOlderRevisionPage = applyBackfillPage(revisionUpdate, olderRevisionPage);
+    expect(afterOlderRevisionPage.canonicalRevision).toBe(2);
+    expect(afterOlderRevisionPage.observedLiveRevision).toBe(3);
+    expect(afterOlderRevisionPage.needsBackfill).toBe(true);
+
+    const sequenceUpdate = observeRealtimeCursor({
+      ...state(), throughSequence: 5, observedLiveSequence: 5,
+      snapshot: snapshot(2, 5, 300, 5400), events: [0, 1, 2, 3, 4, 5].map((n) => event(n)),
+    }, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 7,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    const olderSequencePage = backfill([], {
+      snapshot: snapshot(2, 5, 300, 5400),
+      events: { ...backfill([]).events, throughSequence: 5, items: [] },
+    });
+    const afterOlderSequencePage = applyBackfillPage(sequenceUpdate, olderSequencePage);
+    expect(afterOlderSequencePage.observedLiveSequence).toBe(7);
+    expect(afterOlderSequencePage.needsBackfill).toBe(true);
+  });
+
   it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {
     const first = applyBackfillPage(state(), backfill([event(1), event(2)]));
     expect(first.events.map(item => item.sequence)).toEqual([0, 1, 2]);

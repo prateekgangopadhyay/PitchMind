@@ -80,6 +80,9 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   const requestedTime = state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : 5400;
   if (response.snapshot.selectedTimeSeconds !== requestedTime)
     throw new Error('Backfill response does not match the currently selected match time.');
+  if (response.snapshot.canonicalRevision < state.canonicalRevision ||
+      (state.mode === 'LIVE' && response.snapshot.canonicalRevision < state.observedLiveRevision))
+    return { ...state, needsBackfill: true };
 
   const revisionReset = response.revisionChanged || response.replayRequired || response.snapshot.canonicalRevision !== state.canonicalRevision;
   const timeContextChanged = response.snapshot.selectedTimeSeconds !== state.snapshot.selectedTimeSeconds;
@@ -110,6 +113,17 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
 
   const pageThrough = events.at(-1)?.sequence ?? (replaceTimeline ? -1 : state.throughSequence);
   const caughtUp = !response.events.hasMore && pageThrough >= response.snapshot.throughSequence;
+  const observedLiveRevision = state.mode === 'LIVE'
+    ? response.snapshot.canonicalRevision
+    : Math.max(state.observedLiveRevision, response.snapshot.canonicalRevision);
+  const observedLiveSequence = state.mode === 'LIVE'
+    ? (response.snapshot.canonicalRevision > state.observedLiveRevision
+      ? response.snapshot.throughSequence
+      : Math.max(state.observedLiveSequence, response.snapshot.throughSequence))
+    : response.snapshot.canonicalRevision > state.observedLiveRevision ? -1 : state.observedLiveSequence;
+  const responseBehindObservedCursor = state.mode === 'LIVE' &&
+    (response.snapshot.canonicalRevision < observedLiveRevision ||
+      (response.snapshot.canonicalRevision === observedLiveRevision && pageThrough < observedLiveSequence));
   return {
     ...state,
     mode: state.mode,
@@ -117,19 +131,15 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
     liveAsOfSeconds: state.mode === 'LIVE'
       ? response.snapshot.asOfSeconds
       : state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
-    observedLiveRevision: state.mode === 'LIVE'
-      ? response.snapshot.canonicalRevision
-      : Math.max(state.observedLiveRevision, response.snapshot.canonicalRevision),
-    observedLiveSequence: state.mode === 'LIVE'
-      ? response.snapshot.throughSequence
-      : response.snapshot.canonicalRevision > state.observedLiveRevision ? -1 : state.observedLiveSequence,
+    observedLiveRevision,
+    observedLiveSequence,
     canonicalRevision: response.snapshot.canonicalRevision,
     throughSequence: pageThrough,
     snapshot: response.snapshot,
     events,
     nextCursor: response.events.nextCursor,
     hasMore: response.events.hasMore,
-    needsBackfill: !caughtUp,
+    needsBackfill: !caughtUp || responseBehindObservedCursor,
     reconnecting: false,
     hasNewMatchUpdate: state.mode === 'HISTORICAL' ? state.hasNewMatchUpdate : false,
   };
