@@ -90,6 +90,7 @@ it('loads API state and clears historical insight when replay moves before evide
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
+  document.body.append(container);
   const root = createRoot(container);
   try {
     await act(async () => {root.render(createElement(App));});
@@ -116,6 +117,7 @@ it('loads API state and clears historical insight when replay moves before evide
     expect(container.textContent).not.toContain('Supported press');
   } finally {
     await act(async () => root.unmount());
+    container.remove();
     vi.unstubAllGlobals();
     window.history.replaceState(null, '', '/');
   }
@@ -745,6 +747,7 @@ it('offers retry after required canonical summary failure without substituting d
     return {ok: true, json: async () => canonicalPage(matchId, 3309, 19, [])};
   }));
   const container = document.createElement('div');
+  document.body.append(container);
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
@@ -752,8 +755,10 @@ it('offers retry after required canonical summary failure without substituting d
     await act(async () => { container.querySelector<HTMLButtonElement>('#canonical-match-retry')!.click(); });
     expect(container.textContent).toContain('Canonical revision 4');
     expect(summaryRequests).toBe(2);
+    expect(document.activeElement?.id).toBe('selected-time');
   } finally {
     await act(async () => root.unmount());
+    container.remove();
     vi.unstubAllGlobals();
     window.history.replaceState(null, '', '/');
   }

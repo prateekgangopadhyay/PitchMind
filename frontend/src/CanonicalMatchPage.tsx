@@ -177,7 +177,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       <p>How did the recorded match stand at {clock(selectedSeconds)}?</p>
     </div>
     {loading ? <p className="page-state" role="status">Loading the selected match revision…</p>
-      : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button id="canonical-match-retry" type="button" onClick={() => { setFocusAfterLoad({ kind: 'retry' }); setRetryCounter(value => value + 1); }}>Retry Match Data</button></div>
+      : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button id="canonical-match-retry" type="button" onClick={() => { setFocusAfterLoad({ kind: 'retry' }); setLoading(true); setRetryCounter(value => value + 1); }}>Retry Match Data</button></div>
         : snapshot && view ? <>
           <section className="scoreboard" aria-label="Canonical match score">
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
