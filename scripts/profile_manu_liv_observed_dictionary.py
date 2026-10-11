@@ -105,6 +105,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
                 raise ValueError(f"Source event {index} {field} is not an integer")
     positions = [position for event in events
                  for position in event.get("playerPositions", [])]
+    position_rows_per_event = Counter(len(event.get("playerPositions", [])) for event in events)
     metadata = [event["metadata"] for event in events]
 
     lines = [
@@ -125,6 +126,11 @@ def render(source_path: Path, manifest_path: Path) -> str:
         "- This dictionary preserves source identifiers, sequence, raw clock-field values, coordinates, and ordering as-is. It performs no canonical imports, transformations, or value conversions.", "",
         "## Record structure", "",
         f"The JSON root is an array with {len(events):,} event objects and {len(positions):,} event-attached player-position objects. Each event has a `metadata` object. The tables cover every object of each type in the pinned file.", "",
+        "### Event-attached position-row frequency", "",
+        "This table counts rows in each event's `playerPositions` array. It is event-array coverage only; it is not a time-based sampling frequency or evidence of continuous tracking.", "",
+        "| Position rows in one event | Event records |", "|---:|---:|",
+        *[f"| {row_count} | {event_count:,} |" for row_count, event_count in sorted(position_rows_per_event.items())], "",
+        "Time-based position cadence remains **UNSPECIFIED / UNVERIFIED** because the source clock unit and time semantics are not established.", "",
     ]
     lines += field_table("Event object fields", events)
     lines += field_table("`metadata` object fields", metadata)
