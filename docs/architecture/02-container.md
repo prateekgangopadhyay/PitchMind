@@ -24,7 +24,7 @@ The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/
 
 ```mermaid
 flowchart LR
-  Browser["Authenticated browser"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  Browser["React browser client (authentication pending)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
   BFF -->|read selected revision| PG["Docker PostgreSQL"]
   PG --> Outbox["Committed projection outbox"]
   Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]
