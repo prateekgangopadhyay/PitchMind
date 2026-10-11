@@ -5,7 +5,7 @@
       "command": "codegraph-mcp",
       "args": [
         "--profile",
-        "graph",
+        "all",
         "--workspace",
         "${workspaceFolder}"
       ]
