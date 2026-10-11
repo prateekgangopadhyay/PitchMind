@@ -110,6 +110,27 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="DEV deployment bypasses guarded release chain"), self.assertRaises(PipelinePolicyError):
             validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
 
+    def test_policy_mutations_reject_comment_only_release_guards(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        commented_opt_in = pipeline.replace(
+            "- ${{ if eq(parameters.enableDevDelivery, true) }}:",
+            "# - ${{ if eq(parameters.enableDevDelivery, true) }}:",
+            1,
+        )
+        with self.subTest(mutation="opt-in expression exists only as a comment"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(commented_opt_in, build_template, deploy_template)
+
+        commented_conditions = pipeline.replace(
+            "    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
+            "    # condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
+            2,
+        )
+        with self.subTest(mutation="main and PR conditions exist only as comments"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(commented_conditions, build_template, deploy_template)
+
     def test_policy_mutations_reject_swapped_or_reused_connection_wiring(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
