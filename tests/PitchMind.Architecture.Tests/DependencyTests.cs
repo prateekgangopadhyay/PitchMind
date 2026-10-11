@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -140,6 +141,8 @@ public sealed class DependencyTests
         var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
         var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
         var firstPitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var firstPitchEquivalent = decimal.Parse(firstPitchX, NumberStyles.Float, CultureInfo.InvariantCulture)
+            .ToString("G29", CultureInfo.InvariantCulture) + "e0";
         var firstPlayer = firstEvent.GetProperty("playerPositions")[0];
         var firstPlayerX = firstPlayer.GetProperty("x").GetRawText();
         var firstPlayerSpeed = firstPlayer.GetProperty("speed").GetRawText();
@@ -156,6 +159,7 @@ public sealed class DependencyTests
                 $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
                 $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
                 $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
+                $"const equivalentPitch = {{ pitchX: {firstPitchEquivalent} }};\n" +
                 $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
                 $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
@@ -168,10 +172,11 @@ public sealed class DependencyTests
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(8, violations.Count);
+            Xunit.Assert.Equal(9, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchEquivalent}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
@@ -326,7 +331,7 @@ public sealed class DependencyTests
             markers.Add(name, values);
         }
 
-        values.Add(property.GetRawText());
+        values.Add(NormalizeNumericLiteral(property.GetRawText()));
     }
 
     private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
@@ -350,10 +355,10 @@ public sealed class DependencyTests
             return false;
         }
 
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?[0-9]+(?:\.[0-9]+)?)(?![0-9.])"))
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?![0-9.])"))
         {
             if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
-                values.Contains(match.Groups["value"].Value))
+                values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
             {
                 return true;
             }
@@ -361,6 +366,11 @@ public sealed class DependencyTests
 
         return false;
     }
+
+    private static string NormalizeNumericLiteral(string value) =>
+        decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+            ? number.ToString("G29", CultureInfo.InvariantCulture)
+            : value;
 
     [Xunit.Fact]
     public void Domain_RejectsForgedImplicitFrameworkReferences()
