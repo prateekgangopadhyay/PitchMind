@@ -15,7 +15,14 @@ dotnet test PitchMind.slnx --no-build -c Release
 )
 python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
 python3 -m unittest discover -s scripts -p 'test_check_nuget_vulnerabilities.py' -v
+python3 scripts/test_secret_scan.py -v
+python3 scripts/test_generate_sbom.py -v
+bash scripts/secret-scan.sh
+sbom_temp_dir="$(mktemp -d)"
+trap 'rm -rf "$sbom_temp_dir"' EXIT
+PITCHMIND_SBOM_VERSION="$(git rev-parse --short HEAD)" \
+  bash scripts/generate-sbom.sh . "$sbom_temp_dir/pitchmind-source.spdx.json"
 node scripts/validate_operating_model.mjs
 node scripts/validate_operating_model.mjs --self-test
 node scripts/test_design_skills.mjs
-echo "PASS: .NET, dependency audits, frontend, feed profiler, design and council contract validation"
+echo "PASS: .NET, dependency and secret scans, source SBOM, frontend, feed profiler, design and council contract validation"
