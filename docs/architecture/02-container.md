@@ -20,6 +20,21 @@ flowchart LR
 
 The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. If the PostgreSQL read adapter is absent, those routes return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Authentication for these canonical routes is still an EP06-S04 gate; they must not be exposed through a cloud ingress before that boundary is implemented or an approved public-synthetic boundary exists. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
 
+## LOCAL — reconnect and catch-up slice (EP06-S03 candidate)
+
+```mermaid
+flowchart LR
+  Browser["Authenticated browser"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  BFF -->|read selected revision| PG["Docker PostgreSQL"]
+  PG --> Outbox["Committed projection outbox"]
+  Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]
+  Outbox --> Dispatch
+  Hub -->|match/revision/sequence cursor| Browser
+  Browser -. "gap, reconnect or revision change" .-> BFF
+```
+
+The LOCAL dispatcher is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, the local SignalR provider is enabled, and PostgreSQL is configured. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The new canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch or a client sequence ahead of the durable head forces replay from sequence -1. This slice does not certify a connected browser journey: the current application has no production authentication scheme or integrated SignalR browser client, and the canonical event producer/feed adapter remains separately gated.
+
 ## TARGET — canonical Azure platform
 
 ```mermaid

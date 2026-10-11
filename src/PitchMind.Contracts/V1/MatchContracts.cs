@@ -256,3 +256,11 @@ public sealed record CanonicalEvidenceResponse(
 public sealed record CanonicalReplayResponse(
     CanonicalMatchSnapshotResponse Snapshot,
     CanonicalEventPageResponse Events);
+
+/// <summary>Selected-time snapshot and bounded canonical catch-up page for a reconnecting client.</summary>
+public sealed record CanonicalTimelineBackfillResponse(
+    CanonicalMatchSnapshotResponse Snapshot,
+    CanonicalEventPageResponse Events,
+    bool RevisionChanged,
+    bool ReplayRequired,
+    long RequestedAfterSequence);

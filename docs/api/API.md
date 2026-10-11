@@ -35,6 +35,7 @@ These routes are separately namespaced under `/api/v1/canonical/*` and read Post
 | GET | `/api/v1/canonical/fixtures?afterMatchId&limit` | Latest persisted match projections; page size 1..100. |
 | GET | `/api/v1/canonical/matches/{matchId}/summary?atSeconds&revision` | Latest persisted snapshot at or before selected time/revision. |
 | GET | `/api/v1/canonical/matches/{matchId}/events?atSeconds&revision&cursor&limit` | Ordered ledger event page, bounded by selected time and projection sequence; cursor bound to match/time/revision. |
+| GET | `/api/v1/canonical/matches/{matchId}/timeline/backfill?afterSequence&atSeconds&revision&limit` | Durable reconnect snapshot and ordered event page. `revision` is the client's prior revision; changed revisions or a cursor ahead of the durable head set `replayRequired` and restart at sequence -1. Snapshot and events share the returned selected time and canonical revision. `afterSequence` is -1 for a fresh replay; pages are bounded to 1..100. |
 | GET | `/api/v1/canonical/matches/{matchId}/insights?atSeconds&revision&cursor&limit` | Persisted insight page only if every event/frame reference resolves no later than both the selected time/sequence and the insight's own `as_of_sequence`; each insight includes source version, provenance and the source hash for its canonical revision. |
 | GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One persisted insight whose references resolve no later than both the selected time/sequence and its own `as_of_sequence`, with revision-specific source lineage. |
 | GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Full stored JSON payloads for event/frame evidence bounded by selected time/sequence and the insight's own `as_of_sequence`; incomplete evidence is unavailable and the insight includes revision-specific source lineage. |
@@ -64,7 +65,7 @@ Current insights also carry a typed `evidenceGraph` with claim, event, frame, an
 | GET | `/api/v1/matches/{id}/insights` | EP05-S04 | `atSeconds,category?,truthClass?,cursor?,limit?` | evidence-classified supported tactical insights |
 | GET | `/api/v1/matches/{id}/key-moments` | EP05-S05 | `atSeconds?,limit?` | ranked validated moments with evidence IDs and score impact |
 | GET | `/api/v1/matches/{id}/evidence/{insightId}` | EP07-S05 | `atSeconds,revision?,cursor?` | immutable event/frame/metric refs + conditions/missingness |
-| GET | `/api/v1/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,revision?,limit?` | canonical ordered catch-up, nextCursor/hasMore |
+| GET | `/api/v1/canonical/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,atSeconds?,revision?,limit?` | durable canonical snapshot + ordered catch-up; revision changes force replay from sequence -1 |
 | POST | `/api/v1/realtime/negotiate` | EP06-S02 | `{matchId,clientRevision?}` | **PARTIAL — LOCAL ONLY:** authorized local SignalR path plus current canonical cursor; non-local profiles return `503 SIGNALR_UNAVAILABLE` until the Azure SignalR adapter is implemented |
 | GET | `/api/v1/teams` | EP07-S01/S02 | `competitionId?,cursor?,limit?` | actual synthetic fixture team catalogue, never source-code clubs |
 | GET | `/api/v1/teams/{id}/profile` | EP07-S06 | `window?,asOf?` | evidence-backed tactics, formations as nominal metadata only |
@@ -95,9 +96,11 @@ When PostgreSQL is configured to an approved loopback host in that local profile
 
 ## Synchronization and pagination example
 1. UI chooses selected 55:08; all page queries add `atSeconds=3308` and match/contract revision. A 55:09 goal, its tactical insight, evidence and AI explanation cannot appear in this view.
-2. Live cursor `lastSequence=N+1` arrives while user scrubs; show "New match update — return to live" but keep `SelectedTime`; fetch on explicit click only.
-3. Historical snapshot `revision=R` and evidence `revision=R` must match. On 409 revision conflict, refetch atomic snapshot, invalidate stale queries by clientContextRevision and rerender after new evidence resolves.
-4. Pagination: stable `(matchId,revision,sequence)` cursor; max proposed 100 events per page; endpoint rejects excessive unbounded requests with 400 or 413; complete data not duplicated/omitted across pages.
+2. On initial load, request backfill from `afterSequence=-1`, negotiate realtime, join the match group, then request backfill again to close the race between the initial snapshot and group subscription.
+3. A cursor notification with a newer `(canonicalRevision,lastSequence)` triggers a canonical backfill. A revision mismatch or cursor ahead of the durable head restarts from sequence -1; duplicate pages are reduced idempotently.
+4. If a live cursor arrives while the viewer is in `HISTORICAL` mode, show a nonintrusive update indicator and keep `SelectedTime`; refresh the selected view only after the user explicitly returns to LIVE. The cursor alone does not prove that a new insight exists.
+5. Historical snapshot `revision=R` and evidence `revision=R` must match. On 409 revision conflict, refetch atomic snapshot, invalidate stale queries by clientContextRevision and rerender after new evidence resolves.
+6. Pagination: stable `(matchId,revision,sequence)` cursor; max 100 events per page; endpoint rejects excessive unbounded requests with 400 or 413; complete data not duplicated/omitted across pages.
 
 ## Errors, security and evolution
 `application/problem+json` with `type,title,status,detail,instance,correlationId` and typed `code`: `INVALID_TIME`, `SCHEMA_UNSUPPORTED`, `EVIDENCE_MISSING`, `REVISION_CONFLICT`, `INSUFFICIENT_TRACKING`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMITED`, `DEPENDENCY_UNAVAILABLE`. The currently mapped validation and evidence failures use `INVALID_REQUEST` and `EVIDENCE_MISSING`; middleware/framework-generated 413 and 429 responses are not yet normalized. Use 400 for validation, 401 unauthenticated, 403 denied, 404 inaccessible/unknown, 409 revision/conflict, 413 oversized, 422 semantically invalid envelope, 429 exhausted rate, 503 unavailable. No sensitive provider payload in error detail.

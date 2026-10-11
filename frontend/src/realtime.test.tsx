@@ -1,0 +1,103 @@
+import { describe, expect, it } from 'vitest';
+import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected, observeRealtimeCursor, returnToLive, selectHistoricalTime } from './realtime';
+import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, CanonicalTimelineBackfill } from './api';
+import type { RealtimeTimelineState } from './realtime';
+
+const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120): CanonicalMatchSnapshot => ({
+  matchId: 'match-a', canonicalRevision: revision, selectedTimeSeconds: asOfSeconds, asOfSeconds, throughSequence,
+  algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64), provenance: 'synthetic',
+  period: 1, phase: 'firsthalf', homeScore: 0, awayScore: 0, possessionTeamId: null,
+  homeActivePlayers: 11, awayActivePlayers: 11, players: [],
+});
+
+const event = (sequence: number, clockSeconds = sequence * 60): CanonicalLedgerEvent => ({
+  eventId: `event-${sequence}`, matchId: 'match-a', sequence, type: 'pass', clockSeconds, period: 1,
+  occurredAt: new Date(clockSeconds * 1000).toISOString(),
+});
+
+const state = (): RealtimeTimelineState => ({
+  matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, canonicalRevision: 2, throughSequence: 0,
+  snapshot: snapshot(2, 0, 60), events: [event(0)], nextCursor: null, hasMore: false,
+  needsBackfill: false, hasNewMatchUpdate: false, reconnecting: false,
+});
+
+const backfill = (items: CanonicalLedgerEvent[], options: Partial<CanonicalTimelineBackfill> = {}): CanonicalTimelineBackfill => {
+  const current = snapshot(2, 2, 120);
+  const page: CanonicalEventPage = {
+    matchId: 'match-a', canonicalRevision: current.canonicalRevision, selectedTimeSeconds: current.selectedTimeSeconds,
+    throughSequence: current.throughSequence, items, nextCursor: null, hasMore: false,
+  };
+  return { snapshot: current, events: page, revisionChanged: false, replayRequired: false, requestedAfterSequence: 0, ...options };
+};
+
+describe('realtime reconnect state', () => {
+  it('marks a disconnected client stale and requests durable catch-up after reconnect', () => {
+    const disconnected = markRealtimeDisconnected(state());
+    expect(disconnected.reconnecting).toBe(true);
+    expect(disconnected.needsBackfill).toBe(true);
+  });
+
+  it('uses cursor notifications only to trigger catch-up when live', () => {
+    const next = observeRealtimeCursor(state(), {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 2,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    expect(next.needsBackfill).toBe(true);
+    expect(next.throughSequence).toBe(0);
+    expect(next.snapshot.homeScore).toBe(0);
+  });
+
+  it('keeps historical selection fixed and shows a nonintrusive update indicator', () => {
+    const historical = selectHistoricalTime(state(), 45);
+    const next = observeRealtimeCursor(historical, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 3, lastSequence: 7,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    expect(next.mode).toBe('HISTORICAL');
+    expect(next.selectedTimeSeconds).toBe(45);
+    expect(next.hasNewMatchUpdate).toBe(true);
+    expect(next.snapshot.canonicalRevision).toBe(2);
+  });
+
+  it('switches to the latest observed match clock only on explicit return to live', () => {
+    const live = returnToLive(selectHistoricalTime(state(), 45));
+    expect(live.mode).toBe('LIVE');
+    expect(live.selectedTimeSeconds).toBe(60);
+    expect(live.needsBackfill).toBe(true);
+  });
+
+  it('requests the canonical head in live mode and the exact selected timestamp in historical mode', () => {
+    const historical = selectHistoricalTime(state(), 45);
+    expect(buildTimelineBackfillPath(historical)).toContain('atSeconds=45');
+    expect(buildTimelineBackfillPath(returnToLive(historical))).toContain('atSeconds=5400');
+    expect(buildTimelineBackfillPath(historical)).toContain('afterSequence=0');
+    expect(buildTimelineBackfillPath(historical)).toContain('revision=2');
+  });
+
+  it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {
+    const first = applyBackfillPage(state(), backfill([event(1), event(2)]));
+    expect(first.events.map(item => item.sequence)).toEqual([0, 1, 2]);
+    expect(first.throughSequence).toBe(2);
+    expect(first.needsBackfill).toBe(false);
+    const duplicate = applyBackfillPage(first, backfill([event(1), event(2)]));
+    expect(duplicate.events.map(item => item.eventId)).toEqual(['event-0', 'event-1', 'event-2']);
+  });
+
+  it('resets on a canonical revision change and requests the remaining replay pages', () => {
+    const changed = backfill([event(0), event(1)], { snapshot: snapshot(3, 2, 120), revisionChanged: true,
+      events: { ...backfill([]).events, canonicalRevision: 3, items: [event(0), event(1)], hasMore: true, nextCursor: 'next' } });
+    const next = applyBackfillPage(state(), changed);
+    expect(next.canonicalRevision).toBe(3);
+    expect(next.events.map(item => item.sequence)).toEqual([0, 1]);
+    expect(next.throughSequence).toBe(1);
+    expect(next.hasMore).toBe(true);
+    expect(next.needsBackfill).toBe(true);
+  });
+
+  it('does not advance state across a sequence gap or admit future events', () => {
+    const gap = applyBackfillPage(state(), backfill([event(2)]));
+    expect(gap.reconnecting).toBe(true);
+    expect(gap.throughSequence).toBe(0);
+    expect(() => applyBackfillPage(state(), backfill([event(1, 121)]))).toThrow(/outside the selected match context/);
+  });
+});

@@ -61,6 +61,41 @@ paths:
         '400': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/timeline/backfill:
+    get:
+      operationId: backfillCanonicalTimeline
+      summary: Refresh one canonical snapshot and catch up from the client's last sequence.
+      description: >-
+        Reads only the durable PostgreSQL event ledger and projection. The response
+        binds snapshot and events to one selected time and canonical revision. If
+        the client's revision changed or its sequence is ahead of the durable head,
+        replayRequired is true and events restart from sequence -1. A cursor message
+        is only a wake-up; clients use this endpoint to recover canonical facts.
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - name: afterSequence
+          in: query
+          required: true
+          description: Last applied zero-based event sequence; use -1 for an initial replay.
+          schema: { type: integer, minimum: -1 }
+        - name: atSeconds
+          in: query
+          description: Selected match time, defaults to the match head bound (5400 seconds).
+          schema: { type: integer, minimum: 0, maximum: 5400, default: 5400 }
+        - name: revision
+          in: query
+          description: Client's prior canonical revision; a mismatch forces replay.
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Durable selected-time snapshot and bounded ordered catch-up page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalTimelineBackfill' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/insights:
     get:
       operationId: listCanonicalMatchInsights
@@ -329,6 +364,15 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvent' } }
         nextCursor: { type: [string, 'null'] }
         hasMore: { type: boolean }
+    CanonicalTimelineBackfill:
+      type: object
+      required: [snapshot, events, revisionChanged, replayRequired, requestedAfterSequence]
+      properties:
+        snapshot: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
+        events: { $ref: '#/components/schemas/CanonicalEventPage' }
+        revisionChanged: { type: boolean }
+        replayRequired: { type: boolean }
+        requestedAfterSequence: { type: integer, minimum: -1 }
     CanonicalEvidenceReference:
       type: object
       required: [kind, id, relation]

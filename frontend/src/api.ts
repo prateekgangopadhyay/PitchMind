@@ -68,6 +68,14 @@ export interface CanonicalEvidencePayload {
 }
 export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }
 export interface CanonicalReplay { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage }
+export interface CanonicalTimelineBackfill {
+  snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage; revisionChanged: boolean;
+  replayRequired: boolean; requestedAfterSequence: number;
+}
+export interface RealtimeCursorV1 {
+  kind: 'matchUpdated'; matchId: string; canonicalRevision: number; lastSequence: number;
+  serverUtc: string; schemaVersion: 1;
+}
 export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
 }

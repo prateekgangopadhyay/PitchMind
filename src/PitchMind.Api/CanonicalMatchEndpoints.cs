@@ -63,6 +63,34 @@ internal static class CanonicalMatchEndpoints
             return Results.Ok(ToEventPage(projection, selectedTime, page, canonicalMatchId));
         });
 
+        match.MapGet("/timeline/backfill", async (
+            string matchId, long afterSequence, int? atSeconds, int? revision, int? limit,
+            IMatchProjectionReader projections, HttpContext context, CancellationToken cancellationToken) =>
+        {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (afterSequence < -1)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_CURSOR", "afterSequence must be -1 or a non-negative sequence.");
+            var pageSize = limit ?? 50;
+            if (pageSize is < 1 or > 100)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 100.");
+
+            // The reconnect cursor identifies the client's prior revision; read the current durable
+            // selected-time projection so correction revisions can force an idempotent full replay.
+            var selectedTime = atSeconds ?? 5400;
+            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, null, cancellationToken);
+            if (projection is null)
+                return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
+
+            var revisionChanged = revision is not null && revision != projection.Revision;
+            var replayRequired = revisionChanged || afterSequence > projection.AsOfSequence;
+            var effectiveAfterSequence = replayRequired ? -1 : afterSequence;
+            var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, effectiveAfterSequence, pageSize, cancellationToken);
+            var events = ToEventPage(projection, selectedTime, page, canonicalMatchId);
+            return Results.Ok(new CanonicalTimelineBackfillResponse(
+                ToSnapshot(projection, selectedTime), events, revisionChanged, replayRequired, afterSequence));
+        });
+
         match.MapGet("/insights", async (
             string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
             IMatchProjectionReader projections, IMatchInsightReader insights, HttpContext context,
