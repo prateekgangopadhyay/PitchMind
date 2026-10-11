@@ -521,6 +521,16 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         services = config.get("services", {})
         self.assertIsInstance(services, dict)
         self.assertEqual(services["postgres"].get("image"), "postgres:16-alpine")
+        postgres_mounts = services["postgres"].get("volumes", [])
+        self.assertEqual(
+            [(mount.get("source"), mount.get("target")) for mount in postgres_mounts],
+            [("postgres_data", "/var/lib/postgresql/data")],
+        )
+        redis_mounts = services["redis"].get("volumes", [])
+        self.assertEqual(
+            [(mount.get("source"), mount.get("target")) for mount in redis_mounts],
+            [("redis-data", "/data")],
+        )
         self.assertEqual(
             config.get("volumes"),
             {
