@@ -438,14 +438,6 @@ public sealed class IdentityAndAbuseTests
         return await client.SendAsync(request);
     }
 
-    private static async Task<HttpResponseMessage> SendAs(HttpClient client, string route, string role)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, route);
-        request.Headers.Add("X-Dev-Subject", "qa-user");
-        request.Headers.Add("X-Dev-Roles", role);
-        return await client.SendAsync(request);
-    }
-
     private static async Task<string?> ProblemCode(HttpResponseMessage response)
     {
         using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
