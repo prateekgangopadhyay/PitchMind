@@ -321,7 +321,7 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
-    public void ProductionFixtureGuard_FailsClosedWhenNumericAliasesAreShadowed()
+    public void ProductionFixtureGuard_FailsClosedWhenNumericAliasesAreShadowedOrReassigned()
     {
         var root = FindRepositoryRoot();
         var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
@@ -334,6 +334,7 @@ public sealed class DependencyTests
         {
             var tsxSource = Path.Combine(sourceRoot.FullName, "App.tsx");
             var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
+            var javascriptSource = Path.Combine(sourceRoot.FullName, "App.js");
             File.WriteAllText(tsxSource,
                 $"const observedClock = {candidateClock};\n" +
                 "{ const observedClock = 987654321; }\n" +
@@ -344,17 +345,26 @@ public sealed class DependencyTests
                 "  void Render() {\n" +
                 "    { var observedClock = 987654321; }\n" +
                 "    var payload = new { clockSeconds = observedClock };\n" +
+                "    var mutableClock = 987654321;\n" +
+                $"    mutableClock = {candidateClock};\n" +
+                "    var reassignedPayload = new { clockSeconds = mutableClock };\n" +
                 "  }\n" +
                 "}");
+            File.WriteAllText(javascriptSource,
+                "let observedClock = 987654321;\n" +
+                $"observedClock = {candidateClock};\n" +
+                "const payload = { clockSeconds: observedClock };");
 
             var violations = FindFixtureDataMarkers(
-                [tsxSource, csharpSource],
+                [tsxSource, csharpSource, javascriptSource],
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(2, violations.Count);
+            Xunit.Assert.Equal(4, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("clockSeconds: observedClock", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = observedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = mutableClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("clockSeconds: observedClock", StringComparison.Ordinal));
         }
         finally
         {
@@ -576,6 +586,31 @@ public sealed class DependencyTests
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToHashSet(StringComparer.Ordinal);
+        var declaredNames = declarations
+            .Cast<Match>()
+            .Select(match => match.Groups["name"].Value.TrimStart('@'))
+            .ToHashSet(StringComparer.Ordinal);
+        var declarationNameIndexes = declarations
+            .Cast<Match>()
+            .Select(match => match.Groups["name"].Index)
+            .ToHashSet();
+
+        // The scanner does not model language scopes or execute statements. If a tracked
+        // alias is written after its initializer, stop trusting its initializer and fail
+        // closed when it is later used for a candidate football property.
+        var assignment = new Regex(
+            @"(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\+\+|--|\+=|-=|\*=|/=|%=|=(?!=|>))",
+            RegexOptions.CultureInvariant);
+        foreach (Match match in assignment.Matches(source))
+        {
+            var name = match.Groups["name"].Value.TrimStart('@');
+            if (declarationNameIndexes.Contains(match.Groups["name"].Index) || !declaredNames.Contains(name))
+            {
+                continue;
+            }
+
+            ambiguousNames.Add(name);
+        }
 
         for (var pass = 0; pass < declarations.Count; pass++)
         {
