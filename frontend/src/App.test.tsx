@@ -205,7 +205,7 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
 it('shows the latest persisted insight as the explanation for the exact selected time', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 150,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
@@ -215,12 +215,19 @@ it('shows the latest persisted insight as the explanation for the exact selected
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    if (parsed.pathname.endsWith('/insights')) {
+      const cursor = parsed.searchParams.get('cursor');
+      return {ok: true, json: async () => cursor === 'cursor-two'
+        ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 150, items: [
+          {insightId: 'latest', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 150, detectorVersion: 'press-v2', truthClass: 'interpretation', summary: 'Persisted explanation at this point.', evidence: [{kind: 'event', id: 'event-150', relation: 'supports'}]}
+        ], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 150, items: Array.from({length: 100}, (_, index) => ({
+          insightId: `earlier-${index + 1}`, matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: index + 1, detectorVersion: 'press-v1', truthClass: 'derived', summary: 'Earlier saved insight', evidence: [{kind: 'event', id: `event-${index + 1}`, relation: 'supports'}]
+        })), nextCursor: 'cursor-two', hasMore: true}};
+    }
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
-          {insightId: 'earlier', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 12, detectorVersion: 'press-v1', truthClass: 'derived', summary: 'Earlier saved insight', evidence: [{kind: 'event', id: 'event-12', relation: 'supports'}]},
-          {insightId: 'latest', matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'press-v2', truthClass: 'interpretation', summary: 'Persisted explanation at this point.', evidence: [{kind: 'event', id: 'event-19', relation: 'supports'}]}
-        ], nextCursor: null, hasMore: false};
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 150, items: [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 150, items: [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -230,10 +237,16 @@ it('shows the latest persisted insight as the explanation for the exact selected
     const explanation = container.querySelector<HTMLElement>('.selected-time-explanation');
     expect(explanation?.textContent).toContain('Explanation at 55:09');
     expect(explanation?.textContent).toContain('interpretation');
-    expect(explanation?.textContent).toContain('Saved insight through sequence 19');
+    expect(explanation?.textContent).toContain('Saved insight through sequence 150');
     expect(explanation?.textContent).toContain('Persisted explanation at this point.');
     expect(explanation?.querySelector('a')?.getAttribute('href'))
       .toBe(`/insights/latest?matchId=${matchId}&atSeconds=3309&revision=4`);
+    const insightRequests = vi.mocked(fetch).mock.calls.map(([url]) => new URL(String(url), 'http://localhost'))
+      .filter(url => url.pathname.endsWith('/insights'));
+    expect(insightRequests).toHaveLength(2);
+    expect(insightRequests.map(url => url.searchParams.get('cursor'))).toEqual([null, 'cursor-two']);
+    expect(insightRequests.every(url => url.searchParams.get('limit') === '100' &&
+      url.searchParams.get('atSeconds') === '3309' && url.searchParams.get('revision') === '4')).toBe(true);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
