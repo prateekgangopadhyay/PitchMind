@@ -668,6 +668,8 @@ public sealed class PostgresLedgerTests
         await AddFrame("future-time", 0, 1, 1, update.SourceSha256);
         for (var index = 0; index < 30; index++)
             await AddFrame($"zpage-{index:D3}", 0, 0, 1, update.SourceSha256);
+        var maximumUnicodeFrameId = string.Concat(Enumerable.Repeat("😀", 128));
+        await AddFrame(maximumUnicodeFrameId, 0, 0, 1, update.SourceSha256);
 
         var reader = new PostgresMatchTrackingReader(source);
         var firstPage = await reader.ReadAtAsync(projection, 0, null, null, 1, CancellationToken.None);
@@ -687,15 +689,18 @@ public sealed class PostgresLedgerTests
         var secondLargePage = await reader.ReadAtAsync(projection, 0, firstLargePage.NextAfterSequence,
             firstLargePage.NextAfterFrameId, 25, CancellationToken.None);
         Assert.False(secondLargePage.HasMore);
-        Assert.Equal(7, secondLargePage.Frames.Count);
-        Assert.Equal(32, firstLargePage.Frames.Concat(secondLargePage.Frames).Select(frame => frame.FrameId).Distinct().Count());
+        Assert.Equal(8, secondLargePage.Frames.Count);
+        Assert.Equal(33, firstLargePage.Frames.Concat(secondLargePage.Frames).Select(frame => frame.FrameId).Distinct().Count());
+        Assert.Contains(firstLargePage.Frames.Concat(secondLargePage.Frames), frame => frame.FrameId == maximumUnicodeFrameId);
+        var afterMaximumUnicodeId = await reader.ReadAtAsync(projection, 0, 0, maximumUnicodeFrameId, 1, CancellationToken.None);
+        Assert.Empty(afterMaximumUnicodeId.Frames);
         Assert.Equal(Enumerable.Range(0, 30).Select(index => $"zpage-{index:D3}"),
             firstLargePage.Frames.Concat(secondLargePage.Frames).Where(frame => frame.FrameId.StartsWith("zpage-"))
                 .Select(frame => frame.FrameId));
 
         var allVisible = await reader.ReadAtAsync(projection, 0, null, null, 100, CancellationToken.None);
         Assert.False(allVisible.HasMore);
-        Assert.Equal(32, allVisible.Frames.Count);
+        Assert.Equal(33, allVisible.Frames.Count);
         Assert.DoesNotContain(allVisible.Frames, frame => frame.FrameId == "unversioned");
         // This schema binds one immutable source identity to a match; presenting a selection from
         // another source must not return any of the source-A frame rows.

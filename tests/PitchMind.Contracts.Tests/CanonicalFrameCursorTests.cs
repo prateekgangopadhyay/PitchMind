@@ -25,6 +25,21 @@ public sealed class CanonicalFrameCursorTests
     }
 
     [Fact]
+    public void Frame_cursor_round_trips_maximum_code_point_frame_id_within_cursor_bound()
+    {
+        var frameId = string.Concat(Enumerable.Repeat("😀", 128));
+
+        var token = CanonicalCursorCodec.EncodeFrame(MatchId, 3308, 4, SourceHash, 42, frameId);
+        var decoded = CanonicalCursorCodec.DecodeFrame(token, MatchId, 3308, 4);
+
+        Assert.True(token.Length <= 2048);
+        Assert.Equal(256, frameId.Length); // 128 Unicode code points occupy 256 UTF-16 code units.
+        Assert.Equal(frameId, decoded.AfterFrameId);
+        Assert.Throws<ArgumentException>(() => CanonicalCursorCodec.EncodeFrame(MatchId, 3308, 4,
+            SourceHash, 42, frameId + "😀"));
+    }
+
+    [Fact]
     public void Frame_cursor_rejects_tampered_and_mismatched_context()
     {
         var token = CanonicalCursorCodec.EncodeFrame(MatchId, 3308, 4, SourceHash, 42, "frame-00042");

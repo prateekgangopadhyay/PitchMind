@@ -2,6 +2,7 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Contracts.Telemetry.V1;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Match;
+using System.Text;
 using System.Text.Json;
 
 namespace PitchMind.Api;
@@ -226,7 +227,7 @@ internal static class CanonicalMatchEndpoints
     private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime,
         SelectedMatchProjection projection)
     {
-        if (string.IsNullOrWhiteSpace(frame.FrameId) || frame.FrameId.Length > 128 || frame.Sequence < 0 ||
+        if (string.IsNullOrWhiteSpace(frame.FrameId) || frame.FrameId.EnumerateRunes().Count() > 128 || frame.Sequence < 0 ||
             frame.CanonicalRevision <= 0 || frame.CanonicalRevision > projection.Revision || frame.SourceSha256 != projection.SourceSha256 ||
             frame.Period is < 1 or > 5 || frame.ClockSeconds != selectedTime ||
             string.IsNullOrWhiteSpace(frame.CoordinateVersion) || frame.CoordinateVersion.Length > 128 ||

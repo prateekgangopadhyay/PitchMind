@@ -1,3 +1,4 @@
+using System.Text;
 using Npgsql;
 using NpgsqlTypes;
 using PitchMind.Application.Abstractions;
@@ -22,7 +23,7 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
             throw new InvalidDataException("Persisted projection has an invalid match ID.");
         if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
         if ((afterSequence is null) != (afterFrameId is null) || afterSequence is < 0 ||
-            afterFrameId is { Length: 0 or > 128 })
+            afterFrameId is not null && (string.IsNullOrWhiteSpace(afterFrameId) || afterFrameId.EnumerateRunes().Count() > 128))
             throw new ArgumentException("Frame cursor key must contain a valid sequence and frame ID.");
 
         await using var command = dataSource.CreateCommand("""
