@@ -17,7 +17,8 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
 {
     private readonly WebApplicationFactory<Program> factory;
 
-    public CanonicalApiBoundaryTests(WebApplicationFactory<Program> factory) => this.factory = factory;
+    public CanonicalApiBoundaryTests(WebApplicationFactory<Program> factory) =>
+        this.factory = factory.WithWebHostBuilder(builder => ApiTestAuthentication.Configure(builder));
 
     [Theory]
     [InlineData("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", 120, null)]
@@ -27,6 +28,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
         string cursorMatchId, int cursorTime, int? requestedRevision)
     {
         using var client = factory.CreateClient();
+        AddMatchReaderClaims(client);
         var cursor = EncodeCursor(cursorMatchId, cursorTime, revision: 2, afterSequence: 10);
         var matchId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
         var revisionQuery = requestedRevision is null ? string.Empty : $"&revision={requestedRevision}";
@@ -51,6 +53,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
             services.AddSingleton<IMatchProjectionReader>(reader);
         }));
         using var client = testFactory.CreateClient();
+        AddMatchReaderClaims(client);
         using var cancellation = new CancellationTokenSource();
         var request = client.GetAsync(
             "/api/v1/canonical/matches/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/summary?atSeconds=120",
@@ -74,6 +77,7 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
             services.AddSingleton<IMatchProjectionReader>(reader);
         }));
         using var client = testFactory.CreateClient();
+        AddMatchReaderClaims(client);
         var cursor = EncodeCursor("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 120, revision: 2, afterSequence: 10);
 
         using var response = await client.GetAsync(
@@ -96,6 +100,12 @@ public sealed class CanonicalApiBoundaryTests : IClassFixture<WebApplicationFact
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
+    }
+
+    private static void AddMatchReaderClaims(HttpClient client)
+    {
+        client.DefaultRequestHeaders.Add("X-Test-Role", "analyst");
+        client.DefaultRequestHeaders.Add("X-Test-Match", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     }
 
     private sealed class CancellationObservingProjectionReader : IMatchProjectionReader

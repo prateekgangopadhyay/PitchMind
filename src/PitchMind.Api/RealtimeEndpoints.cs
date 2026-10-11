@@ -45,7 +45,9 @@ internal static class RealtimeEndpoints
 {
     public static IEndpointRouteBuilder MapRealtimeEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/v1/realtime/negotiate", NegotiateAsync);
+        endpoints.MapPost("/api/v1/realtime/negotiate", NegotiateAsync)
+            .RequireAuthorization("CanonicalRead")
+            .RequireRateLimiting("realtime");
         return endpoints;
     }
 

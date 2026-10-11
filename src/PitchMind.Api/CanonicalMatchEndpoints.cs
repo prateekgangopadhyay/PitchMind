@@ -8,7 +8,7 @@ internal static class CanonicalMatchEndpoints
 {
     public static IEndpointRouteBuilder MapCanonicalMatchEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/v1/canonical/fixtures", async (
+        app.MapGet("/fixtures", async (
             string? afterMatchId, int? limit, IMatchProjectionReader projections, HttpContext context,
             CancellationToken cancellationToken) =>
         {
@@ -30,7 +30,7 @@ internal static class CanonicalMatchEndpoints
                 hasMore ? items[^1].MatchId : null, hasMore));
         });
 
-        var match = app.MapGroup("/api/v1/canonical/matches/{matchId}");
+        var match = app.MapGroup("/matches/{matchId}");
         match.MapGet("/summary", async (
             string matchId, int? atSeconds, int? revision, IMatchProjectionReader projections,
             HttpContext context, CancellationToken cancellationToken) =>
@@ -50,6 +50,7 @@ internal static class CanonicalMatchEndpoints
         {
             if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
             if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (ValidateCursor(context, cursor) is { } invalidCursor) return invalidCursor;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
@@ -98,6 +99,7 @@ internal static class CanonicalMatchEndpoints
         {
             if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
             if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (ValidateCursor(context, cursor) is { } invalidCursor) return invalidCursor;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
@@ -167,6 +169,7 @@ internal static class CanonicalMatchEndpoints
         {
             if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
             if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (ValidateCursor(context, cursor) is { } invalidCursor) return invalidCursor;
             var selectedTime = atSeconds ?? 0;
             var pageSize = limit ?? 50;
             if (pageSize is < 1 or > 100)
@@ -246,6 +249,11 @@ internal static class CanonicalMatchEndpoints
             return Problem(context, StatusCodes.Status400BadRequest, "INVALID_MATCH_ID", "matchId must be a non-empty UUID.");
         return null;
     }
+
+    private static IResult? ValidateCursor(HttpContext context, string? cursor) =>
+        cursor is { Length: > 2048 }
+            ? Problem(context, StatusCodes.Status400BadRequest, "INVALID_CURSOR", "cursor must not exceed 2048 characters.")
+            : null;
 
     private static IResult? ValidateInsightId(HttpContext context, string value)
     {

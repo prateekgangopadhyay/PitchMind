@@ -4,10 +4,17 @@ info:
   version: 1.0.0
   description: >-
     PostgreSQL-backed, selected-time read contracts. These routes are separate from
-    the fixture-backed demo API. Authentication is not yet implemented; cloud exposure
-    is blocked pending EP06-S04 or an explicitly approved synthetic public-read boundary.
+    the fixture-backed local synthetic demo API. Canonical BFF routes require JWT
+    authentication, a configured read role, and a configured match-entitlement claim
+    containing the exact route matchId. Operators provide HTTPS Authentication:Authority,
+    Authentication:Audience, Authentication:RoleClaimType,
+    Authentication:MatchEntitlementClaimType, comma-separated Authorization:ReadRoles,
+    and any Authorization:CatalogRoles. Missing or invalid auth configuration fails
+    closed. Cross-match fixture listing requires a separately configured catalog role.
 servers:
   - url: /
+security:
+  - bearerAuth: []
 paths:
   /api/v1/canonical/fixtures:
     get:
@@ -20,12 +27,16 @@ paths:
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
         '200':
           description: Latest persisted match projections.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalMatchPage' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/summary:
     get:
@@ -35,6 +46,10 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Persisted state projection at the selected time.
           content:
@@ -53,6 +68,10 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Sequence-ordered canonical event page bounded by selected time.
           content:
@@ -106,6 +125,10 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Persisted insights with resolvable selected-time evidence.
           content:
@@ -126,6 +149,10 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: One persisted insight with resolvable selected-time evidence.
           content:
@@ -146,6 +173,10 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Persisted insight with complete event/frame evidence visible at the selected time and sequence.
           content:
@@ -164,6 +195,10 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Point-in-time persisted snapshot and event page.
           content:
@@ -180,6 +215,10 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '400':
           description: Invalid match identifier, selected time, or revision; returns sanitized Problem Details.
           content:
@@ -207,6 +246,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/RealtimeNegotiateRequestV1' }
       responses:
+        '413': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '200':
           description: Local SignalR transport details and the canonical head cursor.
           content:

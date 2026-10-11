@@ -7,6 +7,8 @@
 ```mermaid
 flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
+  U -. "bearer token, configured role + match entitlement" .-> A
+  A -. "validate issuer, audience, signature, expiry" .-> IDP["Operator-configured OIDC issuer"]
   A --> S["SyntheticMatchService"]
   S --> G["C# generated fixture (transitional)"]
   S --> T["Deterministic pressing rule"]
@@ -18,7 +20,7 @@ flowchart LR
   J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. If the PostgreSQL read adapter is absent, those routes return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Authentication for these canonical routes is still an EP06-S04 gate; they must not be exposed through a cloud ingress before that boundary is implemented or an approved public-synthetic boundary exists. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
+Fixture-backed `/api/v1/matches/*` demo routes still use `SyntheticMatchService`; they are anonymous only in Development + `Runtime:Profile=local`, return 404 elsewhere, and label responses `X-Data-Class: synthetic-demo`. `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. Canonical routes and local SignalR require JWT bearer validation, a configured read role, and a token entitlement matching the requested match ID; the fixture catalogue has a separate operator-configured catalog role. The issuer, audience, claim types, roles, catalog roles and CORS origins have no repository defaults and missing required authentication settings fail closed. Local contract tests use an explicit test authentication handler and do not prove production identity-provider integration. If the PostgreSQL adapter is absent, authorized canonical reads return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Cloud exposure remains blocked until operators provide and verify the actual identity and CORS configuration. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
 
 ## LOCAL — reconnect and catch-up slice (EP06-S03 candidate)
 

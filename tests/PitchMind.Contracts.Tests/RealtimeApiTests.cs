@@ -97,6 +97,7 @@ public sealed class RealtimeApiTests
         using var authorized = factory.CreateClient();
         unauthorized.DefaultRequestHeaders.Add("X-Test-Role", "coach");
         authorized.DefaultRequestHeaders.Add("X-Test-Role", "fan");
+        authorized.DefaultRequestHeaders.Add("X-Test-Match", MatchId.ToString("D"));
 
         using var anonymousResponse = await anonymous.PostAsJsonAsync("/api/v1/realtime/negotiate",
             new { matchId = MatchId, clientRevision = 2 });
@@ -120,7 +121,7 @@ public sealed class RealtimeApiTests
         Assert.Equal(19, root.GetProperty("cursor").GetProperty("lastSequence").GetInt64());
         using var missingMatchResponse = await authorized.PostAsJsonAsync("/api/v1/realtime/negotiate",
             new { matchId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), clientRevision = 2 });
-        Assert.Equal(HttpStatusCode.NotFound, missingMatchResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, missingMatchResponse.StatusCode);
     }
 
     [Fact]
@@ -129,6 +130,7 @@ public sealed class RealtimeApiTests
         using var factory = CreateFactory(local: false);
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Test-Role", "analyst");
+        client.DefaultRequestHeaders.Add("X-Test-Match", MatchId.ToString("D"));
 
         using var response = await client.PostAsJsonAsync("/api/v1/realtime/negotiate",
             new { matchId = MatchId, clientRevision = (int?)null });
@@ -146,6 +148,7 @@ public sealed class RealtimeApiTests
         Assert.Empty(factory.Services.GetServices<IOutboxPublisher>());
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Test-Role", "fan");
+        client.DefaultRequestHeaders.Add("X-Test-Match", MatchId.ToString("D"));
 
         using var response = await client.PostAsJsonAsync("/api/v1/realtime/negotiate",
             new { matchId = MatchId, clientRevision = (int?)null });
@@ -162,7 +165,13 @@ public sealed class RealtimeApiTests
             builder.UseSetting("Runtime:Profile", local ? "local" : "azure");
             var testSettings = new Dictionary<string, string?>
             {
-                ["Runtime:Profile"] = local ? "local" : "azure"
+                ["Runtime:Profile"] = local ? "local" : "azure",
+                ["Authentication:Authority"] = "https://identity.test.invalid",
+                ["Authentication:Audience"] = "pitchmind-contract-tests",
+                ["Authentication:RoleClaimType"] = "role",
+                ["Authentication:MatchEntitlementClaimType"] = "matches",
+                ["Authorization:ReadRoles"] = "fan,analyst,admin",
+                ["Realtime:MaximumConnections"] = "4"
             };
             if (configureRealtimeProvider)
             {
@@ -171,16 +180,11 @@ public sealed class RealtimeApiTests
                 testSettings["Realtime:Provider"] = provider;
             }
             builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(testSettings));
+            ApiTestAuthentication.Configure(builder);
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IMatchProjectionReader>();
                 services.AddSingleton<IMatchProjectionReader, TestProjectionReader>();
-                services.AddAuthentication(options =>
-                    {
-                        options.DefaultAuthenticateScheme = "test";
-                        options.DefaultChallengeScheme = "test";
-                    })
-                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>("test", _ => { });
             });
         });
 
@@ -208,19 +212,4 @@ public sealed class RealtimeApiTests
         }
     }
 
-    private sealed class TestAuthenticationHandler(
-        IOptionsMonitor<AuthenticationSchemeOptions> options,
-        ILoggerFactory logger,
-        UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
-    {
-        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-        {
-            if (!Request.Headers.TryGetValue("X-Test-Role", out var role))
-                return Task.FromResult(AuthenticateResult.NoResult());
-
-            var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test-user"),
-                new Claim(ClaimTypes.Role, role.ToString())], Scheme.Name);
-            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
-        }
-    }
 }
