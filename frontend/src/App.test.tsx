@@ -155,6 +155,14 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Goal');
     expect(container.textContent).toContain('Score event');
     expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
+    const selectedTime = container.querySelector<HTMLInputElement>('#selected-time');
+    const selectedTimeLabel = container.querySelector<HTMLLabelElement>('label[for=selected-time]');
+    expect(selectedTime).not.toBeNull();
+    expect(selectedTime?.type).toBe('range');
+    expect(selectedTimeLabel?.control).toBe(selectedTime);
+    expect(selectedTime?.getAttribute('aria-valuetext')).toBe('55:09');
+    expect(container.querySelector('[role=status]')?.textContent)
+      .toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
     expect(observedRequests).toHaveLength(4);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');
