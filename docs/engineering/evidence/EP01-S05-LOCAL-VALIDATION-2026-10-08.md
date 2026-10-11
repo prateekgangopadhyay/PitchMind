@@ -69,3 +69,18 @@ The PR feature branch was rebased without conflicts onto current `origin/main` a
 | Complete local quality script | `./scripts/validate-all.sh` | Started at the tested code revision. The command emitted no output while its first step, `dotnet restore PitchMind.slnx`, was running. A cancellation request did not return during observation. Restore/build/tests and all later script stages are therefore unverified on this rebased head; no aggregate pass is claimed. |
 
 The preceding 2026-10-09 full local quality-script and isolated PostgreSQL results apply to their recorded older feature revisions only. They do not establish current-main aggregate validation. This integration rebase does not constitute story acceptance; independent review and Product Owner acceptance remain pending. No Azure command, resource mutation, deployment, PR-ready transition, or PR merge was performed.
+
+## 2026-10-12 latest-main integration revalidation
+
+After the prior rebase, `main` advanced again by merging PR #116. The PR branch was rebased conflict-free onto the exact new base `de8298e1fd836c97037977bada1b7c643d926ddc`; the code tree verified is `30bc33dff68ee9c17675ec23b23bdfa2d1296289`. The branch is a descendant of that base with eleven feature commits ahead and zero behind.
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| Focused NuGet report parser tests | `python3 -m unittest discover -s scripts -p 'test_check_nuget_vulnerabilities.py' -v` | Passed 7/7. |
+| Feed profiler tests | `python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v` | Passed 5/5. |
+| Council route and approval validation | `node scripts/validate_operating_model.mjs` | Passed; 12 epics, 59 stories, 28 Council skills, five design skills, zero dependency cycles, and two approval gates. |
+| Council DAG self-test | `node scripts/validate_operating_model.mjs --self-test` | Passed. |
+| Five design-skill registry tests | `node scripts/test_design_skills.mjs` | Passed. |
+| Exact-base ancestry and whitespace | `git rev-list --left-right --count HEAD...origin/main`; `git diff --check origin/main...HEAD` | `11 0`; diff check passed. The local rebase and merge-tree reported no conflicts. |
+
+The full local quality script was not rerun after this latest rebase. The preceding attempt ran on the prior `6932cfea` base, remained silent during its first `dotnet restore PitchMind.slnx` step, and exited 1 without diagnostics. Therefore no current-head .NET restore/build/test, NuGet live audit, frontend, PostgreSQL, security, accessibility, or performance result is claimed. The current PR remains open and unmerged; story acceptance and a current-head independent review are pending. No Azure actions were performed.
