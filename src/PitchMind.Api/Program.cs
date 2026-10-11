@@ -4,12 +4,26 @@ using PitchMind.Contracts.Health;
 using PitchMind.Infrastructure.Storage;
 using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
+using Npgsql;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
 builder.Services.AddSingleton<SyntheticMatchService>();
+var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
+if (!string.IsNullOrWhiteSpace(postgresConnectionString))
+{
+    var dataSource = NpgsqlDataSource.Create(postgresConnectionString);
+    builder.Services.AddSingleton(dataSource);
+    builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
+    builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+}
+else
+{
+    builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
+    builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+}
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
 {
@@ -31,9 +45,28 @@ app.Use(async (context, next) =>
     {
         await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request", exception.Message).ExecuteAsync(context);
     }
+    catch (BadHttpRequestException exception) when (exception.StatusCode is >= 400 and < 500)
+    {
+        var tooLarge = exception.StatusCode == StatusCodes.Status413PayloadTooLarge;
+        await ApiProblem(context, exception.StatusCode,
+            tooLarge ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST",
+            tooLarge ? "Request content exceeds supported limits" : "Invalid match request").ExecuteAsync(context);
+    }
     catch (KeyNotFoundException)
     {
         await ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time").ExecuteAsync(context);
+    }
+    catch (CanonicalReadUnavailableException)
+    {
+        await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "Canonical match data is not configured").ExecuteAsync(context);
+    }
+    catch (NpgsqlException exception)
+    {
+        app.Logger.LogError(exception, "Canonical read dependency failed for {Path}", context.Request.Path);
+        if (!context.Response.HasStarted)
+            await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "Canonical match data is temporarily unavailable").ExecuteAsync(context);
+        else
+            throw;
     }
     catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
     {
@@ -51,6 +84,7 @@ app.Use(async (context, next) =>
 app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
+app.MapCanonicalMatchEndpoints();
 app.MapGet("/api/v1/matches", (SyntheticMatchService matches) => Results.Ok(new[] { matches.Fixture.ToResponse() }));
 var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
 match.AddEndpointFilter(async (context, next) =>

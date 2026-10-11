@@ -169,3 +169,90 @@ public sealed record ApiProblemResponse(
     string CorrelationId,
     string? Detail = null,
     string? Instance = null);
+
+public sealed record CanonicalMatchCardResponse(
+    string MatchId,
+    int CanonicalRevision,
+    int AsOfSeconds,
+    long ThroughSequence,
+    string Phase,
+    int HomeScore,
+    int AwayScore,
+    string Provenance,
+    string AlgorithmVersion,
+    string SourceSha256);
+
+public sealed record CanonicalMatchPageResponse(
+    IReadOnlyList<CanonicalMatchCardResponse> Items,
+    string? NextMatchId,
+    bool HasMore);
+
+public sealed record CanonicalMatchSnapshotResponse(
+    string MatchId,
+    int CanonicalRevision,
+    int SelectedTimeSeconds,
+    int AsOfSeconds,
+    long ThroughSequence,
+    string AlgorithmVersion,
+    string SourceSha256,
+    string StateSha256,
+    string Provenance,
+    int Period,
+    string Phase,
+    int HomeScore,
+    int AwayScore,
+    string? PossessionTeamId,
+    int HomeActivePlayers,
+    int AwayActivePlayers,
+    IReadOnlyList<MatchPlayerStateResponse> Players);
+
+public sealed record CanonicalEventPageResponse(
+    string MatchId,
+    int CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    IReadOnlyList<MatchEventResponse> Items,
+    string? NextCursor,
+    bool HasMore);
+
+public sealed record CanonicalEvidenceReferenceResponse(string Kind, string Id, string Relation);
+
+public sealed record CanonicalInsightResponse(
+    string InsightId,
+    string MatchId,
+    int CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    string SourceVersion,
+    string Provenance,
+    string SourceSha256,
+    string DetectorVersion,
+    string TruthClass,
+    string Summary,
+    IReadOnlyList<CanonicalEvidenceReferenceResponse> Evidence);
+
+public sealed record CanonicalInsightPageResponse(
+    string MatchId,
+    int CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    IReadOnlyList<CanonicalInsightResponse> Items,
+    string? NextCursor,
+    bool HasMore);
+
+public sealed record CanonicalEvidencePayloadResponse(
+    string Kind,
+    string Id,
+    string Relation,
+    long Sequence,
+    int ClockSeconds,
+    int Period,
+    System.Text.Json.JsonElement Payload);
+
+public sealed record CanonicalEvidenceResponse(
+    CanonicalInsightResponse Insight,
+    IReadOnlyList<CanonicalEvidencePayloadResponse> Items);
+
+public sealed record CanonicalReplayResponse(
+    CanonicalMatchSnapshotResponse Snapshot,
+    CanonicalEventPageResponse Events);

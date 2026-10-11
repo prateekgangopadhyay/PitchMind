@@ -536,6 +536,14 @@ public sealed class PostgresLedgerTests
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
         Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
+        var firstPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, -1, 1, CancellationToken.None);
+        Assert.True(firstPage.HasMore);
+        Assert.Equal(0, Assert.Single(firstPage.Events).Sequence);
+        Assert.Equal(0, firstPage.NextAfterSequence);
+        var secondPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, firstPage.NextAfterSequence!.Value, 1, CancellationToken.None);
+        Assert.False(secondPage.HasMore);
+        Assert.Equal(1, Assert.Single(secondPage.Events).Sequence);
+        Assert.DoesNotContain(secondPage.Events, e => e.Type == MatchEventType.Goal);
 
         var atGoal = await reader.GetAtAsync(matchId, 3309, null, CancellationToken.None);
         Assert.NotNull(atGoal);
@@ -562,6 +570,126 @@ public sealed class PostgresLedgerTests
         var reader = new PostgresMatchProjectionReader(source);
         Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, null, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, null, CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task InsightReadsRequireResolvableEvidenceVisibleAtTheSelectedTime()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        await using var outboxCleanup = new OutboxMatchCleanup(source, matchId);
+        var (update, aggregate) = BuildUpdate(matchId);
+        await RegisterSourceMetadata(source, update);
+        var updateStore = new PostgresCanonicalUpdateStore(source);
+        await updateStore.CommitAsync(update, CancellationToken.None);
+        var futureEvent = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 10, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(futureEvent, "home", "home-2", "pass", "complete"));
+        var futureUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, futureEvent, 2, "aggregate-v1", update.SourceSha256);
+        await updateStore.CommitAsync(futureUpdate, CancellationToken.None);
+
+        async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId)
+        {
+            await using (var command = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence, detector_version, truth_class, summary, conditions_json)
+                VALUES ($1, $2, 1, 0, 'test-v1', $3, $4, '{}'::jsonb)
+                """))
+            {
+                command.Parameters.AddWithValue(insightId);
+                command.Parameters.AddWithValue(matchId.Value);
+                command.Parameters.AddWithValue(truthClass);
+                command.Parameters.AddWithValue(insightId);
+                await command.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id, revision,
+                    relation, event_id, frame_id)
+                VALUES ($1, $2, $3, $4, 1, 'supports', $5, $6)
+                """))
+            {
+                evidence.Parameters.AddWithValue(insightId);
+                evidence.Parameters.AddWithValue(evidenceKind);
+                evidence.Parameters.AddWithValue(evidenceId);
+                evidence.Parameters.AddWithValue(matchId.Value);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "event" ? Guid.Parse(evidenceId) : null) ?? DBNull.Value);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "frame" ? evidenceId : null) ?? DBNull.Value);
+                await evidence.ExecuteNonQueryAsync();
+            }
+        }
+
+        var validInsightId = $"valid-{Guid.NewGuid():N}";
+        var validFrameInsightId = $"valid-frame-{Guid.NewGuid():N}";
+        var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
+        var metricInsightId = $"metric-{Guid.NewGuid():N}";
+        var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
+        var validFrameId = $"frame-{Guid.NewGuid():N}";
+        var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
+        foreach (var (frameId, sequence) in new[] { (validFrameId, 0L), (futureFrameId, 1L) })
+        {
+            await using var frame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4, '{}'::jsonb)
+                """);
+            frame.Parameters.AddWithValue(matchId.Value);
+            frame.Parameters.AddWithValue(frameId);
+            frame.Parameters.AddWithValue(sequence);
+            frame.Parameters.AddWithValue(update.SourceSha256);
+            await frame.ExecuteNonQueryAsync();
+        }
+        await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString());
+        await AddInsight(validFrameInsightId, "derived", "frame", validFrameId);
+        await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString());
+        await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric");
+        await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId);
+
+        var projectionReader = new PostgresMatchProjectionReader(source);
+        var projection = await projectionReader.GetAtAsync(matchId, 0, null, CancellationToken.None);
+        Assert.NotNull(projection);
+        var insightReader = new PostgresMatchInsightReader(source);
+        var page = await insightReader.ReadAtAsync(matchId, projection.Revision, 0, projection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        Assert.Equal(new[] { validFrameInsightId, validInsightId }.OrderBy(i => i).ToArray(),
+            page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
+        var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
+        Assert.Equal("source-v1", visible.SourceVersion);
+        Assert.Equal("synthetic-test", visible.Provenance);
+        Assert.Equal(update.SourceSha256, visible.SourceSha256);
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
+            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+        var framePayload = Assert.Single(validFrameEvidence!);
+        Assert.Equal(validFrameId, framePayload.Id);
+        Assert.Equal(0, framePayload.Sequence);
+        Assert.Equal(0, framePayload.ClockSeconds);
+        Assert.Equal(1, framePayload.Period);
+        Assert.Equal("{}", framePayload.PayloadJson);
+        var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
+            projection.Revision, 0, projection.AsOfSequence, CancellationToken.None);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.Revision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+
+        // Evidence visible to the later projection still cannot support an insight persisted earlier.
+        var laterProjection = await projectionReader.GetAtAsync(matchId, 10, null, CancellationToken.None);
+        Assert.NotNull(laterProjection);
+        Assert.Equal(1, laterProjection.AsOfSequence);
+        foreach (var futureInsightId in new[] { futureEventInsightId, futureFrameInsightId })
+        {
+            Assert.Null(await insightReader.GetAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+            Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureInsightId, laterProjection.Revision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+        }
+        var laterPage = await insightReader.ReadAtAsync(matchId, laterProjection.Revision, 10, laterProjection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureEventInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureFrameInsightId);
     }
 
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,
@@ -594,6 +722,16 @@ public sealed class PostgresLedgerTests
     {
         public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated persistent transport outage.");
+    }
+
+    private sealed class OutboxMatchCleanup(NpgsqlDataSource source, MatchId matchId) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await using var command = source.CreateCommand("DELETE FROM pitchmind.outbox WHERE match_id = $1");
+            command.Parameters.AddWithValue(matchId.Value);
+            await command.ExecuteNonQueryAsync();
+        }
     }
 
     private sealed class BlockingPublisher : IOutboxPublisher
