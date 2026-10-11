@@ -97,7 +97,8 @@ export function App() {
   const route = resolveRoute(pathname);
   const params = new URLSearchParams(search);
   const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined : params.get('matchId') ?? undefined;
-  const selectedSeconds = selectedTimeFromSearch(search);
+  const selectedSeconds = params.has('atSeconds') ? selectedTimeFromSearch(search) : undefined;
+  const selectedAtSeconds = selectedSeconds ?? 0;
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
   const matchPath = matchId ? `/matches/${encodeURIComponent(matchId)}` : '/home';
@@ -120,9 +121,9 @@ export function App() {
     </nav>
     <main id="main-content" tabIndex={-1}>
       {route.kind === 'matches' && matchId
-        ? <CanonicalMatchPage key={`${matchId}:${revision ?? ''}:${route.replay}`} matchId={matchId} selectedSeconds={selectedSeconds} requestedRevision={revision} replay={route.replay} />
+        ? <CanonicalMatchPage key={`${matchId}:${revision ?? ''}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds} requestedRevision={revision} replay={route.replay} />
         : route.kind === 'demo-match'
-          ? <MatchExperience key={`${route.matchId ?? ''}:${route.replay}`} expectedMatchId={route.matchId} initialSeconds={selectedSeconds} replay={route.replay} />
+          ? <MatchExperience key={`${route.matchId ?? ''}:${route.replay}`} expectedMatchId={route.matchId} initialSeconds={selectedAtSeconds} replay={route.replay} />
         : route.kind === 'matches'
           ? <RoutePage route={{ kind: 'home' }} search={search} />
         : <RoutePage route={route} search={search} />}

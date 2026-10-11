@@ -37,12 +37,13 @@ export function selectedTimeFromSearch(search: string): number {
   return Number.isInteger(seconds) && seconds >= 0 && seconds <= 5_400 ? seconds : 0;
 }
 
-export function contextHref(path: string, matchId?: string, selectedSeconds = 0, revision?: number): string {
+export function contextHref(path: string, matchId?: string, selectedSeconds?: number, revision?: number): string {
   const params = new URLSearchParams();
   if (matchId) params.set('matchId', matchId);
-  params.set('atSeconds', String(selectedTimeFromSearch(`?atSeconds=${selectedSeconds}`)));
+  if (selectedSeconds !== undefined) params.set('atSeconds', String(selectedTimeFromSearch(`?atSeconds=${selectedSeconds}`)));
   if (revision && Number.isInteger(revision) && revision > 0) params.set('revision', String(revision));
-  return `${path}?${params.toString()}`;
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 const LOCATION_EVENT = 'pitchmind:locationchange';
@@ -69,5 +70,15 @@ export function replaceCurrentMatchContext(matchId: string, selectedSeconds: num
       ? `/replay/${encodeURIComponent(matchId)}`
       : `/matches/${encodeURIComponent(matchId)}`;
   window.history.replaceState(null, '', contextHref(pathname, matchId, selectedSeconds, revision));
+  window.dispatchEvent(new Event(LOCATION_EVENT));
+}
+
+export function replacePhaseFilterContext(phase: string): void {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  if (phase === 'all') params.delete('phase');
+  else params.set('phase', phase);
+  const query = params.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   window.dispatchEvent(new Event(LOCATION_EVENT));
 }
