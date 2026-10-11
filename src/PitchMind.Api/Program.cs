@@ -10,6 +10,23 @@ using System.Threading.RateLimiting;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
+builder.Services.AddAuthentication();
+builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
+var localRealtimeEnabled = builder.Environment.IsDevelopment() &&
+    builder.Configuration["Runtime:Profile"] == "local" &&
+    string.Equals(builder.Configuration["Realtime:Provider"] ?? "local", "local", StringComparison.OrdinalIgnoreCase);
+if (localRealtimeEnabled)
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
+    builder.Services.AddSingleton<IOutboxPublisher, SignalRRealtimeCursorPublisher>();
+}
+else
+{
+    // Azure SignalR is an explicit target adapter; this build has no Azure SDK/provider registered.
+    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, UnavailableRealtimeConnectionNegotiator>();
+}
 builder.Services.AddSingleton<SyntheticMatchService>();
 var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
 if (!string.IsNullOrWhiteSpace(postgresConnectionString))
@@ -34,6 +51,8 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
@@ -85,6 +104,8 @@ app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
 app.MapCanonicalMatchEndpoints();
+app.MapRealtimeEndpoints();
+if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
 app.MapGet("/api/v1/matches", (SyntheticMatchService matches) => Results.Ok(new[] { matches.Fixture.ToResponse() }));
 var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
 match.AddEndpointFilter(async (context, next) =>

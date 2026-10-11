@@ -155,7 +155,39 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ApiProblem' }
+  /api/v1/realtime/negotiate:
+    post:
+      operationId: negotiateMatchRealtime
+      summary: Negotiate an authorized match-scoped live cursor subscription.
+      description: >-
+        The local Development adapter returns a same-origin ASP.NET Core SignalR
+        path. Non-local profiles return 503 until the Azure SignalR provider is
+        registered. Notifications contain only a canonical revision and sequence
+        cursor; clients read canonical state and backfill through HTTP.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RealtimeNegotiateRequestV1' }
+      responses:
+        '200':
+          description: Local SignalR transport details and the canonical head cursor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RealtimeNegotiateResponseV1' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     MatchId:
       name: matchId
@@ -185,6 +217,34 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ApiProblem' }
   schemas:
+    RealtimeNegotiateRequestV1:
+      type: object
+      additionalProperties: false
+      required: [matchId]
+      properties:
+        matchId: { type: string, format: uuid }
+        clientRevision: { type: integer, minimum: 1 }
+    RealtimeNegotiateResponseV1:
+      type: object
+      additionalProperties: false
+      required: [transport, url, accessToken, cursor, revisionChanged]
+      properties:
+        transport: { type: string, const: aspnetcore-signalr }
+        url: { type: string, const: /hubs/matches }
+        accessToken: { type: [string, 'null'], description: Local adapter uses the caller's existing authentication. }
+        cursor: { $ref: '#/components/schemas/RealtimeCursorV1' }
+        revisionChanged: { type: boolean }
+    RealtimeCursorV1:
+      type: object
+      additionalProperties: false
+      required: [kind, matchId, canonicalRevision, lastSequence, serverUtc, schemaVersion]
+      properties:
+        kind: { type: string, const: matchUpdated }
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer, minimum: 1 }
+        lastSequence: { type: integer, minimum: 0 }
+        serverUtc: { type: string, format: date-time }
+        schemaVersion: { type: integer, const: 1 }
     ApiProblem:
       type: object
       required: [type, title, status, code, correlationId]
