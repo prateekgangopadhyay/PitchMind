@@ -108,6 +108,14 @@ public sealed class ApiReadinessAndTelemetryTests
             item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/matches/{matchId:guid}/state"));
         Assert.Contains(error.Tags, tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == "4xx");
         Assert.DoesNotContain(error.Tags, tag => tag.Value?.ToString()?.Contains("bbbbbbbb", StringComparison.Ordinal) == true);
+
+        using var customMethodOne = await client.SendAsync(new HttpRequestMessage(new HttpMethod("X-PITCHMIND-A"), "/api/health"));
+        using var customMethodTwo = await client.SendAsync(new HttpRequestMessage(new HttpMethod("X-PITCHMIND-B"), "/api/health"));
+        var otherMethodRequests = observations.Where(item => item.Name == "pitchmind.api.requests" &&
+            item.Tags.Any(tag => tag.Key == "http.request.method" && tag.Value?.ToString() == "_OTHER")).ToArray();
+        Assert.Equal(2, otherMethodRequests.Length);
+        Assert.All(otherMethodRequests, item => Assert.Contains(item.Tags,
+            tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == "4xx"));
     }
 
     [Fact]

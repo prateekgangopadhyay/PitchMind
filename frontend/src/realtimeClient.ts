@@ -251,7 +251,15 @@ export class MatchRealtimeClient {
       if (!this.isActive(generation) || this.connection !== connection ||
           epoch !== this.transportEpoch || !this.transportConnected) return;
       this.applyCursorWakeup(negotiation.cursor);
-      await this.refreshFromCanonicalStore(generation);
+      try {
+        await this.refreshFromCanonicalStore(generation);
+      } catch {
+        if (this.isActive(generation)) {
+          this.markDisconnected();
+          this.setStatus('refresh-failed');
+        }
+        return;
+      }
       if (this.isActive(generation) && this.connection === connection &&
           epoch === this.transportEpoch && this.transportConnected) {
         this.subscriptionReady = true;
@@ -277,7 +285,10 @@ export class MatchRealtimeClient {
       const state = this.options.getState();
       if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
     }).catch(() => {
-      if (this.isActive(generation) && this.connection === connection) this.setStatus('disconnected');
+      if (this.isActive(generation) && this.connection === connection) {
+        this.markDisconnected();
+        this.setStatus('refresh-failed');
+      }
     });
   }
 

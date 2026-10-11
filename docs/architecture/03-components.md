@@ -6,7 +6,7 @@
 
 ## Realized application components (source verified, not new test evidence)
 
-`ApiRequestTelemetry` records bounded request/error/duration instruments and trace tags without high-cardinality metric dimensions. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` reports the configured local synthetic profile or performs a bounded PostgreSQL probe. There is no metrics exporter or operator-visible live-update lag signal in this increment.
+`ApiRequestTelemetry` records bounded request/error/duration instruments and trace tags without high-cardinality metric dimensions; unrecognized HTTP methods map to `_OTHER`. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` reports the configured local synthetic profile or performs a bounded PostgreSQL probe. There is no metrics exporter or operator-visible live-update lag signal in this increment.
 
 ```mermaid
 flowchart TB

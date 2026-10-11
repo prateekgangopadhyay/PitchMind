@@ -46,7 +46,7 @@ public static class ApiRequestTelemetry
             {
                 var tags = new TagList
                 {
-                    { "http.request.method", context.Request.Method },
+                    { "http.request.method", BoundedMethodName(context.Request.Method) },
                     { "http.route", route },
                     { "http.response.status_class", $"{context.Response.StatusCode / 100}xx" }
                 };
@@ -61,4 +61,18 @@ public static class ApiRequestTelemetry
             });
         }
     }
+
+    private static string BoundedMethodName(string method) => method.ToUpperInvariant() switch
+    {
+        "GET" => "GET",
+        "HEAD" => "HEAD",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "PATCH" => "PATCH",
+        "DELETE" => "DELETE",
+        "OPTIONS" => "OPTIONS",
+        "TRACE" => "TRACE",
+        "CONNECT" => "CONNECT",
+        _ => "_OTHER"
+    };
 }

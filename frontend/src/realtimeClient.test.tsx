@@ -162,8 +162,10 @@ describe('MatchRealtimeClient', () => {
 
     await client.start();
     connection.handlers.get('MatchUpdated')?.(cursor(1));
-    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('disconnected'));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('refresh-failed'));
     expect(state.throughSequence).toBe(0);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
 
     connection.handlers.get('MatchUpdated')?.(cursor(1));
     await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('connected'));
