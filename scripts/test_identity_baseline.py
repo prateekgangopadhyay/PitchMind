@@ -183,6 +183,11 @@ class IdentityBaselineTests(unittest.TestCase):
                 "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitDigestConfirmation",
                 1,
             ),
+            "unreviewed DeployDev lifecycle hook": pipeline.replace(
+                "        runOnce:\n          deploy:\n            steps:",
+                "        runOnce:\n          preDeploy:\n            steps:\n            - task: AzureCLI@2\n          deploy:\n            steps:",
+                1,
+            ),
         }
         for mutation, candidate in mutations.items():
             with self.subTest(mutation=mutation), self.assertRaises(PipelinePolicyError):

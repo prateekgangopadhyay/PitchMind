@@ -333,8 +333,14 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         if deployment.get("environment") != "pitchmind-dev":
             raise PipelinePolicyError("DEV deployment must target the protected pitchmind-dev environment")
         strategy = deployment.get("strategy")
+        if not isinstance(strategy, dict) or set(strategy) != {"runOnce"}:
+            raise PipelinePolicyError("DeployDev strategy may contain only the reviewed runOnce strategy")
         run_once = strategy.get("runOnce") if isinstance(strategy, dict) else None
+        if not isinstance(run_once, dict) or set(run_once) != {"deploy"}:
+            raise PipelinePolicyError("DeployDev may not add unreviewed deployment lifecycle hooks")
         deploy = run_once.get("deploy") if isinstance(run_once, dict) else None
+        if not isinstance(deploy, dict) or set(deploy) != {"steps"}:
+            raise PipelinePolicyError("DeployDev deployment may contain only the reviewed steps")
         steps = deploy.get("steps") if isinstance(deploy, dict) else None
         if not isinstance(steps, list) or len(steps) != 2 or steps[0] != {"checkout": "self"}:
             raise PipelinePolicyError("DeployDev may contain only checkout and the reviewed deployment template")
