@@ -673,11 +673,21 @@ public sealed class PostgresLedgerTests
         for (var i = 0; i < 3; i++) Assert.Equal(OutboxDispatchResult.Published, await drainer.DispatchOneAsync(CancellationToken.None));
 
         // Version 3 intentionally leaves legacy admission provenance NULL; point-in-time reads remain supported.
-        await using (var legacyProjection = source.CreateCommand(
-            "UPDATE pitchmind.match_projections SET canonical_revision = NULL WHERE match_id = $1 AND revision = 2"))
+        await using (var legacyConnection = await source.OpenConnectionAsync())
+        await using (var legacyTransaction = await legacyConnection.BeginTransactionAsync())
         {
-            legacyProjection.Parameters.AddWithValue(matchId.Value);
-            Assert.Equal(1, await legacyProjection.ExecuteNonQueryAsync());
+            foreach (var sql in new[]
+            {
+                "UPDATE pitchmind.outbox SET canonical_revision = NULL WHERE match_id = $1",
+                "UPDATE pitchmind.match_events SET canonical_revision = NULL WHERE match_id = $1",
+                "UPDATE pitchmind.match_projections SET canonical_revision = NULL WHERE match_id = $1 AND revision = 2"
+            })
+            {
+                await using var legacyUpdate = new NpgsqlCommand(sql, legacyConnection, legacyTransaction);
+                legacyUpdate.Parameters.AddWithValue(matchId.Value);
+                await legacyUpdate.ExecuteNonQueryAsync();
+            }
+            await legacyTransaction.CommitAsync();
         }
         var legacy = await reader.GetAtAsync(matchId, 3308, 2, CancellationToken.None);
         Assert.NotNull(legacy);
