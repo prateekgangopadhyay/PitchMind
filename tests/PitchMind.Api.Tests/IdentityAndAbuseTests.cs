@@ -68,6 +68,33 @@ public sealed class IdentityAndAbuseTests
     }
 
     [Fact]
+    public async Task InvalidIdsTimesAndPageSizesAreRejectedBeforeCanonicalDatabaseAccess()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var oversizedInsightId = new string('i', 257);
+        var invalidRequests = new (string Path, string Code)[]
+        {
+            ("/api/v1/canonical/matches/not-a-guid/summary?atSeconds=0", "INVALID_MATCH_ID"),
+            ($"/api/v1/canonical/matches/{Guid.Empty:D}/summary?atSeconds=0", "INVALID_MATCH_ID"),
+            ("/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/summary?atSeconds=-1", "INVALID_TIME"),
+            ("/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/summary?atSeconds=5401", "INVALID_TIME"),
+            ("/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/events?limit=0", "INVALID_LIMIT"),
+            ("/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/events?limit=101", "INVALID_LIMIT"),
+            ("/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/events?limit=2147483647", "INVALID_LIMIT"),
+            ($"/api/v1/canonical/matches/11111111-1111-1111-1111-111111111111/insights/{oversizedInsightId}?atSeconds=0", "INVALID_INSIGHT_ID")
+        };
+
+        foreach (var (path, code) in invalidRequests)
+        {
+            using var response = await SendAs(client, path, "fan");
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal(code, await ProblemCode(response));
+        }
+    }
+
+    [Fact]
     public async Task DevelopmentDemoIsExplicitlyClassifiedAsSynthetic()
     {
         using var factory = CreateFactory();
@@ -110,6 +137,28 @@ public sealed class IdentityAndAbuseTests
             Assert.Equal((HttpStatusCode)429, last!.StatusCode);
             Assert.Equal("application/problem+json", last.Content.Headers.ContentType?.MediaType);
             Assert.Equal("RATE_LIMITED", await ProblemCode(last));
+        }
+    }
+
+    [Fact]
+    public async Task CanonicalReadRateLimitAlsoAppliesToAuthenticatedClient()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        for (var requestNumber = 1; requestNumber <= 121; requestNumber++)
+        {
+            using var response = await SendAs(client, "/api/v1/canonical/fixtures", "fan");
+
+            if (requestNumber < 121)
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+                Assert.Equal("DEPENDENCY_UNAVAILABLE", await ProblemCode(response));
+                continue;
+            }
+
+            Assert.Equal((HttpStatusCode)429, response.StatusCode);
+            Assert.Equal("RATE_LIMITED", await ProblemCode(response));
         }
     }
 
