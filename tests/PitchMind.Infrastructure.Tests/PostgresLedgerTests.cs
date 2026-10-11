@@ -464,6 +464,100 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task HostedDispatcherDurablyDeliversCommittedOutboxAndRejectsPayloadConflicts()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await IsolateOutboxAsync(source);
+        await using (var localSchema = source.CreateCommand(File.ReadAllText(
+            Path.Combine(FindRepositoryRoot(), "docker", "local-outbox-deliveries.sql"))))
+            await localSchema.ExecuteNonQueryAsync();
+
+        var update = Update(MatchId.New());
+        Assert.Equal(CanonicalUpdateCommitResult.Committed,
+            await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None));
+
+        var localSink = new LocalPostgresOutboxPublisher(source);
+        var publisher = new PersistThenLoseFirstAckPublisher(localSink);
+        var dispatcher = new PostgresOutboxDispatcher(source, publisher);
+        var worker = new PostgresOutboxDispatchWorker(
+            dispatcher,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PostgresOutboxDispatchWorker>.Instance,
+            TimeSpan.FromMilliseconds(10));
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForOutboxPublishedAsync(source, update.Event.EventId, TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            using var stopTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await worker.StopAsync(stopTimeout.Token);
+        }
+
+        await using (var delivery = source.CreateCommand("""
+            SELECT count(*), bool_and(payload->>'messageId' = $1::text)
+            FROM pitchmind_local.outbox_deliveries
+            WHERE message_id = $1
+            """))
+        {
+            delivery.Parameters.AddWithValue(update.Event.EventId);
+            await using var reader = await delivery.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(1L, reader.GetInt64(0));
+            Assert.True(reader.GetBoolean(1));
+        }
+        Assert.Equal(2, publisher.Attempts);
+        await using (var attempts = source.CreateCommand("SELECT attempt_count FROM pitchmind.outbox WHERE message_id = $1"))
+        {
+            attempts.Parameters.AddWithValue(update.Event.EventId);
+            Assert.Equal(2, (int)(await attempts.ExecuteScalarAsync())!);
+        }
+
+        var localPublisher = new LocalPostgresOutboxPublisher(source);
+        var persistedPayload = await ReadOutboxPayloadAsync(source, update.Event.EventId);
+        await localPublisher.PublishAsync(update.Event.EventId, persistedPayload, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => localPublisher.PublishAsync(
+            update.Event.EventId, "{\"conflicting\":true}", CancellationToken.None));
+        await using var count = source.CreateCommand("SELECT count(*) FROM pitchmind_local.outbox_deliveries WHERE message_id = $1");
+        count.Parameters.AddWithValue(update.Event.EventId);
+        Assert.Equal(1L, (long)(await count.ExecuteScalarAsync())!);
+    }
+
+    private static async Task WaitForOutboxPublishedAsync(NpgsqlDataSource source, Guid messageId, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await using var command = source.CreateCommand("SELECT published_at IS NOT NULL FROM pitchmind.outbox WHERE message_id = $1");
+            command.Parameters.AddWithValue(messageId);
+            if (await command.ExecuteScalarAsync() is true)
+                return;
+            await Task.Delay(10);
+        }
+
+        Assert.Fail("Hosted dispatcher did not publish the pending outbox row before the timeout.");
+    }
+
+    private static async Task<string> ReadOutboxPayloadAsync(NpgsqlDataSource source, Guid messageId)
+    {
+        await using var command = source.CreateCommand("SELECT payload::text FROM pitchmind.outbox WHERE message_id = $1");
+        command.Parameters.AddWithValue(messageId);
+        return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PitchMind.slnx")))
+                return directory.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not find PitchMind.slnx above the test output directory.");
+    }
+
+    [PostgresIntegrationFact]
     public async Task FailedOutboxInsertRollsBackEventAndProjection()
     {
         await using var source = Source();
@@ -629,6 +723,19 @@ public sealed class PostgresLedgerTests
             Assert.Equal(eventId, messageId);
             await inbox.ExecuteOnceAsync("projection-consumer-v1", messageId, Apply, cancellationToken);
             if (DeliveryAttempts == 1) throw new InvalidOperationException("Simulated lost acknowledgement after consumer commit.");
+        }
+    }
+
+    private sealed class PersistThenLoseFirstAckPublisher(IOutboxPublisher sink) : IOutboxPublisher
+    {
+        public int Attempts { get; private set; }
+
+        public async Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            Attempts++;
+            await sink.PublishAsync(messageId, messageJson, cancellationToken);
+            if (Attempts == 1)
+                throw new InvalidOperationException("Simulated process loss after durable local handoff, before outbox acknowledgement.");
         }
     }
 

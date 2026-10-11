@@ -14,4 +14,6 @@ fi
 [[ ! -L docker/.env ]] || { echo "Refusing to use docker/.env symlink; keep local credentials in a regular file." >&2; exit 1; }
 chmod 600 docker/.env
 docker compose --env-file docker/.env -f docker/compose.yml up -d --wait
+docker compose --env-file docker/.env -f docker/compose.yml exec -T postgres sh -c \
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/10-local-outbox-deliveries.sql' >/dev/null
 echo "Local PostgreSQL and Redis are healthy."

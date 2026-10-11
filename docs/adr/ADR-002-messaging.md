@@ -1,6 +1,6 @@
 # ADR-002 — Messaging and reliable publication
-Status: Accepted design; local PostgreSQL primitives implemented in EP04-S03, transport/host integration pending.
+Status: Accepted design; local PostgreSQL dispatch path implemented in EP04-S03, Azure transport integration pending.
 
 **Decision:** Event Hubs ingests telemetry, partitioned by matchId. Service Bus transports durable background commands (explanation, recap, exports, recovery). Canonical changes and outbox rows commit in the same PostgreSQL transaction. Outbox dispatcher publishes idempotently with stable message IDs.
 
-**Consequences:** At-least-once delivery is expected. Consumers deduplicate using stable message IDs, bound retries and isolate poison messages. EP04-S03 adds a PostgreSQL transaction port, leased dispatcher state, a same-database inbox transaction, and local .NET metrics instruments. No Service Bus/Event Hubs adapter or metrics exporter is registered by that change, and cross-system exactly-once delivery is not claimed.
+**Consequences:** At-least-once delivery is expected. Consumers deduplicate using stable message IDs, bound retries and isolate poison messages. EP04-S03 adds a PostgreSQL transaction port, leased dispatcher state, a same-database inbox transaction, local .NET metrics instruments, and a LOCAL EventWorker dispatch path. LOCAL uses a durable PostgreSQL delivery sink to verify dispatcher and redelivery behavior; it is not a substitute broker and is never selected in Azure profiles. Azure Service Bus/Event Hubs publisher adapters and a metrics exporter remain unimplemented, and cross-system exactly-once delivery is not claimed.

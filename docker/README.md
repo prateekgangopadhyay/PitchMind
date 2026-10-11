@@ -26,6 +26,8 @@ The first run creates `docker/.env` with independent random passwords and restri
 
 To stop the services and preserve data, run `./scripts/dev-down.sh`. To delete both data volumes, run `./scripts/dev-reset.sh` and type `RESET` at its prompt. For automation, `./scripts/dev-reset.sh --force` explicitly skips the prompt. Reset retains `docker/.env`; restarting reuses the local credentials.
 
-The M01 API and workers still use scaffold adapters; these database/cache containers are not yet wired into canonical persistence or caching. Azure credentials are not required to run the local API.
+The local EventWorker can poll the PostgreSQL outbox and persist deliveries to a separate `pitchmind_local` sink table. This is a durable local handoff used to exercise retries and idempotency; it is not Event Hubs/Service Bus and is not registered for Azure profiles. `./scripts/dev-up.sh` idempotently creates that LOCAL-only table, including on an existing Docker volume.
+
+To run the local dispatcher, use `python3 scripts/dev-event-worker.py`. It reads the resolved loopback PostgreSQL endpoint and credentials from the gitignored Compose environment in memory and starts the worker with `Runtime:Profile=local` and `Outbox:Provider=postgres-local`. EventWorker fails closed for other profiles/providers or a missing connection string. The API still uses its existing scaffold/demo read adapters; this local worker does not import the candidate football JSON or change public API behavior. Azure credentials are not required for local services.
 
 Troubleshooting: start Docker Desktop, run `docker info`, then `docker compose --env-file docker/.env -f docker/compose.yml ps`. If ports 5432 or 6379 are occupied, edit docker/.env to select free host ports.

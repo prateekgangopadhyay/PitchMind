@@ -1,6 +1,6 @@
 # C4 Level 3 — Components, domain purity and realization map
 
-**CURRENT** sections document the source-verified local implementation; **TARGET** sections describe proposed ports and adapters, not an integrated runtime.
+**CURRENT** sections document the source-verified local implementation; **TARGET** sections describe proposed Azure ports and adapters, not an integrated cloud runtime.
 
 **Authority:** [Football LLD](07-football-analytics-detailed-lld.md), [API](../api/API.md), [Architecture review](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md). Current runtime and target ports are intentionally separated to avoid asserting unavailable integrations.
 
@@ -17,14 +17,14 @@ flowchart TB
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL canonical ledger")]
   ProjectionRead["PostgresMatchProjectionStore: metadata + projection/provenance read"] --> DB
   CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
-  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (transport adapter not registered)"]
+  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher"] --> LocalSink["LOCAL Postgres delivery sink"]
   Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
-  EventWorker["EventWorker scaffold (idle)"]
+  EventWorker["EventWorker (LOCAL-only outbox polling)"] --> Dispatcher
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The PostgreSQL v4 migration adds outbox lease/retry/dead-letter state and a consumer inbox while preserving v3 canonical admission revisions. `PostgresMatchProjectionStore` records immutable source metadata and reads persisted projection state and insight provenance, checking hashes and selected-sequence bounds. `PostgresCanonicalUpdateStore` commits event, canonical/projection revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` provides leased at-least-once publication with bounded retries; `PostgresConsumerInbox` couples same-database effects to dedupe receipts. These infrastructure primitives are not registered in the API/EventWorker runtime; there is no Azure broker publisher, metrics exporter/alert, or projection API read path. Competition linkage, source import and persisted correction workflows remain unimplemented. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The PostgreSQL v4 migration adds outbox lease/retry/dead-letter state and a consumer inbox while preserving v3 canonical admission revisions. `PostgresMatchProjectionStore` records immutable source metadata and reads persisted projection state and insight provenance, checking hashes and selected-sequence bounds. `PostgresCanonicalUpdateStore` commits event, canonical/projection revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` provides leased at-least-once publication with bounded retries; `PostgresConsumerInbox` couples same-database effects to dedupe receipts. The LOCAL EventWorker now polls the dispatcher and writes each message to a separate durable PostgreSQL delivery sink; repeated IDs with different payloads fail. This is a development transport adapter, not a broker. Azure profiles fail closed because no cloud publisher is registered. Metrics exporter/alert and projection API read path remain absent. Competition linkage, source import and persisted correction workflows remain unimplemented. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
@@ -48,6 +48,7 @@ flowchart TB
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
     Pg["PostgreSQL schema / checkpoint / outbox"]
+    LocalSink["LOCAL durable delivery sink"]
     EventHubs["Event Hubs publisher/consumer"]
     Bus["Service Bus + DLQ"]
     Hub["Azure SignalR"]
@@ -69,6 +70,7 @@ flowchart TB
   Pg -. "implements canonical update ports" .-> CanonicalPorts
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
+  PublisherPort -. "LOCAL only" .-> LocalSink
   Pg -. "implements consumer inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
