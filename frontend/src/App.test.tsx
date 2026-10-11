@@ -234,6 +234,46 @@ it('rejects events and insights that cross the selected-time sequence', async ()
   }
 });
 
+it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical row with a mismatched %s', async mismatch => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, code: 'DEPENDENCY_UNAVAILABLE'})};
+    const event = {eventId: 'wrong-event', matchId: '22222222-2222-2222-2222-222222222222', sequence: 19,
+      type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'};
+    const insight = {insightId: 'wrong-revision', matchId, canonicalRevision: 3, selectedTimeSeconds: 3309,
+      throughSequence: 19, sourceVersion: 'test-v1', provenance: 'synthetic-approved', sourceSha256: 'c'.repeat(64),
+      detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Must not be shown', evidence: []};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : parsed.pathname.endsWith('/events')
+        ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
+          items: mismatch === 'event-match-id' ? [event] : [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
+          items: mismatch === 'insight-revision' ? [insight] : [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+    expect(container.textContent).not.toContain('wrong-event');
+    expect(container.textContent).not.toContain('Must not be shown');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('renders persisted home cards from canonical fields and keeps the match id in navigation', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';
