@@ -94,6 +94,41 @@ class CandidateValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate source event ID"):
             validator.validate_source(payload, test_manifest(invalid, payload))
 
+    def test_rejects_duplicate_event_ids_with_different_uuid_case(self):
+        invalid = [
+            {**self.events[0], "eventId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},
+            {**self.events[1], "eventId": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"},
+        ]
+        payload = json.dumps(invalid).encode()
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate source event ID"):
+            validator.validate_source(payload, test_manifest(invalid, payload))
+
+    def test_distinct_match_count_uses_uuid_identity_not_source_spelling(self):
+        events = [
+            self.events[0],
+            {**self.events[1], "matchId": self.events[1]["matchId"].upper()},
+        ]
+        payload = json.dumps(events).encode()
+        manifest = test_manifest(events, payload)
+        manifest["match"]["expectedMatchCount"] = 2
+
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Distinct match count differs"):
+            validator.validate_source(payload, manifest)
+
+    def test_uuid_identity_comparison_preserves_original_id_spelling_in_digest(self):
+        events = [
+            {**self.events[0], "eventId": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"},
+            self.events[1],
+        ]
+        payload = json.dumps(events).encode()
+        report = validator.validate_source(payload, test_manifest(events, payload))
+        original_id_ledger = "".join(f"{event['eventId']}\n" for event in events).encode()
+
+        self.assertEqual(
+            report["sourceEventIdLedgerSha256"],
+            validator.sha256(original_id_ledger).hexdigest(),
+        )
+
     def test_same_player_label_and_jersey_are_distinct_across_source_teams(self):
         home_id = self.events[0]["teamId"]
         away_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"

@@ -189,8 +189,8 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     if len(events) != source.get("expectedEventCount"):
         raise CandidateValidationError("Source event count differs from the pinned manifest")
 
-    seen_event_ids: set[str] = set()
-    match_ids: set[str] = set()
+    seen_event_ids: set[uuid.UUID] = set()
+    match_ids: set[uuid.UUID] = set()
     team_names_by_id: dict[str, str] = {}
     team_ids_by_name: dict[str, str] = {}
     position_team_names_by_id: dict[str, str] = {}
@@ -226,14 +226,14 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(event_id, str) or not isinstance(match_id, str):
             raise CandidateValidationError(f"Event identifier is not a string at source index {index}")
         try:
-            uuid.UUID(event_id)
-            uuid.UUID(match_id)
+            event_id_value = uuid.UUID(event_id)
+            match_id_value = uuid.UUID(match_id)
         except ValueError as exc:
             raise CandidateValidationError(f"Invalid source UUID at source index {index}") from exc
-        if event_id in seen_event_ids:
+        if event_id_value in seen_event_ids:
             raise CandidateValidationError(f"Duplicate source event ID at source index {index}")
-        seen_event_ids.add(event_id)
-        match_ids.add(match_id)
+        seen_event_ids.add(event_id_value)
+        match_ids.add(match_id_value)
 
         sequence = event["sequence"]
         if not _is_integer(sequence) or sequence != index + source["sequenceStart"]:
