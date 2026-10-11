@@ -3,8 +3,8 @@ import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected,
 import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, CanonicalTimelineBackfill } from './api';
 import type { RealtimeTimelineState } from './realtime';
 
-const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds, projectionRevision = 1): CanonicalMatchSnapshot => ({
-  matchId: 'match-a', canonicalRevision: revision, projectionRevision, selectedTimeSeconds, asOfSeconds, throughSequence,
+const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds): CanonicalMatchSnapshot => ({
+  matchId: 'match-a', canonicalRevision: revision, selectedTimeSeconds, asOfSeconds, throughSequence,
   algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64), provenance: 'synthetic',
   period: 1, phase: 'firsthalf', homeScore: 0, awayScore: 0, possessionTeamId: null,
   homeActivePlayers: 11, awayActivePlayers: 11, players: [],
@@ -16,8 +16,7 @@ const event = (sequence: number, clockSeconds = sequence * 60): CanonicalLedgerE
 });
 
 const state = (): RealtimeTimelineState => ({
-  matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, observedLiveRevision: 2, observedLiveSequence: 0,
-  canonicalRevision: 2, throughSequence: 0,
+  matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, canonicalRevision: 2, throughSequence: 0,
   snapshot: snapshot(2, 0, 60, 5400), events: [event(0)], nextCursor: null, hasMore: false,
   needsBackfill: false, hasNewMatchUpdate: false, reconnecting: false,
 });
@@ -25,8 +24,7 @@ const state = (): RealtimeTimelineState => ({
 const backfill = (items: CanonicalLedgerEvent[], options: Partial<CanonicalTimelineBackfill> = {}): CanonicalTimelineBackfill => {
   const current = snapshot(2, 2, 120, 5400);
   const page: CanonicalEventPage = {
-    matchId: 'match-a', canonicalRevision: current.canonicalRevision, projectionRevision: current.projectionRevision,
-    selectedTimeSeconds: current.selectedTimeSeconds,
+    matchId: 'match-a', canonicalRevision: current.canonicalRevision, selectedTimeSeconds: current.selectedTimeSeconds,
     throughSequence: current.throughSequence, items, nextCursor: null, hasMore: false,
   };
   return { snapshot: current, events: page, revisionChanged: false, replayRequired: false, requestedAfterSequence: 0, ...options };
@@ -61,36 +59,6 @@ describe('realtime reconnect state', () => {
     expect(next.snapshot.canonicalRevision).toBe(2);
   });
 
-  it('ignores duplicate and stale cursors when deciding whether newer match state exists', () => {
-    const caughtUpLive = applyBackfillPage(state(), backfill([event(1), event(2)]));
-    const historicalView = selectHistoricalTime(caughtUpLive, 45);
-    const historical = applyBackfillPage(historicalView, backfill([event(0)], {
-      snapshot: snapshot(2, 0, 0, 45),
-      events: { ...backfill([]).events, selectedTimeSeconds: 45, throughSequence: 0, items: [event(0)] },
-    }));
-    const duplicate = observeRealtimeCursor(historical, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 2,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    });
-    const stale = observeRealtimeCursor(historical, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 1,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    });
-    const newer = observeRealtimeCursor(historical, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 3,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    });
-
-    expect(duplicate.hasNewMatchUpdate).toBe(false);
-    expect(stale).toBe(historical);
-    expect(newer.hasNewMatchUpdate).toBe(true);
-    const live = state();
-    expect(observeRealtimeCursor(live, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 0,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    })).toMatchObject({ throughSequence: 0, needsBackfill: false, reconnecting: false });
-  });
-
   it('switches to the latest observed match clock only on explicit return to live', () => {
     const live = returnToLive(selectHistoricalTime(state(), 45));
     expect(live.mode).toBe('LIVE');
@@ -103,20 +71,7 @@ describe('realtime reconnect state', () => {
     expect(buildTimelineBackfillPath(historical)).toContain('atSeconds=45');
     expect(buildTimelineBackfillPath(returnToLive(historical))).toContain('atSeconds=5400');
     expect(buildTimelineBackfillPath(historical)).toContain('afterSequence=-1');
-    expect(buildTimelineBackfillPath(historical)).toContain('revision=1');
-  });
-
-  it('sends the projection revision guard independently of the canonical revision', () => {
-    const diverged = {
-      ...state(),
-      canonicalRevision: 100,
-      snapshot: snapshot(100, 0, 60, 5400, 5),
-    };
-
-    const query = new URLSearchParams(buildTimelineBackfillPath(diverged).split('?')[1]);
-
-    expect(query.get('revision')).toBe('5');
-    expect(diverged.canonicalRevision).toBe(100);
+    expect(buildTimelineBackfillPath(historical)).toContain('revision=2');
   });
 
   it('replaces live events and snapshot with the selected historical context', () => {
@@ -135,60 +90,6 @@ describe('realtime reconnect state', () => {
     expect(selected.events.map(item => item.sequence)).toEqual([0]);
     expect(selected.throughSequence).toBe(0);
     expect(selected.needsBackfill).toBe(false);
-  });
-
-  it('returns to the last known live time after applying a historical backfill', () => {
-    const caughtUpLive = applyBackfillPage(state(), backfill([event(1), event(2)]));
-    const historical = selectHistoricalTime(caughtUpLive, 45);
-    const historicalPage = backfill([event(0)], {
-      snapshot: snapshot(2, 0, 0, 45),
-      events: { ...backfill([]).events, selectedTimeSeconds: 45, throughSequence: 0, items: [event(0)] },
-    });
-
-    const selected = applyBackfillPage(historical, historicalPage);
-    const returned = returnToLive(selected);
-
-    expect(selected.snapshot.asOfSeconds).toBe(0);
-    expect(returned.mode).toBe('LIVE');
-    expect(returned.selectedTimeSeconds).toBe(120);
-    expect(returned.needsBackfill).toBe(true);
-  });
-
-  it('does not let an in-flight live backfill erase a newer observed cursor', () => {
-    const revisionUpdate = observeRealtimeCursor(state(), {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 3, lastSequence: 1,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    });
-    const olderRevisionPage = backfill([event(1), event(2)]);
-    const afterOlderRevisionPage = applyBackfillPage(revisionUpdate, olderRevisionPage);
-    expect(afterOlderRevisionPage.canonicalRevision).toBe(2);
-    expect(afterOlderRevisionPage.observedLiveRevision).toBe(3);
-    expect(afterOlderRevisionPage.needsBackfill).toBe(true);
-
-    const sequenceUpdate = observeRealtimeCursor({
-      ...state(), throughSequence: 5, observedLiveSequence: 5,
-      snapshot: snapshot(2, 5, 300, 5400), events: [0, 1, 2, 3, 4, 5].map((n) => event(n)),
-    }, {
-      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 7,
-      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
-    });
-    const olderSequencePage = backfill([], {
-      snapshot: snapshot(2, 5, 300, 5400),
-      events: { ...backfill([]).events, throughSequence: 5, items: [] },
-    });
-    const afterOlderSequencePage = applyBackfillPage(sequenceUpdate, olderSequencePage);
-    expect(afterOlderSequencePage.observedLiveSequence).toBe(7);
-    expect(afterOlderSequencePage.needsBackfill).toBe(true);
-
-    const newestPage = backfill([event(6), event(7)], {
-      snapshot: snapshot(2, 7, 420, 5400),
-      events: { ...backfill([]).events, throughSequence: 7, items: [event(6), event(7)] },
-    });
-    const caughtUp = applyBackfillPage(afterOlderSequencePage, newestPage);
-    expect(caughtUp.needsBackfill).toBe(false);
-    const delayedOlderResponse = applyBackfillPage(caughtUp, olderSequencePage);
-    expect(delayedOlderResponse).toBe(caughtUp);
-    expect(delayedOlderResponse.snapshot.throughSequence).toBe(7);
   });
 
   it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {

@@ -7,11 +7,6 @@ export interface RealtimeTimelineState {
   matchId: string;
   mode: TimelineMode;
   selectedTimeSeconds: number;
-  /** Last canonical LIVE as-of time, preserved while snapshot contains a historical projection. */
-  liveAsOfSeconds?: number;
-  /** Highest LIVE revision/sequence observed, kept separate from the selected historical page. */
-  observedLiveRevision: number;
-  observedLiveSequence: number;
   canonicalRevision: number;
   throughSequence: number;
   snapshot: CanonicalMatchSnapshot;
@@ -30,37 +25,23 @@ export function selectHistoricalTime(state: RealtimeTimelineState, selectedTimeS
 }
 
 export function returnToLive(state: RealtimeTimelineState): RealtimeTimelineState {
-  return {
-    ...state,
-    mode: 'LIVE',
-    selectedTimeSeconds: state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
-    hasNewMatchUpdate: false,
-    needsBackfill: true,
-  };
+  return { ...state, mode: 'LIVE', selectedTimeSeconds: state.snapshot.asOfSeconds, hasNewMatchUpdate: false, needsBackfill: true };
 }
 
 /** Cursor messages are wake-ups only. A selected historical view is never moved by live traffic. */
 export function observeRealtimeCursor(state: RealtimeTimelineState, cursor: RealtimeCursorV1): RealtimeTimelineState {
   if (cursor.kind !== 'matchUpdated' || cursor.schemaVersion !== 1 || cursor.matchId !== state.matchId ||
       !Number.isInteger(cursor.canonicalRevision) || cursor.canonicalRevision < 1 ||
-      !Number.isSafeInteger(cursor.lastSequence) || cursor.lastSequence < 0 ||
-      cursor.canonicalRevision < state.canonicalRevision ||
-      cursor.canonicalRevision < state.observedLiveRevision ||
-      (cursor.canonicalRevision === state.observedLiveRevision && cursor.lastSequence <= state.observedLiveSequence))
+      !Number.isSafeInteger(cursor.lastSequence) || cursor.lastSequence < 0)
     return state;
 
-  const revisionChanged = cursor.canonicalRevision > state.canonicalRevision;
-  const sequenceAdvanced = cursor.canonicalRevision === state.canonicalRevision && cursor.lastSequence > state.throughSequence;
-  const observed = {
-    observedLiveRevision: cursor.canonicalRevision,
-    observedLiveSequence: cursor.lastSequence,
-  };
   if (state.mode === 'HISTORICAL')
-    return { ...state, ...observed, hasNewMatchUpdate: true };
+    return { ...state, hasNewMatchUpdate: true };
 
+  const revisionChanged = cursor.canonicalRevision !== state.canonicalRevision;
+  const sequenceAdvanced = cursor.lastSequence > state.throughSequence;
   return {
     ...state,
-    ...observed,
     needsBackfill: state.needsBackfill || revisionChanged || sequenceAdvanced,
     reconnecting: false,
   };
@@ -80,14 +61,6 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   const requestedTime = state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : 5400;
   if (response.snapshot.selectedTimeSeconds !== requestedTime)
     throw new Error('Backfill response does not match the currently selected match time.');
-  const sameSelectedContext = response.snapshot.selectedTimeSeconds === state.snapshot.selectedTimeSeconds;
-  const olderThanAppliedTimeline = sameSelectedContext && (
-    response.snapshot.canonicalRevision < state.canonicalRevision ||
-    (response.snapshot.canonicalRevision === state.canonicalRevision &&
-      response.snapshot.throughSequence < state.snapshot.throughSequence));
-  if (olderThanAppliedTimeline) return state;
-  if (state.mode === 'LIVE' && response.snapshot.canonicalRevision < state.observedLiveRevision)
-    return { ...state, needsBackfill: true };
 
   const revisionReset = response.revisionChanged || response.replayRequired || response.snapshot.canonicalRevision !== state.canonicalRevision;
   const timeContextChanged = response.snapshot.selectedTimeSeconds !== state.snapshot.selectedTimeSeconds;
@@ -96,8 +69,7 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
   const bySequence = new Map<number, CanonicalLedgerEvent>();
   const byEventId = new Map<string, CanonicalLedgerEvent>();
   for (const event of [...base, ...response.events.items]) {
-    if (event.matchId !== state.matchId || event.clockSeconds > response.snapshot.selectedTimeSeconds ||
-        event.sequence > response.snapshot.throughSequence)
+    if (event.matchId !== state.matchId || event.clockSeconds > response.snapshot.selectedTimeSeconds)
       throw new Error('Backfill contains an event outside the selected match context.');
     const sequenceMatch = bySequence.get(event.sequence);
     const idMatch = byEventId.get(event.eventId);
@@ -119,34 +91,17 @@ export function applyBackfillPage(state: RealtimeTimelineState, response: Canoni
 
   const pageThrough = events.at(-1)?.sequence ?? (replaceTimeline ? -1 : state.throughSequence);
   const caughtUp = !response.events.hasMore && pageThrough >= response.snapshot.throughSequence;
-  const observedLiveRevision = state.mode === 'LIVE'
-    ? response.snapshot.canonicalRevision
-    : Math.max(state.observedLiveRevision, response.snapshot.canonicalRevision);
-  const observedLiveSequence = state.mode === 'LIVE'
-    ? (response.snapshot.canonicalRevision > state.observedLiveRevision
-      ? response.snapshot.throughSequence
-      : Math.max(state.observedLiveSequence, response.snapshot.throughSequence))
-    : response.snapshot.canonicalRevision > state.observedLiveRevision ? -1 : state.observedLiveSequence;
-  const responseBehindObservedCursor = state.mode === 'LIVE' &&
-    (response.snapshot.canonicalRevision < observedLiveRevision ||
-      (response.snapshot.canonicalRevision === observedLiveRevision &&
-        response.snapshot.throughSequence < observedLiveSequence));
   return {
     ...state,
     mode: state.mode,
     selectedTimeSeconds: state.mode === 'HISTORICAL' ? state.selectedTimeSeconds : response.snapshot.asOfSeconds,
-    liveAsOfSeconds: state.mode === 'LIVE'
-      ? response.snapshot.asOfSeconds
-      : state.liveAsOfSeconds ?? state.snapshot.asOfSeconds,
-    observedLiveRevision,
-    observedLiveSequence,
     canonicalRevision: response.snapshot.canonicalRevision,
     throughSequence: pageThrough,
     snapshot: response.snapshot,
     events,
     nextCursor: response.events.nextCursor,
     hasMore: response.events.hasMore,
-    needsBackfill: !caughtUp || responseBehindObservedCursor,
+    needsBackfill: !caughtUp,
     reconnecting: false,
     hasNewMatchUpdate: state.mode === 'HISTORICAL' ? state.hasNewMatchUpdate : false,
   };
@@ -162,7 +117,7 @@ export function buildTimelineBackfillPath(state: RealtimeTimelineState): string 
   const query = new URLSearchParams({
     afterSequence: String(selectedContextChanged ? -1 : state.throughSequence),
     atSeconds: String(atSeconds),
-    revision: String(state.snapshot.projectionRevision),
+    revision: String(state.canonicalRevision),
     limit: '100',
   });
   return `canonical/matches/${encodeURIComponent(state.matchId)}/timeline/backfill?${query.toString()}`;
