@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import unittest
 
+from scripts.release_pipeline_policy import PipelinePolicyError, validate_pipeline_policy
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -68,6 +70,66 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertIn("publicNetworkAccess: 'Disabled'", vault)
         self.assertIn("enablePurgeProtection: true", vault)
         self.assertNotIn("Microsoft.Authorization/roleAssignments", vault)
+
+    def test_release_pipeline_identity_and_delivery_policy(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+        validate_pipeline_policy(pipeline, build_template, deploy_template)
+
+    def test_policy_mutations_reject_default_on_and_pull_request_delivery(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        default_on = pipeline.replace("default: false", "default: true", 1)
+        with self.subTest(mutation="delivery default enabled"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(default_on, build_template, deploy_template)
+
+        pr_eligible = pipeline.replace(
+            "ne(variables['Build.Reason'], 'PullRequest')",
+            "eq(variables['Build.Reason'], 'PullRequest')",
+            1,
+        )
+        with self.subTest(mutation="owner approval stage PR condition"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pr_eligible, build_template, deploy_template)
+
+        pr_eligible_build = pipeline.replace(
+            "ne(variables['Build.Reason'], 'PullRequest')",
+            "eq(variables['Build.Reason'], 'PullRequest')",
+            2,
+        )
+        with self.subTest(mutation="build stage PR condition"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pr_eligible_build, build_template, deploy_template)
+
+        unguarded_deploy = pipeline.replace(
+            "  - stage: DeployDev\n    dependsOn: OwnerApprovalOfReleaseDigest",
+            "  - stage: DeployDev\n    dependsOn: Validate",
+            1,
+        )
+        with self.subTest(mutation="DEV deployment bypasses guarded release chain"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
+
+    def test_policy_mutations_reject_swapped_or_reused_connection_wiring(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        swapped_build = build_template.replace(
+            "azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            "azureSubscription: ${{ parameters.devDeploymentServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="build uses deployment connection"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pipeline, swapped_build, deploy_template)
+
+        swapped_deploy = deploy_template.replace(
+            "azureSubscription: ${{ parameters.devDeploymentServiceConnection }}",
+            "azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="deployment uses ACR connection"), self.assertRaises(PipelinePolicyError):
+            validate_pipeline_policy(pipeline, build_template, swapped_deploy)
 
 
 if __name__ == "__main__":

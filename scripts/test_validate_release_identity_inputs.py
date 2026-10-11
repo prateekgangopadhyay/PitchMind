@@ -25,6 +25,18 @@ class ReleaseIdentityInputTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(validator.IdentityInputError):
                 validator.validate(*values)
 
+    def test_rejects_secret_shaped_connection_values(self):
+        secret_shaped = (
+            "clientSecret=not-a-real-secret",
+            "password: not-a-real-password",
+            "Bearer not-a-real-token",
+            "ghp_012345678901234567890123456789012345",
+            "eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart123456",
+        )
+        for value in secret_shaped:
+            with self.subTest(value=value), self.assertRaises(validator.IdentityInputError):
+                validator.validate(value, "pitchmind-dev-deploy")
+
 
 if __name__ == "__main__":
     unittest.main()

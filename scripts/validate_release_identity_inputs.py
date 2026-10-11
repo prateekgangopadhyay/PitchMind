@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 
@@ -10,12 +11,31 @@ class IdentityInputError(ValueError):
     pass
 
 
-def validate(acr_push: str | None, dev_deploy: str | None) -> None:
-    values = (acr_push, dev_deploy)
-    if any(not isinstance(value, str) or not value.strip() or value.strip().casefold() == "unconfigured"
-           for value in values):
+_SERVICE_CONNECTION_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_. -]{0,127}$")
+_JWT = re.compile(r"^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$")
+_SECRET_PREFIX = re.compile(
+    r"(?i)(?:bearer\s+|client[_-]?secret\s*[=:]|password\s*[=:]|"
+    r"gh[pousr]_|github_pat_|eyJ[A-Za-z0-9_-]{20,})"
+)
+
+
+def _validate_connection_name(value: str | None) -> str:
+    if not isinstance(value, str):
         raise IdentityInputError("Both release service connections must be configured")
-    if acr_push.strip().casefold() == dev_deploy.strip().casefold():
+    normalized = value.strip()
+    if not normalized or normalized.casefold() == "unconfigured":
+        raise IdentityInputError("Both release service connections must be configured")
+    if _SECRET_PREFIX.search(normalized) or _JWT.fullmatch(normalized):
+        raise IdentityInputError("Service connection inputs must be names, not secret-shaped credentials")
+    if not _SERVICE_CONNECTION_NAME.fullmatch(normalized):
+        raise IdentityInputError("Service connection input contains characters invalid in a connection name")
+    return normalized
+
+
+def validate(acr_push: str | None, dev_deploy: str | None) -> None:
+    acr_name = _validate_connection_name(acr_push)
+    deploy_name = _validate_connection_name(dev_deploy)
+    if acr_name.casefold() == deploy_name.casefold():
         raise IdentityInputError("Image-push and DEV-deployment service connections must be distinct")
 
 
