@@ -109,6 +109,13 @@ function deploymentSafetySelfTest(pipeline) {
     /digest approval stage must pause on its dedicated protected Azure DevOps Environment/);
   assert.throws(() => assertDeploymentSafety(pipeline.replace('      - task: ManualValidation@0', '      - task: ManualCheck@0')),
     /two approval stages must retain explicit human consent pauses/);
+  assert.throws(() => assertDeploymentSafety(pipeline.replace('          onTimeout: reject', '          onTimeout: resume')),
+    /human consent pause must reject on timeout/);
+  const preMutationPause = pipeline.match(/      - task: ManualValidation@0[\s\S]*?          onTimeout: reject\r?\n/)[0];
+  const misplacedPause = pipeline.replace(preMutationPause, '')
+    .replace('  - stage: DeployDev', `${preMutationPause}  - stage: DeployDev`);
+  assert.throws(() => assertDeploymentSafety(misplacedPause),
+    /pre-mutation approval stage must retain one human consent pause/);
   assert.throws(() => assertDeploymentSafety(pipeline.replace(
     "                echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'",
     "                echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'\n                az acr push --name unsafe"
