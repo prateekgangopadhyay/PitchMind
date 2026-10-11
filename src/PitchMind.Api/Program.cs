@@ -44,10 +44,10 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(problem, ApiSecurity.ProblemJson), cancellationToken);
     };
     options.AddPolicy("api", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        ApiSecurity.GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        ApiSecurity.GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
