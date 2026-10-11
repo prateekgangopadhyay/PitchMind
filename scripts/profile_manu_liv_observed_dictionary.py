@@ -85,15 +85,27 @@ def render(source_path: Path, manifest_path: Path) -> str:
     events = json.loads(source_bytes.decode("utf-8-sig"))
     if not isinstance(events, list) or len(events) != policy["expectedEventCount"]:
         raise ValueError("Source event array does not match the manifest event count")
+    if not events:
+        raise ValueError("Source event array is empty; dictionary not generated")
     if any(not isinstance(row, dict) for row in events):
         raise ValueError("Source array contains a non-object event")
+    for index, event in enumerate(events):
+        if not isinstance(event.get("metadata"), dict):
+            raise ValueError(f"Source event {index} metadata is not an object")
+        player_positions = event.get("playerPositions", [])
+        if not isinstance(player_positions, list):
+            raise ValueError(f"Source event {index} playerPositions is not an array")
+        if any(not isinstance(position, dict) for position in player_positions):
+            raise ValueError(f"Source event {index} playerPositions contains a non-object row")
+        if not isinstance(event.get("eventType"), str):
+            raise ValueError(f"Source event {index} eventType is not a string")
+        for field in ("sequence", "clockSeconds", "period"):
+            value = event.get(field)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"Source event {index} {field} is not an integer")
     positions = [position for event in events
                  for position in event.get("playerPositions", [])]
-    if any(not isinstance(row, dict) for row in positions):
-        raise ValueError("Source playerPositions contains a non-object row")
-    metadata = [event.get("metadata") for event in events]
-    if any(not isinstance(row, dict) for row in metadata):
-        raise ValueError("Source event metadata contains a non-object value")
+    metadata = [event["metadata"] for event in events]
 
     lines = [
         "# MANU-LIV observed data dictionary", "",

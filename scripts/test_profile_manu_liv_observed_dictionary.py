@@ -86,5 +86,44 @@ class ObservedDictionaryOutputProtectionTests(unittest.TestCase):
         return alias
 
 
+class ObservedDictionaryInputValidationTests(unittest.TestCase):
+    def test_malformed_nested_rows_and_aggregate_fields_fail_with_clear_value_error(self) -> None:
+        valid_event = {
+            "eventId": "event-1", "sequence": 1, "clockSeconds": 0,
+            "period": 1, "eventType": "Pass", "outcome": "Complete",
+            "metadata": {}, "playerPositions": [],
+        }
+        invalid_events = (
+            ("null positions", {**valid_event, "playerPositions": None}, "playerPositions is not an array"),
+            ("object positions", {**valid_event, "playerPositions": {}}, "playerPositions is not an array"),
+            ("non-object position", {**valid_event, "playerPositions": [None]}, "playerPositions contains a non-object row"),
+            ("non-object metadata", {**valid_event, "metadata": None}, "metadata is not an object"),
+            ("non-string event type", {**valid_event, "eventType": []}, "eventType is not a string"),
+            ("boolean sequence", {**valid_event, "sequence": True}, "sequence is not an integer"),
+            ("string clock", {**valid_event, "clockSeconds": "0"}, "clockSeconds is not an integer"),
+            ("fractional period", {**valid_event, "period": 1.5}, "period is not an integer"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+            for label, event, message in invalid_events:
+                with self.subTest(case=label):
+                    source_bytes = json.dumps([event], separators=(",", ":")).encode()
+                    source.write_bytes(source_bytes)
+                    manifest.write_text(json.dumps({
+                        "manifestVersion": "test",
+                        "status": "candidate_not_canonical",
+                        "source": {
+                            "path": "candidate.json",
+                            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                            "byteSize": len(source_bytes),
+                            "expectedEventCount": 1,
+                        },
+                    }), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, message):
+                        generator.render(source, manifest)
+
+
 if __name__ == "__main__":
     unittest.main()
