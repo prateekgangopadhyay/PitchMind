@@ -10,7 +10,8 @@ public sealed record ExplanationGenerationRequest(
     MatchIntelligenceContextPacket Context,
     ExplanationAudience Audience,
     string Question,
-    int MaximumOutputTokens = 256);
+    int MaximumOutputTokens = 256,
+    int MaximumInputTokens = 16_384);
 
 public sealed record CandidateExplanationClaim(string Text, IReadOnlyList<string> EvidenceIds);
 

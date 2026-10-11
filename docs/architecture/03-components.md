@@ -57,6 +57,7 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
+    Resilience["ExplanationResiliencePolicy: timeout, concurrency, call budget, circuit, cache, fallback"]
     Candidate["Untrusted explanation candidate port"]
     VerifyCandidate["Deterministic candidate verifier + evidence-only reformulation"]
     Ports["IMatchEventStore / IMatchProjectionReader / IMatchInsightReader / ICanonicalUpdateStore / IOutboxPublisher / inbox transaction"]
@@ -80,7 +81,11 @@ flowchart TB
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
-  Explain --> Candidate --> VerifyCandidate --> Ports
+  Explain --> Resilience
+  Resilience --> Candidate --> VerifyCandidate --> Ports
+  Resilience -. "provider unavailable / timeout / budget / open circuit" .-> Fallback["Canonical metadata fallback"]
+  Resilience -. "exact scope, match, revision, selected time, audience, question" .-> ResponseCache["Bounded verified-response cache"]
+  Resilience -. "process-local sliding call budget + circuit state" .-> PolicyState["Explanation governance state"]
   Pg -. "implements event, projection/insight read and canonical update ports" .-> Ports
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
@@ -88,10 +93,10 @@ flowchart TB
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements candidate generator" .-> Candidate
-  Cache -. "optional" .-> Ports
+  Cache -. "optional rebuildable projection cache only" .-> Ports
 ```
 
-The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code, and the Application now includes an EP08-S04 verifier that checks packet identity/time/revision and evidence membership while discarding model-authored prose. It reformulates only selected insight classification and evidence metadata. The worker has no message/request consumer and the adapter has not been called against a real Foundry deployment. The dashed adapter arrow above is a target adapter implemented locally, not evidence of an operational Azure path. No public route uses the verifier yet.
+The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code. The Application includes the EP08-S04 verifier and EP08-S05 resilience policy: identity/time/revision/citation checks, model-prose discard, bounded async calls, timeout/concurrency/call budgets, a circuit breaker, a short-lived bounded verified-result cache, and canonical metadata fallback. Governance state/cache are process-local; they are not an aggregate multi-replica Azure spend cap. The worker has no message/request consumer, no live update path invokes this policy, and no real Foundry call has been made. The dashed model adapter arrow shows local target code, not an operational Azure path. No public route uses the verifier or policy yet.
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.

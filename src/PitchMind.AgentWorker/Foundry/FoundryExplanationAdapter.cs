@@ -88,12 +88,16 @@ public sealed class FoundryExplanationAdapter(
         if (request.Context is null || string.IsNullOrWhiteSpace(request.Question) || request.Question.Length > 1_000 ||
             request.Question.Any(char.IsControl) || !Enum.IsDefined(request.Audience) ||
             request.MaximumOutputTokens is < 1 || request.MaximumOutputTokens > options.MaximumOutputTokens ||
+            request.MaximumInputTokens is < 1 or > 32_768 ||
             !IsBoundedContext(request.Context))
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.InvalidCandidate);
 
         var body = BuildRequestBody(request);
         var requestBytes = JsonSerializer.SerializeToUtf8Bytes(body, JsonOptions);
-        if (requestBytes.Length > options.MaximumRequestBytes || request.Context.SerializedSizeBytes > 32_768)
+        // UTF-8 JSON bytes provide a conservative pre-call input-token ceiling proxy; provider-reported
+        // token usage is checked again by the application policy before candidate acceptance.
+        if (requestBytes.Length > options.MaximumRequestBytes || request.Context.SerializedSizeBytes > 32_768 ||
+            requestBytes.Length > request.MaximumInputTokens)
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.RequestTooLarge);
 
         if (!await _concurrency.WaitAsync(0, cancellationToken))

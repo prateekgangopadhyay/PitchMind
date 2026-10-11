@@ -125,6 +125,21 @@ public sealed class FoundryExplanationAdapterTests
     }
 
     [Fact]
+    public async Task GenerateAsync_EnforcesInputTokenCeilingBeforeRequestingIdentity()
+    {
+        var tokenProvider = new StubTokenProvider();
+        var handler = new StubHandler(_ => Task.FromResult(JsonResponse(Completion("A safe answer.", "event-1"))));
+        using var http = new HttpClient(handler);
+        using var adapter = Create(http, tokenProvider);
+
+        var result = await adapter.GenerateAsync(Request() with { MaximumInputTokens = 1 }, CancellationToken.None);
+
+        Assert.Equal(ExplanationGenerationFailure.RequestTooLarge, result.Failure);
+        Assert.Equal(0, tokenProvider.Calls);
+        Assert.Null(handler.RequestUri);
+    }
+
+    [Fact]
     public async Task GenerateAsync_RejectsMalformedEvidenceWithoutThrowingOrRequestingIdentity()
     {
         var tokenProvider = new StubTokenProvider();
