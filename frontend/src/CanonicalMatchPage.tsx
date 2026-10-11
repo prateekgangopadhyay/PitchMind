@@ -10,6 +10,69 @@ type MatchView = {
   keyMomentsStatus: string;
 };
 
+const INSIGHT_PAGE_SIZE = 100;
+const MAX_INSIGHT_PAGES = 100;
+
+class InvalidInsightPaginationError extends Error {}
+
+async function loadSelectedTimeInsights(
+  matchId: string,
+  selectedSeconds: number,
+  revision: number,
+  throughSequence: number,
+  signal: AbortSignal
+): Promise<CanonicalInsightPage> {
+  const items: CanonicalInsightPage['items'] = [];
+  const seenInsightIds = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+  let lastPage: CanonicalInsightPage | null = null;
+
+  for (let pageIndex = 0; pageIndex < MAX_INSIGHT_PAGES; pageIndex++) {
+    const query = new URLSearchParams({
+      atSeconds: String(selectedSeconds),
+      revision: String(revision),
+      limit: String(INSIGHT_PAGE_SIZE)
+    });
+    if (cursor) query.set('cursor', cursor);
+    const page = await request<CanonicalInsightPage>(
+      `canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, signal);
+    const pageContextIsValid = page.matchId === matchId && page.canonicalRevision === revision &&
+      page.selectedTimeSeconds === selectedSeconds && Number.isSafeInteger(page.throughSequence) &&
+      page.throughSequence >= 0 && page.throughSequence === throughSequence;
+    if (!pageContextIsValid || !Array.isArray(page.items) || typeof page.hasMore !== 'boolean')
+      throw new InvalidInsightPaginationError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
+
+    for (const insight of page.items) {
+      const validInsight = insight.matchId === matchId && insight.canonicalRevision === revision &&
+        insight.selectedTimeSeconds === selectedSeconds && Number.isSafeInteger(insight.throughSequence) &&
+        insight.throughSequence >= 0 && insight.throughSequence <= throughSequence &&
+        typeof insight.summary === 'string' && !seenInsightIds.has(insight.insightId);
+      if (!validInsight)
+        throw new InvalidInsightPaginationError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
+      seenInsightIds.add(insight.insightId);
+      items.push(insight);
+    }
+
+    if (!page.hasMore) {
+      if (page.nextCursor !== null)
+        throw new InvalidInsightPaginationError('Canonical insight pagination returned an unexpected cursor.');
+      lastPage = page;
+      break;
+    }
+    if (page.items.length === 0 || typeof page.nextCursor !== 'string' || !page.nextCursor.trim() ||
+        seenCursors.has(page.nextCursor))
+      throw new InvalidInsightPaginationError('Canonical insight pagination did not advance.');
+    seenCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+    lastPage = page;
+  }
+
+  if (!lastPage || lastPage.hasMore)
+    throw new InvalidInsightPaginationError('Canonical insight history exceeds the safe pagination limit.');
+  return { ...lastPage, items, nextCursor: null, hasMore: false };
+}
+
 export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay }: {
   matchId: string;
   selectedSeconds: number;
@@ -32,7 +95,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
         const [events, insights, keyMomentsStatus] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal),
-          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal),
+          loadSelectedTimeInsights(matchId, selectedSeconds, revision, snapshot.throughSequence, controller.signal),
           request<unknown>(`canonical/matches/${encodeURIComponent(matchId)}/key-moments?${keyMomentQuery}`, controller.signal)
             .then(() => 'The canonical key-moment response is not versioned, so this view cannot display it yet.')
             .catch(error => error instanceof ApiRequestError && error.status === 503 && error.code === 'CANONICAL_KEY_MOMENTS_UNAVAILABLE'
@@ -61,7 +124,12 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         }
         setView({ snapshot, events, insights, keyMomentsStatus });
       })
-      .catch(() => { if (!controller.signal.aborted) { setView(null); setError('Canonical match data is unavailable. The page does not fall back to a demo fixture.'); } })
+      .catch(error => { if (!controller.signal.aborted) {
+        setView(null);
+        setError(error instanceof InvalidInsightPaginationError
+          ? error.message
+          : 'Canonical match data is unavailable. The page does not fall back to a demo fixture.');
+      } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [matchId, requestedRevision, selectedSeconds]);
