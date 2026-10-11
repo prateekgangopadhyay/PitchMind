@@ -1,6 +1,6 @@
 # PitchMind Engineering Council Agent Skills
 
-**28 accountable Engineering Council role skills + 3 cross-cutting design specialist skills** (31 discoverable skill directories) in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
+**28 accountable Engineering Council role skills + 5 cross-cutting design specialist skills** (33 discoverable skill directories) in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
 
 Read [Engineering Council Operating Model](../../docs/operating-model/ENGINEERING-OPERATING-MODEL.md), [architecture review](../../docs/engineering/ARCHITECTURE-REVIEW-2026-10-08.md), [delivery templates](../../docs/operating-model/DELIVERY-ARTIFACT-TEMPLATES.md), the exact [backlog story](../../docs/backlog/HACKATHON-MVP-EPICS.md), and repository-wide [instructions](../copilot-instructions.md).
 
@@ -22,6 +22,10 @@ Read [Engineering Council Operating Model](../../docs/operating-model/ENGINEERIN
 Example request: "For EP04-S03, have the principal software architect, distributed systems engineer, PostgreSQL engineer and QA architect produce the HLD/LLD, outbox crash matrix, PR plan and acceptance evidence. Mark unrun tests as unverified. Do not deploy to DEV."
 
 A role skill must issue concrete files/decisions/tests and a handoff; a generic persona debate is not a deliverable. The source backlog/ADR/C4 and observed code take priority over generic best practices. Never use all 28 skills by default; activate the smallest responsible review set.
+
+## Frontend design specialist order (EP07 / EP08-S06)
+
+Use [Taste](design-taste-frontend/SKILL.md) for React screen construction; [Impeccable](impeccable/SKILL.md) for focused audit/polish; [Emil design engineering](emil-design-eng/SKILL.md) for purposeful microinteractions; [Web Design Guidelines](web-design-guidelines/SKILL.md) for current UI/a11y checks; and [Awesome](awesome-design-audit/SKILL.md) for independent screenshot-grounded review. See `docs/design/FRONTEND-DESIGN-DELIVERY.md`. The Impeccable repo skill is a **local advisory adaptation**, not the upstream CLI installation; Emil's original text is vendored under MIT. Do not introduce motion dependencies or block unrelated product coding to manufacture a five-persona review.
 
 ## Full catalog
 - [Product Owner](product-owner/SKILL.md) — Own verifiable user value from synthetic match discovery through context, evidence, explanation and replay.
