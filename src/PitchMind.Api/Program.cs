@@ -74,6 +74,10 @@ if (localRealtimeEnabled)
     var hubMethodLimit = string.IsNullOrWhiteSpace(configuredHubMethodLimit) ? 30 :
         int.TryParse(configuredHubMethodLimit, out var parsedHubMethodLimit) && parsedHubMethodLimit > 0 ? parsedHubMethodLimit : 0;
     builder.Services.AddSingleton<IRealtimeHubMethodLimiter>(new RealtimeHubMethodLimiter(hubMethodLimit));
+    var configuredSubscriptionLimit = builder.Configuration["Realtime:MaximumActiveMatchSubscriptionsPerConnection"];
+    var subscriptionLimit = string.IsNullOrWhiteSpace(configuredSubscriptionLimit) ? 4 :
+        int.TryParse(configuredSubscriptionLimit, out var parsedSubscriptionLimit) && parsedSubscriptionLimit > 0 ? parsedSubscriptionLimit : 0;
+    builder.Services.AddSingleton<IRealtimeHubSubscriptionTracker>(new RealtimeHubSubscriptionTracker(subscriptionLimit));
     builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
     builder.Services.AddSingleton<IOutboxPublisher, SignalRRealtimeCursorPublisher>();
 }

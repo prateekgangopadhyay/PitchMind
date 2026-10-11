@@ -185,23 +185,104 @@ public sealed class AuthorizationAbuseControlTests
     }
 
     [Fact]
-    public async Task Repeated_hub_subscriptions_stop_before_rechecking_entitlement_after_connection_limit()
+    public async Task Repeated_hub_subscriptions_stop_before_rechecking_entitlement_after_subscription_cap()
     {
         var access = new CountingRealtimeAccessPolicy();
-        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(2));
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10),
+            new RealtimeHubSubscriptionTracker(2));
         hub.Context = new TestHubCallerContext();
         hub.Groups = new RecordingGroupManager();
 
         await hub.SubscribeToMatch(Guid.Parse(MatchId));
-        await hub.SubscribeToMatch(Guid.Parse(MatchId));
-        var rejected = await Assert.ThrowsAsync<HubException>(() => hub.SubscribeToMatch(Guid.Parse(MatchId)));
+        await hub.SubscribeToMatch(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+        var rejected = await Assert.ThrowsAsync<HubException>(() =>
+            hub.SubscribeToMatch(Guid.Parse("33333333-3333-4333-8333-333333333333")));
 
-        Assert.Equal("Realtime subscription rate limit exceeded.", rejected.Message);
+        Assert.Equal("Realtime match subscription limit exceeded.", rejected.Message);
         Assert.Equal(2, access.CheckCount);
         Assert.Equal(2, ((RecordingGroupManager)hub.Groups).AddCount);
     }
 
-    private sealed class CountingRealtimeAccessPolicy : IMatchRealtimeAccessPolicy
+    [Fact]
+    public async Task Repeating_a_match_is_idempotent_for_the_distinct_subscription_cap()
+    {
+        var access = new CountingRealtimeAccessPolicy();
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10),
+            new RealtimeHubSubscriptionTracker(2));
+        hub.Context = new TestHubCallerContext();
+        hub.Groups = new RecordingGroupManager();
+        var first = Guid.Parse(MatchId);
+
+        await hub.SubscribeToMatch(first);
+        await hub.SubscribeToMatch(first);
+        await hub.SubscribeToMatch(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+        var rejected = await Assert.ThrowsAsync<HubException>(() =>
+            hub.SubscribeToMatch(Guid.Parse("33333333-3333-4333-8333-333333333333")));
+
+        Assert.Equal("Realtime match subscription limit exceeded.", rejected.Message);
+        Assert.Equal(3, access.CheckCount);
+        Assert.Equal(3, ((RecordingGroupManager)hub.Groups).AddCount);
+    }
+
+    [Fact]
+    public async Task Unsubscribe_releases_a_distinct_subscription_slot()
+    {
+        var access = new CountingRealtimeAccessPolicy();
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10),
+            new RealtimeHubSubscriptionTracker(1));
+        hub.Context = new TestHubCallerContext();
+        var groups = new RecordingGroupManager();
+        hub.Groups = groups;
+        var first = Guid.Parse(MatchId);
+
+        await hub.SubscribeToMatch(first);
+        await hub.UnsubscribeFromMatch(first);
+        await hub.SubscribeToMatch(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+
+        Assert.Equal(2, access.CheckCount);
+        Assert.Equal(2, groups.AddCount);
+        Assert.Equal(1, groups.RemoveCount);
+    }
+
+    [Fact]
+    public async Task Unauthorized_match_ids_do_not_accumulate_and_full_cap_rejects_before_policy_check()
+    {
+        var allowedMatchId = Guid.Parse(MatchId);
+        var access = new CountingRealtimeAccessPolicy(matchId => matchId == allowedMatchId);
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10),
+            new RealtimeHubSubscriptionTracker(1));
+        hub.Context = new TestHubCallerContext();
+        hub.Groups = new RecordingGroupManager();
+
+        await Assert.ThrowsAsync<HubException>(() => hub.SubscribeToMatch(
+            Guid.Parse("22222222-2222-4222-8222-222222222222")));
+        await hub.SubscribeToMatch(allowedMatchId);
+        var rejected = await Assert.ThrowsAsync<HubException>(() => hub.SubscribeToMatch(
+            Guid.Parse("33333333-3333-4333-8333-333333333333")));
+
+        Assert.Equal("Realtime match subscription limit exceeded.", rejected.Message);
+        Assert.Equal(2, access.CheckCount);
+        Assert.Equal(1, ((RecordingGroupManager)hub.Groups).AddCount);
+    }
+
+    [Fact]
+    public async Task Disconnect_clears_connection_scoped_subscription_memberships()
+    {
+        var access = new CountingRealtimeAccessPolicy();
+        var tracker = new RealtimeHubSubscriptionTracker(1);
+        var hub = new MatchUpdatesHub(access, new RealtimeConnectionGate(1), new RealtimeHubMethodLimiter(10), tracker);
+        var context = new TestHubCallerContext();
+        hub.Context = context;
+        hub.Groups = new RecordingGroupManager();
+
+        await hub.SubscribeToMatch(Guid.Parse(MatchId));
+        await hub.OnDisconnectedAsync(null);
+
+        Assert.True(tracker.TryReserve(context.Items, Guid.Parse("22222222-2222-4222-8222-222222222222"), out var isNew));
+        Assert.True(isNew);
+    }
+
+    private sealed class CountingRealtimeAccessPolicy(Func<Guid, bool>? isAllowed = null) : IMatchRealtimeAccessPolicy
     {
         public int CheckCount { get; private set; }
 
@@ -209,7 +290,9 @@ public sealed class AuthorizationAbuseControlTests
             CancellationToken cancellationToken)
         {
             CheckCount++;
-            return Task.FromResult(new MatchRealtimeAccessDecision(MatchRealtimeAccessStatus.Allowed));
+            return Task.FromResult(new MatchRealtimeAccessDecision(isAllowed?.Invoke(matchId) == false
+                ? MatchRealtimeAccessStatus.Forbidden
+                : MatchRealtimeAccessStatus.Allowed));
         }
     }
 
@@ -227,14 +310,18 @@ public sealed class AuthorizationAbuseControlTests
     private sealed class RecordingGroupManager : IGroupManager
     {
         public int AddCount { get; private set; }
+        public int RemoveCount { get; private set; }
         public Task AddToGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
         {
             AddCount++;
             return Task.CompletedTask;
         }
 
-        public Task RemoveFromGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task RemoveFromGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
+        {
+            RemoveCount++;
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

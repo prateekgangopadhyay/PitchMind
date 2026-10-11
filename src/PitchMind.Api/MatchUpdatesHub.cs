@@ -55,6 +55,13 @@ public interface IRealtimeHubMethodLimiter
     bool TryAcquire(IDictionary<object, object?> connectionItems);
 }
 
+public interface IRealtimeHubSubscriptionTracker
+{
+    bool TryReserve(IDictionary<object, object?> connectionItems, Guid matchId, out bool isNew);
+    void Release(IDictionary<object, object?> connectionItems, Guid matchId);
+    void Clear(IDictionary<object, object?> connectionItems);
+}
+
 /// <summary>Bounds sequential subscription operations using state scoped to one SignalR connection.</summary>
 public sealed class RealtimeHubMethodLimiter(int maximumCallsPerMinute, TimeProvider? timeProvider = null) : IRealtimeHubMethodLimiter
 {
@@ -82,6 +89,60 @@ public sealed class RealtimeHubMethodLimiter(int maximumCallsPerMinute, TimeProv
     }
 
     private sealed record WindowState(long StartedAt, int Count);
+}
+
+/// <summary>Bounds the distinct active match groups retained on one SignalR connection.</summary>
+public sealed class RealtimeHubSubscriptionTracker(int maximumSubscriptions) : IRealtimeHubSubscriptionTracker
+{
+    private static readonly object SubscriptionsStateKey = new();
+
+    public bool TryReserve(IDictionary<object, object?> connectionItems, Guid matchId, out bool isNew)
+    {
+        lock (connectionItems)
+        {
+            var subscriptions = GetSubscriptions(connectionItems);
+            if (subscriptions.Contains(matchId))
+            {
+                isNew = false;
+                return true;
+            }
+            if (maximumSubscriptions <= 0 || subscriptions.Count >= maximumSubscriptions)
+            {
+                isNew = false;
+                return false;
+            }
+
+            subscriptions.Add(matchId);
+            isNew = true;
+            return true;
+        }
+    }
+
+    public void Release(IDictionary<object, object?> connectionItems, Guid matchId)
+    {
+        lock (connectionItems)
+        {
+            if (connectionItems.TryGetValue(SubscriptionsStateKey, out var value) && value is HashSet<Guid> subscriptions)
+            {
+                subscriptions.Remove(matchId);
+                if (subscriptions.Count == 0) connectionItems.Remove(SubscriptionsStateKey);
+            }
+        }
+    }
+
+    public void Clear(IDictionary<object, object?> connectionItems)
+    {
+        lock (connectionItems) connectionItems.Remove(SubscriptionsStateKey);
+    }
+
+    private static HashSet<Guid> GetSubscriptions(IDictionary<object, object?> connectionItems)
+    {
+        if (connectionItems.TryGetValue(SubscriptionsStateKey, out var value) && value is HashSet<Guid> subscriptions)
+            return subscriptions;
+        var created = new HashSet<Guid>();
+        connectionItems[SubscriptionsStateKey] = created;
+        return created;
+    }
 }
 
 public sealed class RealtimeConnectionGate(int maximumConnections) : IRealtimeConnectionGate
@@ -112,7 +173,7 @@ public sealed class RealtimeConnectionGate(int maximumConnections) : IRealtimeCo
 
 /// <summary>Clients join only through an authorized match-specific operation; SignalR removes groups on disconnect.</summary>
 public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, IRealtimeConnectionGate connectionGate,
-    IRealtimeHubMethodLimiter methodLimiter) : Hub<IMatchUpdateClient>
+    IRealtimeHubMethodLimiter methodLimiter, IRealtimeHubSubscriptionTracker subscriptionTracker) : Hub<IMatchUpdateClient>
 {
     public static string GroupName(Guid matchId) => $"match:{matchId:D}";
 
@@ -120,20 +181,46 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, IRealtime
     {
         if (!methodLimiter.TryAcquire(Context.Items))
             throw new HubException("Realtime subscription rate limit exceeded.");
-        var decision = await access.CheckAsync(Context.User ?? new ClaimsPrincipal(), matchId,
-            Context.ConnectionAborted).ConfigureAwait(false);
-        if (decision.Status != MatchRealtimeAccessStatus.Allowed)
-            throw new HubException("Match subscription is not authorized.");
+        if (!subscriptionTracker.TryReserve(Context.Items, matchId, out var isNew))
+            throw new HubException("Realtime match subscription limit exceeded.");
+        try
+        {
+            var decision = await access.CheckAsync(Context.User ?? new ClaimsPrincipal(), matchId,
+                Context.ConnectionAborted).ConfigureAwait(false);
+            if (decision.Status != MatchRealtimeAccessStatus.Allowed)
+                throw new HubException("Match subscription is not authorized.");
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
-            .ConfigureAwait(false);
+            await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            if (!isNew)
+            {
+                try
+                {
+                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
+                        .ConfigureAwait(false);
+                }
+                catch { /* Keep the original subscription failure; disconnect also clears group membership. */ }
+            }
+            subscriptionTracker.Release(Context.Items, matchId);
+            throw;
+        }
     }
 
     public Task UnsubscribeFromMatch(Guid matchId)
     {
         if (!methodLimiter.TryAcquire(Context.Items))
             throw new HubException("Realtime subscription rate limit exceeded.");
-        return Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted);
+        return RemoveSubscriptionAsync(matchId);
+    }
+
+    private async Task RemoveSubscriptionAsync(Guid matchId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
+            .ConfigureAwait(false);
+        subscriptionTracker.Release(Context.Items, matchId);
     }
 
     public override async Task OnConnectedAsync()
@@ -150,6 +237,7 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, IRealtime
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        subscriptionTracker.Clear(Context.Items);
         if (Context.Items.ContainsKey("realtime-connection-admitted")) connectionGate.Release();
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }
