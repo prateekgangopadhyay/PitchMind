@@ -93,3 +93,21 @@ On this local candidate, `frontend/`:
 ## Pending
 
 Independent named Frontend/UX and Accessibility reviewer, human screen-reader/axe and complete responsive keyboard evidence, retained desktop/mobile/degraded screenshots, additional route contracts, and Product Owner acceptance remain pending. The canonical API was represented by a local test-only stub for the browser inspection; no actual canonical source feed or database-backed production-like run was tested. No deployment or Azure action occurred.
+
+## Responsive navigation follow-up — 2026-10-11
+
+**Candidate base:** PR #83 exact head `4f04368da5da53bd3993ec8f671cc0d2279d28fd`, stacked on PR #53 exact head `2635f7e83d7d8f0c45218da0b11f344008cfb2dd`.
+
+The mobile header navigation used a horizontally scrolling flex row, placing later route links outside the initial viewport. `frontend/src/styles.css:104-119` now switches it to a three-column grid at 640px and below, disables horizontal scrolling, and preserves 48px link height. It remains the same semantic `<nav>` with the same native links and DOM order; no route, API or match content changed.
+
+### Fresh Web Interface Guidelines review
+
+Fetched the official [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md) on 2026-10-11. Static review of the changed shell and responsive navigation found the skip link and labeled navigation retained, links remain native anchors with active route state, focus-visible styling remains active, and the mobile rule uses CSS Grid with no clipped focus outline. No additional actionable static finding was identified. This review does not establish browser behavior or WCAG conformance.
+
+### Automated responsive/accessibility contract checks
+
+`frontend/src/responsiveAccessibility.test.tsx` verifies: skip-link target and source order; six native navigation destinations and current-page state; the mobile three-column/non-scrolling CSS rule; 48px navigation-link target height; and the selected active/inactive token pairs exceed the 4.5:1 normal-text threshold by formula. It does not measure rendered pixels or simulate device/browser layout.
+
+Executed on the local candidate based on PR #83: offline `npm ci` completed (224 packages, 0 reported vulnerabilities); `npm test` passed **11/11**; `npm run build`, `npm run lint`, `node scripts/validate_operating_model.mjs`, `node scripts/test_design_skills.mjs`, `node scripts/design-slop-scan.mjs frontend/src/App.tsx frontend/src/responsiveAccessibility.test.tsx`, and `git diff --check` passed.
+
+Vite could not bind `127.0.0.1:5173` (`EPERM`); invoking headless Chrome on the built file exited 134 without output; the in-app browser surface was unavailable. No screenshot artifact was saved. Actual mobile/tablet reflow, 320px overflow, 200% zoom, full browser keyboard traversal, rendered contrast, axe, screen-reader behavior and cross-browser support remain unverified. Named independent review and PO acceptance remain pending. Result for story acceptance: **UNVERIFIED**.
