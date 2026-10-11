@@ -61,16 +61,64 @@ public sealed class DependencyTests
     public void ProductionSource_DoesNotGenerateMatchSpecificFixtures()
     {
         var root = FindRepositoryRoot();
-        var productionFiles = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories);
-        var violations = productionFiles
-            .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, lineNumber: index + 1)))
-            .Where(item => item.line.Contains("SyntheticFixtureGenerator", StringComparison.Ordinal)
-                || item.line.Contains("Harbour FC", StringComparison.Ordinal)
-                || item.line.Contains("Ridge Athletic", StringComparison.Ordinal))
-            .Select(item => $"{Path.GetRelativePath(root, item.path)}:{item.lineNumber}: {item.line.Trim()}")
+        var productionFiles = EnumerateProductionSourceFiles(root);
+        var violations = FindFixtureDataMarkers(productionFiles)
+            .Select(item => $"{Path.GetRelativePath(root, item.Path)}:{item.LineNumber}: {item.Line.Trim()}")
             .ToArray();
 
         Xunit.Assert.Empty(violations);
+    }
+
+    [Xunit.Theory]
+    [Xunit.InlineData("fixture.cs")]
+    [Xunit.InlineData("App.tsx")]
+    public void ProductionFixtureGuard_RejectsNamedMatchDataInEveryRuntimeLanguage(string fileName)
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-production-fixture-guard-");
+        try
+        {
+            var source = Path.Combine(root.FullName, fileName);
+            File.WriteAllText(source, "const team = 'Harbour FC';");
+
+            var violations = FindFixtureDataMarkers([source]);
+
+            Xunit.Assert.Single(violations);
+            Xunit.Assert.Equal(source, violations[0].Path);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
+    {
+        var sourceRoots = new[]
+        {
+            Path.Combine(root, "src"),
+            Path.Combine(root, "frontend", "src")
+        };
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".cs", ".js", ".jsx", ".ts", ".tsx"
+        };
+
+        return sourceRoots
+            .Where(Directory.Exists)
+            .SelectMany(sourceRoot => Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+            .Where(path => extensions.Contains(Path.GetExtension(path)))
+            .Where(path => !Path.GetFileName(path).Contains(".test.", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !Path.GetFileName(path).Contains(".spec.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
+        IEnumerable<string> files)
+    {
+        var markers = new[] { "SyntheticFixtureGenerator", "Harbour FC", "Ridge Athletic" };
+        return files
+            .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
+            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)))
+            .ToArray();
     }
 
     [Xunit.Fact]
