@@ -1,6 +1,7 @@
 # EP03-S01 observed-dictionary input validation — 2026-10-11
 
-**Parent:** observed data dictionary PR #84 at exact head `c720db649a9fcbc40dcd2e297723ebd18b817483`.
+**Tested code head:** `349b475684cca3c03380adc82c7ca240c052d001` (the revision used for the commands and results below).
+**Parent/base:** observed data dictionary PR #84 at exact head `c720db649a9fcbc40dcd2e297723ebd18b817483`; the tested code head is a direct child of this base.
 **Scope:** harden the source-only dictionary generator against malformed nested JSON shapes and invalid aggregate field types. No source bytes, manifest semantics, domain model, API contract, migration, canonical admission, or application data path changed.
 
 ## Defect and correction
