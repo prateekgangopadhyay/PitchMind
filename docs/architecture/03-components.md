@@ -23,6 +23,8 @@ flowchart TB
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
   ProjectionRead["PostgresMatchProjectionStore: source metadata + projection/provenance read"] --> DB
   CanonicalWrite["PostgresCanonicalUpdateStore: event + projection + outbox transaction"] --> DB
+  DispatchWorker["OutboxDispatchWorker: Development/local + explicit local provider + loopback PostgreSQL only"] --> Dispatcher
+  Dispatcher["PostgresOutboxDispatcher: leased at-least-once delivery"] --> RealtimePublisher
   PointInTime["Internal Application: GetMatchAtQueryService"] --> ReplayReader["PostgresMatchProjectionReader: projection + replay envelope + bounded frames"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   Candidate["Candidate JSON"] -. "raw schema only" .-> RawReader["ManuLivCandidateFeedReader"]
