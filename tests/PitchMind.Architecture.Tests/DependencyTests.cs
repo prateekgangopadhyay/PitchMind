@@ -321,7 +321,7 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
-    public void ProductionFixtureGuard_FailsClosedWhenNumericAliasesAreShadowedOrReassigned()
+    public void ProductionFixtureGuard_FailsClosedWhenNumericAliasesAreShadowedOrMutated()
     {
         var root = FindRepositoryRoot();
         var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
@@ -335,6 +335,7 @@ public sealed class DependencyTests
             var tsxSource = Path.Combine(sourceRoot.FullName, "App.tsx");
             var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
             var javascriptSource = Path.Combine(sourceRoot.FullName, "App.js");
+            var memberAssignmentSource = Path.Combine(sourceRoot.FullName, "MemberAssignment.js");
             File.WriteAllText(tsxSource,
                 $"const observedClock = {candidateClock};\n" +
                 "{ const observedClock = 987654321; }\n" +
@@ -353,18 +354,32 @@ public sealed class DependencyTests
             File.WriteAllText(javascriptSource,
                 "let observedClock = 987654321;\n" +
                 $"observedClock = {candidateClock};\n" +
-                "const payload = { clockSeconds: observedClock };");
+                "const payload = { clockSeconds: observedClock };\n" +
+                "let logicalClock = 987654321;\n" +
+                $"logicalClock ||= {candidateClock};\n" +
+                "const logicalPayload = { clockSeconds: logicalClock };\n" +
+                "let incrementedSequence = 0;\n" +
+                "++incrementedSequence;\n" +
+                "const sequencePayload = { sequence: incrementedSequence };");
+            File.WriteAllText(memberAssignmentSource,
+                "let clockSeconds = 987654321;\n" +
+                "const match = {};\n" +
+                "match.clockSeconds = 7;\n" +
+                "const unrelated = { clockSeconds: clockSeconds };");
 
             var violations = FindFixtureDataMarkers(
-                [tsxSource, csharpSource, javascriptSource],
+                [tsxSource, csharpSource, javascriptSource, memberAssignmentSource],
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Equal(6, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("clockSeconds: observedClock", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = observedClock", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = mutableClock", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("clockSeconds: observedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("clockSeconds: logicalClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == javascriptSource && item.Line.Contains("sequence: incrementedSequence", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Path == memberAssignmentSource);
         }
         finally
         {
@@ -599,7 +614,7 @@ public sealed class DependencyTests
         // alias is written after its initializer, stop trusting its initializer and fail
         // closed when it is later used for a candidate football property.
         var assignment = new Regex(
-            @"(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\+\+|--|\+=|-=|\*=|/=|%=|=(?!=|>))",
+            @"(?<![A-Za-z0-9_$?.])(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?:>>>=|<<=|>>=|\*\*=|&&=|\|\|=|\?\?=|\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|=(?!=|>))",
             RegexOptions.CultureInvariant);
         foreach (Match match in assignment.Matches(source))
         {
@@ -610,6 +625,18 @@ public sealed class DependencyTests
             }
 
             ambiguousNames.Add(name);
+        }
+
+        var prefixMutation = new Regex(
+            @"(?<![A-Za-z0-9_$?.])(?:\+\+|--)\s*(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)",
+            RegexOptions.CultureInvariant);
+        foreach (Match match in prefixMutation.Matches(source))
+        {
+            var name = match.Groups["name"].Value.TrimStart('@');
+            if (declaredNames.Contains(name))
+            {
+                ambiguousNames.Add(name);
+            }
         }
 
         for (var pass = 0; pass < declarations.Count; pass++)
