@@ -12,6 +12,9 @@ steps:
   artifact: release
 - task: AzureCLI@2
   displayName: Deploy the already built digest and prove HTTP smoke
+  env:
+    PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+    PITCHMIND_DEV_APP_NAME: ${{ parameters.appName }}
   inputs:
     azureSubscription: ${{ parameters.devDeploymentServiceConnection }}
     scriptType: bash
@@ -20,7 +23,7 @@ steps:
       set -euo pipefail
       image=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$(Pipeline.Workspace)/release/manifest.json")
       [[ "$image" == *@sha256:* ]]
-      az containerapp update --resource-group '${{ parameters.resourceGroup }}' --name '${{ parameters.appName }}' --image "$image" --output none
-      fqdn=$(az containerapp show --resource-group '${{ parameters.resourceGroup }}' --name '${{ parameters.appName }}' --query properties.configuration.ingress.fqdn -o tsv)
+      az containerapp update --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" --name "$PITCHMIND_DEV_APP_NAME" --image "$image" --output none
+      fqdn=$(az containerapp show --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" --name "$PITCHMIND_DEV_APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)
       test -n "$fqdn"
       python3 scripts/api-smoke.py "https://$fqdn"

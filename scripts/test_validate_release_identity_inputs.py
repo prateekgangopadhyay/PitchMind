@@ -37,6 +37,25 @@ class ReleaseIdentityInputTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(validator.IdentityInputError):
                 validator.validate(value, "pitchmind-dev-deploy")
 
+    def test_accepts_valid_release_resource_names(self):
+        self.assertIsNone(validator.validate_release_resource_inputs(
+            "pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api"
+        ))
+
+    def test_rejects_shell_injection_and_invalid_release_resource_names(self):
+        good = ("pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api")
+        cases = (
+            ("pmdev4iwntkatliy6sacr'; touch /tmp/pwned; #", *good[1:]),
+            (good[0], "pitchmind'; echo injected", *good[2:]),
+            (*good[:2], "rg-dev'; az group delete", good[3]),
+            (*good[:3], "pm-dev-api'; echo injected"),
+            ("tiny", *good[1:]),
+            (*good[:3], "PM-DEV-API"),
+        )
+        for values in cases:
+            with self.subTest(values=values), self.assertRaises(validator.IdentityInputError):
+                validator.validate_release_resource_inputs(*values)
+
 
 if __name__ == "__main__":
     unittest.main()

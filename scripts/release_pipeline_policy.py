@@ -6,6 +6,7 @@ DevOps federation, RBAC, protected-environment configuration, or owner approval.
 from __future__ import annotations
 
 import re
+import hashlib
 from typing import Any
 
 import yaml
@@ -39,6 +40,10 @@ _OTHER_MUTATORS = re.compile(
     re.IGNORECASE,
 )
 _ALLOWED_AZ_BICEP = {"version", "build", "build-params"}
+# Script changes in AzureCLI release templates require this policy pin to be
+# reviewed alongside a command-level diff and the mutation tests.
+_BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
+_DEPLOY_SCRIPT_SHA256 = "28577f73b5910af3c6e078bfd252d601f1bbd194ac105920389a394ec2a6693c"
 
 
 def validate_pipeline_policy(
@@ -59,6 +64,13 @@ def validate_pipeline_policy(
     )
     if delivery_parameter is None or delivery_parameter.get("type") != "boolean" or delivery_parameter.get("default") is not False:
         raise PipelinePolicyError("DEV delivery must remain a boolean default-off parameter")
+    for parameter_name in ("registryName", "devResourceGroup", "devAppName"):
+        configured = [
+            item for item in parameters
+            if isinstance(item, dict) and item.get("name") == parameter_name
+        ]
+        if len(configured) != 1 or configured[0].get("type") != "string":
+            raise PipelinePolicyError(f"{parameter_name} must remain a single queue-time string parameter")
 
     stage_items = _sequence(pipeline_doc.get("stages"), "pipeline stages")
     validate_stages = [item for item in stage_items if isinstance(item, dict) and item.get("stage") == "Validate"]
@@ -135,10 +147,22 @@ def validate_pipeline_policy(
     if deploy_call.get("parameters", {}).get("devDeploymentServiceConnection") != "${{ parameters.devDeploymentServiceConnection }}":
         raise PipelinePolicyError("DeployDev must pass the dedicated DEV deployment service connection")
 
-    if _azure_cli_task_connection(build_doc) != "${{ parameters.acrPushServiceConnection }}":
-        raise PipelinePolicyError("The image build task must use the ACR-push service connection")
-    if _azure_cli_task_connection(deploy_doc) != "${{ parameters.devDeploymentServiceConnection }}":
-        raise PipelinePolicyError("The deployment task must use the DEV deployment service connection")
+    _assert_release_template(
+        build_doc,
+        kind="build",
+        expected_connection="${{ parameters.acrPushServiceConnection }}",
+    )
+    _assert_release_template(
+        deploy_doc,
+        kind="deploy",
+        expected_connection="${{ parameters.devDeploymentServiceConnection }}",
+    )
+    if build_call["parameters"].get("registryName") != "${{ parameters.registryName }}" or \
+            build_call["parameters"].get("imageRepository") != "pitchmind":
+        raise PipelinePolicyError("BuildRelease must pass only the reviewed registry and image repository")
+    if deploy_call["parameters"].get("resourceGroup") != "${{ parameters.devResourceGroup }}" or \
+            deploy_call["parameters"].get("appName") != "${{ parameters.devAppName }}":
+        raise PipelinePolicyError("DeployDev must pass only the reviewed resource group and app name")
 
 
 def _load_yaml(source: str, label: str) -> dict[str, Any]:
@@ -203,19 +227,74 @@ def _find_template_call_mappings(node: Any, template_name: str) -> list[dict[str
     return []
 
 
-def _azure_cli_task_connection(template_doc: dict[str, Any]) -> Any:
-    matches: list[Any] = []
-    for task in _find_values(template_doc, "task"):
-        if task == "AzureCLI@2":
-            # Inspect the task's active inputs mapping, not other YAML values.
-            for node in _find_mappings(template_doc):
-                if node.get("task") == task:
-                    inputs = node.get("inputs")
-                    if isinstance(inputs, dict):
-                        matches.append(inputs.get("azureSubscription"))
-    if len(matches) != 1:
-        raise PipelinePolicyError("Each release template must contain exactly one AzureCLI@2 task")
-    return matches[0]
+def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expected_connection: str) -> None:
+    parameters = template_doc.get("parameters")
+    steps = template_doc.get("steps")
+    expected_parameter_names = (
+        ("acrPushServiceConnection", "registryName", "imageRepository")
+        if kind == "build" else
+        ("devDeploymentServiceConnection", "resourceGroup", "appName")
+    )
+    expected_parameters = (
+        [
+            {"name": "acrPushServiceConnection", "type": "string"},
+            {"name": "registryName", "type": "string"},
+            {"name": "imageRepository", "type": "string", "default": "pitchmind"},
+        ]
+        if kind == "build" else
+        [
+            {"name": "devDeploymentServiceConnection", "type": "string"},
+            {"name": "resourceGroup", "type": "string"},
+            {"name": "appName", "type": "string"},
+        ]
+    )
+    if set(template_doc) != {"parameters", "steps"} or not isinstance(parameters, list) or \
+            tuple(item.get("name") for item in parameters if isinstance(item, dict)) != expected_parameter_names or \
+            parameters != expected_parameters:
+        raise PipelinePolicyError(f"The {kind} release template parameters must remain on the reviewed allowlist")
+
+    if not isinstance(steps, list) or len(steps) != 2:
+        raise PipelinePolicyError(f"The {kind} release template may contain only its two reviewed steps")
+    if kind == "build":
+        task = steps[0]
+        expected_env = {
+            "PITCHMIND_REGISTRY_NAME": "${{ parameters.registryName }}",
+            "PITCHMIND_IMAGE_REPOSITORY": "${{ parameters.imageRepository }}",
+        }
+        if not isinstance(steps[1], dict) or steps[1] != {
+            "publish": "$(Build.ArtifactStagingDirectory)/release",
+            "artifact": "release",
+            "displayName": "Publish immutable release manifest",
+        }:
+            raise PipelinePolicyError("The image build template may contain only the reviewed manifest publication")
+        expected_script_hash = _BUILD_SCRIPT_SHA256
+        expected_display = "Build immutable application image and release manifest"
+    elif kind == "deploy":
+        if steps[0] != {"download": "current", "artifact": "release"}:
+            raise PipelinePolicyError("The deployment template may only download the reviewed release artifact")
+        task = steps[1]
+        expected_env = {
+            "PITCHMIND_DEV_RESOURCE_GROUP": "${{ parameters.resourceGroup }}",
+            "PITCHMIND_DEV_APP_NAME": "${{ parameters.appName }}",
+        }
+        expected_script_hash = _DEPLOY_SCRIPT_SHA256
+        expected_display = "Deploy the already built digest and prove HTTP smoke"
+    else:
+        raise PipelinePolicyError("Unknown release template kind")
+
+    if not isinstance(task, dict) or set(task) != {"task", "displayName", "env", "inputs"} or \
+            task.get("task") != "AzureCLI@2" or task.get("displayName") != expected_display:
+        raise PipelinePolicyError(f"The {kind} release template may contain only its reviewed AzureCLI task")
+    if task.get("env") != expected_env:
+        raise PipelinePolicyError(f"The {kind} release template must pass resource names through reviewed environment variables")
+    inputs = task.get("inputs")
+    if not isinstance(inputs, dict) or set(inputs) != {"azureSubscription", "scriptType", "scriptLocation", "inlineScript"} or \
+            inputs.get("azureSubscription") != expected_connection or inputs.get("scriptType") != "bash" or \
+            inputs.get("scriptLocation") != "inlineScript" or not isinstance(inputs.get("inlineScript"), str):
+        raise PipelinePolicyError(f"The {kind} AzureCLI inputs must remain on the reviewed allowlist")
+    actual_script_hash = hashlib.sha256(inputs["inlineScript"].encode("utf-8")).hexdigest()
+    if actual_script_hash != expected_script_hash:
+        raise PipelinePolicyError(f"The {kind} inline AzureCLI script changed without a reviewed policy pin")
 
 
 def _require_manual_approval(
@@ -286,6 +365,10 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     expected = {
         "PITCHMIND_ACR_PUSH_SERVICE_CONNECTION": "${{ parameters.acrPushServiceConnection }}",
         "PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION": "${{ parameters.devDeploymentServiceConnection }}",
+        "PITCHMIND_REGISTRY_NAME": "${{ parameters.registryName }}",
+        "PITCHMIND_IMAGE_REPOSITORY": "pitchmind",
+        "PITCHMIND_DEV_RESOURCE_GROUP": "${{ parameters.devResourceGroup }}",
+        "PITCHMIND_DEV_APP_NAME": "${{ parameters.devAppName }}",
     }
     if not isinstance(environment, dict) or any(environment.get(key) != value for key, value in expected.items()):
         raise PipelinePolicyError("The identity preflight must receive the distinct connection parameters")
@@ -323,7 +406,9 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         if set(steps[1]) != {"template", "parameters"}:
             raise PipelinePolicyError("BuildRelease image template call may not contain unreviewed fields")
         parameters = steps[1].get("parameters")
-        if not isinstance(parameters, dict) or set(parameters) != {"acrPushServiceConnection", "registryName"}:
+        if not isinstance(parameters, dict) or set(parameters) != {
+            "acrPushServiceConnection", "registryName", "imageRepository"
+        }:
             raise PipelinePolicyError("BuildRelease image template parameters must remain on the reviewed allowlist")
         return
     if stage_name == "DeployDev":
@@ -353,14 +438,6 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
             "devDeploymentServiceConnection", "resourceGroup", "appName"
         }:
             raise PipelinePolicyError("DeployDev template parameters must remain on the reviewed allowlist")
-
-
-def _find_mappings(node: Any) -> list[dict[str, Any]]:
-    if isinstance(node, dict):
-        return [node, *(mapping for value in node.values() for mapping in _find_mappings(value))]
-    if isinstance(node, list):
-        return [mapping for value in node for mapping in _find_mappings(value)]
-    return []
 
 
 def _assert_validation_only(node: Any, label: str) -> None:

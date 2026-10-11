@@ -83,6 +83,74 @@ class IdentityBaselineTests(unittest.TestCase):
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
         _validate_pipeline_policy(pipeline, build_template, deploy_template)
 
+    def test_policy_rejects_unreviewed_release_template_steps_and_scripts(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        mutations = {
+            "extra build task": (
+                build_template.replace(
+                    "- publish: $(Build.ArtifactStagingDirectory)/release",
+                    "- task: AzurePowerShell@5\n  inputs:\n    azureSubscription: malicious\n- publish: $(Build.ArtifactStagingDirectory)/release",
+                    1,
+                ), deploy_template,
+            ),
+            "build script mutation": (
+                build_template.replace(
+                    '      docker push "$loginServer/$repository:$tag"',
+                    '      docker push "$loginServer/$repository:$tag"\n      az group delete --name unreviewed',
+                    1,
+                ), deploy_template,
+            ),
+            "deployment script mutation": (
+                build_template,
+                deploy_template.replace(
+                    '      az containerapp update --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP"',
+                    '      az group delete --name unreviewed\n      az containerapp update --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP"',
+                    1,
+                ),
+            ),
+            "extra build task input": (
+                build_template.replace(
+                    "    scriptLocation: inlineScript",
+                    "    scriptLocation: inlineScript\n    workingDirectory: $(Pipeline.Workspace)",
+                    1,
+                ), deploy_template,
+            ),
+            "shell interpolation restored": (
+                build_template.replace(
+                    'registry="$PITCHMIND_REGISTRY_NAME"',
+                    "registry='${{ parameters.registryName }}'",
+                    1,
+                ), deploy_template,
+            ),
+        }
+        for mutation, (candidate_build, candidate_deploy) in mutations.items():
+            with self.subTest(mutation=mutation), self.assertRaises(PipelinePolicyError):
+                _validate_pipeline_policy(pipeline, candidate_build, candidate_deploy)
+
+    def test_policy_requires_resource_names_to_reach_the_preflight(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        wrong_resource_mapping = pipeline.replace(
+            "PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}",
+            "PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devAppName }}",
+            1,
+        )
+        with self.subTest(mutation="resource group is not validated"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(wrong_resource_mapping, build_template, deploy_template)
+
+        unsafe_parameter_type = pipeline.replace(
+            "- name: registryName\n  type: string",
+            "- name: registryName\n  type: object",
+            1,
+        )
+        with self.subTest(mutation="registry name is not a string parameter"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(unsafe_parameter_type, build_template, deploy_template)
+
     def test_policy_mutations_reject_default_on_and_pull_request_delivery(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
@@ -252,8 +320,8 @@ class IdentityBaselineTests(unittest.TestCase):
             _validate_pipeline_policy(pass_through_spoof, build_template, deploy_template)
 
         block_scalar_spoof = build_template.replace(
-            "  displayName: Build immutable application image and release manifest\n  inputs:\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}",
-            "  displayName: |\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}\n  inputs:\n    azureSubscription: ${{ parameters.devDeploymentServiceConnection }}",
+            "  displayName: Build immutable application image and release manifest",
+            "  displayName: |\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}",
             1,
         )
         with self.subTest(mutation="connection text in block scalar cannot spoof task input"), self.assertRaises(PipelinePolicyError):

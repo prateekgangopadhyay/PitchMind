@@ -122,6 +122,10 @@ stages:
         env:
           PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
           PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
+          PITCHMIND_REGISTRY_NAME: ${{ parameters.registryName }}
+          PITCHMIND_IMAGE_REPOSITORY: pitchmind
+          PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}
+          PITCHMIND_DEV_APP_NAME: ${{ parameters.devAppName }}
     - job: AwaitExplicitOwnerApproval
       dependsOn: ValidateReleaseIdentityInputs
       displayName: Review the approved change set before ACR push or DEV mutation
@@ -149,6 +153,7 @@ stages:
         parameters:
           acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
           registryName: ${{ parameters.registryName }}
+          imageRepository: pitchmind
   - stage: OwnerApprovalOfReleaseDigest
     dependsOn: BuildRelease
     condition: succeeded()
