@@ -297,6 +297,7 @@ public sealed class AuthorizationAbuseControlTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => hub.SubscribeToMatch(Guid.Parse(MatchId)));
         Assert.Equal(1, groups.RemoveCount);
+        Assert.Empty(groups.Memberships);
         groups.FailAddAfterAdd = false;
 
         await hub.SubscribeToMatch(Guid.Parse("22222222-2222-4222-8222-222222222222"));
@@ -327,8 +328,11 @@ public sealed class AuthorizationAbuseControlTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => hub.SubscribeToMatch(first));
 
         Assert.Equal(1, context.AbortCount);
+        Assert.Contains((context.ConnectionId, MatchUpdatesHub.GroupName(first)), groups.Memberships);
         Assert.False(tracker.TryReserve(context.Items, second, out _));
         await hub.OnDisconnectedAsync(null);
+        groups.ClearConnection(context.ConnectionId);
+        Assert.Empty(groups.Memberships);
         Assert.True(tracker.TryReserve(context.Items, second, out var isNew));
         Assert.True(isNew);
     }
@@ -361,6 +365,7 @@ public sealed class AuthorizationAbuseControlTests
 
     private sealed class RecordingGroupManager : IGroupManager
     {
+        public HashSet<(string ConnectionId, string GroupName)> Memberships { get; } = [];
         public int AddCount { get; private set; }
         public int RemoveCount { get; private set; }
         public bool FailAddAfterAdd { get; set; }
@@ -368,6 +373,7 @@ public sealed class AuthorizationAbuseControlTests
         public Task AddToGroupAsync(string connectionId, string groupName, CancellationToken cancellationToken = default)
         {
             AddCount++;
+            Memberships.Add((connectionId, groupName));
             if (FailAddAfterAdd) throw new InvalidOperationException("Simulated partial group add failure.");
             return Task.CompletedTask;
         }
@@ -376,8 +382,11 @@ public sealed class AuthorizationAbuseControlTests
         {
             RemoveCount++;
             if (FailRemove) throw new InvalidOperationException("Simulated group removal failure.");
+            Memberships.Remove((connectionId, groupName));
             return Task.CompletedTask;
         }
+
+        public void ClearConnection(string connectionId) => Memberships.RemoveWhere(item => item.ConnectionId == connectionId);
     }
 
     [Fact]
