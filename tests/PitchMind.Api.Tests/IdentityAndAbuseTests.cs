@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -160,6 +161,26 @@ public sealed class IdentityAndAbuseTests
             Assert.Equal((HttpStatusCode)429, response.StatusCode);
             Assert.Equal("RATE_LIMITED", await ProblemCode(response));
         }
+    }
+
+    [Fact]
+    public async Task AuthenticatedCanonicalReadQuotaFollowsSubjectAcrossClientAddresses()
+    {
+        using var factory = CreateFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<IStartupFilter>(new TestRemoteIpStartupFilter())));
+        using var client = factory.CreateClient();
+
+        for (var requestNumber = 1; requestNumber <= 120; requestNumber++)
+        {
+            using var response = await SendAs(client, "/api/v1/canonical/fixtures", "fan", "192.0.2.10");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+
+        using var requestFromAnotherAddress = await SendAs(client,
+            "/api/v1/canonical/fixtures", "fan", "198.51.100.20");
+
+        Assert.Equal((HttpStatusCode)429, requestFromAnotherAddress.StatusCode);
+        Assert.Equal("RATE_LIMITED", await ProblemCode(requestFromAnotherAddress));
     }
 
     [Fact]
@@ -479,12 +500,28 @@ public sealed class IdentityAndAbuseTests
     private static SymmetricSecurityKey AzureTestSigningKey() =>
         new(Encoding.UTF8.GetBytes("pitchmind-azure-test-signing-key-32-bytes-min"));
 
-    private static async Task<HttpResponseMessage> SendAs(HttpClient client, string route, string role)
+    private static async Task<HttpResponseMessage> SendAs(HttpClient client, string route, string role,
+        string? testRemoteIp = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, route);
         request.Headers.Add("X-Dev-Subject", "qa-user");
         request.Headers.Add("X-Dev-Roles", role);
+        if (testRemoteIp is not null) request.Headers.Add("X-Test-Remote-IP", testRemoteIp);
         return await client.SendAsync(request);
+    }
+
+    private sealed class TestRemoteIpStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                var address = context.Request.Headers["X-Test-Remote-IP"].ToString();
+                if (IPAddress.TryParse(address, out var parsed)) context.Connection.RemoteIpAddress = parsed;
+                await nextMiddleware();
+            });
+            next(app);
+        };
     }
 
     private static async Task<string?> ProblemCode(HttpResponseMessage response)
