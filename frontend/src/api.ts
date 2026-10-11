@@ -75,6 +75,14 @@ export interface CanonicalEvidencePayload {
 }
 export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }
 export interface CanonicalReplay { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage }
+export interface CanonicalTimelineBackfill {
+  snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage; revisionChanged: boolean;
+  replayRequired: boolean; requestedAfterSequence: number;
+}
+export interface RealtimeCursorV1 {
+  kind: 'matchUpdated'; matchId: string; canonicalRevision: number; lastSequence: number;
+  serverUtc: string; schemaVersion: 1;
+}
 export interface TelemetryTrackingFrameV1 {
   schemaVersion: number; matchId: string; frameId: string; sequence: number;
   matchTime: { period: number; elapsedSeconds: number; sourceClockValue: number; sourceClockUnit: string; sourceClockBasis: string };

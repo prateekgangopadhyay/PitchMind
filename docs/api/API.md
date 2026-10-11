@@ -33,6 +33,7 @@ The current v1 DTO property names and representative JSON types are pinned by `P
 | GET | `/api/v1/canonical/matches/{matchId}/insights/{insightId}?atSeconds&revision` | One evidence-backed persisted insight. |
 | GET | `/api/v1/canonical/matches/{matchId}/evidence/{insightId}?atSeconds&revision` | Resolved source event/frame payloads for a persisted insight. |
 | GET | `/api/v1/canonical/matches/{matchId}/replay?atSeconds&revision&cursor&limit` | Selected-time state and bounded event page; carries source and revision identity. |
+| GET | `/api/v1/canonical/matches/{matchId}/timeline/backfill?afterSequence&atSeconds&revision&limit` | Durable selected-time snapshot and ordered catch-up page. Revision changes or a cursor ahead of the durable head set `replayRequired` and restart from sequence -1; snapshot and events share one selected time and canonical revision; page size 1..100. |
 | GET | `/api/v1/canonical/matches/{matchId}/key-moments?atSeconds&revision` | Typed 503 `CANONICAL_KEY_MOMENTS_UNAVAILABLE`; no persisted key-moment read model exists. |
 
 These canonical routes read through Application ports backed by PostgreSQL when a connection string is configured. They are protected by the EP06-S04 `MatchRead` role policy; replay and complete evidence require `analyst` or `admin`. Azure profiles map the same protected contracts but register unavailable read adapters until an Azure PostgreSQL adapter is configured, so authenticated requests return sanitized `503 DEPENDENCY_UNAVAILABLE` and never fall back to fixtures. Azure startup requires explicit HTTPS Entra authority and audience configuration. Tenant role assignments and Azure connectivity remain unverified. `canonicalRevision` (64-bit admission revision) and `projectionRevision` (projection revision) are separate contract fields; the `revision` query parameter caps `projectionRevision`. Event/frame evidence payloads additionally return `sourceCanonicalRevision` for each referenced source record. Evidence source revision may precede the insight revision but cannot exceed the insight or selected revision, and each reference must resolve within selected time and sequence. OpenAPI source: [`openapi-canonical-bff-v1.yaml`](openapi-canonical-bff-v1.yaml).
@@ -60,8 +61,8 @@ Current insights also carry a typed `evidenceGraph` with claim, event, frame, an
 | GET | `/api/v1/matches/{id}/insights` | EP05-S04 | `atSeconds,category?,truthClass?,cursor?,limit?` | evidence-classified supported tactical insights |
 | GET | `/api/v1/matches/{id}/key-moments` | EP05-S05 | `atSeconds?` | selected-time KeyMomentResponse with source hash and event/frame/claim references; proposed only, unavailable until canonical revisioned PostgreSQL read port exists |
 | GET | `/api/v1/matches/{id}/evidence/{insightId}` | EP07-S05 | `atSeconds,revision?,cursor?` | immutable event/frame/metric refs + conditions/missingness |
-| GET | `/api/v1/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,revision?,limit?` | canonical ordered catch-up, nextCursor/hasMore |
-| POST | `/api/v1/realtime/negotiate` | EP06-S02 | `{matchId,clientRevision?}` | authorized short-lived Azure SignalR connection details |
+| GET | `/api/v1/canonical/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,atSeconds?,revision?,limit?` | durable canonical snapshot + ordered catch-up; revision changes force replay from sequence -1 |
+| POST | `/api/v1/realtime/negotiate` | EP06-S02 | `{matchId,clientRevision?}` | authorized local SignalR path plus current canonical cursor; non-local profiles return `503 SIGNALR_UNAVAILABLE` until an Azure provider exists |
 | GET | `/api/v1/teams` | EP07-S01/S02 | `competitionId?,cursor?,limit?` | actual synthetic fixture team catalogue, never source-code clubs |
 | GET | `/api/v1/teams/{id}/profile` | EP07-S06 | `window?,asOf?` | evidence-backed tactics, formations as nominal metadata only |
 | GET | `/api/v1/players` | EP07-S06 | `teamId?,cursor?,limit?` | synthetic/rights-cleared participant list |
@@ -100,9 +101,11 @@ With PostgreSQL configured to a single approved loopback host in that explicit l
 
 ## Synchronization and pagination example
 1. UI chooses selected 55:08; all page queries add `atSeconds=3308` and match/contract revision. A 55:09 goal, its tactical insight, evidence and AI explanation cannot appear in this view.
-2. Live cursor `lastSequence=N+1` arrives while user scrubs; show "New match update — return to live" but keep `SelectedTime`; fetch on explicit click only.
-3. Historical snapshot `revision=R` and evidence `revision=R` must match. On 409 revision conflict, refetch atomic snapshot, invalidate stale queries by clientContextRevision and rerender after new evidence resolves.
-4. Pagination: stable `(matchId,revision,sequence)` cursor; max proposed 100 events per page; endpoint rejects excessive unbounded requests with 400 or 413; complete data not duplicated/omitted across pages.
+2. On initial load, request canonical backfill from `afterSequence=-1`, negotiate realtime, join the match group, then backfill again to close the race between snapshot and group subscription.
+3. A newer cursor triggers canonical backfill. Revision mismatch or cursor ahead of durable head restarts from sequence -1; duplicate pages are reduced idempotently.
+4. If a live cursor arrives while the viewer is in historical mode, show a nonintrusive update indicator and keep `SelectedTime`; refresh only after the user explicitly returns to LIVE. A cursor alone does not prove a new insight exists.
+5. Historical snapshot revision and evidence revision must match. On 409, refetch an atomic snapshot and invalidate stale queries before rendering resolved evidence.
+6. Pagination uses a stable `(matchId,revision,sequence)` cursor and at most 100 events per page; excessive or unbounded requests fail, and adjacent pages neither duplicate nor omit data.
 
 ## Errors, security and evolution
 `application/problem+json` with `type,title,status,detail,instance,correlationId` and typed `code`: `INVALID_TIME`, `SCHEMA_UNSUPPORTED`, `EVIDENCE_MISSING`, `REVISION_CONFLICT`, `INSUFFICIENT_TRACKING`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMITED`, `REQUEST_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `DEPENDENCY_UNAVAILABLE`. Current verified validation, evidence, size and rate-limit failures use `INVALID_REQUEST`, `EVIDENCE_MISSING`, `REQUEST_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE` and `RATE_LIMITED`. Use 400 for validation, 401 unauthenticated, 403 denied, 404 inaccessible/unknown, 409 revision/conflict, 413 oversized, 415 unsupported media type, 422 semantically invalid envelope, 429 exhausted rate, 503 unavailable. No sensitive provider payload in error detail.
