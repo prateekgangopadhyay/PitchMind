@@ -9,7 +9,8 @@ internal static class CanonicalMatchEndpoints
     public static IEndpointRouteBuilder MapCanonicalMatchEndpoints(this IEndpointRouteBuilder app)
     {
         var canonical = app.MapGroup("/api/v1/canonical")
-            .RequireAuthorization(ApiSecurityConfiguration.MatchReadPolicy);
+            .RequireAuthorization(ApiSecurityConfiguration.MatchReadPolicy)
+            .RequireRateLimiting("api");
         canonical.MapGet("/fixtures", async (
             string? afterMatchId, int? limit, IMatchProjectionReader projections, HttpContext context,
             CancellationToken cancellationToken) =>

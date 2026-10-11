@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Net;
 using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
@@ -35,12 +37,16 @@ internal static class ApiTestHost
                 ["Authentication:Audience"] = audience
             };
             builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(settings));
-            builder.ConfigureTestServices(services => services.AddAuthentication(options =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = "test";
                     options.DefaultChallengeScheme = "test";
                 })
-                .AddScheme<AuthenticationSchemeOptions, TestRoleAuthenticationHandler>("test", _ => { }));
+                    .AddScheme<AuthenticationSchemeOptions, TestRoleAuthenticationHandler>("test", _ => { });
+                services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>();
+            });
         });
 
     public static WebApplicationFactory<Program> CreateJwtFactory(string issuer, string audience, RSA signingKey)
@@ -62,14 +68,17 @@ internal static class ApiTestHost
                     ["Authentication:Issuer"] = issuer,
                     ["Authentication:Audience"] = audience
                 }));
-            builder.ConfigureTestServices(services => services.PostConfigure<JwtBearerOptions>(
-                JwtBearerDefaults.AuthenticationScheme, options =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
                 {
                     // Keep discovery local while exercising production token-validation parameters.
                     options.Authority = null;
                     options.MetadataAddress = string.Empty;
                     options.ConfigurationManager = configurationManager;
-                }));
+                });
+                services.AddSingleton<IStartupFilter, TestRemoteIpStartupFilter>();
+            });
         });
     }
 
@@ -79,6 +88,20 @@ internal static class ApiTestHost
         client.DefaultRequestHeaders.Add("X-Test-Role", role);
         return client;
     }
+}
+
+internal sealed class TestRemoteIpStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use(async (context, nextMiddleware) =>
+        {
+            var address = context.Request.Headers["X-Test-Remote-IP"].ToString();
+            if (IPAddress.TryParse(address, out var parsed)) context.Connection.RemoteIpAddress = parsed;
+            await nextMiddleware();
+        });
+        next(app);
+    };
 }
 
 internal sealed class TestRoleAuthenticationHandler(

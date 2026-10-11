@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
 namespace PitchMind.Api;
@@ -9,6 +12,18 @@ public static class ApiSecurityConfiguration
     public const string MatchReadPolicy = "match-read";
     public const string EvidenceReadPolicy = "evidence-read";
     public const string OperationsAdminPolicy = "operations-admin";
+
+    public static string GetRateLimitPartitionKey(HttpContext context)
+    {
+        var subject = context.User.FindFirstValue("sub");
+        if (context.User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(subject))
+        {
+            var subjectHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subject))).ToLowerInvariant();
+            return $"subject:{subjectHash}";
+        }
+
+        return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+    }
 
     public static ApiJwtSettings? ResolveJwtSettings(bool localDevelopmentProfile, string? runtimeProfile, IConfiguration configuration)
     {

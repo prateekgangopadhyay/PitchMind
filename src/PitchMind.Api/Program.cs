@@ -75,8 +75,20 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (rejection, cancellationToken) =>
+    {
+        var context = rejection.HttpContext;
+        var problem = new ApiProblemResponse("about:blank", "Rate limit exceeded",
+            StatusCodes.Status429TooManyRequests, "RATE_LIMITED", context.TraceIdentifier,
+            Instance: context.Request.Path);
+        await Results.Json(problem, statusCode: StatusCodes.Status429TooManyRequests,
+            contentType: "application/problem+json").ExecuteAsync(context);
+    };
+    options.AddPolicy("api", context => RateLimitPartition.GetFixedWindowLimiter(
+        ApiSecurityConfiguration.GetRateLimitPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        ApiSecurityConfiguration.GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));

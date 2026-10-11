@@ -63,6 +63,57 @@ public sealed class ApiSecurityTests
     }
 
     [Fact]
+    public async Task Canonical_quota_follows_validated_subject_across_client_ips_and_returns_typed_problem()
+    {
+        const string issuer = "https://issuer.test.local/tenant/v2.0";
+        const string audience = "api://pitchmind-test";
+        using var signingKey = RSA.Create(2048);
+        using var factory = ApiTestHost.CreateJwtFactory(issuer, audience, signingKey);
+        using var client = factory.CreateClient();
+        var token = CreateToken(issuer, audience, signingKey, "fan");
+
+        for (var requestNumber = 0; requestNumber < 120; requestNumber++)
+        {
+            using var response = await SendBearer(client, "/api/v1/canonical/fixtures", token, "192.0.2.10");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        }
+
+        using var requestFromAnotherIp = await SendBearer(client, "/api/v1/canonical/fixtures", token, "198.51.100.20");
+        Assert.Equal(HttpStatusCode.TooManyRequests, requestFromAnotherIp.StatusCode);
+        Assert.Equal("application/problem+json", requestFromAnotherIp.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("RATE_LIMITED", await ProblemCode(requestFromAnotherIp));
+        Assert.DoesNotContain("local-security-test", await requestFromAnotherIp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Analyst_quota_remains_thirty_per_minute_for_local_ip_fallback()
+    {
+        using var factory = ApiTestHost.CreateFactory();
+        using var client = factory.CreateClient();
+        var route = "/api/v1/matches/00000000-0000-0000-0000-000000000001/analyst";
+
+        for (var requestNumber = 0; requestNumber < 30; requestNumber++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, route)
+            {
+                Content = System.Net.Http.Json.JsonContent.Create(new { insightId = "test", atSeconds = 0, audience = "fan" })
+            };
+            request.Headers.Add("X-Test-Remote-IP", "203.0.113.10");
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+
+        using var rejected = new HttpRequestMessage(HttpMethod.Post, route)
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(new { insightId = "test", atSeconds = 0, audience = "fan" })
+        };
+        rejected.Headers.Add("X-Test-Remote-IP", "203.0.113.10");
+        using var rejectedResponse = await client.SendAsync(rejected);
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejectedResponse.StatusCode);
+        Assert.Equal("RATE_LIMITED", await ProblemCode(rejectedResponse));
+    }
+
+    [Fact]
     public async Task Canonical_routes_reject_anonymous_and_unapproved_roles()
     {
         using var factory = ApiTestHost.CreateFactory();
@@ -164,10 +215,18 @@ public sealed class ApiSecurityTests
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static async Task<HttpResponseMessage> SendBearer(HttpClient client, string route, string token)
+    private static async Task<HttpResponseMessage> SendBearer(HttpClient client, string route, string token,
+        string? testRemoteIp = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, route);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        if (testRemoteIp is not null) request.Headers.Add("X-Test-Remote-IP", testRemoteIp);
         return await client.SendAsync(request);
+    }
+
+    private static async Task<string?> ProblemCode(HttpResponseMessage response)
+    {
+        using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return body.RootElement.GetProperty("code").GetString();
     }
 }

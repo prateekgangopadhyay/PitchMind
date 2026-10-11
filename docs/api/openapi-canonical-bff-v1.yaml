@@ -6,7 +6,9 @@ info:
     PostgreSQL-backed, selected-time read contracts. These routes are separate from
     the fixture-backed demo API. A validated bearer token with the fan, analyst, or
     admin role is required. Full evidence payloads additionally require analyst or
-    admin. Non-local runtime startup requires configured HTTPS issuer and audience.
+    admin. Canonical requests are limited to 120 per minute per validated subject,
+    partitioned by lowercase SHA-256 of `sub`; excess requests return typed 429
+    Problem Details. Non-local runtime startup requires configured HTTPS issuer and audience.
 servers:
   - url: /
 security:
@@ -25,6 +27,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Latest persisted match projections.
           content:
@@ -42,6 +45,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Persisted state projection at the selected time.
           content:
@@ -62,6 +66,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Sequence-ordered canonical event page bounded by selected time.
           content:
@@ -99,6 +104,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Durable selected-time snapshot and bounded ordered catch-up page.
           content:
@@ -119,6 +125,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Persisted insights with resolvable selected-time evidence.
           content:
@@ -141,6 +148,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: One persisted insight with resolvable selected-time evidence.
           content:
@@ -163,6 +171,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Persisted insight with complete event/frame evidence visible at the selected time and sequence.
           content:
@@ -183,6 +192,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '200':
           description: Point-in-time persisted snapshot and event page.
           content:
@@ -201,6 +211,7 @@ paths:
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '400':
           description: Invalid match identifier, selected time, or revision; returns sanitized Problem Details.
           content:
@@ -240,6 +251,11 @@ paths:
         '503': { $ref: '#/components/responses/Problem' }
 components:
   responses:
+    RateLimited:
+      description: The authenticated subject exceeded its fixed-window API quota.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ApiProblem' }
     Unauthorized:
       description: Missing or invalid bearer token.
       content:
@@ -247,6 +263,11 @@ components:
           schema: { $ref: '#/components/schemas/ApiProblem' }
     Forbidden:
       description: Authenticated caller does not have a role allowed for this operation.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ApiProblem' }
+    Problem:
+      description: Typed, sanitized API failure.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ApiProblem' }
@@ -277,12 +298,6 @@ components:
       name: limit
       in: query
       schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-  responses:
-    Problem:
-      description: Typed, sanitized API failure.
-      content:
-        application/problem+json:
-          schema: { $ref: '#/components/schemas/ApiProblem' }
   schemas:
     RealtimeNegotiateRequestV1:
       type: object
