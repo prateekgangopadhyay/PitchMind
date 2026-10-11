@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [[ $# -ne 1 ]]; then
-  echo "Usage: scripts/codegraph-pr-context.sh <exact-local-base-ref>" >&2
+  echo "Usage: bash scripts/codegraph-pr-context.sh <exact-local-base-ref>" >&2
   echo "For stacked PRs, pass the checked-out parent's exact local ref or commit, not origin/main." >&2
   exit 2
 fi
