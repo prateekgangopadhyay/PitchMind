@@ -32,7 +32,7 @@ In a checked-out PR worktree where the *actual parent* ref is present and an anc
 
 ```sh
 git fetch origin <parent-branch>
-scripts/codegraph-pr-context.sh origin/<parent-branch>
+bash scripts/codegraph-pr-context.sh origin/<parent-branch>
 # Or use an exact ancestor commit SHA as the argument.
 ```
 
