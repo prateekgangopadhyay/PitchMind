@@ -160,13 +160,11 @@ def load_profile(path: Path) -> dict[str, Any]:
     if isinstance(queue_capacity, bool) or not isinstance(queue_capacity, int) or not 1 <= queue_capacity <= 100_000:
         raise HarnessError("queueCapacityRecords must be an integer from 1 to 100000")
     duration = workload.get("durationSeconds")
-    if duration is not None and (
-        isinstance(duration, bool)
-        or not isinstance(duration, (int, float))
-        or not math.isfinite(duration)
-        or duration <= 0
-    ):
-        raise HarnessError("durationSeconds must be null or a positive number")
+    if duration is not None:
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+            raise HarnessError("durationSeconds must be null or a positive number")
+        if duration <= 0 or duration > 3600 or (isinstance(duration, float) and not math.isfinite(duration)):
+            raise HarnessError("durationSeconds must be null or a finite number from greater than 0 through 3600")
     return profile
 
 

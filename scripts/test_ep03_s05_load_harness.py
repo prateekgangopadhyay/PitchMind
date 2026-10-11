@@ -97,6 +97,16 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
                 with self.assertRaisesRegex(HarnessError, "durationSeconds"):
                     load_profile(profile_path)
 
+    def test_profile_rejects_duration_above_runtime_bound(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        template = json.loads((repo_root / "docs/engineering/performance/ep03-s05-load-profile.json").read_text())
+        template["workload"]["durationSeconds"] = 10**400
+        with tempfile.TemporaryDirectory() as directory:
+            profile_path = Path(directory) / "profile.json"
+            profile_path.write_text(json.dumps(template))
+            with self.assertRaisesRegex(HarnessError, "through 3600"):
+                load_profile(profile_path)
+
     def test_execute_rejects_non_finite_duration_override_without_traceback_or_report(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         profile_path = repo_root / "docs/engineering/performance/ep03-s05-load-profile.json"
