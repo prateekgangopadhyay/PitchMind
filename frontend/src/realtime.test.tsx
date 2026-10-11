@@ -3,8 +3,8 @@ import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected,
 import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, CanonicalTimelineBackfill } from './api';
 import type { RealtimeTimelineState } from './realtime';
 
-const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120): CanonicalMatchSnapshot => ({
-  matchId: 'match-a', canonicalRevision: revision, selectedTimeSeconds: asOfSeconds, asOfSeconds, throughSequence,
+const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds): CanonicalMatchSnapshot => ({
+  matchId: 'match-a', canonicalRevision: revision, selectedTimeSeconds, asOfSeconds, throughSequence,
   algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64), provenance: 'synthetic',
   period: 1, phase: 'firsthalf', homeScore: 0, awayScore: 0, possessionTeamId: null,
   homeActivePlayers: 11, awayActivePlayers: 11, players: [],
@@ -17,12 +17,12 @@ const event = (sequence: number, clockSeconds = sequence * 60): CanonicalLedgerE
 
 const state = (): RealtimeTimelineState => ({
   matchId: 'match-a', mode: 'LIVE', selectedTimeSeconds: 60, canonicalRevision: 2, throughSequence: 0,
-  snapshot: snapshot(2, 0, 60), events: [event(0)], nextCursor: null, hasMore: false,
+  snapshot: snapshot(2, 0, 60, 5400), events: [event(0)], nextCursor: null, hasMore: false,
   needsBackfill: false, hasNewMatchUpdate: false, reconnecting: false,
 });
 
 const backfill = (items: CanonicalLedgerEvent[], options: Partial<CanonicalTimelineBackfill> = {}): CanonicalTimelineBackfill => {
-  const current = snapshot(2, 2, 120);
+  const current = snapshot(2, 2, 120, 5400);
   const page: CanonicalEventPage = {
     matchId: 'match-a', canonicalRevision: current.canonicalRevision, selectedTimeSeconds: current.selectedTimeSeconds,
     throughSequence: current.throughSequence, items, nextCursor: null, hasMore: false,
@@ -70,8 +70,26 @@ describe('realtime reconnect state', () => {
     const historical = selectHistoricalTime(state(), 45);
     expect(buildTimelineBackfillPath(historical)).toContain('atSeconds=45');
     expect(buildTimelineBackfillPath(returnToLive(historical))).toContain('atSeconds=5400');
-    expect(buildTimelineBackfillPath(historical)).toContain('afterSequence=0');
+    expect(buildTimelineBackfillPath(historical)).toContain('afterSequence=-1');
     expect(buildTimelineBackfillPath(historical)).toContain('revision=2');
+  });
+
+  it('replaces live events and snapshot with the selected historical context', () => {
+    const live = { ...state(), events: [event(0), event(1, 120), event(2, 240)], throughSequence: 2,
+      snapshot: snapshot(2, 2, 240, 5400) };
+    const historical = selectHistoricalTime(live, 45);
+    const page = backfill([event(0)], { snapshot: snapshot(2, 0, 0, 45),
+      events: { ...backfill([]).events, selectedTimeSeconds: 45, throughSequence: 0, items: [event(0)] } });
+
+    const selected = applyBackfillPage(historical, page);
+
+    expect(selected.mode).toBe('HISTORICAL');
+    expect(selected.selectedTimeSeconds).toBe(45);
+    expect(selected.snapshot.selectedTimeSeconds).toBe(45);
+    expect(selected.snapshot.asOfSeconds).toBe(0);
+    expect(selected.events.map(item => item.sequence)).toEqual([0]);
+    expect(selected.throughSequence).toBe(0);
+    expect(selected.needsBackfill).toBe(false);
   });
 
   it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {
@@ -84,7 +102,7 @@ describe('realtime reconnect state', () => {
   });
 
   it('resets on a canonical revision change and requests the remaining replay pages', () => {
-    const changed = backfill([event(0), event(1)], { snapshot: snapshot(3, 2, 120), revisionChanged: true,
+    const changed = backfill([event(0), event(1)], { snapshot: snapshot(3, 2, 120, 5400), revisionChanged: true,
       events: { ...backfill([]).events, canonicalRevision: 3, items: [event(0), event(1)], hasMore: true, nextCursor: 'next' } });
     const next = applyBackfillPage(state(), changed);
     expect(next.canonicalRevision).toBe(3);
@@ -98,6 +116,10 @@ describe('realtime reconnect state', () => {
     const gap = applyBackfillPage(state(), backfill([event(2)]));
     expect(gap.reconnecting).toBe(true);
     expect(gap.throughSequence).toBe(0);
-    expect(() => applyBackfillPage(state(), backfill([event(1, 121)]))).toThrow(/outside the selected match context/);
+    const selected = selectHistoricalTime(state(), 120);
+    const futureEvent = event(1, 121);
+    const futurePage = backfill([futureEvent], { snapshot: snapshot(2, 2, 120, 120),
+      events: { ...backfill([]).events, selectedTimeSeconds: 120, items: [futureEvent] } });
+    expect(() => applyBackfillPage(selected, futurePage)).toThrow(/outside the selected match context/);
   });
 });
