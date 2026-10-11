@@ -37,3 +37,7 @@ button, select { min-height: 44px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+.realtime-status { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.realtime-status > p { margin: 0; }
+.new-match-updates { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .6rem .8rem; border-left: 3px solid var(--emerald, #54d69b); border-radius: .4rem; background: rgba(84, 214, 155, .08); }
