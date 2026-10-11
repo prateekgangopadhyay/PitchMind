@@ -7,20 +7,25 @@ if [[ "$#" -ne 2 ]]; then
 fi
 
 sbom_source="$1"
-sbom_output="$2"
+sbom_output_input="$2"
 if [[ ! -d "$sbom_source" ]]; then
   printf 'SBOM source must be a directory: %s\n' "$sbom_source" >&2
   exit 2
 fi
 sbom_source="$(cd -- "$sbom_source" && pwd -P)"
-sbom_output_parent="$(mkdir -p -- "$(dirname -- "$sbom_output")" && cd -- "$(dirname -- "$sbom_output")" && pwd -P)"
-sbom_output="${sbom_output_parent}/$(basename -- "$sbom_output")"
+if [[ -e "$sbom_output_input" || -L "$sbom_output_input" ]]; then
+  printf 'SBOM output path must not already exist or be a symlink.\n' >&2
+  exit 2
+fi
+sbom_output="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$sbom_output_input")"
 case "$sbom_output" in
   "$sbom_source"|"$sbom_source"/*)
     printf 'SBOM output must be outside the scanned source directory.\n' >&2
     exit 2
     ;;
 esac
+sbom_output_parent="$(mkdir -p -- "$(dirname -- "$sbom_output")" && cd -- "$(dirname -- "$sbom_output")" && pwd -P)"
+sbom_output="${sbom_output_parent}/$(basename -- "$sbom_output")"
 
 syft_image='ghcr.io/anchore/syft:v1.54.1@sha256:3eb5379ba7b409c3f4069b686110527af0c47df993fa5c10d13e7cf34f49b1aa'
 if ! command -v docker >/dev/null 2>&1; then
