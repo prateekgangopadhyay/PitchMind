@@ -13,9 +13,10 @@ builder.Services.AddHealthChecks();
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
-var localRealtimeEnabled = builder.Environment.IsDevelopment() &&
-    builder.Configuration["Runtime:Profile"] == "local" &&
-    string.Equals(builder.Configuration["Realtime:Provider"], "local", StringComparison.OrdinalIgnoreCase);
+var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
+    builder.Environment.EnvironmentName,
+    builder.Configuration["Runtime:Profile"],
+    builder.Configuration["Realtime:Provider"]);
 if (localRealtimeEnabled)
 {
     builder.Services.AddSignalR();
@@ -35,7 +36,11 @@ if (!string.IsNullOrWhiteSpace(postgresConnectionString))
     builder.Services.AddSingleton(dataSource);
     builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
     builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
-    if (localRealtimeEnabled && LocalPostgresConnectionPolicy.IsLoopbackConnectionString(postgresConnectionString))
+    if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
+        builder.Environment.EnvironmentName,
+        builder.Configuration["Runtime:Profile"],
+        builder.Configuration["Realtime:Provider"],
+        postgresConnectionString))
     {
         builder.Services.AddSingleton<PostgresOutboxDispatcher>();
         builder.Services.AddHostedService<OutboxDispatchWorker>(services => new OutboxDispatchWorker(

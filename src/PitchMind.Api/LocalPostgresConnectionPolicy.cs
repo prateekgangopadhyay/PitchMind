@@ -27,4 +27,17 @@ public static class LocalPostgresConnectionPolicy
             return false;
         }
     }
+
+    public static bool IsLocalRealtimeProfile(string? environmentName, string? runtimeProfile, string? provider) =>
+        string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) &&
+        runtimeProfile == "local" &&
+        string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
+
+    public static bool ShouldRegisterOutboxWorker(
+        string? environmentName,
+        string? runtimeProfile,
+        string? provider,
+        string? postgresConnectionString) =>
+        IsLocalRealtimeProfile(environmentName, runtimeProfile, provider) &&
+        IsLoopbackConnectionString(postgresConnectionString);
 }
