@@ -471,6 +471,74 @@ public sealed class AuthorizationAbuseControlTests
         Assert.False(new PitchMind.Api.RealtimeConnectionGate(0).TryAcquire());
     }
 
+    [Fact]
+    public async Task Realtime_connection_gate_never_admits_more_than_its_cap_under_contention()
+    {
+        const int cap = 8;
+        const int contenders = 64;
+        var gate = new PitchMind.Api.RealtimeConnectionGate(cap);
+        var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attemptsFinished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHolders = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readyCount = 0;
+        var completedAttempts = 0;
+        var admitted = 0;
+        var active = 0;
+        var peak = 0;
+
+        var tasks = Enumerable.Range(0, contenders).Select(_ => Task.Run(async () =>
+        {
+            if (Interlocked.Increment(ref readyCount) == contenders) ready.TrySetResult(true);
+            await start.Task.ConfigureAwait(false);
+
+            var acquired = gate.TryAcquire();
+            if (acquired)
+            {
+                Interlocked.Increment(ref admitted);
+                var nowActive = Interlocked.Increment(ref active);
+                int observed;
+                while (nowActive > (observed = Volatile.Read(ref peak)) &&
+                       Interlocked.CompareExchange(ref peak, nowActive, observed) != observed) { }
+            }
+
+            if (Interlocked.Increment(ref completedAttempts) == contenders)
+                attemptsFinished.TrySetResult(true);
+
+            if (acquired)
+            {
+                await releaseHolders.Task.ConfigureAwait(false);
+                Interlocked.Decrement(ref active);
+                gate.Release();
+            }
+
+            return acquired;
+        })).ToArray();
+
+        try
+        {
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            start.TrySetResult(true);
+            await attemptsFinished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(cap, admitted);
+            Assert.Equal(cap, peak);
+            Assert.Equal(cap, active);
+        }
+        finally
+        {
+            releaseHolders.TrySetResult(true);
+        }
+
+        var results = await Task.WhenAll(tasks);
+        Assert.Equal(cap, results.Count(result => result));
+        Assert.Equal(0, active);
+
+        for (var i = 0; i < cap; i++) Assert.True(gate.TryAcquire());
+        Assert.False(gate.TryAcquire());
+        for (var i = 0; i < cap; i++) gate.Release();
+    }
+
     private static HttpClient AuthorizedClient(WebApplicationFactory<Program> factory, string role, string? matchId)
     {
         var client = factory.CreateClient();
