@@ -165,6 +165,16 @@ describe('realtime reconnect state', () => {
     const afterOlderSequencePage = applyBackfillPage(sequenceUpdate, olderSequencePage);
     expect(afterOlderSequencePage.observedLiveSequence).toBe(7);
     expect(afterOlderSequencePage.needsBackfill).toBe(true);
+
+    const newestPage = backfill([event(6), event(7)], {
+      snapshot: snapshot(2, 7, 420, 5400),
+      events: { ...backfill([]).events, throughSequence: 7, items: [event(6), event(7)] },
+    });
+    const caughtUp = applyBackfillPage(afterOlderSequencePage, newestPage);
+    expect(caughtUp.needsBackfill).toBe(false);
+    const delayedOlderResponse = applyBackfillPage(caughtUp, olderSequencePage);
+    expect(delayedOlderResponse).toBe(caughtUp);
+    expect(delayedOlderResponse.snapshot.throughSequence).toBe(7);
   });
 
   it('merges duplicate catch-up pages idempotently and advances the cursor contiguously', () => {
