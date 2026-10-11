@@ -58,7 +58,8 @@ flowchart TB
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
     Candidate["Untrusted explanation candidate port"]
-    Ports["IMatchEventStore / IMatchProjectionStore / ICanonicalUpdateStore / IOutboxPublisher / IModelClient / IRealtimeNotifier / inbox transaction"]
+    VerifyCandidate["Deterministic candidate verifier + evidence-only reformulation"]
+    Ports["IMatchEventStore / IMatchProjectionReader / IMatchInsightReader / ICanonicalUpdateStore / IOutboxPublisher / inbox transaction"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -79,18 +80,18 @@ flowchart TB
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
-  Explain --> Candidate --> Ports
-  Pg -. "implements event, projection read and canonical update ports" .-> Ports
+  Explain --> Candidate --> VerifyCandidate --> Ports
+  Pg -. "implements event, projection/insight read and canonical update ports" .-> Ports
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
   Pg -. "implements consumer inbox" .-> Ports
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
-  Model -. "implements candidate generator; EP08-S04 verifier still required" .-> Candidate
+  Model -. "implements candidate generator" .-> Candidate
   Cache -. "optional" .-> Ports
 ```
 
-The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code, but the worker has no message/request consumer and the adapter has not been called against a real Foundry deployment. The dashed adapter arrow above is a target adapter implemented locally, not evidence of an operational Azure path. Candidate output remains untrusted and cannot be displayed or persisted as validated explanation.
+The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code, and the Application now includes an EP08-S04 verifier that checks packet identity/time/revision and evidence membership while discarding model-authored prose. It reformulates only selected insight classification and evidence metadata. The worker has no message/request consumer and the adapter has not been called against a real Foundry deployment. The dashed adapter arrow above is a target adapter implemented locally, not evidence of an operational Azure path. No public route uses the verifier yet.
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
