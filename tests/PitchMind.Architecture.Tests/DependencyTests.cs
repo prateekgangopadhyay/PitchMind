@@ -365,6 +365,7 @@ public sealed class DependencyTests
                 "let clockSeconds = 987654321;\n" +
                 "const match = {};\n" +
                 "match.clockSeconds = 7;\n" +
+                "class Clock { #clockSeconds; update() { this.#clockSeconds = 7; this.#clockSeconds++; ++this.#clockSeconds; } }\n" +
                 "const unrelated = { clockSeconds: clockSeconds };");
 
             var violations = FindFixtureDataMarkers(
@@ -614,7 +615,7 @@ public sealed class DependencyTests
         // alias is written after its initializer, stop trusting its initializer and fail
         // closed when it is later used for a candidate football property.
         var assignment = new Regex(
-            @"(?<![A-Za-z0-9_$?.])(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?:>>>=|<<=|>>=|\*\*=|&&=|\|\|=|\?\?=|\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|=(?!=|>))",
+            @"(?<![A-Za-z0-9_$?.#])(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?:>>>=|<<=|>>=|\*\*=|&&=|\|\|=|\?\?=|\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|=(?!=|>))",
             RegexOptions.CultureInvariant);
         foreach (Match match in assignment.Matches(source))
         {
@@ -628,7 +629,7 @@ public sealed class DependencyTests
         }
 
         var prefixMutation = new Regex(
-            @"(?<![A-Za-z0-9_$?.])(?:\+\+|--)\s*(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)",
+            @"(?<![A-Za-z0-9_$?.#])(?:\+\+|--)\s*(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)",
             RegexOptions.CultureInvariant);
         foreach (Match match in prefixMutation.Matches(source))
         {
