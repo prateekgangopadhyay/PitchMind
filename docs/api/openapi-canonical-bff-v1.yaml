@@ -6,9 +6,11 @@ info:
     PostgreSQL-backed, selected-time read contracts. These routes are separate from
     the fixture-backed demo API. A validated bearer token with the fan, analyst, or
     admin role is required. Full evidence payloads additionally require analyst or
-    admin. Canonical requests are limited to 120 per minute per validated subject,
-    partitioned by lowercase SHA-256 of `sub`; excess requests return typed 429
-    Problem Details. Non-local runtime startup requires configured HTTPS issuer and audience.
+    admin. After authentication and before authorization, canonical requests are
+    limited to 120 per minute per partition. Validated `sub` values use lowercase
+    SHA-256 keys; anonymous, invalid-token, and subjectless requests fall back to IP.
+    Excess requests return typed 429 Problem Details. Limits are process-local and
+    are not shared across API instances. Non-local runtime startup requires configured HTTPS issuer and audience.
 servers:
   - url: /
 security:
@@ -252,7 +254,7 @@ paths:
 components:
   responses:
     RateLimited:
-      description: The authenticated subject exceeded its fixed-window API quota.
+      description: The caller exceeded its fixed-window API quota, partitioned by validated subject hash or IP fallback.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/ApiProblem' }

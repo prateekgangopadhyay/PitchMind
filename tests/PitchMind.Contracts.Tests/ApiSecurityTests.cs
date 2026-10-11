@@ -86,6 +86,31 @@ public sealed class ApiSecurityTests
     }
 
     [Fact]
+    public async Task Anonymous_canonical_quota_uses_client_ip_before_authorization()
+    {
+        const string issuer = "https://issuer.test.local/tenant/v2.0";
+        const string audience = "api://pitchmind-test";
+        using var signingKey = RSA.Create(2048);
+        using var factory = ApiTestHost.CreateJwtFactory(issuer, audience, signingKey);
+        using var client = factory.CreateClient();
+
+        for (var requestNumber = 0; requestNumber < 120; requestNumber++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/canonical/fixtures");
+            request.Headers.Add("X-Test-Remote-IP", "192.0.2.50");
+            using var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+
+        using var limitedRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/canonical/fixtures");
+        limitedRequest.Headers.Add("X-Test-Remote-IP", "192.0.2.50");
+        using var limitedResponse = await client.SendAsync(limitedRequest);
+        Assert.Equal(HttpStatusCode.TooManyRequests, limitedResponse.StatusCode);
+        Assert.Equal("application/problem+json", limitedResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("RATE_LIMITED", await ProblemCode(limitedResponse));
+    }
+
+    [Fact]
     public async Task Analyst_quota_remains_thirty_per_minute_for_local_ip_fallback()
     {
         using var factory = ApiTestHost.CreateFactory();

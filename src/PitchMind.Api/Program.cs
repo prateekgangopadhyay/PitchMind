@@ -141,8 +141,8 @@ app.Use(async (context, next) =>
     }
 });
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseRateLimiter();
+app.UseAuthorization();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
 app.MapCanonicalMatchEndpoints();
