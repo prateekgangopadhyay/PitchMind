@@ -388,6 +388,17 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             {("postgres", "5432", 5432), ("redis", "6379", 6379)},
         )
 
+    def test_compose_resolves_the_existing_local_volume_names_offline(self) -> None:
+        config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
+
+        self.assertEqual(
+            config.get("volumes"),
+            {
+                "postgres_data": {"name": "pitchmind_postgres_data"},
+                "redis-data": {"name": "pitchmind_redis_data"},
+            },
+        )
+
     def test_resolved_compose_port_check_handles_inline_lists_and_aliases(self) -> None:
         compose_file = Path(self.temp.name) / "compose-public-ports.yml"
         compose_file.write_text(
