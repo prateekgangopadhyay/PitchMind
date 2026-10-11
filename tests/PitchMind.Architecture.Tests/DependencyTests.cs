@@ -129,7 +129,7 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
-    public void ProductionFixtureGuard_RejectsCandidateClockAndSequenceLiterals()
+    public void ProductionFixtureGuard_RejectsCandidateFootballNumericLiterals()
     {
         var root = FindRepositoryRoot();
         var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
@@ -139,8 +139,14 @@ public sealed class DependencyTests
         var finalEvent = feed.RootElement[feed.RootElement.GetArrayLength() - 1];
         var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
         var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
+        var firstPitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var firstPlayer = firstEvent.GetProperty("playerPositions")[0];
+        var firstPlayerX = firstPlayer.GetProperty("x").GetRawText();
+        var firstPlayerSpeed = firstPlayer.GetProperty("speed").GetRawText();
         var finalSequence = finalEvent.GetProperty("sequence").GetInt32();
         var finalClockSeconds = finalEvent.GetProperty("clockSeconds").GetInt32();
+        var finalPlayer = finalEvent.GetProperty("playerPositions")[0];
+        var finalPlayerStamina = finalPlayer.GetProperty("stamina").GetRawText();
 
         var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-guard-");
         try
@@ -149,8 +155,12 @@ public sealed class DependencyTests
             File.WriteAllText(source,
                 $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
                 $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
+                $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
+                $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
+                $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
+                $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
                 "const unrelatedPageSize = 25;");
 
             var violations = FindFixtureDataMarkers(
@@ -158,11 +168,15 @@ public sealed class DependencyTests
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Equal(8, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"stamina: {finalPlayerStamina}", StringComparison.Ordinal));
         }
         finally
         {
@@ -260,8 +274,7 @@ public sealed class DependencyTests
 
         foreach (var sourceEvent in document.RootElement.EnumerateArray())
         {
-            AddNumberProperty(sourceEvent, "sequence", markers);
-            AddNumberProperty(sourceEvent, "clockSeconds", markers);
+            AddFootballNumericMarkers(sourceEvent, markers);
         }
 
         return markers.ToDictionary(
@@ -269,6 +282,36 @@ public sealed class DependencyTests
             pair => (IReadOnlySet<string>)pair.Value,
             StringComparer.OrdinalIgnoreCase);
     }
+
+    private static void AddFootballNumericMarkers(JsonElement element, IDictionary<string, HashSet<string>> markers)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (FootballNumericProperties.Contains(property.Name))
+                {
+                    AddNumberProperty(element, property.Name, markers);
+                }
+
+                AddFootballNumericMarkers(property.Value, markers);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                AddFootballNumericMarkers(item, markers);
+            }
+        }
+    }
+
+    private static readonly HashSet<string> FootballNumericProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sequence", "clockSeconds", "period", "pitchX", "pitchY", "ballX", "ballY", "endX", "endY",
+        "jerseyNumber", "x", "y", "speed", "distanceCovered", "heatIndex", "passAccuracy", "touches",
+        "stamina", "heartRate"
+    };
 
     private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
     {
