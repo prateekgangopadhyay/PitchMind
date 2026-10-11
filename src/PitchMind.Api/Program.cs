@@ -14,6 +14,13 @@ var builder = WebApplication.CreateBuilder(args);
 var runtimeProfile = builder.Configuration["Runtime:Profile"];
 RuntimeProfileGuard.Validate(builder.Environment.EnvironmentName, runtimeProfile);
 RuntimeProfileGuard.ConfigureLocalServices(builder.Services, runtimeProfile);
+ApiSecurity.Configure(builder);
+var corsOrigins = ApiSecurity.GetConfiguredCorsOrigins(builder.Configuration, builder.Environment);
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options => options.AddPolicy("ApiCors", policy =>
+        policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
+}
 if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
 {
     var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
@@ -29,6 +36,12 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
     }
 }
+else
+{
+    // Until an Azure PostgreSQL adapter is configured, authenticated canonical reads fail closed.
+    builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
+    builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+}
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
@@ -40,18 +53,31 @@ builder.Services.AddRateLimiter(options =>
         await ApiProblem(httpContext, StatusCodes.Status429TooManyRequests, "RATE_LIMITED",
             "Too many requests", "Retry after the current rate limit window").ExecuteAsync(httpContext);
     };
+    options.AddPolicy("api", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 var app = builder.Build();
+app.UseRouting();
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
-    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    ApiSecurity.AddSecurityHeaders(context, false);
     if (context.Request.Path.StartsWithSegments("/api/v1"))
         context.Response.Headers["X-Contract-Version"] = ContractVersion.V1;
+    try { await next(context); }
+    finally { ApiSecurity.AuditProtectedRequest(context, app.Logger); }
+});
+if (corsOrigins.Length > 0) app.UseCors("ApiCors");
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.Use(async (context, next) =>
+{
     try
     {
         if (context.Request.ContentLength is > 4096)
@@ -131,20 +157,22 @@ app.Use(async (context, next) =>
             throw;
     }
 });
-app.UseRateLimiter();
-app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
-app.MapHealthChecks("/health");
-// Canonical reads are local-only until EP06-S04 provides authenticated cloud access.
-if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
-    app.MapCanonicalMatchEndpoints();
-app.MapGet("/api/v1/matches", (HttpContext context) => MatchDataUnavailable(context));
-var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
+app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api"))).AllowAnonymous();
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapCanonicalMatchEndpoints();
+var matches = app.MapGroup("/api/v1/matches")
+    .RequireAuthorization("MatchRead")
+    .RequireRateLimiting("api");
+matches.MapGet("", (HttpContext context) => MatchDataUnavailable(context));
+var match = matches.MapGroup("/{matchId:guid}");
 match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/events", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/insights", (HttpContext context) => MatchDataUnavailable(context));
-match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context));
-match.MapGet("/evidence/{insightId}/replay", (HttpContext context) => MatchDataUnavailable(context));
-match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync).RequireRateLimiting("analyst");
+match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context)).RequireAuthorization("MatchReplay");
+match.MapGet("/evidence/{insightId}/replay", (HttpContext context) => MatchDataUnavailable(context)).RequireAuthorization("MatchReplay");
+match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync)
+    .RequireAuthorization("AnalystAction")
+    .RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();

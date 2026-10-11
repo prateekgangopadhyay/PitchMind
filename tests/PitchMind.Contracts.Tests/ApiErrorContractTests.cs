@@ -41,6 +41,7 @@ public sealed class ApiErrorContractTests : IAsyncLifetime
         start.Environment["DOTNET_ENVIRONMENT"] = "Development";
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         start.Environment["Runtime__Profile"] = "local";
+        start.Environment["Identity__DevelopmentHeaderAuthEnabled"] = "true";
 
         _api = Process.Start(start) ?? throw new InvalidOperationException("Could not start the local API process.");
         _api.OutputDataReceived += (_, eventArgs) => AppendOutput(eventArgs.Data);
@@ -48,6 +49,8 @@ public sealed class ApiErrorContractTests : IAsyncLifetime
         _api.BeginOutputReadLine();
         _api.BeginErrorReadLine();
         _client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(3) };
+        _client.DefaultRequestHeaders.Add("X-Dev-Subject", "api-error-test-analyst");
+        _client.DefaultRequestHeaders.Add("X-Dev-Roles", "analyst");
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
         while (DateTimeOffset.UtcNow < deadline)

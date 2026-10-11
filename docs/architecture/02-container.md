@@ -9,7 +9,8 @@ flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
   A --> H["Health endpoints"]
   A --> MR["Fixture/demo routes: fail-closed 503"]
-  A --> C["Canonical BFF routes (Development + local profile only)"]
+  A --> C["Canonical BFF routes (role-protected)"]
+  ID["Entra issuer / audience"] -. "JWT bearer in Azure; local header adapter only when explicitly enabled" .-> A
   C --> Q["IMatchProjectionReader / IMatchInsightReader"]
   Q --> PG["Local PostgreSQL projections, events, insights, evidence"]
   T["Deterministic test golden generator"] -. test assemblies only .-> Tests["Automated tests"]
@@ -19,7 +20,7 @@ flowchart LR
   RP -. "no canonical admission or persistence" .-> X["Clock / units / identity semantics unresolved"]
 ```
 
-The local canonical BFF reads persisted projections, ledger events, insights and evidence through `PostgresMatchProjectionReader` and `PostgresMatchInsightReader`; the registration is conditional on `Runtime:Profile=local` and a PostgreSQL connection string. Without the adapter, canonical reads return sanitized `503 DEPENDENCY_UNAVAILABLE`. Fixture/demo routes remain fail-closed and never supply canonical fallback data. Canonical endpoints are unauthenticated in this slice and are not mapped for Azure profiles; cloud ingress remains blocked pending EP06-S04 or a separately approved public-read boundary. No candidate-feed canonical admission path is implemented. `ManuLivCandidateFeedReader` parses raw candidate records and their source hash; `LocalCandidateFeedReplayProducer` emits those records in order at a bounded local rate and returns a source-bound resume cursor for the caller to persist after handling. Neither component maps or persists canonical football facts, and this local producer is not the target Event Hubs adapter. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
+The local canonical BFF reads persisted projections, ledger events, insights and evidence through `PostgresMatchProjectionReader` and `PostgresMatchInsightReader`; the registration is conditional on `Runtime:Profile=local` and a PostgreSQL connection string. Without the adapter, canonical reads return sanitized `503 DEPENDENCY_UNAVAILABLE`. Canonical routes require the EP06-S04 role policies. Azure profiles require explicit Entra authority/audience configuration and map the protected routes with unavailable adapters until an Azure PostgreSQL read adapter is configured; no fixture fallback exists. Legacy match/demo routes remain fail-closed and protected; no synthetic demo is served by the runtime. No candidate-feed canonical admission path is implemented. `ManuLivCandidateFeedReader` parses raw candidate records and their source hash; `LocalCandidateFeedReplayProducer` emits those records in order at a bounded local rate and returns a source-bound resume cursor for the caller to persist after handling. Neither component maps or persists canonical football facts, and this local producer is not the target Event Hubs adapter. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
 
 ## TARGET — canonical Azure platform
 
