@@ -57,7 +57,8 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
-    Ports["IMatchEventStore / IMatchProjectionStore / ICanonicalUpdateStore / IOutboxPublisher / IModelClient / IRealtimeNotifier"]
+    Candidate["Untrusted explanation candidate port"]
+    Ports["IMatchEventStore / IMatchProjectionStore / ICanonicalUpdateStore / IOutboxPublisher / IModelClient / IRealtimeNotifier / inbox transaction"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -65,7 +66,7 @@ flowchart TB
     EventHubs["Event Hubs publisher/consumer"]
     Bus["Service Bus + DLQ"]
     Hub["Azure SignalR"]
-    Model["Microsoft Foundry client"]
+    Model["FoundryExplanationAdapter (managed identity, strict JSON, bounded request)"]
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
@@ -78,16 +79,18 @@ flowchart TB
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
-  Explain --> Ports
+  Explain --> Candidate --> Ports
   Pg -. "implements event, projection read and canonical update ports" .-> Ports
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
   OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
   Pg -. "implements consumer inbox" .-> Ports
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
-  Model -. "implements" .-> Ports
+  Model -. "implements candidate generator; EP08-S04 verifier still required" .-> Candidate
   Cache -. "optional" .-> Ports
 ```
+
+The AgentWorker Foundry adapter and Azure-profile managed-identity composition are implemented as code, but the worker has no message/request consumer and the adapter has not been called against a real Foundry deployment. The dashed adapter arrow above is a target adapter implemented locally, not evidence of an operational Azure path. Candidate output remains untrusted and cannot be displayed or persisted as validated explanation.
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
