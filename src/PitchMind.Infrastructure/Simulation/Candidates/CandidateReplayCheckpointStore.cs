@@ -25,8 +25,7 @@ public sealed class CandidateReplayCheckpointStore
     {
         ArgumentNullException.ThrowIfNull(feed);
         EnsureCandidate(feed);
-        if (new FileInfo(_path).LinkTarget is not null)
-            throw new InvalidDataException("Candidate replay checkpoint must not be a symbolic link.");
+        EnsureNoReparsePointsInPath(_path);
 
         FileStream input;
         try
@@ -104,11 +103,9 @@ public sealed class CandidateReplayCheckpointStore
         Validate(checkpoint, feed);
 
         var directory = Path.GetDirectoryName(_path)!;
-        EnsureNoLink(directory);
+        EnsureNoReparsePointsInPath(directory);
         Directory.CreateDirectory(directory);
-        EnsureNoLink(directory);
-        if (File.Exists(_path))
-            EnsureRegularFile(_path);
+        EnsureNoReparsePointsInPath(_path);
 
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
         try
@@ -128,6 +125,9 @@ public sealed class CandidateReplayCheckpointStore
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            // Recheck the complete path immediately before replacement. This narrows
+            // ancestor/leaf substitution windows, but is not an atomic no-follow open.
+            EnsureNoReparsePointsInPath(_path);
             File.Move(temporaryPath, _path, overwrite: true);
         }
         finally
@@ -189,18 +189,38 @@ public sealed class CandidateReplayCheckpointStore
             throw new InvalidDataException("Candidate replay checkpoint is missing required properties.");
     }
 
-    private static void EnsureRegularFile(string path)
+    private static void EnsureNoReparsePointsInPath(string path)
     {
-        var info = new FileInfo(path);
-        if (info.LinkTarget is not null)
-            throw new InvalidDataException("Candidate replay checkpoint must not be a symbolic link.");
-    }
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath)
+            ?? throw new InvalidDataException("Candidate replay checkpoint path has no filesystem root.");
+        var segments = fullPath[root.Length..]
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        var current = root;
 
-    private static void EnsureNoLink(string path)
-    {
-        var info = new DirectoryInfo(path);
-        if (info.LinkTarget is not null)
-            throw new InvalidDataException("Candidate replay checkpoint directory must not be a symbolic link.");
+        for (var index = 0; index < segments.Length; index++)
+        {
+            current = Path.Combine(current, segments[index]);
+            var directoryInfo = new DirectoryInfo(current);
+            var fileInfo = new FileInfo(current);
+            if (directoryInfo.LinkTarget is not null || fileInfo.LinkTarget is not null)
+                throw new InvalidDataException("Candidate replay checkpoint path must not contain symbolic links.");
+
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("Candidate replay checkpoint path must not contain reparse points.");
+            }
+            catch (FileNotFoundException)
+            {
+                // A missing leaf (or parent on a read) retains the existing not-found behavior.
+                break;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                break;
+            }
+        }
     }
 }
 

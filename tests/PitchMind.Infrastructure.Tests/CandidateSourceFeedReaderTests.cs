@@ -530,6 +530,75 @@ public sealed class CandidateSourceFeedReaderTests
     }
 
     [Fact]
+    public async Task CandidateReplayCheckpointRejectsSymbolicLinkInAncestorPathForReadAndWrite()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var realDirectory = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "real-checkpoints");
+            var linkedDirectory = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "linked-checkpoints");
+            Directory.CreateDirectory(realDirectory);
+            Directory.CreateSymbolicLink(linkedDirectory, realDirectory);
+
+            var store = new CandidateReplayCheckpointStore(Path.Combine(linkedDirectory, "checkpoint.json"));
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+
+            var session = new CandidateReplaySession(
+                feed,
+                1,
+                new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            await using var replay = session.ReplayAsync().GetAsyncEnumerator();
+            Assert.True(await replay.MoveNextAsync());
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.WriteAcknowledgedAsync(feed, session, 1));
+            Assert.False(File.Exists(Path.Combine(realDirectory, "checkpoint.json")));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task CandidateReplayCheckpointRechecksAncestorAfterStoreConstruction()
+    {
+        var fixture = await Fixture.CreateAsync("[{\"eventId\":\"a\",\"matchId\":\"m\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}]");
+        try
+        {
+            var feed = await new CandidateSourceFeedReader().ReadAsync(fixture.SourcePath, fixture.ManifestPath);
+            var parent = Path.Combine(Path.GetDirectoryName(fixture.SourcePath)!, "replaceable-checkpoints");
+            var movedParent = parent + "-moved";
+            Directory.CreateDirectory(parent);
+            var store = new CandidateReplayCheckpointStore(Path.Combine(parent, "checkpoint.json"));
+            var session = new CandidateReplaySession(
+                feed,
+                1,
+                new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            await using (var replay = session.ReplayAsync().GetAsyncEnumerator())
+            {
+                Assert.True(await replay.MoveNextAsync());
+                await store.WriteAcknowledgedAsync(feed, session, 1);
+            }
+
+            Directory.Move(parent, movedParent);
+            Directory.CreateSymbolicLink(parent, movedParent);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.ReadAsync(feed));
+            var resumedSession = new CandidateReplaySession(
+                feed,
+                1,
+                new CandidateReplayOptions(CandidateReplayOptions.MaximumEventsPerSecond));
+            await using var resumedReplay = resumedSession.ReplayAsync().GetAsyncEnumerator();
+            Assert.True(await resumedReplay.MoveNextAsync());
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.WriteAcknowledgedAsync(feed, resumedSession, 1));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task RateLimitedReplayRetainsSourceOrderAndWaitsBetweenEvents()
     {
         const string first = "{\"eventId\":\"event-a\",\"matchId\":\"match-a\",\"teamId\":\"team-a\",\"sequence\":1,\"clockSeconds\":0,\"period\":1,\"eventType\":\"Pass\"}";
@@ -812,7 +881,8 @@ public sealed class CandidateSourceFeedReaderTests
 
         public static async Task<Fixture> CreateAsync(string source)
         {
-            var directory = Path.Combine(Path.GetTempPath(), "pitchmind-candidate-reader-" + Guid.NewGuid().ToString("N"));
+            var physicalTempPath = ResolveDirectoryLinks(Path.GetTempPath());
+            var directory = Path.Combine(physicalTempPath, "pitchmind-candidate-reader-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
             var sourcePath = Path.Combine(directory, "source.json");
             var manifestPath = Path.Combine(directory, "manifest.json");
@@ -821,6 +891,22 @@ public sealed class CandidateSourceFeedReaderTests
             await File.WriteAllBytesAsync(sourcePath, bytes);
             await File.WriteAllTextAsync(manifestPath, Manifest(sha, bytes.Length, CountEvents(source), CountTeams(source)));
             return new Fixture(directory, sourcePath, manifestPath, sha);
+        }
+
+        private static string ResolveDirectoryLinks(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(fullPath)!;
+            var current = root;
+            foreach (var segment in fullPath[root.Length..]
+                         .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = Path.Combine(current, segment);
+                var directory = new DirectoryInfo(current);
+                if (directory.LinkTarget is not null)
+                    current = directory.ResolveLinkTarget(returnFinalTarget: true)!.FullName;
+            }
+            return current;
         }
 
         private static int CountEvents(string source)
