@@ -1,31 +1,44 @@
-"""Static policy checks for the opt-in Azure release path.
+"""Structural checks for the opt-in Azure release path.
 
-These checks validate repository text only. They do not prove Azure DevOps
-service-connection federation, RBAC, protected-environment configuration, or
-owner approval outside this repository.
+These checks validate parsed repository YAML only. They do not prove Azure
+DevOps federation, RBAC, protected-environment configuration, or owner approval.
 """
 from __future__ import annotations
 
 import re
+from typing import Any
+
+import yaml
 
 
 class PipelinePolicyError(ValueError):
     pass
 
 
+_OPT_IN = "${{ if eq(parameters.enableDevDelivery, true) }}"
 _DELIVERY_STAGES = (
     "OwnerApprovalBeforeAzureMutation",
     "BuildRelease",
     "OwnerApprovalOfReleaseDigest",
     "DeployDev",
 )
-_ALLOWED_ROOT_STAGES = ("Validate",)
-_AZURE_MUTATION_MARKERS = re.compile(
-    r"(?im)^\s*- task:\s*(?:AzureCLI|AzurePowerShell|AzureResourceManagerTemplateDeployment|"
-    r"AzureWebApp|AzureFunctionApp)@|"
-    r"\b(?:az deployment (?:group|sub|tenant|mg)|az containerapp update|az webapp deploy|"
-    r"az acr (?:login|import)|azd (?:provision|deploy)|terraform apply|bicep deploy|kubectl apply)\b"
+_VALIDATION_TEMPLATES = {
+    "templates/validate-dotnet.yml",
+    "templates/validate-frontend.yml",
+    "templates/validate-infra.yml",
+}
+_ALLOWED_VALIDATION_TASKS = {
+    "UseDotNet@2",
+    "NodeTool@0",
+    "PublishTestResults@2",
+}
+_AZ_COMMAND = re.compile(r"\baz\s+([a-z][a-z0-9-]*)\s*([a-z][a-z0-9-]*)?", re.IGNORECASE)
+_AZ_MUTATING_CMDLETS = re.compile(r"\b[A-Za-z][A-Za-z0-9]*-Az[A-Za-z0-9]+\b")
+_OTHER_MUTATORS = re.compile(
+    r"\b(?:terraform\s+(?:apply|destroy)|bicep\s+deploy|kubectl\s+apply|azd\s+(?:provision|deploy))\b",
+    re.IGNORECASE,
 )
+_ALLOWED_AZ_BICEP = {"version", "build", "build-params"}
 
 
 def validate_pipeline_policy(
@@ -34,161 +47,182 @@ def validate_pipeline_policy(
     deploy_template: str,
     validation_templates: dict[str, str],
 ) -> None:
-    """Reject release-pipeline source edits that weaken identity and PR gates."""
-    pipeline = _without_yaml_comments(pipeline)
-    build_template = _without_yaml_comments(build_template)
-    deploy_template = _without_yaml_comments(deploy_template)
+    """Reject policy weakening by inspecting active YAML mappings and steps."""
+    pipeline_doc = _load_yaml(pipeline, "pipeline")
+    build_doc = _load_yaml(build_template, "image build template")
+    deploy_doc = _load_yaml(deploy_template, "deployment template")
 
-    default_off = re.search(
-        r"(?ms)^- name: enableDevDelivery\s+type: boolean\s+default: false\s*$",
-        pipeline,
+    parameters = _sequence(pipeline_doc.get("parameters"), "pipeline parameters")
+    delivery_parameter = next(
+        (item for item in parameters if isinstance(item, dict) and item.get("name") == "enableDevDelivery"),
+        None,
     )
-    if default_off is None:
+    if delivery_parameter is None or delivery_parameter.get("type") != "boolean" or delivery_parameter.get("default") is not False:
         raise PipelinePolicyError("DEV delivery must remain a boolean default-off parameter")
 
-    opt_in = "- ${{ if eq(parameters.enableDevDelivery, true) }}:"
-    if pipeline.count(opt_in) != 1:
-        raise PipelinePolicyError("DEV release stages must have one explicit opt-in condition")
-    conditional_block = _conditional_block(pipeline, opt_in)
-    nested_stages = re.findall(r"(?m)^  - stage:\s*([A-Za-z0-9_]+)\s*$", conditional_block)
-    if tuple(nested_stages) != _DELIVERY_STAGES:
-        raise PipelinePolicyError("The guarded block may contain only the approved release stages")
-    root_stages = re.findall(r"(?m)^- stage:\s*([A-Za-z0-9_]+)\s*$", pipeline)
-    if tuple(root_stages) != _ALLOWED_ROOT_STAGES:
-        raise PipelinePolicyError("All release stages must remain nested under the guarded opt-in block")
-    validate_stage = _root_stage_block(pipeline, "Validate")
-    if _AZURE_MUTATION_MARKERS.search(validate_stage):
-        raise PipelinePolicyError("Azure mutations must remain inside the guarded release stage block")
-    expected_validation_templates = {
-        "templates/validate-dotnet.yml",
-        "templates/validate-frontend.yml",
-        "templates/validate-infra.yml",
-    }
-    validation_template_names = set(re.findall(r"(?m)^\s*- template:\s*([^\s]+)\s*$", validate_stage))
-    if validation_template_names != expected_validation_templates:
+    stage_items = _sequence(pipeline_doc.get("stages"), "pipeline stages")
+    validate_stages = [item for item in stage_items if isinstance(item, dict) and item.get("stage") == "Validate"]
+    conditional_items = [item for item in stage_items if isinstance(item, dict) and _OPT_IN in item]
+    if len(validate_stages) != 1 or len(conditional_items) != 1 or len(stage_items) != 2:
+        raise PipelinePolicyError("The pipeline may contain only Validate and one guarded release block")
+
+    guarded_stages = _sequence(conditional_items[0][_OPT_IN], "guarded release stages")
+    stage_names = [item.get("stage") for item in guarded_stages if isinstance(item, dict)]
+    if tuple(stage_names) != _DELIVERY_STAGES or len(stage_names) != len(guarded_stages):
+        raise PipelinePolicyError("The guarded block may contain only the approved release stages in order")
+    stages_by_name = {item["stage"]: item for item in guarded_stages}
+
+    main_only_condition = (
+        "and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), "
+        "ne(variables['Build.Reason'], 'PullRequest'))"
+    )
+    for stage_name in ("OwnerApprovalBeforeAzureMutation", "BuildRelease"):
+        if stages_by_name[stage_name].get("condition") != main_only_condition:
+            raise PipelinePolicyError(f"{stage_name} must be restricted to main and exclude pull-request runs")
+
+    digest_approval = stages_by_name["OwnerApprovalOfReleaseDigest"]
+    if digest_approval.get("dependsOn") != "BuildRelease" or digest_approval.get("condition") != "succeeded()":
+        raise PipelinePolicyError("Digest approval must run only after a successful guarded image build")
+    dev_deployment = stages_by_name["DeployDev"]
+    if dev_deployment.get("dependsOn") != "OwnerApprovalOfReleaseDigest" or dev_deployment.get("condition") != "succeeded()":
+        raise PipelinePolicyError("DEV deployment must depend on successful digest approval")
+
+    validate_stage = validate_stages[0]
+    referenced_templates = _find_values(validate_stage, "template")
+    if set(referenced_templates) != _VALIDATION_TEMPLATES or len(referenced_templates) != len(_VALIDATION_TEMPLATES):
         raise PipelinePolicyError("Validation stage template references must remain on the reviewed allowlist")
-    for template_name in validation_template_names:
+    for template_name in referenced_templates:
         template_source = validation_templates.get(template_name)
         if template_source is None:
             raise PipelinePolicyError(f"Missing source for validation template {template_name}")
-        template_source = _without_yaml_comments(template_source)
-        if re.search(r"(?m)^\s*- template:", template_source):
+        template_doc = _load_yaml(template_source, template_name)
+        _assert_validation_only(validate_stage, "Validate stage")
+        _assert_validation_only(template_doc, template_name)
+        if _find_values(template_doc, "template"):
             raise PipelinePolicyError("Nested validation templates require an explicit policy review")
-        if _AZURE_MUTATION_MARKERS.search(template_source):
-            raise PipelinePolicyError(f"Azure mutations are not allowed in validation template {template_name}")
-    for stage in _DELIVERY_STAGES:
-        if len(re.findall(rf"(?m)^  - stage: {re.escape(stage)}\s*$", conditional_block)) != 1:
-            raise PipelinePolicyError(f"{stage} must be nested under the opt-in release condition")
 
-    for stage in ("OwnerApprovalBeforeAzureMutation", "BuildRelease"):
-        stage_text = _stage_block(pipeline, stage)
-        main_only = "and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))"
-        if not re.search(rf"(?m)^    condition:\s*{re.escape(main_only)}\s*$", stage_text):
-            raise PipelinePolicyError(f"{stage} must be restricted to main and exclude pull-request runs")
+    build_release = stages_by_name["BuildRelease"]
+    deploy_stage = stages_by_name["DeployDev"]
+    build_call = _find_one_template_call(build_release, "templates/build-image.yml")
+    deploy_call = _find_one_template_call(deploy_stage, "templates/deploy-image.yml")
+    if build_call.get("parameters", {}).get("acrPushServiceConnection") != "${{ parameters.acrPushServiceConnection }}":
+        raise PipelinePolicyError("BuildRelease must pass the dedicated ACR-push service connection")
+    if deploy_call.get("parameters", {}).get("devDeploymentServiceConnection") != "${{ parameters.devDeploymentServiceConnection }}":
+        raise PipelinePolicyError("DeployDev must pass the dedicated DEV deployment service connection")
 
-    digest_approval = _stage_block(pipeline, "OwnerApprovalOfReleaseDigest")
-    if (not re.search(r"(?m)^    dependsOn: BuildRelease\s*$", digest_approval) or
-            not re.search(r"(?m)^    condition: succeeded\(\)\s*$", digest_approval)):
-        raise PipelinePolicyError("Digest approval must run only after a successful guarded image build")
-    dev_deployment = _stage_block(pipeline, "DeployDev")
-    if (not re.search(r"(?m)^    dependsOn: OwnerApprovalOfReleaseDigest\s*$", dev_deployment) or
-            not re.search(r"(?m)^    condition: succeeded\(\)\s*$", dev_deployment)):
-        raise PipelinePolicyError("DEV deployment must depend on successful digest approval")
-
-    build_release = _stage_block(pipeline, "BuildRelease")
-    deploy_dev = _stage_block(pipeline, "DeployDev")
-    if (not _has_field(build_release, "acrPushServiceConnection", "${{ parameters.acrPushServiceConnection }}", 10) or
-            not _has_field(deploy_dev, "devDeploymentServiceConnection", "${{ parameters.devDeploymentServiceConnection }}", 16) or
-            not _has_task_input(build_template, "${{ parameters.acrPushServiceConnection }}") or
-            not _has_task_input(deploy_template, "${{ parameters.devDeploymentServiceConnection }}")):
-        raise PipelinePolicyError("Build/push and deployment must use their respective distinct connection inputs")
-    if _has_task_input(build_template, "${{ parameters.devDeploymentServiceConnection }}"):
-        raise PipelinePolicyError("The image build template must not use the DEV deployment connection")
-    if _has_task_input(deploy_template, "${{ parameters.acrPushServiceConnection }}"):
-        raise PipelinePolicyError("The DEV deployment template must not use the ACR push connection")
+    if _azure_cli_task_connection(build_doc) != "${{ parameters.acrPushServiceConnection }}":
+        raise PipelinePolicyError("The image build task must use the ACR-push service connection")
+    if _azure_cli_task_connection(deploy_doc) != "${{ parameters.devDeploymentServiceConnection }}":
+        raise PipelinePolicyError("The deployment task must use the DEV deployment service connection")
 
 
-def _has_field(source: str, name: str, value: str, indentation: int) -> bool:
-    return re.search(rf"(?m)^ {{{indentation}}}{re.escape(name)}:\s*{re.escape(value)}\s*$", source) is not None
+def _load_yaml(source: str, label: str) -> dict[str, Any]:
+    try:
+        document = yaml.safe_load(source)
+    except yaml.YAMLError as error:
+        raise PipelinePolicyError(f"Could not parse {label} YAML") from error
+    if not isinstance(document, dict):
+        raise PipelinePolicyError(f"{label} YAML must have a mapping root")
+    return document
 
 
-def _has_task_input(template: str, value: str) -> bool:
-    task_starts = list(re.finditer(r"(?m)^- task: AzureCLI@2\s*$", template))
-    if len(task_starts) != 1:
-        return False
-    start = task_starts[0]
-    following = re.search(r"(?m)^- ", template[start.end():])
-    end = start.end() + following.start() if following else len(template)
-    task = template[start.start():end]
-    return _has_field(task, "azureSubscription", value, 4)
+def _sequence(value: Any, label: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise PipelinePolicyError(f"{label} must be a sequence")
+    return value
 
 
-def _stage_block(pipeline: str, stage: str) -> str:
-    match = re.search(rf"(?m)^  - stage: {re.escape(stage)}\s*$", pipeline)
-    if match is None:
-        raise PipelinePolicyError(f"Missing release stage {stage}")
-    following = re.search(r"(?m)^  - stage: ", pipeline[match.end():])
-    end = match.end() + following.start() if following else len(pipeline)
-    return pipeline[match.start():end]
+def _find_values(node: Any, key: str) -> list[Any]:
+    found: list[Any] = []
+    if isinstance(node, dict):
+        for current_key, value in node.items():
+            if current_key == key:
+                found.append(value)
+            found.extend(_find_values(value, key))
+    elif isinstance(node, list):
+        for value in node:
+            found.extend(_find_values(value, key))
+    return found
 
 
-def _root_stage_block(pipeline: str, stage: str) -> str:
-    match = re.search(rf"(?m)^- stage: {re.escape(stage)}\s*$", pipeline)
-    if match is None:
-        raise PipelinePolicyError(f"Missing root stage {stage}")
-    following = re.search(r"(?m)^- (?:stage:|\$\{\{)", pipeline[match.end():])
-    end = match.end() + following.start() if following else len(pipeline)
-    return pipeline[match.start():end]
+def _find_one_template_call(stage: dict[str, Any], template_name: str) -> dict[str, Any]:
+    calls = [value for value in _find_values(stage, "template") if value == template_name]
+    if len(calls) != 1:
+        raise PipelinePolicyError(f"Stage must have exactly one call to {template_name}")
+    return _find_template_call_mapping(stage, template_name)
 
 
-def _conditional_block(pipeline: str, condition: str) -> str:
-    """Return only active, indented stages beneath the root opt-in list item."""
-    match = re.search(rf"(?m)^- {re.escape(condition[2:])}\s*$", pipeline)
-    if match is None:
-        raise PipelinePolicyError("DEV release stages must use an active root-level opt-in condition")
-    following_root_item = re.search(r"(?m)^- (?:stage:|\$\{\{)", pipeline[match.end():])
-    end = match.end() + following_root_item.start() if following_root_item else len(pipeline)
-    return pipeline[match.end():end]
+def _find_template_call_mapping(node: Any, template_name: str) -> dict[str, Any]:
+    matches: list[dict[str, Any]] = []
+    if isinstance(node, dict):
+        if node.get("template") == template_name:
+            matches.append(node)
+        for value in node.values():
+            matches.extend(_find_template_call_mappings(value, template_name))
+    elif isinstance(node, list):
+        for value in node:
+            matches.extend(_find_template_call_mappings(value, template_name))
+    if len(matches) != 1:
+        raise PipelinePolicyError(f"Stage must have exactly one mapping call to {template_name}")
+    return matches[0]
 
 
-def _without_yaml_comments(source: str) -> str:
-    """Strip YAML comments while preserving hashes inside quoted scalars."""
-    cleaned_lines: list[str] = []
-    block_scalar_parent_indent: int | None = None
-    for line in source.splitlines():
-        indentation = len(line) - len(line.lstrip())
-        if block_scalar_parent_indent is not None:
-            if not line.strip() or indentation > block_scalar_parent_indent:
-                cleaned_lines.append("")
-                continue
-            block_scalar_parent_indent = None
+def _find_template_call_mappings(node: Any, template_name: str) -> list[dict[str, Any]]:
+    if isinstance(node, dict):
+        results = [node] if node.get("template") == template_name else []
+        for value in node.values():
+            results.extend(_find_template_call_mappings(value, template_name))
+        return results
+    if isinstance(node, list):
+        return [match for value in node for match in _find_template_call_mappings(value, template_name)]
+    return []
 
-        quote: str | None = None
-        escaped = False
-        index = 0
-        while index < len(line):
-            character = line[index]
-            if quote == '"':
-                if escaped:
-                    escaped = False
-                elif character == "\\":
-                    escaped = True
-                elif character == '"':
-                    quote = None
-            elif quote == "'":
-                if character == "'":
-                    if index + 1 < len(line) and line[index + 1] == "'":
-                        index += 2
-                        continue
-                    quote = None
-            elif character in ('"', "'"):
-                quote = character
-            elif character == "#" and (index == 0 or line[index - 1].isspace()):
-                line = line[:index]
-                break
-            index += 1
-        cleaned = line.rstrip()
-        cleaned_lines.append(cleaned)
-        if re.search(r":\s*[|>](?:[+-]\d?|\d[+-]?|)\s*$", cleaned):
-            block_scalar_parent_indent = indentation
-    return "\n".join(cleaned_lines)
+
+def _azure_cli_task_connection(template_doc: dict[str, Any]) -> Any:
+    matches: list[Any] = []
+    for task in _find_values(template_doc, "task"):
+        if task == "AzureCLI@2":
+            # Inspect the task's active inputs mapping, not other YAML values.
+            for node in _find_mappings(template_doc):
+                if node.get("task") == task:
+                    inputs = node.get("inputs")
+                    if isinstance(inputs, dict):
+                        matches.append(inputs.get("azureSubscription"))
+    if len(matches) != 1:
+        raise PipelinePolicyError("Each release template must contain exactly one AzureCLI@2 task")
+    return matches[0]
+
+
+def _find_mappings(node: Any) -> list[dict[str, Any]]:
+    if isinstance(node, dict):
+        return [node, *(mapping for value in node.values() for mapping in _find_mappings(value))]
+    if isinstance(node, list):
+        return [mapping for value in node for mapping in _find_mappings(value)]
+    return []
+
+
+def _assert_validation_only(node: Any, label: str) -> None:
+    for task in _find_values(node, "task"):
+        if isinstance(task, str) and task.startswith("Azure"):
+            raise PipelinePolicyError(f"Azure task {task} is not allowed in {label}")
+        if isinstance(task, str) and task not in _ALLOWED_VALIDATION_TASKS:
+            raise PipelinePolicyError(f"Unreviewed task {task} is not allowed in {label}")
+    for command in _script_values(node):
+        if _OTHER_MUTATORS.search(command) or _AZ_MUTATING_CMDLETS.search(command):
+            raise PipelinePolicyError(f"Potential infrastructure mutation is not allowed in {label}")
+        for match in _AZ_COMMAND.finditer(command):
+            if match.group(1).casefold() != "bicep" or (match.group(2) or "").casefold() not in _ALLOWED_AZ_BICEP:
+                raise PipelinePolicyError(f"Only local read-only az bicep validation is allowed in {label}")
+
+
+def _script_values(node: Any) -> list[str]:
+    script_keys = {"bash", "script", "inlineScript", "powershell", "pwsh"}
+    if isinstance(node, dict):
+        return [
+            value
+            for key, child in node.items()
+            for value in (([child] if key in script_keys and isinstance(child, str) else []) + _script_values(child))
+        ]
+    if isinstance(node, list):
+        return [value for child in node for value in _script_values(child)]
+    return []

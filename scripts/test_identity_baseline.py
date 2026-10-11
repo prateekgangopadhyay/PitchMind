@@ -191,6 +191,14 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="connection text in block scalar cannot spoof task input"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(pipeline, block_scalar_spoof, deploy_template)
 
+        wrong_task_parent = build_template.replace(
+            "    azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            "    azureSubscription: ${{ parameters.devDeploymentServiceConnection }}\n  env:\n    azureSubscription: ${{ parameters.acrPushServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="azureSubscription under env cannot spoof task inputs"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(pipeline, wrong_task_parent, deploy_template)
+
         pass_through_block_scalar = pipeline.replace(
             "        parameters:\n          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
             "        displayName: |\n          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}\n        parameters:\n          acrPushServiceConnection: ${{ parameters.devDeploymentServiceConnection }}",
@@ -198,6 +206,14 @@ class IdentityBaselineTests(unittest.TestCase):
         )
         with self.subTest(mutation="connection text in block scalar cannot spoof template parameter"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(pass_through_block_scalar, build_template, deploy_template)
+
+        wrong_template_parent = pipeline.replace(
+            "          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
+            "          acrPushServiceConnection: ${{ parameters.devDeploymentServiceConnection }}\n        env:\n          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}",
+            1,
+        )
+        with self.subTest(mutation="connection under template env cannot spoof parameters"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(wrong_template_parent, build_template, deploy_template)
 
     def test_policy_rejects_unrecognized_unguarded_azure_mutation(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -228,13 +244,28 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="Azure CLI task outside the guarded release block"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(mutation_in_validation, build_template, deploy_template)
 
-        with self.subTest(mutation="Azure mutation hidden in allowed validation template"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(
-                pipeline,
-                build_template,
-                deploy_template,
-                {"templates/validate-infra.yml": "steps:\n- task: AzureCLI@2\n"},
+        mutating_validation_scripts = (
+            "az rest --method PUT --url https://management.azure.com/example",
+            "az group delete --name example",
+            "New-AzResourceGroupDeployment -ResourceGroupName example",
+            "terraform destroy -auto-approve",
+        )
+        for command in mutating_validation_scripts:
+            with self.subTest(mutation=f"Azure-capable validation template: {command}"), self.assertRaises(PipelinePolicyError):
+                _validate_pipeline_policy(
+                    pipeline,
+                    build_template,
+                    deploy_template,
+                    {"templates/validate-infra.yml": f"steps:\n- bash: |\n    {command}\n"},
+                )
+
+        with self.subTest(mutation="Azure task in Validate stage"), self.assertRaises(PipelinePolicyError):
+            azure_task_in_validate = pipeline.replace(
+                "    - bash: |",
+                "    - task: AzureCLI@2\n      inputs:\n        azureSubscription: example\n    - bash: |",
+                1,
             )
+            _validate_pipeline_policy(azure_task_in_validate, build_template, deploy_template)
 
         new_validation_template = pipeline.replace(
             "- template: templates/validate-infra.yml",
