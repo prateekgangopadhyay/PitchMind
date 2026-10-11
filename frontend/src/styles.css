@@ -138,6 +138,9 @@ button, select { min-height: 44px; }
 .canonical-evidence-content p { margin:.5rem 0; }
 .canonical-evidence-provenance { font-size:.78rem; }
 .canonical-evidence-content .evidence-list { margin:.5rem 0 0; }
+.canonical-evidence-content details { margin:.75rem 0; border-top:1px solid var(--pm-border); }
+.canonical-evidence-content details > summary { min-height:44px; display:flex; align-items:center; cursor:pointer; color:var(--pm-text); }
+.evidence-json { max-width:100%; overflow:auto; padding:.75rem; border-radius:6px; background:var(--pm-bg); color:var(--pm-text-secondary); white-space:pre-wrap; overflow-wrap:anywhere; }
 .event-marker { grid-column:2; justify-self:start; padding:.2rem .45rem; border:1px solid var(--pm-border); border-radius:999px; color:var(--pm-text-secondary); font-size:.7rem; }
 .match-context-controls { grid-template-columns:auto minmax(0,1fr) auto auto; }
 .pitch-dashboard { grid-template-columns:minmax(0,1.25fr) minmax(18rem,.9fr); }

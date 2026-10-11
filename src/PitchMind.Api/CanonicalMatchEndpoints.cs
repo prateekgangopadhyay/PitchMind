@@ -213,6 +213,7 @@ internal static class CanonicalMatchEndpoints
         insight.InsightId, insight.MatchId.ToString(), insight.Revision, selectedTime, insight.AsOfSequence,
         insight.SourceVersion, insight.Provenance, insight.SourceSha256,
         insight.DetectorVersion, insight.TruthClass, insight.Summary,
+        insight.Conditions, insight.Limitations,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
 
     private static CanonicalTrackingFrameResponse ToTrackingFrame(PersistedTrackingFrame frame, Guid matchId, int selectedTime,

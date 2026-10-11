@@ -64,9 +64,9 @@ app.Use(async (context, next) =>
     }
     catch (InvalidDataException)
     {
-        app.Logger.LogError("Canonical tracking data failed validation for {Path}", context.Request.Path);
+        app.Logger.LogError("Canonical data failed validation for {Path}", context.Request.Path);
         if (!context.Response.HasStarted)
-            await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "TRACKING_DATA_INVALID", "Tracking data is unavailable at the selected time").ExecuteAsync(context);
+            await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "CANONICAL_DATA_INVALID", "Canonical match data is unavailable at the selected time").ExecuteAsync(context);
         else
             throw;
     }

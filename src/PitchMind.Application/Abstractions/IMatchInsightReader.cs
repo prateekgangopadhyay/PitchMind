@@ -1,4 +1,5 @@
 using PitchMind.Domain.Match;
+using System.Text.Json;
 
 namespace PitchMind.Application.Abstractions;
 
@@ -15,6 +16,8 @@ public sealed record PersistedMatchInsight(
     string SourceVersion,
     string Provenance,
     string SourceSha256,
+    JsonElement Conditions,
+    IReadOnlyList<string>? Limitations,
     IReadOnlyList<PersistedEvidenceReference> Evidence);
 
 public sealed record PersistedMatchInsightPage(

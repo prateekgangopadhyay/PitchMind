@@ -156,7 +156,8 @@ public sealed class V1ContractCompatibilityTests
         var eventPage = new CanonicalEventPageResponse("match", 4, 3308, 42, new[] { evt }, "cursor", true);
         var evidence = new CanonicalEvidenceReferenceResponse("event", evt.EventId.ToString(), "supports");
         var insight = new CanonicalInsightResponse("insight", "match", 4, 3308, 42, "source-v1", "synthetic",
-            new string('a', 64), "detector-v1", "derived", "Persisted summary", new[] { evidence });
+            new string('a', 64), "detector-v1", "derived", "Persisted summary", JsonSerializer.Deserialize<JsonElement>("{\"sampleSize\":11}", Json)!,
+            new[] { "Sparse frame coverage" }, new[] { evidence });
         var insightPage = new CanonicalInsightPageResponse("match", 4, 3308, 42, new[] { insight }, "cursor", true);
         var evidencePayload = new CanonicalEvidencePayloadResponse("event", evt.EventId.ToString(), "supports", 42,
             3000, 2, JsonSerializer.Deserialize<JsonElement>("{\"eventId\":\"sample\"}"));
@@ -185,7 +186,8 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(eventPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
             "items", "nextCursor", "hasMore");
         AssertJsonProperties(insight, "insightId", "matchId", "canonicalRevision", "selectedTimeSeconds",
-            "throughSequence", "sourceVersion", "provenance", "sourceSha256", "detectorVersion", "truthClass", "summary", "evidence");
+            "throughSequence", "sourceVersion", "provenance", "sourceSha256", "detectorVersion", "truthClass", "summary",
+            "conditions", "limitations", "evidence");
         AssertJsonProperties(evidence, "kind", "id", "relation");
         AssertJsonProperties(insightPage, "matchId", "canonicalRevision", "selectedTimeSeconds", "throughSequence",
             "items", "nextCursor", "hasMore");

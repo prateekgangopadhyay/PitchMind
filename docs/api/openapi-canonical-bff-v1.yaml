@@ -292,7 +292,7 @@ components:
         relation: { type: string }
     CanonicalInsight:
       type: object
-      required: [insightId, matchId, canonicalRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, evidence]
+      required: [insightId, matchId, canonicalRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, conditions, limitations, evidence]
       properties:
         insightId: { type: string }
         matchId: { type: string, format: uuid }
@@ -305,6 +305,11 @@ components:
         detectorVersion: { type: string }
         truthClass: { type: string }
         summary: { type: string }
+        conditions: { type: object, maxProperties: 128, additionalProperties: true }
+        limitations:
+          type: [array, 'null']
+          maxItems: 32
+          items: { type: string, minLength: 1, maxLength: 512 }
         evidence: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidenceReference' } }
     CanonicalInsightPage:
       type: object

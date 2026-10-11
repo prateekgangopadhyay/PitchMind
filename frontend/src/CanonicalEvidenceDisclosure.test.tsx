@@ -10,6 +10,7 @@ const insight: CanonicalInsight = {
   throughSequence: 19, sourceVersion: 'synthetic-v1', provenance: 'synthetic-approved',
   sourceSha256: 'a'.repeat(64), detectorVersion: 'press-detector-v2', truthClass: 'pattern',
   summary: 'A recorded pressing sequence is available for inspection.',
+  conditions: { sampleSize: 11, selectedTimeSafe: true }, limitations: ['Sparse frame coverage'],
   evidence: [{ kind: 'event', id: 'event-source-1', relation: 'supports' }]
 };
 
@@ -84,6 +85,9 @@ describe('Canonical evidence disclosure', () => {
       expect(container.textContent).toContain('sequence 19');
       expect(container.textContent).toContain('synthetic-approved');
       expect(container.textContent).toContain('press-detector-v2');
+      expect(container.textContent).toContain('Stored detector conditions');
+      expect(container.textContent).toContain('"sampleSize": 11');
+      expect(container.textContent).toContain('Sparse frame coverage');
       expect(container.querySelector('summary')?.textContent).toContain('Why? Inspect evidence for 55:08');
       const sourceLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19"]');
       expect(sourceLink?.tagName).toBe('A');

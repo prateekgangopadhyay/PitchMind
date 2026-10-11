@@ -64,6 +64,16 @@ function EvidenceDetails({ evidence }: { evidence: CanonicalEvidence }) {
       {insight.provenance} · source {insight.sourceVersion} · SHA-256 {insight.sourceSha256} · detector {insight.detectorVersion}
     </p>
     <p>Selected {clock(insight.selectedTimeSeconds)} · revision {insight.canonicalRevision} · sequence through {insight.throughSequence}</p>
+    <details>
+      <summary>Stored detector conditions</summary>
+      <pre className="evidence-json">{JSON.stringify(insight.conditions, null, 2)}</pre>
+    </details>
+    {insight.limitations === null
+      ? <p>Limitations are not recorded for this insight.</p>
+      : insight.limitations.length === 0
+        ? <p>No limitations were recorded for this insight.</p>
+        : <div><h4>Recorded limitations</h4><ul>{insight.limitations.map((limitation, index) =>
+          <li key={`${index}:${limitation}`}>{limitation}</li>)}</ul></div>}
     {evidence.items.length === 0
       ? <p role="status">No source evidence is recorded for this insight at the selected time.</p>
       : <>
@@ -95,6 +105,8 @@ function canonicalEvidenceMatches(evidence: CanonicalEvidence, expected: Expecte
       returned.sourceVersion !== expected.insight.sourceVersion || returned.provenance !== expected.insight.provenance ||
       returned.sourceSha256 !== expected.insight.sourceSha256 || returned.detectorVersion !== expected.insight.detectorVersion ||
       returned.truthClass !== expected.insight.truthClass || returned.summary !== expected.insight.summary ||
+      JSON.stringify(returned.conditions) !== JSON.stringify(expected.insight.conditions) ||
+      JSON.stringify(returned.limitations) !== JSON.stringify(expected.insight.limitations) ||
       !Array.isArray(returned.evidence) || !Array.isArray(evidence.items)) return false;
 
   if (returned.evidence.length !== expected.insight.evidence.length ||
