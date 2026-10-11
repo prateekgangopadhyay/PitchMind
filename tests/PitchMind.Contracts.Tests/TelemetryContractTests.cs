@@ -241,6 +241,26 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
+    public void Missing_team_direction_diagnostic_does_not_echo_overlong_team_id()
+    {
+        var longTeamId = new string('x', 100_000);
+        var frame = Frame() with
+        {
+            Players = new[] { Frame().Players[0] with { TeamId = longTeamId } },
+            CoordinateSystem = Frame().CoordinateSystem with
+            {
+                TeamDirections = new[] { new TeamAttackingDirectionV1 { TeamId = "home", Direction = "right" } }
+            }
+        };
+
+        var diagnostic = Assert.Single(TelemetryContractValidatorV1.Validate(frame).Errors,
+            error => error.Code == "ATTACKING_DIRECTION_MISSING");
+
+        Assert.DoesNotContain(longTeamId, diagnostic.Message);
+        Assert.True(diagnostic.Message.Length < 128);
+    }
+
+    [Fact]
     public void Declared_percent_and_axis_origin_normalize_to_stadium_metres()
     {
         var system = Frame().CoordinateSystem with { Unit = "percent_0_100", AxisOrigin = "top_left" };

@@ -234,7 +234,7 @@ public static class TelemetryContractValidatorV1
         if (requiredTeams is null) return;
         foreach (var team in requiredTeams)
             if (!declaredTeams.Contains(team))
-                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", $"No attacking direction is declared for team '{team}'.");
+                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", "No attacking direction is declared for a team referenced by the frame.");
     }
 
     private static void Point(PitchPointV1? point, PitchCoordinateSystemV1 system, string path, List<TelemetryValidationError> errors)
