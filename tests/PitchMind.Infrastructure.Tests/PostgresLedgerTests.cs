@@ -742,6 +742,7 @@ public sealed class PostgresLedgerTests
 
         var validInsightId = $"valid-{Guid.NewGuid():N}";
         var validFrameInsightId = $"valid-frame-{Guid.NewGuid():N}";
+        var emptyLimitationsInsightId = $"empty-limitations-{Guid.NewGuid():N}";
         var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
         var metricInsightId = $"metric-{Guid.NewGuid():N}";
         var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
@@ -762,6 +763,7 @@ public sealed class PostgresLedgerTests
         await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString(),
             "{\"sampleSize\":11,\"observed\":true}", "[\"Sparse frame coverage\"]");
         await AddInsight(validFrameInsightId, "derived", "frame", validFrameId);
+        await AddInsight(emptyLimitationsInsightId, "derived", "event", update.Event.EventId.ToString(), "{}", "[]");
         await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString());
         await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric");
         await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId);
@@ -772,7 +774,7 @@ public sealed class PostgresLedgerTests
         var insightReader = new PostgresMatchInsightReader(source);
         var page = await insightReader.ReadAtAsync(matchId, projection.Revision, 0, projection.AsOfSequence,
             null, null, 10, CancellationToken.None);
-        Assert.Equal(new[] { validFrameInsightId, validInsightId }.OrderBy(i => i).ToArray(),
+        Assert.Equal(new[] { validFrameInsightId, validInsightId, emptyLimitationsInsightId }.OrderBy(i => i).ToArray(),
             page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
         var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
@@ -782,6 +784,7 @@ public sealed class PostgresLedgerTests
         Assert.Equal(11, visible.Conditions.GetProperty("sampleSize").GetInt32());
         Assert.Equal("Sparse frame coverage", Assert.Single(visible.Limitations!));
         Assert.Null(Assert.Single(page.Insights, insight => insight.InsightId == validFrameInsightId).Limitations);
+        Assert.Empty(Assert.Single(page.Insights, insight => insight.InsightId == emptyLimitationsInsightId).Limitations!);
         Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.Revision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.Revision, 0,

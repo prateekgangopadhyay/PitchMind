@@ -305,11 +305,16 @@ components:
         detectorVersion: { type: string }
         truthClass: { type: string }
         summary: { type: string }
-        conditions: { type: object, maxProperties: 128, additionalProperties: true }
+        conditions:
+          type: object
+          maxProperties: 128
+          additionalProperties: true
+          description: Stored detector data; responses are limited to 16 KiB UTF-8 and nesting depth 16.
         limitations:
           type: [array, 'null']
           maxItems: 32
           items: { type: string, minLength: 1, maxLength: 512 }
+          description: Null means no limitation metadata was stored; an empty array means none were recorded.
         evidence: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidenceReference' } }
     CanonicalInsightPage:
       type: object

@@ -1,8 +1,8 @@
 # EP07-S05 design review evidence
 
-**Review date:** 2026-10-11  
-**Review scope:** static implementation review of the local consolidation working tree  
-**Candidate base:** PR #73 head `1ca00cceaa9ec5861dd559b5cc01fb48e660c227`  
+**Review date:** 2026-10-11
+**Review scope:** static implementation review of the local consolidation working tree
+**Candidate base:** PR #73 head `1ca00cceaa9ec5861dd559b5cc01fb48e660c227`
 **Status:** unverified for visual and assistive-technology acceptance; independent design review remains pending.
 
 ## Design references
