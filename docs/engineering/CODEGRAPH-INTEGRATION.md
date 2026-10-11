@@ -14,7 +14,7 @@ npm install -g @astudioplus/codegraph-mcp
 # If engine download fails, follow the vendor's documented fetch-engine command.
 ```
 
-A checked-in `/.vscode/mcp.json` config registers `codegraph-mcp` in the **graph** tool profile for VS Code-compatible MCP clients. Reload the editor and explicitly enable/trust the server. Other MCP clients can configure the command `codegraph-mcp` with `--profile graph --workspace <absolute-checkout-path>`; client configuration is local to each agent host. The repository does not install or execute a downloaded binary merely because it was cloned.
+A checked-in `/.vscode/mcp.json` config registers `codegraph-mcp` in the **all** tool profile for VS Code-compatible MCP clients (one server exposes both `get_edit_context` and graph/impact tools; the narrower `graph` profile omits edit-context). Reload the editor and explicitly enable/trust the server. Other MCP clients can configure the command `codegraph-mcp` with `--profile all --workspace <absolute-checkout-path>`; client configuration is local to each agent host. The repository does not install or execute a downloaded binary merely because it was cloned.
 
 Use `CODEGRAPH_TELEMETRY=off` in the agent host environment if the operator wishes to disable CodeGraph's anonymous usage telemetry. Never index secrets, unapproved source materials, a `docker/.env` file, token stores, or retained production data; its built-in exclusions are defense-in-depth, not permission to ingest those materials. Only enable CodeGraph in an appropriately trusted worktree.
 
@@ -47,6 +47,6 @@ The script resolves a locally installed engine (or an explicitly configured `COD
 
 ## Pilot / operational checks
 
-Pilot on a single dependency chain (`#81 -> #88 -> #90 -> #89 -> #91` or the currently active parent/child equivalents). Compare time-to-context, actual review turnaround, rework after restack, targeted-test usefulness and merges into `main` against the prior baseline. Prefer the lightweight graph profile; if indexing or querying materially slows critical-path development, disable it without weakening tests.
+Pilot on a single dependency chain (`#81 -> #88 -> #90 -> #89 -> #91` or the currently active parent/child equivalents). Compare time-to-context, actual review turnaround, rework after restack, targeted-test usefulness and merges into `main` against the prior baseline. Prefer the narrowest tool calls rather than dumping the entire graph. If the full MCP tool surface materially slows an agent, switch that agent to `--profile core` (edit/search context) and use the separate graph-only PR script for impact analysis, without weakening tests.
 
 **Known limitations:** graph resolution is imperfect across dynamic dispatch, reflection, DI, SQL and runtime configurations; graph output does not prove live SignalR, PostgreSQL, Azure or Foundry behavior, real browser accessibility, football mapping or data rights.
