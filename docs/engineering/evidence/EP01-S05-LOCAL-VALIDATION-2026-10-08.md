@@ -84,3 +84,19 @@ After the prior rebase, `main` advanced again by merging PR #116. The PR branch 
 | Exact-base ancestry and whitespace | `git rev-list --left-right --count HEAD...origin/main`; `git diff --check origin/main...HEAD` | `11 0`; diff check passed. The local rebase and merge-tree reported no conflicts. |
 
 The full local quality script was not rerun after this latest rebase. The preceding attempt ran on the prior `6932cfea` base, remained silent during its first `dotnet restore PitchMind.slnx` step, and exited 1 without diagnostics. Therefore no current-head .NET restore/build/test, NuGet live audit, frontend, PostgreSQL, security, accessibility, or performance result is claimed. The current PR remains open and unmerged; story acceptance and a current-head independent review are pending. No Azure actions were performed.
+
+## 2026-10-12 full gate on current PR head
+
+After the cache/offline diagnosis, the unchanged validation script completed at PR head `16e980e565cee1621e627faad81d3d2ddf2032de`. This head contains the tested code tree at `30bc33dff68ee9c17675ec23b23bdfa2d1296289` plus the evidence-only commit `16e980e`.
+
+| Requirement | Command | Observed result |
+|---|---|---|
+| Complete local quality script | `./scripts/validate-all.sh` | Exit 0; final output: `PASS: .NET, dependency audits, frontend, feed profiler, design and council contract validation`. Run with approved local execution permissions; the script and security thresholds were unchanged. |
+| .NET restore | Invoked by the quality script | All projects up-to-date; restore passed. |
+| NuGet vulnerability audit | Invoked by the quality script | No advisories across all 12 solution projects. |
+| Release build and tests | Invoked by the quality script | Build succeeded with 0 warnings and 0 errors. 23 tests passed; 0 failed; 5 PostgreSQL integration tests skipped because no test database was configured. |
+| Frontend dependency audit, build, tests and lint | Invoked by the quality script | `npm ci` installed 224 packages; both npm audits found 0 vulnerabilities; Vite production build and ESLint passed; Vitest passed 3/3. npm printed deprecation warnings for `whatwg-encoding` and ESLint 9.39.5. |
+| Feed profiler and NuGet parser | Invoked by the quality script | Feed profiler tests 5/5; NuGet parser tests 7/7. |
+| Operating model, DAG and design skills | Invoked by the quality script | All passed; validator reported 12 epics, 59 stories, 28 Council skills, five design skills, zero dependency cycles and two approval gates. |
+
+The initial default-sandbox attempt did not demonstrate a code defect. A focused restore in that sandbox produced `NuGet.targets(198,5): error : Access to the path '/Users/prateekgangopadhyay/.codex/worktrees/ep01-s05-quality-gate/PitchMind/src/PitchMind.Domain/obj/<guid>.tmp' is denied. Operation not permitted`. A sandboxed request to the configured NuGet endpoint also failed DNS resolution: `curl: (6) Could not resolve host: api.nuget.org`. The approved local retry allowed the normal restore/audit to run; the complete unchanged gate passed. No code or security-gate changes were needed. This local pass is not Azure DevOps evidence, independent review, or Product Owner acceptance. PostgreSQL integration, security scanning, threat-model, accessibility, performance, hosted clean-runner and deliberate-failure gates remain unverified. No Azure command or resource mutation was performed.
