@@ -496,6 +496,18 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
     def test_compose_services_bind_only_to_loopback(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
         published_ports = self._published_ports(config)
+        self.assertEqual(config.get("name"), "pitchmind")
+        self.assertEqual(
+            {
+                key: volume.get("name")
+                for key, volume in config.get("volumes", {}).items()
+                if isinstance(volume, dict)
+            },
+            {
+                "postgres-data": "pitchmind_postgres_data",
+                "redis-data": "pitchmind_redis_data",
+            },
+        )
         self.assertEqual(len(published_ports), 2)
         self.assertTrue(self._published_ports_are_loopback(config), published_ports)
         self.assertEqual(
