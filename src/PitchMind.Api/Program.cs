@@ -1,12 +1,12 @@
-using PitchMind.Application.Abstractions;
 using PitchMind.Api;
 using PitchMind.Contracts.Health;
-using PitchMind.Infrastructure.Storage;
 using PitchMind.Contracts.V1;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
+var runtimeProfile = builder.Configuration["Runtime:Profile"];
+RuntimeProfileGuard.Validate(builder.Environment.EnvironmentName, runtimeProfile);
+RuntimeProfileGuard.ConfigureLocalServices(builder.Services, runtimeProfile);
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
