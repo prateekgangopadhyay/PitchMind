@@ -14,21 +14,21 @@ const sections = [
 
 type SectionPath = typeof sections[number]['path'];
 
-function routeFor(pathname: string): typeof sections[number] {
-  const path = pathname.replace(/\/$/, '') || '/match';
-  return sections.find(section => section.path === path) ?? sections[1];
+function routeFor(pathname: string): typeof sections[number] | null {
+  const path = pathname.split('?')[0].replace(/\/$/, '') || '/match';
+  return sections.find(section => section.path === path) ?? null;
 }
 
-function routeFromLocation(): SectionPath {
+function routeFromLocation(): SectionPath | null {
   const routePath = window.location.hash.startsWith('#/') ? window.location.hash.slice(1) : window.location.pathname;
-  return routeFor(routePath).path;
+  return routeFor(routePath)?.path ?? null;
 }
 
 export function App() {
   const contextVersion = useRef(0);
-  const previousRoute = useRef<SectionPath | null>(null);
+  const previousRoute = useRef<SectionPath | null | undefined>(undefined);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const [pathname, setPathname] = useState<SectionPath>(() => typeof window === 'undefined' ? '/match' : routeFromLocation());
+  const [pathname, setPathname] = useState<SectionPath | null>(() => typeof window === 'undefined' ? '/match' : routeFromLocation());
   const [retryVersion, setRetryVersion] = useState(0);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [matchId, setMatchId] = useState('');
@@ -44,15 +44,11 @@ export function App() {
   const [loadingFixtures, setLoadingFixtures] = useState(true);
   const [failedAction, setFailedAction] = useState<'evidence' | 'analyst' | null>(null);
   const fixture = fixtures.find(f => f.matchId === matchId);
-  const section = routeFor(pathname);
-  const isMatchRoute = section.path === '/match';
+  const section = pathname ? routeFor(pathname) : null;
+  const isMatchRoute = section?.path === '/match';
   useEffect(() => {
     const syncHistoryRoute = () => setPathname(routeFromLocation());
-    const syncHashRoute = () => {
-      const hashPath = window.location.hash.slice(1);
-      const route = sections.find(item => item.path === hashPath);
-      if (route) setPathname(route.path);
-    };
+    const syncHashRoute = () => setPathname(routeFromLocation());
     window.addEventListener('popstate', syncHistoryRoute);
     window.addEventListener('hashchange', syncHashRoute);
     return () => {
@@ -61,7 +57,7 @@ export function App() {
     };
   }, []);
   useLayoutEffect(() => {
-    if (previousRoute.current !== null && previousRoute.current !== pathname) headingRef.current?.focus();
+    if (previousRoute.current !== undefined && previousRoute.current !== pathname) headingRef.current?.focus();
     previousRoute.current = pathname;
   }, [pathname]);
   useEffect(() => {
@@ -126,9 +122,10 @@ export function App() {
     setPathname(path);
   }
 
-  return <><a href="#main-content" className="skip-link" onClick={skipToMain}>Skip to main content</a><header className="app-header"><a className="brand" href="#/home" onClick={event => navigate(event, '/home')}><span aria-hidden="true">◈</span> PitchMind</a><span className="tag">Simulated matches</span></header><nav className="primary-nav" aria-label="Primary navigation">{sections.map(item => <a key={item.path} href={`#${item.path}`} onClick={event => navigate(event, item.path)} aria-current={section.path === item.path ? 'page' : undefined}>{item.label}</a>)}</nav><main id="main-content" tabIndex={-1}>
-    <div className="intro"><div><p className="eyebrow">Football intelligence, grounded in evidence</p><h1 ref={headingRef} tabIndex={-1}>{section.question}</h1></div>{isMatchRoute && fixtures.length > 0 && <select aria-label="Select simulated match" value={matchId} onChange={e => {setMatchId(e.target.value); selectTime(0); setPlaying(false);}}>{fixtures.map(f => <option key={f.matchId} value={f.matchId}>{f.home.name} vs {f.away.name}</option>)}</select>}</div>
-    {!isMatchRoute && <section className="route-state" aria-labelledby="route-state-title"><div className="route-mark" aria-hidden="true">—</div><p className="eyebrow">{section.label}</p><h2 id="route-state-title">{loadingFixtures ? 'Finding a simulated match' : fixtures.length ? 'Choose a match to begin' : 'Match data is not available yet'}</h2><p>{loadingFixtures ? 'Match details will appear when a fixture is available.' : fixtures.length ? 'Open Match to inspect the selected fixture. This view will follow the same match context when its data is available.' : 'Scores, events and analysis stay hidden until a simulated match can be loaded.'}</p>{!loadingFixtures && <a className="primary-action" href="#/match" onClick={event => navigate(event, '/match')}>{fixtures.length ? 'Open match' : 'Check match availability'}</a>}</section>}
+  return <><a href="#main-content" className="skip-link" onClick={skipToMain}>Skip to main content</a><header className="app-header"><a className="brand" href="#/home" onClick={event => navigate(event, '/home')}><span aria-hidden="true">◈</span> PitchMind</a><span className="tag">Simulated matches</span></header><nav className="primary-nav" aria-label="Primary navigation">{sections.map(item => <a key={item.path} href={`#${item.path}`} onClick={event => navigate(event, item.path)} aria-current={section?.path === item.path ? 'page' : undefined}>{item.label}</a>)}</nav><main id="main-content" tabIndex={-1}>
+    <div className="intro"><div><p className="eyebrow">Football intelligence, grounded in evidence</p><h1 ref={headingRef} tabIndex={-1}>{section?.question ?? 'This page isn’t available'}</h1></div>{isMatchRoute && fixtures.length > 0 && <select aria-label="Select simulated match" value={matchId} onChange={e => {setMatchId(e.target.value); selectTime(0); setPlaying(false);}}>{fixtures.map(f => <option key={f.matchId} value={f.matchId}>{f.home.name} vs {f.away.name}</option>)}</select>}</div>
+    {!section && <section className="route-state" aria-labelledby="route-state-title"><div className="route-mark" aria-hidden="true">—</div><p className="eyebrow">Page unavailable</p><h2 id="route-state-title">This PitchMind page could not be found</h2><p>The address may be outdated or mistyped. Use Home to return to the available match views.</p><a className="primary-action" href="#/home" onClick={event => navigate(event, '/home')}>Go to Home</a></section>}
+    {section && !isMatchRoute && <section className="route-state" aria-labelledby="route-state-title"><div className="route-mark" aria-hidden="true">—</div><p className="eyebrow">{section.label}</p><h2 id="route-state-title">{loadingFixtures ? 'Finding a simulated match' : fixtures.length ? 'Choose a match to begin' : 'Match data is not available yet'}</h2><p>{loadingFixtures ? 'Match details will appear when a fixture is available.' : fixtures.length ? 'Open Match to inspect the selected fixture. This view will follow the same match context when its data is available.' : 'Scores, events and analysis stay hidden until a simulated match can be loaded.'}</p>{!loadingFixtures && <a className="primary-action" href="#/match" onClick={event => navigate(event, '/match')}>{fixtures.length ? 'Open match' : 'Check match availability'}</a>}</section>}
     {isMatchRoute && loadingFixtures && <div role="status" className="availability-state"><span className="status-mark" aria-hidden="true"/><div><h2>Finding a simulated match</h2><p>Match details will appear when a fixture is available.</p></div></div>}
     {isMatchRoute && error === 'unavailable' && <section role="alert" className="availability-state unavailable"><span className="status-mark" aria-hidden="true"/><div><p className="eyebrow">Match availability</p><h2>Match data can’t be loaded right now</h2><p>Scores, events and analysis stay hidden until match data is available.</p><button onClick={retryFixtures}>Try again</button></div></section>}
     {isMatchRoute && error === 'action-unavailable' && <div role="alert" className="notice error">This part of the match isn’t available right now. <button onClick={() => {if (failedAction === 'evidence') void showEvidence(); else if (failedAction === 'analyst') void askAnalyst();}}>Try again</button></div>}
