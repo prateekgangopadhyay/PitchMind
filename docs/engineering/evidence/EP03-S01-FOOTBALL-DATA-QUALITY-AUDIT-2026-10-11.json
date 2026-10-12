@@ -1,5 +1,5 @@
 {
-  "auditVersion": "1.0.0",
+  "auditVersion": "1.1.0",
   "canonicalizationStatus": "blocked_pending_source_semantics_and_football_review",
   "chronology": {
     "adjacentEqualClockPairs": 11,
@@ -552,6 +552,15 @@
     "sourceCompositeIdentitiesByTeam": {
       "Liverpool": 12,
       "Manchester United": 12
+    },
+    "sourcePlayerLabelAudit": {
+      "distinctTeamJerseyNumberLabelCount": 24,
+      "distinctTeamPlayerNameLabelCount": 24,
+      "extraRowsInRepeatedTeamJerseySlotsWithinFrames": 0,
+      "interpretation": "Source-label consistency across observed rows only; names and jersey numbers are not canonical roster identities or a football-rules verdict.",
+      "repeatedTeamJerseySlotsWithinFrames": 0,
+      "teamJerseyNumberLabelsWithMultiplePlayerNames": 0,
+      "teamPlayerNameLabelsWithMultipleJerseyNumbers": 0
     }
   },
   "source": {

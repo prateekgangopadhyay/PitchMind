@@ -143,6 +143,36 @@ class CandidateQualityAuditTests(unittest.TestCase):
         self.assertEqual(coordinates["rawFieldRanges"]["playerX"]["outsideZeroToHundredCount"], 0)
         self.assertIn("units", coordinates["interpretation"])
 
+    def test_player_label_consistency_reports_only_source_observations(self):
+        events = [
+            event(1, positions=[
+                position(player_name="Player One", jersey=1),
+                position(player_name="Player Two", jersey=2),
+                position(team_id=AWAY, team_name="Synthetic Away", player_name="Away One", jersey=1),
+            ]),
+            event(2, positions=[
+                position(player_name="Player One", jersey=3),
+                position(player_name="Player Three", jersey=2),
+                position(team_id=AWAY, team_name="Synthetic Away", player_name="Away One", jersey=1),
+            ]),
+            event(3, positions=[
+                position(player_name="Player Four", jersey=4),
+                position(player_name="Player Five", jersey=4),
+                position(team_id=AWAY, team_name="Synthetic Away", player_name="Away Two", jersey=4),
+            ]),
+        ]
+        report = report_for(events)
+        labels = report["playerMetricAudit"]["sourcePlayerLabelAudit"]
+
+        self.assertEqual(report["auditVersion"], "1.1.0")
+        self.assertEqual(labels["distinctTeamPlayerNameLabelCount"], 7)
+        self.assertEqual(labels["distinctTeamJerseyNumberLabelCount"], 6)
+        self.assertEqual(labels["teamPlayerNameLabelsWithMultipleJerseyNumbers"], 1)
+        self.assertEqual(labels["teamJerseyNumberLabelsWithMultiplePlayerNames"], 2)
+        self.assertEqual(labels["repeatedTeamJerseySlotsWithinFrames"], 1)
+        self.assertEqual(labels["extraRowsInRepeatedTeamJerseySlotsWithinFrames"], 1)
+        self.assertIn("not canonical roster identities", labels["interpretation"])
+
     def test_metric_variation_and_source_order_are_descriptive_only(self):
         first = event(1, positions=[position(distanceCovered=0.0, touches=0)])
         second = event(2, positions=[position(distanceCovered=1.2, touches=5)])

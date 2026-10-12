@@ -117,8 +117,12 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
         lambda: {metric: [] for metric in METRICS}
     )
     source_identities_by_team: dict[str, set[tuple[Any, Any, Any]]] = defaultdict(set)
+    jerseys_by_team_player_name: dict[tuple[Any, Any], set[Any]] = defaultdict(set)
+    player_names_by_team_jersey: dict[tuple[Any, Any], set[Any]] = defaultdict(set)
     frame_sizes = Counter()
     team_frame_sizes: dict[str, Counter[int]] = defaultdict(Counter)
+    repeated_team_jersey_slots_within_frames = 0
+    extra_rows_in_repeated_team_jersey_slots = 0
     position_count = 0
     for event in events:
         positions = event.get("playerPositions", [])
@@ -126,20 +130,29 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
             raise AuditError("Candidate has a non-array playerPositions value")
         frame_sizes[len(positions)] += 1
         by_team = Counter()
+        team_jersey_rows = Counter()
         for position in positions:
             if not isinstance(position, dict):
                 raise AuditError("Candidate has a non-object position row")
             team_id = position.get("teamId")
             team_name = position.get("teamName")
-            key = (team_id, position.get("playerName"), position.get("jerseyNumber"))
+            player_name = position.get("playerName")
+            jersey_number = position.get("jerseyNumber")
+            key = (team_id, player_name, jersey_number)
             source_players[key]
             source_identities_by_team[str(team_name)].add(key)
+            jerseys_by_team_player_name[(team_id, player_name)].add(jersey_number)
+            player_names_by_team_jersey[(team_id, jersey_number)].add(player_name)
+            team_jersey_rows[(team_id, jersey_number)] += 1
             by_team[str(team_name)] += 1
             position_count += 1
             for metric in METRICS:
                 source_players[key][metric].append(position.get(metric))
         for team_name, count in by_team.items():
             team_frame_sizes[team_name][count] += 1
+        repeated_slots = [count for count in team_jersey_rows.values() if count > 1]
+        repeated_team_jersey_slots_within_frames += len(repeated_slots)
+        extra_rows_in_repeated_team_jersey_slots += sum(count - 1 for count in repeated_slots)
 
     metrics: dict[str, Any] = {}
     for metric in METRICS:
@@ -243,7 +256,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     clock_value_span = clocks[-1] - clocks[0] if len(clocks) > 1 else 0
 
     return {
-        "auditVersion": "1.0.0",
+        "auditVersion": "1.1.0",
         "source": {
             "path": source_policy.get("path"),
             "manifestVersion": manifest.get("manifestVersion"),
@@ -265,6 +278,19 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
             "mayBePresentedAsObservedPerformance": metrics_policy.get("mayBePresentedAsObservedPerformance"),
             "sourceCompositeIdentitiesByTeam": {
                 team: len(identities) for team, identities in sorted(source_identities_by_team.items())
+            },
+            "sourcePlayerLabelAudit": {
+                "distinctTeamPlayerNameLabelCount": len(jerseys_by_team_player_name),
+                "distinctTeamJerseyNumberLabelCount": len(player_names_by_team_jersey),
+                "teamPlayerNameLabelsWithMultipleJerseyNumbers": sum(
+                    len(jerseys) > 1 for jerseys in jerseys_by_team_player_name.values()
+                ),
+                "teamJerseyNumberLabelsWithMultiplePlayerNames": sum(
+                    len(names) > 1 for names in player_names_by_team_jersey.values()
+                ),
+                "repeatedTeamJerseySlotsWithinFrames": repeated_team_jersey_slots_within_frames,
+                "extraRowsInRepeatedTeamJerseySlotsWithinFrames": extra_rows_in_repeated_team_jersey_slots,
+                "interpretation": "Source-label consistency across observed rows only; names and jersey numbers are not canonical roster identities or a football-rules verdict.",
             },
             "positionObservationCount": position_count,
             "fields": metrics,
