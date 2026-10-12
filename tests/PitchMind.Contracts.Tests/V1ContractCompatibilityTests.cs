@@ -70,6 +70,18 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void Analyst_request_serialization_pins_the_v1_request_shape()
+    {
+        var request = new AnalystRequest("insight", 5400, "analyst");
+
+        AssertJsonProperties(request, "insightId", "atSeconds", "audience");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(request, Json));
+        Assert.Equal("insight", json.RootElement.GetProperty("insightId").GetString());
+        Assert.Equal(5400, json.RootElement.GetProperty("atSeconds").GetInt32());
+        Assert.Equal("analyst", json.RootElement.GetProperty("audience").GetString());
+    }
+
+    [Fact]
     public void Match_and_evidence_serialization_preserve_required_identifiers_and_time()
     {
         var sourceEvent = new MatchEventResponse(Guid.Empty, "match", 0, "pass", 0, 1, DateTimeOffset.UnixEpoch);
