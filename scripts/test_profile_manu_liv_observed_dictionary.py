@@ -189,6 +189,68 @@ class ObservedDictionaryInputValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate JSON object key: source"):
                 generator.render(source, manifest)
 
+    def test_nested_and_escape_equivalent_duplicate_keys_are_rejected(self) -> None:
+        valid_event = (
+            b'{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,'
+            b'"eventType":"Pass","outcome":"Complete","metadata":{},"playerPositions":[]}'
+        )
+        duplicate_metadata = (
+            b'{"metric":"first","metric":"second"}'
+        )
+        escaped_equivalent_metadata = (
+            b'{"1":"first","\\u0031":"second"}'
+        )
+        cases = (
+            ("nested duplicate", duplicate_metadata, "Duplicate JSON object key: metric"),
+            ("escaped-equivalent key", escaped_equivalent_metadata, "Duplicate JSON object key: 1"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+            for label, metadata, message in cases:
+                with self.subTest(case=label):
+                    source.write_bytes(b"[" + valid_event.replace(b'"metadata":{}', b'"metadata":' + metadata) + b"]")
+                    manifest.write_text(json.dumps({
+                        "manifestVersion": "test",
+                        "status": "candidate_not_canonical",
+                        "source": {
+                            "path": "candidate.json",
+                            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                            "byteSize": source.stat().st_size,
+                            "expectedEventCount": 1,
+                        },
+                    }), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, message):
+                        generator.render(source, manifest)
+
+    def test_distinct_numeric_looking_string_keys_remain_distinct(self) -> None:
+        event = (
+            b'{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,'
+            b'"eventType":"Pass","outcome":"Complete",'
+            b'"metadata":{"1":"first","1.0":"second"},"playerPositions":[]}'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+            source.write_bytes(b"[" + event + b"]")
+            manifest.write_text(json.dumps({
+                "manifestVersion": "test",
+                "status": "candidate_not_canonical",
+                "source": {
+                    "path": "candidate.json",
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "byteSize": source.stat().st_size,
+                    "expectedEventCount": 1,
+                },
+            }), encoding="utf-8")
+
+            report = generator.render(source, manifest)
+
+            self.assertIn("| `1` | `string` 1 |", report)
+            self.assertIn("| `1.0` | `string` 1 |", report)
+
 
 class ObservedDictionaryNumericCardinalityTests(unittest.TestCase):
     def test_numeric_values_use_numeric_equality_and_keep_booleans_separate(self) -> None:
