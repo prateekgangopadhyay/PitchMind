@@ -1,6 +1,6 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 16 and Redis 7.4 run in Docker Desktop under Compose project `pitchmind`. The ports bind only to 127.0.0.1. Compose explicitly reuses the `pitchmind_postgres_data` and `pitchmind_redis_data` named volumes so a project-name change cannot silently create empty replacement stores. The PostgreSQL service is pinned to `postgres:16-alpine`, matching the reported existing local database major version. `dev-down.sh` preserves the volumes; `dev-reset.sh` removes them only after explicit confirmation. Compose configuration tests check the image and volume names offline. This config does not migrate data or verify runtime compatibility. All checkouts on this machine using project `pitchmind` share the same containers; `dev-down.sh` from any such checkout stops the shared stack. Existing-service readiness was checked without starting or stopping containers. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 16 and Redis 7.4 run in Docker Desktop under Compose project `pitchmind`. The ports bind only to 127.0.0.1. The default project uses the existing `pitchmind_postgres_data` and `pitchmind_redis_data` volumes. When `COMPOSE_PROJECT_NAME` is overridden for an isolated test stack, volume names follow that project so test containers cannot attach to the default project's data. The PostgreSQL service is pinned to `postgres:16-alpine`, matching the reported existing local database major version. `dev-down.sh` preserves the volumes; `dev-reset.sh` removes them only after explicit confirmation. Compose configuration tests check the image and volume names offline. This config does not migrate data or verify runtime compatibility. All checkouts on this machine using project `pitchmind` share the same containers; `dev-down.sh` from any such checkout stops the shared stack. Existing-service readiness was checked without starting or stopping containers. **These are development-only containers**; Azure environments use managed Azure services.
 
 From the repository root:
 
@@ -8,6 +8,17 @@ From the repository root:
 ./scripts/dev-up.sh
 ./scripts/dev-health.sh
 ```
+
+For an isolated test stack, override the project name and use free loopback ports. Compose derives separate volume names from that project, so these commands do not attach to the default `pitchmind` data:
+
+```bash
+PROJECT=pitchmind-validation
+COMPOSE_PROJECT_NAME="$PROJECT" POSTGRES_PORT=25432 REDIS_PORT=26379 ./scripts/dev-up.sh
+COMPOSE_PROJECT_NAME="$PROJECT" POSTGRES_PORT=25432 REDIS_PORT=26379 ./scripts/dev-health.sh
+COMPOSE_PROJECT_NAME="$PROJECT" ./scripts/dev-down.sh
+```
+
+The isolated test volumes remain after `dev-down.sh`; remove them only when they contain disposable test data, using `COMPOSE_PROJECT_NAME="$PROJECT" ./scripts/dev-reset.sh --force`.
 
 In a second terminal, run the local API:
 

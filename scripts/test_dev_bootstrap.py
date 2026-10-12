@@ -421,10 +421,30 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertIn("down --volumes --remove-orphans", self.docker_log.read_text())
         self.assertTrue((self.root / "docker" / ".env").is_file())
 
-    def _resolved_compose_config(self, compose_file: Path) -> dict[str, object]:
+    def _resolved_compose_config(
+        self,
+        compose_file: Path,
+        env_overrides: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         docker = shutil.which("docker")
         if docker is None:
             self.skipTest("Docker Compose CLI is unavailable for resolved-port validation")
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            not in {
+                "POSTGRES_USER",
+                "POSTGRES_DB",
+                "POSTGRES_PASSWORD",
+                "POSTGRES_PORT",
+                "REDIS_PASSWORD",
+                "REDIS_PORT",
+                "COMPOSE_PROJECT_NAME",
+            }
+        }
+        if env_overrides:
+            env.update(env_overrides)
         result = subprocess.run(
             [
                 docker,
@@ -438,19 +458,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "json",
             ],
             cwd=REPOSITORY,
-            env={
-                key: value
-                for key, value in os.environ.items()
-                if key
-                not in {
-                    "POSTGRES_USER",
-                    "POSTGRES_DB",
-                    "POSTGRES_PASSWORD",
-                    "POSTGRES_PORT",
-                    "REDIS_PASSWORD",
-                    "REDIS_PORT",
-                }
-            },
+            env=env,
             capture_output=True,
             text=True,
             check=False,
@@ -537,6 +545,22 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             {
                 "postgres_data": {"name": "pitchmind_postgres_data"},
                 "redis-data": {"name": "pitchmind_redis_data"},
+            },
+        )
+
+    def test_alternate_compose_project_uses_isolated_volume_names(self) -> None:
+        project = "pitchmind-bootstrap-isolated"
+        config = self._resolved_compose_config(
+            REPOSITORY / "docker" / "compose.yml",
+            {"COMPOSE_PROJECT_NAME": project},
+        )
+
+        self.assertEqual(config.get("name"), project)
+        self.assertEqual(
+            config.get("volumes"),
+            {
+                "postgres_data": {"name": f"{project}_postgres_data"},
+                "redis-data": {"name": f"{project}_redis_data"},
             },
         )
 
