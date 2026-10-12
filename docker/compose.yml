@@ -38,9 +38,9 @@ services:
 
 volumes:
   postgres_data:
-    name: pitchmind_postgres_data
+    name: ${COMPOSE_PROJECT_NAME:-pitchmind}_postgres_data
   redis-data:
-    name: pitchmind_redis_data
+    name: ${COMPOSE_PROJECT_NAME:-pitchmind}_redis_data
 
 networks:
   local:
