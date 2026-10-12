@@ -6,6 +6,8 @@
 
 **Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON has no embedded provenance/rights manifest. No authoritative source data dictionary was supplied; this owner declaration does not resolve clock units/policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
 
+**Data-dictionary clarification (2026-10-12):** the repository owner confirmed that no authoritative field dictionary is available. The generated [observed structural dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) documents field paths, observed JSON shapes, nullability, and measured values for the pinned bytes; it is not a substitute for source-owner semantics. Coordinate units/axes/orientation, clock meaning, player-metric definitions/units, event meaning, and canonical mappings remain unspecified or unverified.
+
 ## Observed source statistics
 | Property | Observed value |
 |---|---|
@@ -41,7 +43,7 @@
 | Substitution | 2 | RedCard | 1 |
 | FullTime | 1 | | |
 
-**Football quality concern:** 124 shot events and 254 fouls in a single match are not a plausible ordinary professional match profile. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
+**Football quality review prompt:** The source contains 124 rows labeled as shots and 254 labeled as fouls. These counts appear unusually high, but source event definitions, deduplication rules, and counting methodology are unavailable; the counts alone do not establish football plausibility. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
 
 ## Clock, coordinate and identity conversion — REQUIRED
 - Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.** The candidate field is named `clockSeconds`, but its unit and clock semantics remain unverified until supported by a source-owner data dictionary.
@@ -65,7 +67,7 @@ This JSON contains **real club and player names**, location and synthetic-lookin
 6. API/UI serves *this* match only after canonical adapter verification; source names/scores not hardcoded in C# or React. Frontend matches 96:01, both team labels and score changes, missing footage is explicit.
 7. Demonstrated model grounding uses cited source-derived evidence, never real-match knowledge.
 
-**Implemented so far:** read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py) and manifest-pinned [candidate structural validator](../../scripts/validate_manu_liv_candidate.py), each with standalone tests. The candidate validator emits an aggregate report and preserves source event IDs, sequence, clock, and record ordering in its checks/digests. It does **not** normalize, map, ingest, or make the feed available through match APIs. Source-specific canonical import is **not yet implemented**; ordinary match routes remain fail-closed until admitted canonical PostgreSQL data and a read port exist.
+**Implemented so far:** read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py), manifest-pinned [candidate structural validator](../../scripts/validate_manu_liv_candidate.py), and [structural observed-dictionary generator](../../scripts/profile_manu_liv_observed_dictionary.py), each with standalone tests. The candidate validator emits an aggregate report and preserves source event IDs, sequence, clock, and record ordering in its checks/digests. The observed-dictionary generator checks its pinned byte hash and validates nested metadata/position shapes plus aggregate field types before producing the structural report; malformed nested shapes fail with a concise validation error. These tools do **not** normalize, map, ingest, or make the feed available through match APIs. Source-specific canonical import is **not yet implemented**; ordinary match routes remain fail-closed until admitted canonical PostgreSQL data and a read port exist. Latest dictionary input-shape regression evidence is recorded in [EP03-S01 dictionary input validation](../engineering/evidence/EP03-S01-DICTIONARY-INPUT-GUARD-2026-10-11.md).
 
 ## Follow-up measured football-data audit — 2026-10-11
 
