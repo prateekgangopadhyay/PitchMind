@@ -1,12 +1,13 @@
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Simulation;
+using PitchMind.TestFixtures;
 using Xunit;
 namespace PitchMind.Application.Tests;
 public sealed class SyntheticMatchTests
 {
     [Fact] public void ReplayExcludesFutureGoalsAndEvidence()
     {
-        var service = new SyntheticMatchService();
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
         Assert.Equal(0, service.GetState(3308).HomeScore); Assert.Empty(service.GetInsights(3308));
         Assert.Equal(1, service.GetState(3309).HomeScore); Assert.Single(service.GetInsights(3309));
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
@@ -30,10 +31,10 @@ public sealed class SyntheticMatchTests
         var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = "ridge" } : e).ToArray();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
     }
-    [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService().GetState(clock));
+    [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(clock));
     [Fact] public void AudienceChangesCopyWithoutChangingEvidence()
     {
-        var service = new SyntheticMatchService(); var id = service.GetInsights(5400).Single().Id;
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()); var id = service.GetInsights(5400).Single().Id;
         var fan = service.Explain(id, 3309, "fan")!; var analyst = service.Explain(id, 3309, "analyst")!;
         Assert.Equal(fan.EventIds, analyst.EventIds); Assert.NotEqual(fan.Text, analyst.Text);
     }

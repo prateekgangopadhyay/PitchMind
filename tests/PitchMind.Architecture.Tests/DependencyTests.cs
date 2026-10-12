@@ -1,7 +1,10 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -53,7 +56,385 @@ public sealed class DependencyTests
         var root = FindRepositoryRoot();
         var domain = ReadEvaluatedProjectDocuments(root)["PitchMind.Domain"];
 
-        Xunit.Assert.Empty(ArchitectureDependencyPolicy.ValidateDomainReferences(domain));
+        var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(domain);
+        Xunit.Assert.Empty(violations);
+    }
+
+    [Xunit.Fact]
+    public void ProductionSource_DoesNotGenerateMatchSpecificFixtures()
+    {
+        var root = FindRepositoryRoot();
+        var productionFiles = EnumerateProductionSourceFiles(root);
+        var fixtureDataMarkers = ReadFixtureDataMarkers(root);
+        var numericFixtureMarkers = ReadFixtureNumericMarkers(root);
+        var violations = FindFixtureDataMarkers(productionFiles, fixtureDataMarkers, numericFixtureMarkers)
+            .Select(item => $"{Path.GetRelativePath(root, item.Path)}:{item.LineNumber}: {item.Line.Trim()}")
+            .ToArray();
+
+        Xunit.Assert.Empty(violations);
+    }
+
+    [Xunit.Theory]
+    [Xunit.InlineData("fixture.cs")]
+    [Xunit.InlineData("App.tsx")]
+    public void ProductionFixtureGuard_RejectsNamedMatchDataInEveryRuntimeLanguage(string fileName)
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-production-fixture-guard-");
+        try
+        {
+            var source = Path.Combine(root.FullName, fileName);
+            File.WriteAllText(source, "const team = 'Harbour FC';");
+
+            var violations = FindFixtureDataMarkers([source], new HashSet<string>(["Harbour FC"], StringComparer.Ordinal));
+
+            Xunit.Assert.Single(violations);
+            Xunit.Assert.Equal(source, violations[0].Path);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsEventAndTeamIdsFromCandidateFeed()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var eventId = firstEvent.GetProperty("eventId").GetString();
+        var teamId = firstEvent.GetProperty("teamId").GetString();
+        Xunit.Assert.False(string.IsNullOrWhiteSpace(eventId));
+        Xunit.Assert.False(string.IsNullOrWhiteSpace(teamId));
+
+        var markers = ReadFixtureDataMarkers(root);
+        Xunit.Assert.Contains(eventId!, markers);
+        Xunit.Assert.Contains(teamId!, markers);
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-fixture-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            File.WriteAllText(source, $"const candidateFixture = {{ eventId: '{eventId}', teamId: '{teamId}' }};");
+
+            var violations = FindFixtureDataMarkers([source], markers);
+
+            Xunit.Assert.Single(violations);
+            Xunit.Assert.Equal(source, violations[0].Path);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsCandidateFootballNumericLiterals()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var finalEvent = feed.RootElement[feed.RootElement.GetArrayLength() - 1];
+        var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
+        var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
+        var firstPitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var firstPitchValue = decimal.Parse(firstPitchX, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var firstPitchEquivalent = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture) + "e0";
+        var firstPitchInteger = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture);
+        var firstPlayer = firstEvent.GetProperty("playerPositions")[0];
+        var firstPlayerX = firstPlayer.GetProperty("x").GetRawText();
+        var firstPlayerSpeed = firstPlayer.GetProperty("speed").GetRawText();
+        var firstPlayerHeartRate = firstPlayer.GetProperty("heartRate").GetRawText();
+        var firstPlayerHeartRateWithSeparator = firstPlayerHeartRate.Insert(firstPlayerHeartRate.Length / 2, "_");
+        var finalSequence = finalEvent.GetProperty("sequence").GetInt32();
+        var finalClockSeconds = finalEvent.GetProperty("clockSeconds").GetInt32();
+        var finalPlayer = finalEvent.GetProperty("playerPositions")[0];
+        var finalPlayerStamina = finalPlayer.GetProperty("stamina").GetRawText();
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
+            File.WriteAllText(source,
+                $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
+                $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
+                $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
+                $"const equivalentPitch = {{ pitchX: {firstPitchEquivalent} }};\n" +
+                $"const integerPitch = {{ pitchY: {firstPitchInteger} }};\n" +
+                $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
+                $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
+                $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
+                $"const hexSequence = {{ sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                $"const binaryClock = {{ clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)} }};\n" +
+                $"const octalFinalSequence = {{ sequence: 0o{Convert.ToString(finalSequence, 8)} }};\n" +
+                $"const explicitPlusSequence = {{ sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
+                $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
+                $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
+                $"const unrelatedWidth = {{ width: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                "const unrelatedPageSize = 25;");
+            File.WriteAllText(csharpSource,
+                $"var coordinate = new {{ pitchX = {firstPitchX}m }};\n" +
+                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"var sourceSequence = new {{ sequence = 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}UL }};");
+
+            var violations = FindFixtureDataMarkers(
+                [source, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(19, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchEquivalent}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchY: {firstPitchInteger}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRate}n", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0o{Convert.ToString(finalSequence, 8)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedWidth", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX = {firstPitchX}m", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate = {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"stamina: {finalPlayerStamina}", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
+    {
+        var sourceRoots = new[]
+        {
+            Path.Combine(root, "src"),
+            Path.Combine(root, "frontend", "src")
+        };
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".cs", ".js", ".jsx", ".ts", ".tsx"
+        };
+
+        return sourceRoots
+            .Where(Directory.Exists)
+            .SelectMany(sourceRoot => Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+            .Where(path => extensions.Contains(Path.GetExtension(path)))
+            .Where(path => !Path.GetFileName(path).Contains(".test.", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !Path.GetFileName(path).Contains(".spec.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlySet<string> ReadFixtureDataMarkers(string root)
+    {
+        var markers = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "SyntheticFixtureGenerator", "Harbour FC", "Ridge Athletic"
+        };
+
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        if (!File.Exists(feedPath))
+        {
+            throw new FileNotFoundException("The candidate synthetic feed is required to check production source for fixture literals.", feedPath);
+        }
+
+        using var stream = File.OpenRead(feedPath);
+        using var document = JsonDocument.Parse(stream);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("The candidate synthetic feed must be a JSON array for the production-source guard.");
+        }
+
+        foreach (var sourceEvent in document.RootElement.EnumerateArray())
+        {
+            AddStringProperties(sourceEvent, markers, "eventId", "matchId", "teamId", "teamName", "playerName", "receiverName");
+            if (!sourceEvent.TryGetProperty("playerPositions", out var positions) || positions.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var position in positions.EnumerateArray())
+            {
+                AddStringProperties(position, markers, "teamId", "teamName", "playerName");
+            }
+        }
+
+        return markers;
+    }
+
+    private static void AddStringProperties(JsonElement element, ISet<string> markers, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String)
+            {
+                var value = property.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    markers.Add(value);
+                }
+            }
+        }
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlySet<string>> ReadFixtureNumericMarkers(string root)
+    {
+        var markers = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        if (!File.Exists(feedPath))
+        {
+            throw new FileNotFoundException("The candidate synthetic feed is required to check production source for match-time literals.", feedPath);
+        }
+
+        using var stream = File.OpenRead(feedPath);
+        using var document = JsonDocument.Parse(stream);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("The candidate synthetic feed must be a JSON array for the production-source guard.");
+        }
+
+        foreach (var sourceEvent in document.RootElement.EnumerateArray())
+        {
+            AddFootballNumericMarkers(sourceEvent, markers);
+        }
+
+        return markers.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlySet<string>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddFootballNumericMarkers(JsonElement element, IDictionary<string, HashSet<string>> markers)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (FootballNumericProperties.Contains(property.Name))
+                {
+                    AddNumberProperty(element, property.Name, markers);
+                }
+
+                AddFootballNumericMarkers(property.Value, markers);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                AddFootballNumericMarkers(item, markers);
+            }
+        }
+    }
+
+    private static readonly HashSet<string> FootballNumericProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sequence", "clockSeconds", "period", "pitchX", "pitchY", "ballX", "ballY", "endX", "endY",
+        "jerseyNumber", "x", "y", "speed", "distanceCovered", "heatIndex", "passAccuracy", "touches",
+        "stamina", "heartRate"
+    };
+
+    private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
+    {
+        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+        {
+            return;
+        }
+
+        if (!markers.TryGetValue(name, out var values))
+        {
+            values = new HashSet<string>(StringComparer.Ordinal);
+            markers.Add(name, values);
+        }
+
+        values.Add(NormalizeNumericLiteral(property.GetRawText()));
+    }
+
+    private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
+        IEnumerable<string> files,
+        IReadOnlySet<string> markers,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers = null)
+    {
+        return files
+            .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
+            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)) ||
+                ContainsNumericFixtureMarker(item.Line, numericMarkers))
+            .ToArray();
+    }
+
+    private static bool ContainsNumericFixtureMarker(
+        string line,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers)
+    {
+        if (numericMarkers is null || numericMarkers.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
+        {
+            if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
+                values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeNumericLiteral(string value)
+    {
+        var normalized = value.Replace("_", string.Empty, StringComparison.Ordinal);
+        var isNegative = normalized.StartsWith("-", StringComparison.Ordinal);
+        var unsigned = normalized.StartsWith("+", StringComparison.Ordinal) || isNegative ? normalized[1..] : normalized;
+        var radix = unsigned.Length > 2 && unsigned[0] == '0'
+            ? char.ToLowerInvariant(unsigned[1]) switch
+            {
+                'x' => 16,
+                'b' => 2,
+                'o' => 8,
+                _ => 10
+            }
+            : 10;
+
+        if (radix != 10)
+        {
+            BigInteger number = BigInteger.Zero;
+            foreach (var digit in unsigned.AsSpan(2))
+            {
+                var digitValue = digit switch
+                {
+                    >= '0' and <= '9' => digit - '0',
+                    >= 'a' and <= 'f' => digit - 'a' + 10,
+                    >= 'A' and <= 'F' => digit - 'A' + 10,
+                    _ => radix
+                };
+                if (digitValue >= radix)
+                {
+                    return value;
+                }
+
+                number = number * radix + digitValue;
+            }
+
+            return (isNegative ? -number : number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+            ? decimalNumber.ToString("G29", CultureInfo.InvariantCulture)
+            : value;
     }
 
     [Xunit.Fact]
@@ -103,6 +484,73 @@ public sealed class DependencyTests
 
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetResolvedReference '" + externalAssembly, StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, violation => violation.Contains("TargetCompilerReference '" + externalAssembly, StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void Domain_RejectsCompilerReferenceAddedImmediatelyBeforeCoreCompile()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-late-compiler-input-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            var injectedAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<Target Name='InjectLateCompilerReference' BeforeTargets='CoreCompile'><ItemGroup>" +
+                "<ReferencePathWithRefAssemblies Include='" + injectedAssembly + "' />" +
+                "</ItemGroup></Target></Project>");
+            File.WriteAllText(Path.Combine(root.FullName, "Fixture.cs"), "public sealed class Fixture { }");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetFinalCompilerReference" &&
+                item.Attribute("FullPath")?.Value == injectedAssembly);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetFinalCompilerReference", StringComparison.Ordinal) &&
+                violation.Contains(injectedAssembly, StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void Domain_RejectsCompilerReferenceMetadataMutatedImmediatelyBeforeCoreCompile()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-late-compiler-metadata-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            var dotnetRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
+            var runtimeReference = Directory.GetFiles(
+                    Path.Combine(dotnetRoot, "packs", "Microsoft.NETCore.App.Ref"), "System.Runtime.dll", SearchOption.AllDirectories)
+                .First(path => path.Contains($"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}net10.0{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+            var injectedAssembly = Path.Combine(AppContext.BaseDirectory, "PitchMind.Infrastructure.dll");
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<Target Name='MutateLateCompilerReferenceMetadata' BeforeTargets='CoreCompile'><ItemGroup>" +
+                "<ReferencePathWithRefAssemblies Update='@(ReferencePathWithRefAssemblies)' " +
+                "Condition=\"'%(ReferencePathWithRefAssemblies.FullPath)' == '" + runtimeReference + "'\">" +
+                "<ReferenceAssembly>" + injectedAssembly + "</ReferenceAssembly>" +
+                "</ReferencePathWithRefAssemblies></ItemGroup></Target></Project>");
+            File.WriteAllText(Path.Combine(root.FullName, "Fixture.cs"), "public sealed class Fixture { }");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateDomainReferences(evaluated);
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item => item.Name.LocalName == "TargetFinalCompilerReference" &&
+                item.Attribute("FullPath")?.Value == runtimeReference &&
+                item.Attribute("ReferenceAssembly")?.Value == injectedAssembly);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("TargetFinalCompilerReference", StringComparison.Ordinal) &&
+                violation.Contains(runtimeReference, StringComparison.Ordinal));
         }
         finally
         {
@@ -596,6 +1044,122 @@ public sealed class DependencyTests
                 project.Root!.Add(item);
             }
         }
+
+        AddFinalCompilerInputs(projectPath, project);
+    }
+
+    private static void AddFinalCompilerInputs(string projectPath, XDocument project)
+    {
+        var captureDirectory = Directory.CreateTempSubdirectory("pitchmind-compiler-input-capture-");
+        try
+        {
+            var targetPath = Path.Combine(captureDirectory.FullName, "CaptureCompilerInputs.targets");
+            var outputPath = Path.Combine(captureDirectory.FullName, "compiler-inputs.txt");
+            File.WriteAllText(targetPath,
+                "<Project><Target Name='PitchMindCaptureFinalCompilerInputs' DependsOnTargets='ResolveReferences;CoreCompile'>" +
+                "<WriteLinesToFile File=\"$(PitchMindCompilerInputOutput)\" " +
+                "Lines=\"@(ReferencePathWithRefAssemblies-&gt;'%(Identity)|%(FullPath)|%(ReferenceAssembly)|%(AssemblyName)|%(OriginalProjectReferenceItemSpec)|%(DefiningProjectFullPath)')\" " +
+                "Overwrite=\"true\" /></Target></Project>");
+
+            var startInfo = new ProcessStartInfo("dotnet")
+            {
+                WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add("msbuild");
+            startInfo.ArgumentList.Add(projectPath);
+            startInfo.ArgumentList.Add("-target:PitchMindCaptureFinalCompilerInputs");
+            startInfo.ArgumentList.Add("-property:CustomAfterMicrosoftCommonTargets=" + targetPath);
+            startInfo.ArgumentList.Add("-property:PitchMindCompilerInputOutput=" + outputPath);
+            startInfo.ArgumentList.Add("-nologo");
+            startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+            startInfo.ArgumentList.Add("-maxcpucount:1");
+            startInfo.ArgumentList.Add("-nodeReuse:false");
+
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start final compiler-input capture.");
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(60_000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException($"Final compiler-input capture timed out for '{projectPath}'.");
+            }
+
+            var output = outputTask.GetAwaiter().GetResult();
+            var error = errorTask.GetAwaiter().GetResult();
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Final compiler-input capture failed for '{projectPath}': {error}{output}");
+            }
+
+            if (!File.Exists(outputPath))
+            {
+                throw new InvalidOperationException($"Final compiler-input capture did not produce '{outputPath}'.");
+            }
+
+            var previouslyCapturedCompilerInputs = project.Descendants()
+                .Where(item => item.Name.LocalName == "TargetCompilerReference")
+                .Select(item => CompilerInputSignature(
+                    item.Attribute("Include")?.Value,
+                    item.Attribute("FullPath")?.Value,
+                    item.Attribute("ReferenceAssembly")?.Value,
+                    item.Attribute("AssemblyName")?.Value,
+                    item.Attribute("OriginalProjectReferenceItemSpec")?.Value,
+                    item.Attribute("DefiningProjectFullPath")?.Value))
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var line in File.ReadAllLines(outputPath))
+            {
+                var metadata = line.Split('|');
+                var signature = CompilerInputSignature(metadata[0], metadata[1], metadata[2], metadata[3], metadata[4], metadata[5]);
+                if (previouslyCapturedCompilerInputs.Contains(signature))
+                {
+                    continue;
+                }
+
+                var item = new XElement("TargetFinalCompilerReference", new XAttribute("Include", metadata[0]));
+                var names = new[] { "FullPath", "ReferenceAssembly", "AssemblyName", "OriginalProjectReferenceItemSpec", "DefiningProjectFullPath" };
+                for (var index = 1; index < metadata.Length && index <= names.Length; index++)
+                {
+                    if (!string.IsNullOrWhiteSpace(metadata[index]))
+                    {
+                        item.SetAttributeValue(names[index - 1], metadata[index]);
+                    }
+                }
+
+                var projectReference = project.Descendants().FirstOrDefault(existing =>
+                    existing.Name.LocalName == "TargetCompilerReference" &&
+                    !string.IsNullOrWhiteSpace(metadata[3]) &&
+                    string.Equals(existing.Attribute("AssemblyName")?.Value, metadata[3], StringComparison.Ordinal));
+                if (projectReference is not null &&
+                    string.IsNullOrWhiteSpace(item.Attribute("OriginalProjectReferenceItemSpec")?.Value) &&
+                    !string.IsNullOrWhiteSpace(projectReference.Attribute("OriginalProjectReferenceItemSpec")?.Value))
+                {
+                    item.SetAttributeValue("OriginalProjectReferenceItemSpec", projectReference.Attribute("OriginalProjectReferenceItemSpec")!.Value);
+                }
+
+                project.Root!.Add(item);
+            }
+        }
+        finally
+        {
+            captureDirectory.Delete(recursive: true);
+        }
+    }
+
+    private static string CompilerInputSignature(params string?[] fields)
+    {
+        var normalized = fields.Select(field => field ?? string.Empty).ToArray();
+        for (var index = 0; index < normalized.Length; index++)
+        {
+            if (index is 1 or 2 && !string.IsNullOrWhiteSpace(normalized[index]))
+            {
+                normalized[index] = Path.GetFullPath(normalized[index]);
+            }
+        }
+
+        return string.Join('\u001f', normalized);
     }
 
     private static string TargetItemSignature(string itemType, XElement item)
@@ -797,7 +1361,7 @@ internal static class ArchitectureDependencyPolicy
         foreach (var item in domain.Descendants())
         {
             var itemType = item.Name.LocalName;
-            var forbiddenResolvedInput = (itemType is "TargetResolvedReference" or "TargetCompilerReference") &&
+            var forbiddenResolvedInput = (itemType is "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference") &&
                                          !IsTrustedSdkFrameworkInput(domain, item);
             var forbidden = itemType is "PackageReference" or "TargetPackageReference" or "Reference" or "TargetReference" or
                 "TargetFrameworkReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference" ||
@@ -890,10 +1454,10 @@ internal static class ArchitectureDependencyPolicy
             var projectPath = document.Root?.Attribute("ProjectPath")?.Value;
             var projectDirectory = string.IsNullOrWhiteSpace(projectPath) ? null : Path.GetDirectoryName(projectPath);
             foreach (var item in document.Descendants().Where(element =>
-                         element.Name.LocalName is "Reference" or "TargetReference" or "TargetResolvedReference" or "TargetCompilerReference" or "PackageReference" or "PackageAssembly" or
+                         element.Name.LocalName is "Reference" or "TargetReference" or "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference" or "PackageReference" or "PackageAssembly" or
                              "TargetPackageReference" or "COMReference" or "TargetCOMReference" or "NativeReference" or "TargetNativeReference"))
             {
-                if ((item.Name.LocalName is "TargetResolvedReference" or "TargetCompilerReference") &&
+                if ((item.Name.LocalName is "TargetResolvedReference" or "TargetCompilerReference" or "TargetFinalCompilerReference") &&
                     IsMappedProjectAssembly(project, item, document, projectDirectory, allowedProjectReferences))
                 {
                     continue;

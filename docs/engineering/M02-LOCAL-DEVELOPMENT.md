@@ -54,6 +54,6 @@ Azure DevOps validates .NET restore/build/tests, React `npm ci`/build/test/lint,
 ## Current limitations and evidence
 
 - The API and workers do not yet use PostgreSQL or Redis as canonical persistence/cache; these containers provide local infrastructure only.
-- The offline API remains a fixture-backed demonstration. This workstation workflow does not certify football source rights, coordinate units, or feed realism.
+- Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint may return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned PostgreSQL-backed read port. Local startup and health do not certify feed clock, coordinate units/orientation, player metrics, event mappings or football realism.
 - A Docker daemon is required to execute the Compose start, health, and teardown flow. Static Compose validation does not substitute for a successful fresh-machine Docker smoke.
 - Run `./scripts/validate-all.sh` for repository checks. Run `./scripts/test-postgres.sh` only after local PostgreSQL is healthy; it creates and drops an isolated test database.
