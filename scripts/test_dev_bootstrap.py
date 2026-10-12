@@ -152,6 +152,40 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertFalse((self.root / "docker" / ".env").exists())
         self.assertFalse(self.docker_log.exists())
 
+    def test_docker_context_overrides_remote_docker_host(self) -> None:
+        self.env["DOCKER_CONTEXT"] = "desktop-local"
+        self.env["DOCKER_HOST"] = "tcp://builder.example.invalid:2376"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context inspect desktop-local --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+                "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
+            ],
+        )
+
+    def test_remote_docker_context_overrides_local_docker_host(self) -> None:
+        self.env["DOCKER_CONTEXT"] = "remote-builder"
+        self.env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+        self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+        self.assertFalse((self.root / "docker" / ".env").exists())
+        self.assertFalse(self.openssl_count.exists())
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context inspect remote-builder --format {{(index .Endpoints \"docker\").Host}}",
+            ],
+        )
+
     def test_docker_unavailable_fails_before_creating_local_credentials(self) -> None:
         self.env["PITCHMIND_FAKE_DOCKER_INFO_STATUS"] = "1"
         result = self._run("dev-up.sh")
