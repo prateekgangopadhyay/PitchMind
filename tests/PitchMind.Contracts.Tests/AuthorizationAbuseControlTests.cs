@@ -137,6 +137,10 @@ public sealed class AuthorizationAbuseControlTests
 
         var filterRules = factory.Services.GetRequiredService<IOptions<LoggerFilterOptions>>().Value.Rules;
         Assert.Contains(filterRules, rule => rule.CategoryName == "Microsoft.AspNetCore.Hosting" && rule.LogLevel == LogLevel.Warning);
+        var loggerFactory = factory.Services.GetRequiredService<ILoggerFactory>();
+        Assert.False(loggerFactory.CreateLogger("Microsoft.AspNetCore.Hosting.Diagnostics").IsEnabled(LogLevel.Information));
+        loggerFactory.CreateLogger("PitchMind.SecurityTest.Control").LogInformation("capture-control");
+        Assert.Contains(loggerProvider.Messages, message => message.Contains("capture-control", StringComparison.Ordinal));
 
         using var client = factory.CreateClient();
         using var response = await client.PostAsync(
