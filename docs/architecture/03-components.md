@@ -14,13 +14,14 @@ flowchart TB
   Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
-  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL canonical ledger")]
+  ProjectionRead["PostgresMatchProjectionStore: metadata + projection/provenance read"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` now folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. Two cautions or an explicit red-card event dismisses the player in this in-memory projection. This is an offline deterministic projection only: the event store is a separately exercised adapter; current API paths do **not** consume it, persist projections, or retain correction revisions. The current PostgreSQL type constraint also does not admit the new red-card enum value. Competition linkage and durable revision/correction semantics remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The version 2 schema migration defines metadata, frames, revisioned projection, evidence, quarantine, checkpoint and outbox tables. `PostgresMatchProjectionStore` now records immutable match source metadata and reads persisted projection state plus insight provenance, verifying source/state hashes and that event/frame evidence is not later than the insight sequence. Atomic event+projection+outbox writes remain owned by `PostgresCanonicalUpdateStore` in the stacked EP04-S03 workstream; this read store does not duplicate that write path. The current offline API still does not consume the PostgreSQL read store. Competition linkage and source-feed ingestion remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
@@ -38,7 +39,7 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
-    Ports["IEventLedger / IFrameStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
