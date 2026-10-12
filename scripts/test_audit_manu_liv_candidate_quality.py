@@ -122,6 +122,36 @@ class CandidateQualityAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(audit.AuditError, "Non-standard JSON numeric constant|Non-finite JSON number"):
                     audit.audit_data(raw, manifest, "public enum MatchEventType { Pass }")
 
+    def test_json_integer_digit_limit_accepts_boundary_and_rejects_overflow(self):
+        prefix = json.dumps([event(1)], separators=(",", ":")).encode()[:-2]
+        valid_raw = prefix + b',"extra":' + b"9" * audit.MAX_JSON_INTEGER_DIGITS + b"}]"
+        invalid_raw = prefix + b',"extra":' + b"9" * (audit.MAX_JSON_INTEGER_DIGITS + 1) + b"}]"
+        manifest = {
+            "manifestVersion": "test",
+            "status": "candidate_not_canonical",
+            "source": {
+                "path": "fixture.json",
+                "sha256": audit.sha256(valid_raw).hexdigest(),
+                "byteSize": len(valid_raw),
+                "expectedEventCount": 1,
+            },
+            "match": {"sourceClockUnit": None, "sourceClockUnitStatus": "unverified",
+                      "clockAndPeriodChecks": "candidate-file-structural-regression-only", "sequenceStart": 1},
+            "coordinates": {"unit": None, "axisConvention": None, "pitchDimensionsMetres": None,
+                            "status": "unverified"},
+            "playerMetrics": {"status": "unvalidated", "unitsAndValidity": "unverified",
+                              "mayBePresentedAsObservedPerformance": False},
+            "canonicalization": {"mappingStatus": "not_approved"},
+        }
+
+        self.assertTrue(audit.audit_data(valid_raw, manifest, "public enum MatchEventType { Pass }"))
+        invalid_manifest = {**manifest, "source": {
+            **manifest["source"], "sha256": audit.sha256(invalid_raw).hexdigest(),
+            "byteSize": len(invalid_raw),
+        }}
+        with self.assertRaisesRegex(audit.AuditError, "JSON integer exceeds the supported size"):
+            audit.audit_data(invalid_raw, invalid_manifest, "public enum MatchEventType { Pass }")
+
     def test_clock_report_does_not_infer_units_from_field_name(self):
         report = report_for([event(1, clock=10)])
         self.assertIsNone(report["chronology"]["clockUnitDeclaredByManifest"])
