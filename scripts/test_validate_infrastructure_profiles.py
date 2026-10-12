@@ -49,6 +49,27 @@ class InfrastructureProfileValidationTests(unittest.TestCase):
         self.assertTrue(any("guard network" in error for error in errors))
         self.assertTrue(any("guard vault" in error for error in errors))
 
+    def test_dev_foundation_modules_are_guarded_only_for_dev(self) -> None:
+        main = self.root / "infra/main.bicep"
+        original = main.read_text(encoding="utf-8")
+
+        self.assertEqual([], validate_profiles(self.root))
+
+        for environment in ("stage", "prod"):
+            with self.subTest(environment=environment):
+                main.write_text(
+                    original.replace(
+                        "environment == 'dev'",
+                        f"environment == '{environment}'",
+                    ),
+                    encoding="utf-8",
+                )
+
+                errors = validate_profiles(self.root)
+
+                self.assertTrue(any("guard network" in error for error in errors))
+                self.assertTrue(any("guard vault" in error for error in errors))
+
     def test_comment_cannot_substitute_for_active_environment_restriction(self) -> None:
         main = self.root / "infra/main.bicep"
         main.write_text(main.read_text(encoding="utf-8").replace(
