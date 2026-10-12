@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -127,6 +129,31 @@ public sealed class AuthorizationAbuseControlTests
         Assert.Equal("application/problem+json", second.Content.Headers.ContentType?.MediaType);
         var problem = await second.Content.ReadFromJsonAsync<ProblemBody>();
         Assert.Equal("RATE_LIMITED", problem?.Code);
+    }
+
+    [Fact]
+    public async Task Authenticated_rate_limit_isolated_by_subject_and_follows_subject_across_addresses()
+    {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            ApiTestAuthentication.Configure(builder, canonicalReadLimit: 1);
+            builder.ConfigureTestServices(services => services.AddSingleton<IStartupFilter>(new TestRemoteIpStartupFilter()));
+        });
+
+        using var firstSubjectFirstAddress = AuthorizedClient(factory, "analyst", MatchId, "viewer-a", "192.0.2.10");
+        using var secondSubjectSameAddress = AuthorizedClient(factory, "analyst", MatchId, "viewer-b", "192.0.2.10");
+        using var firstSubjectSecondAddress = AuthorizedClient(factory, "analyst", MatchId, "viewer-a", "198.51.100.20");
+        var path = $"/api/v1/canonical/matches/{MatchId}/summary?atSeconds=120";
+
+        using var first = await firstSubjectFirstAddress.GetAsync(path);
+        using var secondSubject = await secondSubjectSameAddress.GetAsync(path);
+        using var secondAddress = await firstSubjectSecondAddress.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, first.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, secondSubject.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, secondAddress.StatusCode);
+        Assert.Equal("application/problem+json", secondAddress.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("RATE_LIMITED", (await secondAddress.Content.ReadFromJsonAsync<ProblemBody>())?.Code);
     }
 
     [Fact]
@@ -471,12 +498,29 @@ public sealed class AuthorizationAbuseControlTests
         Assert.False(new PitchMind.Api.RealtimeConnectionGate(0).TryAcquire());
     }
 
-    private static HttpClient AuthorizedClient(WebApplicationFactory<Program> factory, string role, string? matchId)
+    private static HttpClient AuthorizedClient(WebApplicationFactory<Program> factory, string role, string? matchId,
+        string? subject = null, string? remoteIp = null)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Test-Role", role);
         if (matchId is not null) client.DefaultRequestHeaders.Add("X-Test-Match", matchId);
+        if (subject is not null) client.DefaultRequestHeaders.Add("X-Test-Subject", subject);
+        if (remoteIp is not null) client.DefaultRequestHeaders.Add("X-Test-Remote-IP", remoteIp);
         return client;
+    }
+
+    private sealed class TestRemoteIpStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                if (IPAddress.TryParse(context.Request.Headers["X-Test-Remote-IP"].ToString(), out var address))
+                    context.Connection.RemoteIpAddress = address;
+                await nextMiddleware();
+            });
+            next(app);
+        };
     }
 
     private sealed record ProblemBody(string Code);

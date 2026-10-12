@@ -5,6 +5,8 @@ using PitchMind.Infrastructure.Storage;
 using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using Npgsql;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
@@ -118,15 +120,15 @@ builder.Services.AddRateLimiter(options =>
     var canonicalReadLimit = int.TryParse(builder.Configuration["Abuse:CanonicalReadPermitLimit"], out var configuredLimit) && configuredLimit > 0
         ? configuredLimit : 60;
     options.AddPolicy("canonical-read", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = canonicalReadLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     var realtimeLimit = int.TryParse(builder.Configuration["Abuse:RealtimePermitLimit"], out var configuredRealtimeLimit) && configuredRealtimeLimit > 0
         ? configuredRealtimeLimit : 20;
     options.AddPolicy("realtime", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = realtimeLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        GetRateLimitPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.OnRejected = async (context, cancellationToken) =>
     {
@@ -218,9 +220,10 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.UseRouting();
-app.UseRateLimiter();
 app.UseCors("browser");
 app.UseAuthentication();
+// Endpoint rate-limit partitions use the validated subject when present.
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
@@ -275,6 +278,18 @@ static IResult ApiProblem(HttpContext context, int status, string code, string t
 static string[] ParseConfiguredRoles(string? configuredRoles) => string.IsNullOrWhiteSpace(configuredRoles)
     ? []
     : configuredRoles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+static string GetRateLimitPartitionKey(HttpContext context)
+{
+    var subject = context.User.FindFirst("sub")?.Value;
+    if (context.User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(subject))
+    {
+        var subjectHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subject))).ToLowerInvariant();
+        return $"subject:{subjectHash}";
+    }
+
+    return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+}
 
 public partial class Program { }
 public sealed record AnalystRequest(string InsightId, int AtSeconds, string? Audience);

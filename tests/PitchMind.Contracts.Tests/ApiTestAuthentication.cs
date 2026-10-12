@@ -64,6 +64,8 @@ internal static class ApiTestAuthentication
 
             var claims = new List<Claim> { new("role", role) };
             if (!string.IsNullOrWhiteSpace(matchId)) claims.Add(new Claim("matches", matchId));
+            if (Request.Headers.TryGetValue("X-Test-Subject", out var subject) && !string.IsNullOrWhiteSpace(subject))
+                claims.Add(new Claim("sub", subject.ToString()));
             var identity = new ClaimsIdentity(claims, Scheme.Name, ClaimTypes.Name, "role");
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
         }
