@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Globalization;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
@@ -29,7 +31,7 @@ public sealed class SyntheticFixtureTests
         var repeated = SyntheticFixtureGenerator.Generate(seed: 42);
         var differentSeed = SyntheticFixtureGenerator.Generate(seed: 43);
 
-        Assert.Equal("synthetic-v2", first.Version);
+        Assert.Equal("synthetic-v3", first.Version);
         Assert.Equal(42, first.Seed);
         Assert.Equal(SyntheticFixtureGenerator.FixtureId.ToString(), first.MatchId);
         Assert.Equal(first.MatchId, repeated.MatchId);
@@ -38,6 +40,13 @@ public sealed class SyntheticFixtureTests
         Assert.NotEqual(first.Events, differentSeed.Events);
         Assert.Empty(first.Events.Select(item => item.Event.EventId)
             .Intersect(differentSeed.Events.Select(item => item.Event.EventId)));
+        Assert.All(first.Events, item =>
+        {
+            var expectedId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(FormattableString.Invariant(
+                $"{SyntheticFixtureGenerator.Version}:{first.Seed}:{item.Event.ClockSeconds}:{item.Event.Sequence}:{item.Action}")))
+                .AsSpan(0, 16));
+            Assert.Equal(expectedId, item.Event.EventId);
+        });
         Assert.Equal(first.Frames.Count, repeated.Frames.Count);
         for (var index = 0; index < first.Frames.Count; index++)
         {
