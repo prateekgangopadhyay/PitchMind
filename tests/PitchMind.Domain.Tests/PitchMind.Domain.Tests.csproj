@@ -5,5 +5,6 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <ProjectReference Include="../../src/PitchMind.Domain/PitchMind.Domain.csproj" />
+    <ProjectReference Include="../PitchMind.TestFixtures/PitchMind.TestFixtures.csproj" />
   </ItemGroup>
 </Project>

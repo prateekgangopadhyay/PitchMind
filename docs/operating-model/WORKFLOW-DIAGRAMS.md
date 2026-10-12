@@ -52,7 +52,7 @@ Engage only the relevant specialist skills for a particular story, rather than r
 ```mermaid
 flowchart TB
   subgraph CURRENT["CURRENT: read-only synthetic vertical slice"]
-    BROWSER["React/Vite"] --> API["ASP.NET API / SyntheticMatchService"]
+    BROWSER["React/Vite"] --> API["ASP.NET API / match reads 503; analyst may rate-limit"]
     API --> FIXTURE["Immutable seeded fixture"]
     FIXTURE --> RULES["Selected-time / pressing candidate / deterministic fallback"]
   end
