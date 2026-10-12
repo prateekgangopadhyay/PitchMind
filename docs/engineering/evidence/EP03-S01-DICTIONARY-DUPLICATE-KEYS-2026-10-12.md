@@ -20,6 +20,18 @@ This is parser integrity only. It does not reinterpret, convert, normalize, or e
 - `node scripts/validate_operating_model.mjs` — passed: 12 epics, 59 stories, 28 Council skills, 3 design skills, zero routing cycles, two approval gates.
 - `git show --check --oneline HEAD` — passed.
 
+## Coverage follow-up — exact test commit `4f46076f01e389077b794c32140370211c8428c9`
+
+The regression suite now also rejects duplicate keys inside nested event metadata and decoded-key collisions such as JSON `"1"` and `"\u0031"`. A positive test verifies distinct string names `"1"` and `"1.0"` are both preserved in the generated dictionary.
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_*.py' -v` — **48 passed, 0 failed, 0 skipped**.
+- Pinned candidate validation and source quality audit — both exited 0; candidate status remains `structurally_valid_candidate_blocked_for_canonicalization` for 2,199 events / 48,048 attached positions.
+- Observed dictionary regeneration and `cmp` against the tracked report — passed, byte-identical.
+- `node scripts/validate_operating_model.mjs` and `node scripts/validate_operating_model.mjs --self-test` — passed; 12 epics, 59 stories, 28 Council skills, no routing cycles; DAG self-test passed.
+- `git show --check --oneline HEAD` — passed.
+
+These checks do not change the canonicalization or acceptance status.
+
 ## Limits and gates
 
 This does not validate coordinate units/axes/orientation, clock/period meaning, player-metric definitions or validity, canonical event/team/player mappings, score authority, football realism, rights/privacy, or Product Owner acceptance. The candidate remains blocked from canonical admission; EP03-S01 remains unaccepted. No application data path, shared domain model, migration, public API, or Azure resource changed.
