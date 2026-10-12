@@ -493,6 +493,24 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 return False
         return True
 
+    def test_compose_reuses_stable_local_project_and_volume_identity(self) -> None:
+        config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
+
+        self.assertEqual(config.get("name"), "pitchmind")
+        volumes = config.get("volumes", {})
+        self.assertIsInstance(volumes, dict)
+        self.assertEqual(
+            {
+                key: volume.get("name")
+                for key, volume in volumes.items()
+                if isinstance(volume, dict)
+            },
+            {
+                "postgres-data": "pitchmind_postgres_data",
+                "redis-data": "pitchmind_redis_data",
+            },
+        )
+
     def test_compose_services_bind_only_to_loopback(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
         published_ports = self._published_ports(config)

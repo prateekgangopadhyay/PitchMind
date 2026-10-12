@@ -1,6 +1,8 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Named volumes persist data. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Compose uses the stable `pitchmind` project name and explicitly named `pitchmind_postgres_data` / `pitchmind_redis_data` volumes, so the configured defaults use the same project and data-volume identities as the existing local PitchMind services. **These are development-only containers**; Azure environments use managed Azure services.
+
+The explicit volume names are shared across Compose project names. For an isolated runtime check, override both volume names as well as the project name; changing only the project name still uses the PitchMind data volumes.
 
 From the repository root:
 
