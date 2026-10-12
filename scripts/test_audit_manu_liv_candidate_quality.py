@@ -79,7 +79,7 @@ class CandidateQualityAuditTests(unittest.TestCase):
         self.assertEqual(report["chronology"]["clockValueSpan"], 0)
         self.assertTrue(report["chronology"]["checksAreCandidateStructuralOnly"])
 
-    def test_report_output_cannot_alias_and_overwrite_source_manifest_or_audit_script(self):
+    def test_report_output_cannot_alias_and_overwrite_any_audit_input_or_audit_script(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             source = root / "candidate.json"
@@ -108,7 +108,8 @@ class CandidateQualityAuditTests(unittest.TestCase):
             audit.__file__ = str(audit_script)
             try:
                 for protected_path, protected_bytes in (
-                    (source, source_bytes), (manifest, manifest_bytes), (audit_script, audit_script_bytes)
+                    (source, source_bytes), (manifest, manifest_bytes),
+                    (domain_source, domain_source.read_bytes()), (audit_script, audit_script_bytes)
                 ):
                     with self.subTest(protected=protected_path.name, alias="direct"):
                         self.assertEqual(self._run_audit(source, manifest, domain_source, protected_path), 2)

@@ -70,6 +70,10 @@ Coordination: Domain/Application owns immutable fixture and football rules; API 
 
 The repository owner confirmed that no authoritative source data dictionary is available. A generated observed structural dictionary is documented at [MANU-LIV-OBSERVED-DATA-DICTIONARY.md](../data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md); it records measured JSON shapes and values but does not infer field meaning or units. Coordinate semantics, clock/period semantics, player metric definitions/units, event meaning/mappings, score-side mapping, football realism, and independent rights/privacy review remain unresolved; canonical admission is blocked. See [owner clarification evidence](../engineering/evidence/EP03-S01-OWNER-DICTIONARY-RESPONSE-2026-10-12.md). EP03-S01 remains unverified and unaccepted.
 
+### Audit report-output protection follow-up — 2026-10-12
+
+Code head `17fd8c976a24dc809b836b940e533536f1db2e62` (tree `94a8f630c0862c39187be416b8d318e4274b3b93`) extends the offline audit CLI's output alias guard to the supplied domain enum source. Its direct, symlink, and hardlink regression cases verify the protected file bytes remain unchanged. On that exact code head, the audit tests passed 9/9 and the full Python scripts suite passed 49/49; candidate validation and the all-event audit exited 0, generated audit and dictionary reports matched tracked files byte-for-byte, Council validation and DAG self-test passed, and `git diff --check` passed. Canonical admission remains blocked and EP03-S01 remains unaccepted. See [football-data audit evidence](../engineering/evidence/EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-11.md).
+
 ## Acceptance evidence record per story
 
 Every story record attaches: code paths and change justification; test command/result and fixture version; positive/negative/degraded cases; reviewer for football/security behavior; API/UX proof where relevant; Azure deployment ID/image digest and smoke evidence where relevant; unresolved risk and owner. The current local synthetic path may prove a delta without accepting an entire cloud-dependent story. No release gate is complete merely because this register exists.
