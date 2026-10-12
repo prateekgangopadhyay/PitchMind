@@ -47,20 +47,86 @@ def _bicepparam_values(path: Path) -> dict[str, object]:
     return values
 
 
-def _without_bicep_comments(source: str) -> str:
-    source = re.sub(r"/\*[\s\S]*?\*/", "", source)
-    return re.sub(r"^\s*//.*$", "", source, flags=re.MULTILINE)
+def _without_bicep_comments_and_strings(source: str) -> str:
+    """Mask comments and strings, preserving only the literal needed by the guard grammar."""
+    characters = list(source)
+    index = 0
+
+    def mask(start: int, end: int) -> None:
+        for offset in range(start, end):
+            if characters[offset] not in "\r\n":
+                characters[offset] = " "
+
+    while index < len(source):
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            if end < 0:
+                end = len(source)
+            mask(index, end)
+            index = end
+        elif source.startswith("/*", index):
+            closing = source.find("*/", index + 2)
+            end = len(source) if closing < 0 else closing + 2
+            mask(index, end)
+            index = end
+        elif source.startswith("'''", index):
+            closing = source.find("'''", index + 3)
+            end = len(source) if closing < 0 else closing + 3
+            mask(index, end)
+            index = end
+        elif source[index] == "'":
+            start = index
+            index += 1
+            while index < len(source):
+                if source[index] == "'":
+                    if index + 1 < len(source) and source[index + 1] == "'":
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                index += 1
+            if source[start:index] != "'dev'":
+                mask(start, index)
+        else:
+            index += 1
+
+    return "".join(characters)
+
+
+def _has_active_environment_allowlist(source: str, active_code: str) -> bool:
+    expected = "@allowed(['dev', 'stage', 'prod'])"
+    source_lines = source.splitlines()
+    code_lines = active_code.splitlines()
+    for index, (source_line, code_line) in enumerate(zip(source_lines, code_lines)):
+        if source_line.strip() != expected or not code_line.strip().startswith("@allowed("):
+            continue
+        next_index = index + 1
+        while next_index < len(code_lines) and not code_lines[next_index].strip():
+            next_index += 1
+        if next_index < len(code_lines) and code_lines[next_index].strip() == "param environment string":
+            return True
+    return False
 
 
 def validate_profiles(repo_root: Path) -> list[str]:
     errors: list[str] = []
     infra = repo_root / "infra"
-    main = _without_bicep_comments((infra / "main.bicep").read_text(encoding="utf-8"))
+    main_source = (infra / "main.bicep").read_text(encoding="utf-8")
+    main = _without_bicep_comments_and_strings(main_source)
 
-    if "@allowed(['dev', 'stage', 'prod'])" not in main:
+    if not _has_active_environment_allowlist(main_source, main):
         errors.append("infra/main.bicep must restrict environment to dev, stage, or prod")
+    declarations = re.findall(
+        r"(?m)^[ \t]*module[ \t]+(\w+)[ \t]+[^=\r\n]*=[ \t]*(.*)$",
+        main,
+    )
+    modules: dict[str, list[str]] = {}
+    for name, expression in declarations:
+        modules.setdefault(name, []).append(expression.strip())
+    required_guard = re.compile(r"if \(enableDevFoundation && environment == 'dev'\) \{")
     for module_name in ("network", "vault"):
-        if not re.search(rf"module\s+{module_name}\s+'[^']+'\s*=\s*if\s*\(enableDevFoundation\s*&&\s*environment\s*==\s*'dev'\)", main):
+        module_guards = modules.get(module_name, [])
+        if len(module_guards) != 1 or not required_guard.fullmatch(module_guards[0]):
             errors.append(f"infra/main.bicep must guard {module_name} with enableDevFoundation && environment == 'dev'")
 
     for environment in ENVIRONMENTS:
