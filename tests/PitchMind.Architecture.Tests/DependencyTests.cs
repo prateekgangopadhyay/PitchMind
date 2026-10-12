@@ -481,6 +481,47 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_DoesNotResolveVarPlayerRecordsFromGenericFunction()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstPosition = feed.RootElement[0].GetProperty("playerPositions")[0];
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-generic-function-player-record-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "GenericFunction.tsx");
+            File.WriteAllText(source,
+                "function buildPlayers<T>() {\n" +
+                "  if (true) {\n" +
+                "    var sourcePlayer = {\n" +
+                $"      x: {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"      y: {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"      speed: {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"      heartRate: {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "    };\n" +
+                "    var positions = [sourcePlayer];\n" +
+                "  }\n" +
+                "}\n" +
+                "function renderFrame() {\n" +
+                "  const frame = { playerPositions: positions };\n" +
+                "}\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsQuotedAndMultilineNumericPropertyLiterals()
     {
         var root = FindRepositoryRoot();
@@ -1068,7 +1109,7 @@ public sealed class DependencyTests
         var prefix = source.AsSpan(0, openingBraceIndex).TrimEnd().ToString();
         if (Regex.IsMatch(
                    prefix,
-                   @"\bfunction(?:\s*\*)?\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\s*)?\([^{}]*\)\s*(?::[^{}]+)?$",
+                   @"\bfunction(?:\s*\*)?\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\s*)?(?:<[^{}()]*>\s*)?\([^{}]*\)\s*(?::[^{}]+)?$",
                    RegexOptions.CultureInvariant | RegexOptions.Singleline) ||
             Regex.IsMatch(prefix, @"=>\s*$", RegexOptions.CultureInvariant))
         {
