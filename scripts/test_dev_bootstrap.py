@@ -41,6 +41,18 @@ class DevBootstrapTests(unittest.TestCase):
             """#!/bin/sh
 set -eu
 printf '%s\\n' \"$*\" >> \"$PITCHMIND_FAKE_DOCKER_LOG\"
+if [ "${1:-}" = volume ] && [ "${2:-}" = ls ]; then
+  if [ "${PITCHMIND_FAKE_VOLUME_EXISTS:-1}" = 1 ]; then printf 'pitchmind_postgres_data\n'; fi
+  exit 0
+fi
+if [ "${1:-}" = run ]; then
+  if [ "${PITCHMIND_FAKE_PG_VERSION_STATUS:-0}" != 0 ]; then exit 1; fi
+  printf '%s\n' "${PITCHMIND_FAKE_PG_VERSION:-17}"
+  exit 0
+fi
+case " $* " in
+  *" compose --env-file docker/.env -f docker/compose.yml ps -q postgres "*) printf 'fake-postgres\\n'; exit 0 ;;
+esac
 if [ "${1:-}" = context ] && [ "${2:-}" = show ]; then
   printf '%s\n' "${PITCHMIND_FAKE_DOCKER_CONTEXT:-desktop-linux}"
   exit 0
@@ -57,7 +69,6 @@ if [ \"${1:-}\" = compose ]; then
     exit 73
   fi
   case " $* " in
-    *" ps -q postgres "*) printf 'fake-postgres\n'; exit 0 ;;
     *" ps -q redis "*) printf 'fake-redis\n'; exit 0 ;;
   esac
   exit \"${PITCHMIND_FAKE_COMPOSE_STATUS:-0}\"
@@ -112,6 +123,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
 
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
         result = self._run("dev-up.sh")
         env_file = self.root / "docker" / ".env"
 
@@ -131,9 +143,58 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "volume ls -q --filter name=pitchmind_postgres_data",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
+
+    def test_orphaned_postgres_volume_major_mismatch_fails_before_compose_up(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("volume pitchmind_postgres_data contains PostgreSQL major version 16", result.stderr)
+        self.assertIn("data volume was not changed", result.stderr)
+        self.assertNotIn("up -d --wait", self.docker_log.read_text())
+        self.assertTrue((self.root / "docker" / ".env").is_file())
+
+    def test_stopped_postgres_container_volume_major_mismatch_fails_before_compose_up(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("volume pitchmind_postgres_data contains PostgreSQL major version 16", result.stderr)
+        self.assertNotIn("up -d --wait", self.docker_log.read_text())
+        self.assertIn("target=/pgdata,readonly", self.docker_log.read_text())
+        self.assertIn("--network none", self.docker_log.read_text())
+
+    def test_existing_postgres_same_major_is_allowed_to_start(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "17"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("up -d --wait", self.docker_log.read_text())
+
+    def test_unknown_or_unreadable_postgres_data_version_fails_closed(self) -> None:
+        for version, probe_status in (("unknown", "0"), ("", "1")):
+            with self.subTest(version=version, probe_status=probe_status):
+                self.docker_log.unlink(missing_ok=True)
+                self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
+                self.env["PITCHMIND_FAKE_PG_VERSION"] = version
+                self.env["PITCHMIND_FAKE_PG_VERSION_STATUS"] = probe_status
+
+                result = self._run("dev-up.sh")
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("refusing Compose startup to protect local data", result.stderr)
+                self.assertNotIn("up -d --wait", self.docker_log.read_text())
+        self.env.pop("PITCHMIND_FAKE_PG_VERSION_STATUS", None)
 
     def test_remote_context_fails_before_credentials_or_docker_info(self) -> None:
         self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
@@ -174,6 +235,8 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             [
                 "context inspect desktop-local --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "volume ls -q --filter name=pitchmind_postgres_data",
+                "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
@@ -297,6 +360,8 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "volume ls -q --filter name=pitchmind_postgres_data",
+                "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )

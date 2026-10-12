@@ -51,12 +51,66 @@ read_local_password() {
   printf '%s' "$value"
 }
 
+postgres_major() {
+  local image="$1"
+  if [[ "$image" =~ (^|/)postgres:([0-9]+)([-.]|$) ]]; then
+    printf '%s' "${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
+}
+
+ensure_existing_postgres_volume_compatible() {
+  local postgres_volume existing_volumes volume_name volume_exists=0 configured_image configured_major data_version data_major
+  postgres_volume="$(awk '
+    /^  postgres-data:$/ { in_volume = 1; next }
+    /^  [^ ]/ { in_volume = 0 }
+    in_volume && /^    name:/ { print $2; exit }
+  ' docker/compose.yml)"
+  [[ -n "$postgres_volume" ]] || {
+    echo "Cannot determine the configured PostgreSQL data volume; refusing Compose startup to protect local data." >&2
+    return 1
+  }
+  existing_volumes="$(docker volume ls -q --filter "name=$postgres_volume")"
+  while IFS= read -r volume_name; do
+    [[ "$volume_name" == "$postgres_volume" ]] && volume_exists=1
+  done <<< "$existing_volumes"
+  [[ "$volume_exists" -eq 1 ]] || return 0
+  configured_image="$(awk '
+    /^  postgres:$/ { in_postgres = 1; next }
+    /^  [^ ]/ { in_postgres = 0 }
+    in_postgres && /^    image:/ { print $2; exit }
+  ' docker/compose.yml)"
+  if ! configured_major="$(postgres_major "$configured_image")"; then
+    echo "Cannot verify the configured PostgreSQL major version; refusing Compose startup to protect local data." >&2
+    return 1
+  fi
+  if ! data_version="$(docker run --rm --pull=never --network none \
+    --mount "type=volume,source=$postgres_volume,target=/pgdata,readonly" \
+    --entrypoint /bin/sh "$configured_image" -c 'cat /pgdata/PG_VERSION' 2>/dev/null)"; then
+    echo "Cannot read PostgreSQL PG_VERSION from existing volume $postgres_volume; refusing Compose startup to protect local data." >&2
+    return 1
+  fi
+  if [[ "$data_version" =~ ^([0-9]+)(\.[0-9]+)?$ ]]; then
+    data_major="${BASH_REMATCH[1]}"
+  else
+    echo "Cannot parse PostgreSQL PG_VERSION from existing volume $postgres_volume; refusing Compose startup to protect local data." >&2
+    return 1
+  fi
+  if [[ "$configured_major" != "$data_major" ]]; then
+    echo "Refusing Compose startup: volume $postgres_volume contains PostgreSQL major version $data_major but docker/compose.yml requests $configured_major. The data volume was not changed. Back up and perform a PostgreSQL major-version migration before changing the configured image." >&2
+    return 1
+  fi
+}
+
 if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
   || ! redis_password="$(read_local_password REDIS_PASSWORD)" \
   || [[ "$postgres_password" == "$redis_password" ]]; then
   echo "docker/.env must contain distinct 48-character lowercase hexadecimal POSTGRES_PASSWORD and REDIS_PASSWORD values with at least 12 unique hex digits each. Replace the local values; secrets were not displayed." >&2
   exit 1
 fi
+
+ensure_existing_postgres_volume_compatible
 
 if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
   docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
