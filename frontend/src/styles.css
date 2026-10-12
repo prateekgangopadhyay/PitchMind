@@ -121,7 +121,7 @@ button, select { min-height: 44px; }
 .load-more-wrap { display:grid; justify-items:center; gap:.25rem; margin-top:1.25rem; }
 .load-more { min-height:44px; }
 .match-context-controls { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.9rem; margin:1.25rem 0; color:var(--pm-text-secondary); }
-.match-context-controls input { width:100%; min-width:0; min-height:44px; accent-color:var(--pm-accent); touch-action:pan-y; }
+.match-context-controls input { width:100%; min-width:0; min-height:44px; accent-color:var(--pm-accent); }
 .canonical-events { margin:0; padding:0; list-style:none; }
 .canonical-events li { padding:0; border-top:1px solid var(--pm-border); }
 .canonical-events time { color:var(--pm-accent); font-variant-numeric:tabular-nums; }

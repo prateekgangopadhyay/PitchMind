@@ -43,7 +43,7 @@ The match page was rendered locally at a selected time of 55:09 in period 2 usin
 
 ### Web Design Guidelines audit
 
-Fetched the official raw guideline document on 2026-10-12 from [Vercel Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md). The narrow change keeps the native range control keyboard-operable and visibly focused while enlarging its mobile hit area. `touch-action: pan-y` preserves page scrolling while horizontal slider gestures control the range.
+Fetched the official raw guideline document on 2026-10-12 from [Vercel Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md). The narrow change keeps the native range control keyboard-operable and visibly focused while enlarging its mobile hit area. It does not override the browser's default touch handling; pinch-zoom behavior was not exercised.
 
 No unrelated findings were audited as part of this bounded CSS change. The existing label and native keyboard semantics were exercised by Playwright; no screen-reader or WCAG conformance claim is made.
 
