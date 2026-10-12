@@ -259,7 +259,7 @@ public static class PostgresSchemaMigrator
         ALTER TABLE pitchmind.match_projections
             ADD CONSTRAINT match_projections_match_source_fk
             FOREIGN KEY (match_id, source_sha256)
-            REFERENCES pitchmind.matches(match_id, source_sha256);
+            REFERENCES pitchmind.matches(match_id, source_sha256) NOT VALID;
 
         INSERT INTO pitchmind.schema_versions(version) VALUES (4) ON CONFLICT DO NOTHING;
         """;
