@@ -113,6 +113,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+        self.assertEqual(values["POSTGRES_IMAGE"], "postgres:16-alpine")
         postgres_password = values["POSTGRES_PASSWORD"]
         redis_password = values["REDIS_PASSWORD"]
         self.assertRegex(postgres_password, r"^[0-9a-f]{48}$")
@@ -485,6 +486,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "POSTGRES_USER",
                 "POSTGRES_DB",
                 "POSTGRES_PASSWORD",
+                "POSTGRES_IMAGE",
                 "POSTGRES_PORT",
                 "REDIS_PASSWORD",
                 "REDIS_PORT",
@@ -595,6 +597,16 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "redis-data": {"name": "pitchmind_redis_data"},
             },
         )
+
+    def test_postgres_image_can_match_an_existing_major_version(self) -> None:
+        config = self._resolved_compose_config(
+            REPOSITORY / "docker" / "compose.yml",
+            {"POSTGRES_IMAGE": "postgres:17-alpine"},
+        )
+
+        services = config.get("services", {})
+        self.assertIsInstance(services, dict)
+        self.assertEqual(services["postgres"].get("image"), "postgres:17-alpine")
 
     def test_alternate_compose_project_uses_isolated_volume_names(self) -> None:
         project = "pitchmind-bootstrap-isolated"

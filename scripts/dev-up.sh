@@ -23,7 +23,7 @@ if [[ ! -f docker/.env ]]; then
   umask 077
   postgres_password="$(openssl rand -hex 24)"
   redis_password="$(openssl rand -hex 24)"
-  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
+  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:16-alpine\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
 require_regular_credentials_file
@@ -56,7 +56,7 @@ if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
   exit 1
 fi
 
-if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
+if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD -u POSTGRES_IMAGE \
   docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
   echo "Local services did not become healthy. Inspect Docker logs, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
   exit 1
