@@ -119,6 +119,21 @@ public sealed class ManuLivCandidateFeedReaderTests
         Assert.Equal("source_too_large", sizeError.Code);
     }
 
+    [Theory]
+    [InlineData("\"metadata\":{\"source\":{\"label\":\"first\",\"label\":\"second\"}}")]
+    [InlineData("\"playerPositions\":[{\"x\":10,\"x\":20}]")]
+    public async Task ReadAsync_rejects_duplicate_json_keys_in_nested_objects(string nestedFields)
+    {
+        var json = $"[{{\"eventId\":\"a\",\"matchId\":\"m\",\"sequence\":1,\"clockSeconds\":1,\"period\":1,\"eventType\":\"A\",{nestedFields}}}]";
+        await using var input = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        var error = await Assert.ThrowsAsync<CandidateFeedParseException>(
+            () => ManuLivCandidateFeedReader.ReadAsync(input));
+
+        Assert.Equal("duplicate_json_property", error.Code);
+        Assert.Equal(0, error.SourceRecordIndex);
+    }
+
     [Fact]
     public async Task ReadAsync_accepts_nonseekable_sources_and_rejects_empty_input()
     {
