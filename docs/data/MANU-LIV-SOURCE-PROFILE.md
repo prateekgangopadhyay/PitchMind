@@ -4,7 +4,7 @@
 
 **Reproducibility check (2026-10-08):** `python3 scripts/profile_simulation_feed.py data/simulations/manu-liv-match-dataset.json --output <outside-repository-report>` completed with status `profiled_not_validated`, 28,601,013 bytes and SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`. `git hash-object` returned the blob SHA above. The profiler is metadata-only and deliberately does not validate football semantics or ingest the source.
 
-**Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON has no embedded provenance/rights manifest. No authoritative source data dictionary was supplied; this owner declaration does not resolve clock units/policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
+**Owner confirmation (recorded 2026-10-08):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. This is an owner declaration, not an independent rights/privacy assessment or source-field validation; see the [confirmation evidence](../engineering/evidence/EP03-S01-OWNER-CONFIRMATION-2026-10-12.md). The JSON has no embedded provenance/rights manifest. No authoritative source data dictionary was supplied; this owner declaration does not resolve coordinate units/axes/orientation, clock/period semantics, player-metric definitions/units, event mapping or football-realism gates below.
 
 ## Observed source statistics
 | Property | Observed value |
@@ -22,7 +22,7 @@
 | Player positions | 48,048 observations across 2,199 event-attached `playerPositions` arrays; 24 distinct `teamName + playerName` identities |
 | Player/ball coordinate min/max | each axis between 2 and 98; pass `endX` spans 0..100. **Units unspecified**; values look normalized, not metres. |
 | Tracking | event-attached frames, most 22 players with population reduced after lineup/card changes. **Not necessarily a dense continuous tracking feed.** |
-| Provenance | no explicit `synthetic` or source-license/coordinate-orientation manifest at the top level; owner separately confirmed synthetic provenance and redistribution permission (2026-10-08) |
+| Provenance | no embedded `synthetic` or source-license/coordinate-orientation manifest; repository owner separately confirmed synthetic provenance and redistribution permission (2026-10-08); independent rights/privacy review remains pending |
 
 ## Top-level fields (actual)
 `eventId,matchId,sequence,clockSeconds,period,eventType,teamId,teamName,playerName,receiverName,pitchX,pitchY,endX,endY,outcome,metadata,playerPositions,ballX,ballY`. `receiverName` is null in 1,601 records; `endX/endY` null in 1,232. `playerName` null in 2. `playerPositions[]` elements contain `playerName,teamName,teamId,jerseyNumber,position,x,y,speed,distanceCovered,heatIndex,passAccuracy,touches,stamina,heartRate`. **The last five numeric attributes are not independently validated biometrics or performance metrics; do not display player-specific heart rates as real.**

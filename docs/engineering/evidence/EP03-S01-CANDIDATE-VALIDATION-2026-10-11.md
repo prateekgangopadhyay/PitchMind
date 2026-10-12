@@ -38,5 +38,5 @@
 - No `src/`, frontend runtime, public API DTO, canonical event mapping, database migration, or broker contract changes are included.
 - Ordinary match API routes remain fail-closed with `503 MATCH_DATA_UNAVAILABLE`; the fictional `SyntheticFixtureGenerator` remains in `PitchMind.TestFixtures`.
 - No coordinate conversion, player identity inference, event mapping, score certification, or tactical inference occurs.
-- The owner confirmed synthetic provenance and redistribution permission. Independent rights/privacy review, coordinate/time semantics, player-metric validity, football-realism review, and Product Owner acceptance remain pending.
+- The repository owner confirmed synthetic provenance and redistribution permission (2026-10-08; see the [confirmation record](EP03-S01-OWNER-CONFIRMATION-2026-10-12.md)). This declaration is not independent rights/privacy or player-metric review. Coordinate/time semantics, player-metric definitions/units and validity, canonical mapping, football-realism review, and Product Owner acceptance remain pending.
 - No PostgreSQL integration, hosted CI, Azure validation, Azure resource operation, or deployment is claimed.
