@@ -1,7 +1,10 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using PitchMind.Api;
+using PitchMind.Application.Abstractions;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Simulation;
+using PitchMind.Infrastructure.Storage;
 using PitchMind.TestFixtures;
 using Xunit;
 
@@ -36,6 +39,19 @@ public sealed class V1ContractCompatibilityTests
     public void Runtime_profile_guard_rejects_missing_or_incompatible_profiles(string environmentName, string? runtimeProfile)
     {
         Assert.Throws<InvalidOperationException>(() => RuntimeProfileGuard.Validate(environmentName, runtimeProfile));
+    }
+
+    [Fact]
+    public void Local_in_memory_store_is_registered_only_for_the_local_profile()
+    {
+        var localServices = new ServiceCollection();
+        RuntimeProfileGuard.ConfigureLocalServices(localServices, "local");
+        Assert.Contains(localServices, descriptor => descriptor.ServiceType == typeof(IMatchEventStore) &&
+            descriptor.ImplementationType == typeof(InMemoryMatchEventStore));
+
+        var azureServices = new ServiceCollection();
+        RuntimeProfileGuard.ConfigureLocalServices(azureServices, "azure");
+        Assert.DoesNotContain(azureServices, descriptor => descriptor.ServiceType == typeof(IMatchEventStore));
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

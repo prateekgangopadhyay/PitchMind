@@ -1,3 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
+using PitchMind.Application.Abstractions;
+using PitchMind.Infrastructure.Storage;
+
 namespace PitchMind.Api;
 
 /// <summary>Validates that local-only adapters cannot be selected by a deployed runtime.</summary>
@@ -22,5 +26,11 @@ public static class RuntimeProfileGuard
 
         throw new InvalidOperationException(
             "Use Runtime:Profile=local only in Development, or Runtime:Profile=azure in Development, Staging, or Production.");
+    }
+
+    public static void ConfigureLocalServices(IServiceCollection services, string? runtimeProfile)
+    {
+        if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
+            services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
     }
 }

@@ -18,7 +18,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. It does not configure authentication, managed identity, or service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
+The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. The in-memory event store is registered only for the local profile; Azure startup does not fall back to it. This does not configure Azure authentication, managed identity, or canonical service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
 
 ## Target Ports and Adapters
 
