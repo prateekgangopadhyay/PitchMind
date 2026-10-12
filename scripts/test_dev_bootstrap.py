@@ -22,9 +22,14 @@ class DevBootstrapTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="pitchmind-bootstrap-")
         self.root = Path(self.temp.name) / "repo"
         (self.root / "scripts").mkdir(parents=True)
+        (self.root / "scripts" / "lib").mkdir()
         (self.root / "docker").mkdir()
         for script in SCRIPTS:
             shutil.copy2(REPOSITORY / "scripts" / script, self.root / "scripts" / script)
+        shutil.copy2(
+            REPOSITORY / "scripts" / "lib" / "local-docker-target.sh",
+            self.root / "scripts" / "lib" / "local-docker-target.sh",
+        )
         shutil.copy2(REPOSITORY / "docker" / "compose.yml", self.root / "docker" / "compose.yml")
 
         self.bin = Path(self.temp.name) / "bin"
@@ -179,6 +184,49 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertIn("Refusing non-local Docker endpoint", result.stderr)
         self.assertFalse((self.root / "docker" / ".env").exists())
         self.assertFalse(self.openssl_count.exists())
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context inspect remote-builder --format {{(index .Endpoints \"docker\").Host}}",
+            ],
+        )
+
+    def test_dev_down_refuses_remote_context_before_compose(self) -> None:
+        (self.root / "docker" / ".env").write_text("POSTGRES_USER=pitchmind\n")
+        self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
+
+        result = self._run("dev-down.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+            ],
+        )
+
+    def test_dev_reset_refuses_remote_docker_host_before_volume_removal(self) -> None:
+        (self.root / "docker" / ".env").write_text("POSTGRES_USER=pitchmind\n")
+        self.env["DOCKER_HOST"] = "tcp://builder.example.invalid:2376"
+
+        result = self._run("dev-reset.sh", "--force")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+        self.assertFalse(self.docker_log.exists())
+
+    def test_dev_reset_remote_context_overrides_local_docker_host(self) -> None:
+        (self.root / "docker" / ".env").write_text("POSTGRES_USER=pitchmind\n")
+        self.env["DOCKER_CONTEXT"] = "remote-builder"
+        self.env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+        self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
+
+        result = self._run("dev-reset.sh", "--force")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
         self.assertEqual(
             self.docker_log.read_text().splitlines(),
             [
