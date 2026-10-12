@@ -21,4 +21,30 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(5, fixture.Frames.Single(f => f.ClockSeconds == 2670).Players.Single(p => p.PlayerId == "harbour-1").X);
         Assert.Equal(100, fixture.Frames.Single(f => f.ClockSeconds == 2700).Players.Single(p => p.PlayerId == "harbour-1").X);
     }
+
+    [Fact] public void SeedAndVersionProduceRepeatableSeedScopedMatchIdentity()
+    {
+        var first = SyntheticFixtureGenerator.Generate(seed: 42);
+        var repeated = SyntheticFixtureGenerator.Generate(seed: 42);
+        var differentSeed = SyntheticFixtureGenerator.Generate(seed: 43);
+
+        Assert.Equal("synthetic-v2", first.Version);
+        Assert.Equal(42, first.Seed);
+        Assert.Equal(SyntheticFixtureGenerator.FixtureId.ToString(), first.MatchId);
+        Assert.Equal(first.MatchId, repeated.MatchId);
+        Assert.NotEqual(first.MatchId, differentSeed.MatchId);
+        Assert.Equal(first.Events, repeated.Events);
+        Assert.NotEqual(first.Events, differentSeed.Events);
+        Assert.Equal(first.Frames.Count, repeated.Frames.Count);
+        for (var index = 0; index < first.Frames.Count; index++)
+        {
+            Assert.Equal(first.Frames[index].Id, repeated.Frames[index].Id);
+            Assert.Equal(first.Frames[index].ClockSeconds, repeated.Frames[index].ClockSeconds);
+            Assert.Equal(first.Frames[index].BallX, repeated.Frames[index].BallX);
+            Assert.Equal(first.Frames[index].BallY, repeated.Frames[index].BallY);
+            Assert.Equal(first.Frames[index].Players, repeated.Frames[index].Players);
+        }
+        Assert.All(first.Events, item => Assert.Equal(first.MatchId, item.Event.MatchId.ToString()));
+        Assert.All(differentSeed.Events, item => Assert.Equal(differentSeed.MatchId, item.Event.MatchId.ToString()));
+    }
 }
