@@ -166,17 +166,21 @@ public sealed class DependencyTests
                 $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
                 $"const equivalentPitch = {{ pitchX: {firstPitchEquivalent} }};\n" +
                 $"const integerPitch = {{ pitchY: {firstPitchInteger} }};\n" +
-                $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
-                $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
-                $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
-                $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
+                "const playerPositions = [{\n" +
+                $"  x: {firstPlayerX},\n" +
+                $"  speed: {firstPlayerSpeed},\n" +
+                $"  heartRate: {firstPlayerHeartRateWithSeparator},\n" +
+                $"  heartRate: {firstPlayerHeartRate}n\n" +
+                "}];\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
-                $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
+                $"const finalPlayer = {{ playerPositions: [{{ stamina: {finalPlayerStamina} }}] }};\n" +
                 "const unrelatedPageSize = 25;");
             File.WriteAllText(csharpSource,
                 $"var coordinate = new {{ pitchX = {firstPitchX}m }};\n" +
-                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};");
+                "var playerPositions = new[] { new {\n" +
+                $"  heartRate = {firstPlayerHeartRateWithSeparator}\n" +
+                "} };");
 
             var violations = FindFixtureDataMarkers(
                 [source, csharpSource],
@@ -198,6 +202,50 @@ public sealed class DependencyTests
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"stamina: {finalPlayerStamina}", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_IgnoresUnrelatedUiAndGeometryNumbersThatOverlapFeedValues()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstEvent = feed.RootElement[0];
+        var firstPosition = firstEvent.GetProperty("playerPositions")[0];
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-unrelated-numeric-values-");
+        try
+        {
+            var tsxSource = Path.Combine(sourceRoot.FullName, "Layout.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Layout.cs");
+            File.WriteAllText(tsxSource,
+                "const layout = {\n" +
+                $"  x: {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"  y: {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"  speed: {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"  width: {firstPosition.GetProperty("heartRate").GetRawText()},\n" +
+                $"  pageSize: {firstEvent.GetProperty("sequence").GetRawText()},\n" +
+                $"  opacity: {firstPosition.GetProperty("heatIndex").GetRawText()}\n" +
+                "};\n" +
+                "const emptyState = { pageSize: 25, durationMs: 250, zIndex: 10 };");
+            File.WriteAllText(csharpSource,
+                $"var layout = new {{ x = {firstPosition.GetProperty("x").GetRawText()}, " +
+                $"y = {firstPosition.GetProperty("y").GetRawText()}, " +
+                $"speed = {firstPosition.GetProperty("speed").GetRawText()}, " +
+                $"width = {firstPosition.GetProperty("heartRate").GetRawText()}, " +
+                $"pageSize = {firstEvent.GetProperty("sequence").GetRawText()} }};");
+
+            var violations = FindFixtureDataMarkers(
+                [tsxSource, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
         }
         finally
         {
@@ -517,6 +565,12 @@ public sealed class DependencyTests
         "stamina", "heartRate"
     };
 
+    private static readonly HashSet<string> PlayerNumericProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "jerseyNumber", "x", "y", "speed", "distanceCovered", "heatIndex", "passAccuracy", "touches",
+        "stamina", "heartRate"
+    };
+
     private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
     {
         if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
@@ -574,7 +628,9 @@ public sealed class DependencyTests
                     var matchesCandidateValue = numericValue is not null &&
                         numericMarkers.TryGetValue(propertyName, out var values) &&
                         values.Contains(numericValue);
-                    if (ambiguousAlias || matchesCandidateValue)
+                    var playerFieldOutsidePlayerPositions = PlayerNumericProperties.Contains(propertyName) &&
+                        !IsInsidePlayerPositionsArray(source, match.Index);
+                    if ((ambiguousAlias || matchesCandidateValue) && !playerFieldOutsidePlayerPositions)
                     {
                         matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
                     }
@@ -586,6 +642,38 @@ public sealed class DependencyTests
         }
 
         return violations;
+    }
+
+    private static bool IsInsidePlayerPositionsArray(string source, int propertyIndex)
+    {
+        var declarations = Regex.Matches(
+            source,
+            @"\bplayerPositions\b\s*[:=]\s*(?:new\s*\[\s*\]\s*)?(?<open>\[|\{)",
+            RegexOptions.CultureInvariant);
+        var declaration = declarations
+            .Cast<Match>()
+            .LastOrDefault(match => match.Index < propertyIndex);
+        if (declaration is null)
+        {
+            return false;
+        }
+
+        var opening = declaration.Groups["open"].Value[0];
+        var closing = opening == '[' ? ']' : '}';
+        var depth = 1;
+        for (var index = declaration.Groups["open"].Index + 1; index < propertyIndex; index++)
+        {
+            if (source[index] == opening)
+            {
+                depth++;
+            }
+            else if (source[index] == closing && --depth == 0)
+            {
+                return false;
+            }
+        }
+
+        return depth > 0;
     }
 
     private static IReadOnlyDictionary<string, string> ReadNumericAliases(string source, out IReadOnlySet<string> ambiguousAliases)
