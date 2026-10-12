@@ -136,6 +136,12 @@ public sealed class TelemetryContractTests
 
         var substitutionErrors = TelemetryContractValidatorV1.Validate(Event("Substitution") with { RelatedPlayerId = null }).Errors;
         Assert.Contains(substitutionErrors, error => error.Path == "relatedPlayerId");
+
+        var duplicateParticipantErrors = TelemetryContractValidatorV1.Validate(Event("Substitution") with
+        {
+            RelatedPlayerId = "player-home-1"
+        }).Errors;
+        Assert.Contains(duplicateParticipantErrors, error => error.Code == "INVALID_SUBSTITUTION" && error.Path == "relatedPlayerId");
     }
 
     [Fact]
@@ -154,10 +160,21 @@ public sealed class TelemetryContractTests
         Assert.Contains(frameSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
         Assert.Equal(1, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
         Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
-        Assert.Contains(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
-            rule.GetProperty("if").GetProperty("properties").GetProperty("eventType").GetProperty("const").GetString() == "Substitution" &&
-            rule.GetProperty("then").GetProperty("required").EnumerateArray().Any(field => field.GetString() == "relatedPlayerId") &&
-            rule.GetProperty("then").GetProperty("properties").GetProperty("relatedPlayerId").GetProperty("type").GetString() == "string");
+        var substitutionRule = Assert.Single(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
+        {
+            var condition = rule.GetProperty("if");
+            return condition.TryGetProperty("properties", out var properties) &&
+                   properties.TryGetProperty("eventType", out var eventType) &&
+                   eventType.TryGetProperty("const", out var constant) &&
+                   constant.GetString() == "Substitution";
+        });
+        Assert.Contains(substitutionRule.GetProperty("then").GetProperty("required").EnumerateArray(), field => field.GetString() == "relatedPlayerId");
+        Assert.Equal("string", substitutionRule.GetProperty("then").GetProperty("properties").GetProperty("relatedPlayerId").GetProperty("type").GetString());
+        Assert.Contains("runtime validator", substitutionRule.GetProperty("then").GetProperty("description").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("elapsedSeconds").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceSequence").GetProperty("maximum").GetInt64());
         Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
         Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
@@ -297,6 +314,17 @@ public sealed class TelemetryContractTests
 
         var missingPoints = value with { Location = new EventLocationV1() };
         Assert.Contains(TelemetryContractValidatorV1.Validate(missingPoints).Errors, error => error.Code == "EVENT_LOCATION_REQUIRED");
+
+        var missingEventTeamDirection = value with
+        {
+            CoordinateSystem = coordinateSystem with
+            {
+                TeamDirections = new[] { new TeamAttackingDirectionV1 { TeamId = "away", Direction = "left" } }
+            }
+        };
+        var directionError = Assert.Single(TelemetryContractValidatorV1.Validate(missingEventTeamDirection).Errors,
+            error => error.Code == "ATTACKING_DIRECTION_MISSING");
+        Assert.Equal("coordinateSystem.teamDirections", directionError.Path);
 
         var oneSided = value with { Location = new EventLocationV1 { Start = new PitchPointV1 { X = .25m, Y = .5m } } };
         var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(JsonSerializer.Serialize(oneSided, JsonOptions), JsonOptions)!;

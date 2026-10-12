@@ -70,6 +70,9 @@ public static class TelemetryContractValidatorV1
         {
             Required(value.RelatedPlayerId, "relatedPlayerId", errors);
             MaximumLength(value.RelatedPlayerId, "relatedPlayerId", MaximumIdentifierLength, errors);
+            if (!string.IsNullOrWhiteSpace(value.PlayerId) &&
+                string.Equals(value.PlayerId, value.RelatedPlayerId, StringComparison.Ordinal))
+                Add(errors, "INVALID_SUBSTITUTION", "relatedPlayerId", "A substitution must identify two different participants.");
         }
         if (value.Location is not null)
         {
@@ -80,7 +83,10 @@ public static class TelemetryContractValidatorV1
             else
             {
                 CoordinateSystem(value.CoordinateSystem, errors);
-                TeamDirections(value.CoordinateSystem.TeamDirections, errors);
+                var requiredTeams = string.IsNullOrWhiteSpace(value.TeamId)
+                    ? Array.Empty<string>()
+                    : new[] { value.TeamId };
+                TeamDirections(value.CoordinateSystem.TeamDirections, errors, requiredTeams);
                 if (value.Location.Start is null && value.Location.End is null)
                     Add(errors, "EVENT_LOCATION_REQUIRED", "location", "At least one event location point is required.");
                 if (value.Location.Start is not null) Point(value.Location.Start, value.CoordinateSystem, "location.start", errors);
@@ -234,7 +240,7 @@ public static class TelemetryContractValidatorV1
         if (requiredTeams is null) return;
         foreach (var team in requiredTeams)
             if (!declaredTeams.Contains(team))
-                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", "No attacking direction is declared for a team referenced by the frame.");
+                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", "No attacking direction is declared for a team referenced by the record.");
     }
 
     private static void Point(PitchPointV1? point, PitchCoordinateSystemV1 system, string path, List<TelemetryValidationError> errors)
