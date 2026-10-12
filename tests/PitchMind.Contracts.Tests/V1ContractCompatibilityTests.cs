@@ -73,12 +73,15 @@ public sealed class V1ContractCompatibilityTests
     public void Analyst_request_serialization_pins_the_v1_request_shape()
     {
         var request = new AnalystRequest("insight", 5400, "analyst");
+        var requestWithoutAudience = new AnalystRequest("insight", 0);
 
         AssertJsonProperties(request, "insightId", "atSeconds", "audience");
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(request, Json));
         Assert.Equal("insight", json.RootElement.GetProperty("insightId").GetString());
         Assert.Equal(5400, json.RootElement.GetProperty("atSeconds").GetInt32());
         Assert.Equal("analyst", json.RootElement.GetProperty("audience").GetString());
+        using var withoutAudienceJson = JsonDocument.Parse(JsonSerializer.Serialize(requestWithoutAudience, Json));
+        Assert.DoesNotContain("audience", withoutAudienceJson.RootElement.EnumerateObject().Select(property => property.Name));
     }
 
     [Fact]
