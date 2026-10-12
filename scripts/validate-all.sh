@@ -15,4 +15,5 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 node scripts/validate_operating_model.mjs
 node scripts/validate_operating_model.mjs --self-test
 node scripts/test_design_skills.mjs
-echo "PASS: .NET, frontend, feed profiler and council contract validation"
+python3 scripts/validate_iac_dependency_contract.py
+echo "PASS: .NET, frontend, feed validation, IaC dependency contract and council validation"
