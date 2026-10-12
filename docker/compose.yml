@@ -1,4 +1,4 @@
-name: pitchmind-local
+name: pitchmind
 
 services:
   postgres:

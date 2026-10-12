@@ -4,6 +4,8 @@ PostgreSQL 16 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.
 
 Compose keeps the PostgreSQL service on `postgres:16-alpine` and names its local volume `pitchmind_postgres_data`, matching the image major version and volume name reported for the existing local database. The Compose configuration tests check these values offline. No data migration or runtime verification is included in PR #117, and no existing volume is changed by its config or tests.
 
+The Compose project name is `pitchmind`, matching the existing local service project so `dev-health.sh` can discover its containers and subsequent local starts target the same named volumes instead of creating a parallel project. All checkouts on this machine that use this name share the same containers; `dev-down.sh` from any such checkout stops that shared stack. For these already-running services, readiness was checked without starting or stopping containers; the repository test `.env.example` was used only for Compose interpolation and removed after the check.
+
 From the repository root:
 
 ```bash
