@@ -24,9 +24,11 @@ for attempt in range(31):
         with urllib.request.urlopen(request, timeout=10) as response:
             status = response.status
             body = json.load(response)
+            headers = response.headers
     except urllib.error.HTTPError as error:
         status = error.code
-        body = json.load(error) if error.headers.get("Content-Type", "").endswith("+json") else None
+        headers = error.headers
+        body = json.load(error) if headers.get("Content-Type", "").endswith("+json") else None
 
     statuses.append(status)
     if attempt < 30:
@@ -34,5 +36,11 @@ for attempt in range(31):
         assert body["code"] == "MATCH_DATA_UNAVAILABLE", body
     else:
         assert status == 429, (attempt + 1, status, body)
+        assert headers.get("Content-Type", "").startswith("application/problem+json"), headers
+        assert headers.get("X-Correlation-ID"), headers
+        assert headers.get("X-Contract-Version") == "1", headers
+        assert body["code"] == "RATE_LIMITED", body
+        assert body["status"] == 429, body
+        assert body["correlationId"] == headers["X-Correlation-ID"], body
 
 print("PASS: 30 analyst requests fail closed with 503; request 31 is rate-limited with 429")
