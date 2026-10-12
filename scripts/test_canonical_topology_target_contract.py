@@ -25,6 +25,66 @@ class CanonicalTopologyTargetContractTests(unittest.TestCase):
         self.assertRegex(self.template, r"(?m)^@allowed\(\['dev'\]\)$")
         self.assertRegex(self.template, r"(?m)^param environment string = 'dev'$")
 
+    def test_every_deployable_resource_is_behind_the_opt_in_guard(self):
+        resources = re.findall(
+            r"(?m)^resource[ \t]+(\w+)[ \t]+'[^']+'([ \t]+existing)?[ \t]*=[ \t]*(.*)$",
+            self.template,
+        )
+        deployable = [
+            (name, declaration)
+            for name, existing, declaration in resources
+            if existing.strip() != "existing"
+        ]
+        self.assertGreater(len(deployable), 0)
+        for name, declaration in deployable:
+            with self.subTest(resource=name):
+                self.assertEqual(declaration, "if (deployCanonicalTopology) {")
+
+    def test_provisioning_modules_cannot_bypass_the_opt_in_guard(self):
+        def unguarded_modules(source):
+            declarations = re.findall(
+                r"(?m)^[ \t]*module[ \t]+(\w+)[ \t]+'[^']+'[ \t]*=[ \t]*(?:\r?\n[ \t]*)?([^\r\n]+)",
+                source,
+            )
+            return [
+                name
+                for name, expression in declarations
+                if expression.strip() != "if (deployCanonicalTopology) {"
+            ]
+
+        self.assertEqual([], unguarded_modules(self.template))
+
+        unguarded_fixture = self.template + (
+            "\nmodule hiddenWorkload './workload.bicep' = {\n"
+            "  name: 'workload'\n"
+            "}\n"
+        )
+        self.assertEqual(["hiddenWorkload"], unguarded_modules(unguarded_fixture))
+
+        guarded_fixture = self.template + (
+            "\nmodule optionalWorkload './workload.bicep' = if (deployCanonicalTopology) {\n"
+            "  name: 'workload'\n"
+            "}\n"
+        )
+        self.assertEqual([], unguarded_modules(guarded_fixture))
+
+    def test_disabled_outputs_do_not_dereference_undeployed_resources(self):
+        guarded_outputs = (
+            "postgresServerId",
+            "postgresServerName",
+            "postgresFqdn",
+            "containerAppsEnvironmentId",
+            "storagePrivateEndpointId",
+            "keyVaultPrivateEndpointId",
+            "eventHubsPrivateEndpointId",
+        )
+        for output_name in guarded_outputs:
+            with self.subTest(output=output_name):
+                self.assertRegex(
+                    self.template,
+                    rf"(?m)^output {output_name} \w+ = deployCanonicalTopology \? .+ : ''$",
+                )
+
     def test_targets_are_fixed_type_existing_resources_at_explicit_scopes(self):
         targets = {
             "storageAccount": (
