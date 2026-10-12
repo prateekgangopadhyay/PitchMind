@@ -26,3 +26,14 @@ The report preserves source sequence 1–2199, raw values from the source `clock
 - The high shot/foul frequencies, source score semantics, roster/identity mapping and realism require football-domain review. Independent rights/privacy review and Product Owner acceptance remain pending.
 - PostgreSQL, hosted CI, Azure validation and deployment were not exercised. No Azure resource or deployment action was performed.
 - No C4, ADR or public API contract changed: this is an isolated read-only validation tool and documentation addition.
+
+## Independent local re-run on current-main descendant
+
+An isolated worktree at `6c8fe25aae00ea7449441fda212fe556c5bf0eba` reproduced the candidate checks without modifying the source or validator:
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate` — 20 passed, 0 failed.
+- `PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_manu_liv_candidate.py --output /private/tmp/pitchmind-ep03-s01-field-dictionary-report.json` — exit 0; result remains `structurally_valid_candidate_blocked_for_canonicalization`.
+- Re-run report: 2,199 events; source sequence 1–2,199; raw `clockSeconds` range 0–5,761 with unit `unverified`; 48,048 attached positions; source SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; event-ID ledger SHA-256 `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`; ordered-record SHA-256 `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`.
+- `git diff --check` — passed after the evidence-only update.
+
+This re-run does not change any semantic or acceptance gate: clock policy, coordinate units/axes/orientation, metric definitions/units, source-to-canonical identity and event mapping, football realism, independent rights/privacy review, full seeded 90-minute regeneration, PostgreSQL behavior and Product Owner acceptance remain unresolved or unverified.
