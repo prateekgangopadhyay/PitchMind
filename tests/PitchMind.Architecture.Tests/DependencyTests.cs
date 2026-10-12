@@ -387,6 +387,100 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsVarDeclaredPlayerPositionsConsumedLaterInFunction()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstPosition = feed.RootElement[0].GetProperty("playerPositions")[0];
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-function-scoped-player-record-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "FunctionPlayerFrame.tsx");
+            File.WriteAllText(source,
+                "function renderFrame() {\n" +
+                "  if (true) {\n" +
+                "    var sourcePlayer = {\n" +
+                $"      x: {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"      y: {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"      speed: {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"      heartRate: {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "    };\n" +
+                "    var positions = [sourcePlayer];\n" +
+                "  }\n" +
+                "  const frame = { playerPositions: positions };\n" +
+                "}\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("x:", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("heartRate:", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_DoesNotResolveVarPlayerRecordsFromDifferentFunction()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstPosition = feed.RootElement[0].GetProperty("playerPositions")[0];
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-other-function-player-record-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "SeparateFunction.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "BlockScoped.cs");
+            File.WriteAllText(source,
+                "function buildLayout() {\n" +
+                "  if (true) {\n" +
+                "    var sourcePlayer = {\n" +
+                $"      x: {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"      y: {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"      speed: {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"      heartRate: {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "    };\n" +
+                "    var positions = [sourcePlayer];\n" +
+                "  }\n" +
+                "}\n" +
+                "function renderFrame() {\n" +
+                "  const frame = { playerPositions: positions };\n" +
+                "}\n");
+            File.WriteAllText(csharpSource,
+                "if (true) {\n" +
+                "  var sourcePlayer = new {\n" +
+                $"    x = {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"    y = {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"    speed = {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"    heartRate = {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "  };\n" +
+                "  var positions = new[] { sourcePlayer };\n" +
+                "}\n" +
+                "var frame = new { playerPositions = positions };\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsQuotedAndMultilineNumericPropertyLiterals()
     {
         var root = FindRepositoryRoot();
@@ -742,7 +836,7 @@ public sealed class DependencyTests
             {
                 var source = File.ReadAllText(path);
                 var numericAliases = ReadNumericAliases(source, out var ambiguousNumericAliases);
-                var referencedPlayerRecordSpans = FindReferencedPlayerRecordSpans(source);
+                var referencedPlayerRecordSpans = FindReferencedPlayerRecordSpans(source, Path.GetExtension(path));
                 var propertyPattern =
                     @"(?:(?<quote>[""'])(?<quotedName>[A-Za-z_][A-Za-z0-9_]*)\k<quote>|\[\s*[""'](?<indexedName>[A-Za-z_][A-Za-z0-9_]*)[""']\s*\]|(?<plainName>[A-Za-z_][A-Za-z0-9_]*))\s*[:=]\s*(?:(?<value>" + SourceNumericLiteralPattern + @")(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)|(?<alias>@?[A-Za-z_$][A-Za-z0-9_$]*))(?![A-Za-z0-9_.])";
                 foreach (Match match in Regex.Matches(source, propertyPattern))
@@ -811,7 +905,7 @@ public sealed class DependencyTests
         return depth > 0;
     }
 
-    private static IReadOnlyList<(int Start, int End)> FindReferencedPlayerRecordSpans(string source)
+    private static IReadOnlyList<(int Start, int End)> FindReferencedPlayerRecordSpans(string source, string extension)
     {
         var spans = new List<(int Start, int End)>();
         var positionAssignments = Regex.Matches(
@@ -820,7 +914,7 @@ public sealed class DependencyTests
             RegexOptions.CultureInvariant);
         foreach (Match assignment in positionAssignments)
         {
-            var variables = FindPlayerPositionVariables(source, assignment);
+            var variables = FindPlayerPositionVariables(source, assignment, extension);
             if (variables.Count == 0)
             {
                 continue;
@@ -829,13 +923,15 @@ public sealed class DependencyTests
             var assignmentScope = GetBraceScopeAt(source, assignment.Index);
             var declarations = Regex.Matches(
                 source,
-                @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?:new\s*)?(?<open>\{)",
+                @"\b(?<kind>const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?:new\s*)?(?<open>\{)",
                 RegexOptions.CultureInvariant);
             foreach (Match declaration in declarations)
             {
                 var name = declaration.Groups["name"].Value.TrimStart('@');
                 if (declaration.Index >= assignment.Index || !variables.Contains(name) ||
-                    !IsScopeVisibleAt(GetBraceScopeAt(source, declaration.Index), assignmentScope))
+                    !IsScopeVisibleAt(
+                        GetDeclarationScopeAt(source, declaration.Index, declaration.Groups["kind"].Value, extension),
+                        assignmentScope))
                 {
                     continue;
                 }
@@ -852,7 +948,7 @@ public sealed class DependencyTests
         return spans;
     }
 
-    private static HashSet<string> FindPlayerPositionVariables(string source, Match assignment)
+    private static HashSet<string> FindPlayerPositionVariables(string source, Match assignment, string extension)
     {
         var variables = new HashSet<string>(StringComparer.Ordinal);
         {
@@ -887,11 +983,11 @@ public sealed class DependencyTests
 
         var arrayDeclarations = Regex.Matches(
             source,
-            @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<prefix>new\s*\[\s*\]\s*)?(?<open>\[|\{)",
+            @"\b(?<kind>const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<prefix>new\s*\[\s*\]\s*)?(?<open>\[|\{)",
             RegexOptions.CultureInvariant);
         var aliasDeclarations = Regex.Matches(
             source,
-            @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<reference>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*;?",
+            @"\b(?<kind>const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<reference>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*;?",
             RegexOptions.CultureInvariant);
         var assignmentScope = GetBraceScopeAt(source, assignment.Index);
 
@@ -902,7 +998,9 @@ public sealed class DependencyTests
             {
                 var name = declaration.Groups["name"].Value.TrimStart('@');
                 if (!variables.Contains(name) || declaration.Index >= assignment.Index ||
-                    !IsScopeVisibleAt(GetBraceScopeAt(source, declaration.Index), assignmentScope))
+                    !IsScopeVisibleAt(
+                        GetDeclarationScopeAt(source, declaration.Index, declaration.Groups["kind"].Value, extension),
+                        assignmentScope))
                 {
                     continue;
                 }
@@ -927,7 +1025,9 @@ public sealed class DependencyTests
             {
                 var name = alias.Groups["name"].Value.TrimStart('@');
                 if (variables.Contains(name) && alias.Index < assignment.Index &&
-                    IsScopeVisibleAt(GetBraceScopeAt(source, alias.Index), assignmentScope))
+                    IsScopeVisibleAt(
+                        GetDeclarationScopeAt(source, alias.Index, alias.Groups["kind"].Value, extension),
+                        assignmentScope))
                 {
                     changed |= variables.Add(alias.Groups["reference"].Value.TrimStart('@'));
                 }
@@ -940,6 +1040,46 @@ public sealed class DependencyTests
         }
 
         return variables;
+    }
+
+    private static IReadOnlyList<int> GetDeclarationScopeAt(string source, int position, string kind, string extension)
+    {
+        var scope = GetBraceScopeAt(source, position);
+        if (!string.Equals(kind, "var", StringComparison.Ordinal) ||
+            extension is not (".js" or ".jsx" or ".mjs" or ".cjs" or ".ts" or ".tsx"))
+        {
+            return scope;
+        }
+
+        for (var index = scope.Count - 1; index >= 0; index--)
+        {
+            if (IsJavaScriptFunctionBody(source, scope[index]))
+            {
+                return scope.Take(index + 1).ToArray();
+            }
+        }
+
+        // At script/module scope, var escapes intervening blocks to the file scope.
+        return [];
+    }
+
+    private static bool IsJavaScriptFunctionBody(string source, int openingBraceIndex)
+    {
+        var prefix = source.AsSpan(0, openingBraceIndex).TrimEnd().ToString();
+        if (Regex.IsMatch(
+                   prefix,
+                   @"\bfunction(?:\s*\*)?\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\s*)?\([^{}]*\)\s*(?::[^{}]+)?$",
+                   RegexOptions.CultureInvariant | RegexOptions.Singleline) ||
+            Regex.IsMatch(prefix, @"=>\s*$", RegexOptions.CultureInvariant))
+        {
+            return true;
+        }
+
+        var method = Regex.Match(
+            prefix,
+            @"(?:^|[;{}])\s*(?:(?:public|private|protected|static|async|override|abstract|get|set)\s+)*(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*\([^{};]*\)\s*(?::[^{}]+)?$",
+            RegexOptions.CultureInvariant | RegexOptions.Singleline);
+        return method.Success && method.Groups["name"].Value is not ("if" or "for" or "while" or "switch" or "catch" or "with");
     }
 
     private static IReadOnlyList<int> GetBraceScopeAt(string source, int position)
