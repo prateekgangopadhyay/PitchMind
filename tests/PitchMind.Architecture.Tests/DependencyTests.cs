@@ -320,6 +320,39 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_IgnoresCandidateCoordinateAliasShadowedAtPlayerShorthand()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-shadowed-coordinate-alias-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            File.WriteAllText(source,
+                $"const x = {firstX};\n" +
+                "function render() {\n" +
+                "  const layoutX = 999999999;\n" +
+                "  const x = layoutX;\n" +
+                "  return { playerPositions: [{ x }] };\n" +
+                "}\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsFeedNumbersInAliasedPlayerRecordsIncludedInPlayerPositions()
     {
         var root = FindRepositoryRoot();
@@ -1033,7 +1066,23 @@ public sealed class DependencyTests
         int declarationIndex,
         string extension)
     {
-        var declarationScope = GetBraceScopeAt(source, declarationIndex);
+        var declaration = Regex.Matches(
+                source,
+                @"\b(?<kind>const|let|var)\s+(?<name>@?" + Regex.Escape(propertyName) + @")" +
+                @"(?:\s*:\s*[^=;\r\n]+)?\s*=",
+                RegexOptions.CultureInvariant)
+            .Cast<Match>()
+            .FirstOrDefault(match => match.Groups["name"].Index == declarationIndex);
+        if (declaration is null)
+        {
+            return false;
+        }
+
+        var declarationScope = GetDeclarationScopeAt(
+            source,
+            declaration.Index,
+            declaration.Groups["kind"].Value,
+            extension);
         var positionAssignments = Regex.Matches(
             source,
             @"\bplayerPositions\b\s*[:=]\s*",
@@ -1088,10 +1137,57 @@ public sealed class DependencyTests
             }
 
             var shorthandPattern = @"(?<![A-Za-z0-9_$])" + Regex.Escape(propertyName) + @"\s*(?=[,}])";
-            if (Regex.IsMatch(
-                source.AsSpan(openingIndex + 1, closingIndex - openingIndex - 1).ToString(),
+            var collectionContents = source.AsSpan(openingIndex + 1, closingIndex - openingIndex - 1).ToString();
+            foreach (Match shorthand in Regex.Matches(
+                collectionContents,
                 shorthandPattern,
                 RegexOptions.CultureInvariant))
+            {
+                var shorthandIndex = openingIndex + 1 + shorthand.Index;
+                var shorthandScope = GetBraceScopeAt(source, shorthandIndex);
+                if (!IsScopeVisibleAt(declarationScope, shorthandScope) ||
+                    IsPlayerShorthandShadowedAt(source, propertyName, declaration, declarationScope, shorthandIndex, extension))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPlayerShorthandShadowedAt(
+        string source,
+        string propertyName,
+        Match candidateDeclaration,
+        IReadOnlyList<int> candidateScope,
+        int shorthandIndex,
+        string extension)
+    {
+        var declarations = Regex.Matches(
+            source,
+            @"\b(?<kind>const|let|var)\s+@?" + Regex.Escape(propertyName) +
+            @"(?:\s*:\s*[^=;\r\n]+)?\s*=",
+            RegexOptions.CultureInvariant);
+        foreach (Match declaration in declarations)
+        {
+            if (declaration.Index == candidateDeclaration.Index)
+            {
+                continue;
+            }
+
+            var scope = GetDeclarationScopeAt(source, declaration.Index, declaration.Groups["kind"].Value, extension);
+            if (!IsScopeVisibleAt(scope, GetBraceScopeAt(source, shorthandIndex)))
+            {
+                continue;
+            }
+
+            var nestedScopeShadows = scope.Count > candidateScope.Count && IsScopeVisibleAt(candidateScope, scope);
+            var laterSameScopeDeclaration = scope.SequenceEqual(candidateScope) &&
+                declaration.Index > candidateDeclaration.Index && declaration.Index < shorthandIndex;
+            if (nestedScopeShadows || laterSameScopeDeclaration)
             {
                 return true;
             }
