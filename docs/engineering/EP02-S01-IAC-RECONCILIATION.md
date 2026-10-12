@@ -2,6 +2,12 @@
 
 **Story:** EP02-S01, P0. **Purpose:** reconcile the Bicep foundation with the deployable MVP topology and identify dependencies that are not yet safe to assume available. **Review date:** 2026-10-09.
 
+The machine-readable repository declaration matrix is maintained in [`infra/resource-dependency-contract.json`](../../infra/resource-dependency-contract.json) and checked by [`scripts/validate_iac_dependency_contract.py`](../../scripts/validate_iac_dependency_contract.py). It is a source consistency guard; the dated observations below remain historical and no runtime connectivity is inferred by a passing validator.
+
+## Source contract verification — 2026-10-12
+
+The source contract covers 27 resource and workload rows. It checks referenced Bicep declaration symbols, the default-off gate on candidate resources, required canonical dependency rows, and blocks availability claims for disabled-public-access resources until evidence is recorded. It also confines evidence paths to repository files. This verifies that the repository matrix is internally consistent; it does not inspect Azure or prove resource existence, policy, DNS, identity, connectivity, cost, or deployment readiness. See the [local test evidence](evidence/EP02-S01-IAC-CONTRACT-2026-10-12.md).
+
 ## Evidence boundary
 
 This is a repository and prior-evidence review, not a new Azure inventory. The observed state below is taken from [the dated DEV execution record](evidence/2026-10-08-DEV-DEPLOYMENT.md), which records a read-only inventory of `rg-pitchmind-dev-001` in `centralindia`, followed by a separately recorded deployment and smoke of the bounded offline API. No Azure command, what-if, provisioning, or deployment was run for this reconciliation. Historical evidence is not a fresh assertion of current state.
