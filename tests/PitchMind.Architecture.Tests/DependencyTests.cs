@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -169,20 +170,26 @@ public sealed class DependencyTests
                 $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
                 $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
                 $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
+                $"const hexSequence = {{ sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                $"const binaryClock = {{ clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)} }};\n" +
+                $"const octalFinalSequence = {{ sequence: 0o{Convert.ToString(finalSequence, 8)} }};\n" +
+                $"const explicitPlusSequence = {{ sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
                 $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
+                $"const unrelatedWidth = {{ width: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 "const unrelatedPageSize = 25;");
             File.WriteAllText(csharpSource,
                 $"var coordinate = new {{ pitchX = {firstPitchX}m }};\n" +
-                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};");
+                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"var sourceSequence = new {{ sequence = 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}UL }};");
 
             var violations = FindFixtureDataMarkers(
                 [source, csharpSource],
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(14, violations.Count);
+            Xunit.Assert.Equal(19, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
@@ -192,6 +199,11 @@ public sealed class DependencyTests
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRate}n", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0o{Convert.ToString(finalSequence, 8)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedWidth", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX = {firstPitchX}m", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate = {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
@@ -370,7 +382,7 @@ public sealed class DependencyTests
             return false;
         }
 
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?(?:[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
         {
             if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
                 values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
@@ -382,10 +394,48 @@ public sealed class DependencyTests
         return false;
     }
 
-    private static string NormalizeNumericLiteral(string value) =>
-        decimal.TryParse(value.Replace("_", string.Empty, StringComparison.Ordinal), NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
-            ? number.ToString("G29", CultureInfo.InvariantCulture)
+    private static string NormalizeNumericLiteral(string value)
+    {
+        var normalized = value.Replace("_", string.Empty, StringComparison.Ordinal);
+        var isNegative = normalized.StartsWith("-", StringComparison.Ordinal);
+        var unsigned = normalized.StartsWith("+", StringComparison.Ordinal) || isNegative ? normalized[1..] : normalized;
+        var radix = unsigned.Length > 2 && unsigned[0] == '0'
+            ? char.ToLowerInvariant(unsigned[1]) switch
+            {
+                'x' => 16,
+                'b' => 2,
+                'o' => 8,
+                _ => 10
+            }
+            : 10;
+
+        if (radix != 10)
+        {
+            BigInteger number = BigInteger.Zero;
+            foreach (var digit in unsigned.AsSpan(2))
+            {
+                var digitValue = digit switch
+                {
+                    >= '0' and <= '9' => digit - '0',
+                    >= 'a' and <= 'f' => digit - 'a' + 10,
+                    >= 'A' and <= 'F' => digit - 'A' + 10,
+                    _ => radix
+                };
+                if (digitValue >= radix)
+                {
+                    return value;
+                }
+
+                number = number * radix + digitValue;
+            }
+
+            return (isNegative ? -number : number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+            ? decimalNumber.ToString("G29", CultureInfo.InvariantCulture)
             : value;
+    }
 
     [Xunit.Fact]
     public void Domain_RejectsForgedImplicitFrameworkReferences()
