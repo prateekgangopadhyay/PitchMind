@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -129,7 +131,7 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
-    public void ProductionFixtureGuard_RejectsCandidateClockAndSequenceLiterals()
+    public void ProductionFixtureGuard_RejectsCandidateFootballNumericLiterals()
     {
         var root = FindRepositoryRoot();
         var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
@@ -139,30 +141,74 @@ public sealed class DependencyTests
         var finalEvent = feed.RootElement[feed.RootElement.GetArrayLength() - 1];
         var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
         var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
+        var firstPitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var firstPitchValue = decimal.Parse(firstPitchX, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var firstPitchEquivalent = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture) + "e0";
+        var firstPitchInteger = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture);
+        var firstPlayer = firstEvent.GetProperty("playerPositions")[0];
+        var firstPlayerX = firstPlayer.GetProperty("x").GetRawText();
+        var firstPlayerSpeed = firstPlayer.GetProperty("speed").GetRawText();
+        var firstPlayerHeartRate = firstPlayer.GetProperty("heartRate").GetRawText();
+        var firstPlayerHeartRateWithSeparator = firstPlayerHeartRate.Insert(firstPlayerHeartRate.Length / 2, "_");
         var finalSequence = finalEvent.GetProperty("sequence").GetInt32();
         var finalClockSeconds = finalEvent.GetProperty("clockSeconds").GetInt32();
+        var finalPlayer = finalEvent.GetProperty("playerPositions")[0];
+        var finalPlayerStamina = finalPlayer.GetProperty("stamina").GetRawText();
 
         var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-guard-");
         try
         {
             var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
             File.WriteAllText(source,
                 $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
                 $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
+                $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
+                $"const equivalentPitch = {{ pitchX: {firstPitchEquivalent} }};\n" +
+                $"const integerPitch = {{ pitchY: {firstPitchInteger} }};\n" +
+                $"const firstPlayerX = {{ x: {firstPlayerX} }};\n" +
+                $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
+                $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
+                $"const hexSequence = {{ sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                $"const binaryClock = {{ clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)} }};\n" +
+                $"const octalFinalSequence = {{ sequence: 0o{Convert.ToString(finalSequence, 8)} }};\n" +
+                $"const explicitPlusSequence = {{ sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
+                $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
+                $"const unrelatedWidth = {{ width: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 "const unrelatedPageSize = 25;");
+            File.WriteAllText(csharpSource,
+                $"var coordinate = new {{ pitchX = {firstPitchX}m }};\n" +
+                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"var sourceSequence = new {{ sequence = 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}UL }};");
 
             var violations = FindFixtureDataMarkers(
-                [source],
+                [source, csharpSource],
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Equal(19, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchEquivalent}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchY: {firstPitchInteger}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRate}n", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0o{Convert.ToString(finalSequence, 8)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedWidth", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX = {firstPitchX}m", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate = {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"stamina: {finalPlayerStamina}", StringComparison.Ordinal));
         }
         finally
         {
@@ -260,8 +306,7 @@ public sealed class DependencyTests
 
         foreach (var sourceEvent in document.RootElement.EnumerateArray())
         {
-            AddNumberProperty(sourceEvent, "sequence", markers);
-            AddNumberProperty(sourceEvent, "clockSeconds", markers);
+            AddFootballNumericMarkers(sourceEvent, markers);
         }
 
         return markers.ToDictionary(
@@ -269,6 +314,36 @@ public sealed class DependencyTests
             pair => (IReadOnlySet<string>)pair.Value,
             StringComparer.OrdinalIgnoreCase);
     }
+
+    private static void AddFootballNumericMarkers(JsonElement element, IDictionary<string, HashSet<string>> markers)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (FootballNumericProperties.Contains(property.Name))
+                {
+                    AddNumberProperty(element, property.Name, markers);
+                }
+
+                AddFootballNumericMarkers(property.Value, markers);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                AddFootballNumericMarkers(item, markers);
+            }
+        }
+    }
+
+    private static readonly HashSet<string> FootballNumericProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sequence", "clockSeconds", "period", "pitchX", "pitchY", "ballX", "ballY", "endX", "endY",
+        "jerseyNumber", "x", "y", "speed", "distanceCovered", "heatIndex", "passAccuracy", "touches",
+        "stamina", "heartRate"
+    };
 
     private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
     {
@@ -283,7 +358,7 @@ public sealed class DependencyTests
             markers.Add(name, values);
         }
 
-        values.Add(property.GetRawText());
+        values.Add(NormalizeNumericLiteral(property.GetRawText()));
     }
 
     private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
@@ -307,16 +382,59 @@ public sealed class DependencyTests
             return false;
         }
 
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?[0-9]+(?:\.[0-9]+)?)(?![0-9.])"))
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
         {
             if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
-                values.Contains(match.Groups["value"].Value))
+                values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static string NormalizeNumericLiteral(string value)
+    {
+        var normalized = value.Replace("_", string.Empty, StringComparison.Ordinal);
+        var isNegative = normalized.StartsWith("-", StringComparison.Ordinal);
+        var unsigned = normalized.StartsWith("+", StringComparison.Ordinal) || isNegative ? normalized[1..] : normalized;
+        var radix = unsigned.Length > 2 && unsigned[0] == '0'
+            ? char.ToLowerInvariant(unsigned[1]) switch
+            {
+                'x' => 16,
+                'b' => 2,
+                'o' => 8,
+                _ => 10
+            }
+            : 10;
+
+        if (radix != 10)
+        {
+            BigInteger number = BigInteger.Zero;
+            foreach (var digit in unsigned.AsSpan(2))
+            {
+                var digitValue = digit switch
+                {
+                    >= '0' and <= '9' => digit - '0',
+                    >= 'a' and <= 'f' => digit - 'a' + 10,
+                    >= 'A' and <= 'F' => digit - 'A' + 10,
+                    _ => radix
+                };
+                if (digitValue >= radix)
+                {
+                    return value;
+                }
+
+                number = number * radix + digitValue;
+            }
+
+            return (isNegative ? -number : number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+            ? decimalNumber.ToString("G29", CultureInfo.InvariantCulture)
+            : value;
     }
 
     [Xunit.Fact]
