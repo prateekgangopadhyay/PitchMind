@@ -8,10 +8,9 @@
 
 ```mermaid
 flowchart TB
-  API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
-  Match --> Fixture["SyntheticFixtureGenerator, in-source data"]
-  Match --> Press["PressingSequenceDetector"]
-  Match --> Replay["Selected-time projection/evidence/fallback"]
+  API["PitchMind.Api Program.cs / HTTP routes"] --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
+  API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
+  Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]

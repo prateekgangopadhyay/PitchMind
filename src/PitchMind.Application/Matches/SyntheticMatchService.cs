@@ -7,7 +7,6 @@ namespace PitchMind.Application.Matches;
 public sealed class SyntheticMatchService
 {
     public SyntheticFixture Fixture { get; }
-    public SyntheticMatchService() : this(SyntheticFixtureGenerator.Generate()) { }
     public SyntheticMatchService(SyntheticFixture fixture)
     {
         ArgumentNullException.ThrowIfNull(fixture);

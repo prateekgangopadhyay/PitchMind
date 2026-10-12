@@ -7,7 +7,7 @@ Hexagonal/Clean Architecture (Domain zero external dependencies); DDD match/fixt
 ## Target architecture
 ```mermaid
 flowchart LR
- U[Browser React] --> FD[Front Door WAF optional]
+ U[Browser React] --> FD[Public edge; required when ACA is internal/private]
  FD --> API[ASP.NET Core BFF on ACA]
  U -. PKCE .-> AUTH[Entra External ID]
  U <-. cursor .-> SR[Azure SignalR]
@@ -38,6 +38,8 @@ flowchart LR
  EW -. OTEL .-> MON
  AW -. OTEL .-> MON
  ```
+
+For the current `canonical-dev-topology.bicep` candidate, ACA is internal with public network access disabled, so direct public browser ingress does not apply. Front Door Premium with a Private Link origin is one possible public path, but no edge module or configuration is included; the public path remains blocked pending architecture review. The separate offline demo's public ingress is not evidence for this canonical topology.
 
 ## Platform service and local-equivalent matrix
 | Boundary | LOCAL | DEV/STAGE/PROD | Verification |
@@ -98,4 +100,4 @@ Failure: Event Hubs lag pauses canonical progress (no skip); PostgreSQL loss -> 
 Monitor: correlation IDs, lag/offset, error/quarantine, transaction retry, replay mismatch, p50/p95/p99 API latency, AI costs/tokens, user-facing staleness, uptime and monthly burn. FinOps approval required for model and ingestion quotas. Restore drills, backup/PITR and immutable rollback are release gates.
 
 ## Explicit differences from current prototype
-`SyntheticMatchService` currently uses generated in-memory fixture, API service registration binds `InMemoryMatchEventStore`; independent `PostgresMatchEventStore` stores only `MatchEvent`. No live Azure adapters/auth/Foundry workers yet. `docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md` proves a **bounded offline** DEV prototype only. No new DEV deployment authorized by this HLD.
+`SyntheticMatchService` remains a fixture-backed application component for test scenarios; it is not registered or resolved by the API routes. Match routes currently return `503 MATCH_DATA_UNAVAILABLE` until API route composition is replaced with a canonical, revisioned read port backed by admitted PostgreSQL data. API service registration binds `InMemoryMatchEventStore`; independent `PostgresMatchEventStore` stores only `MatchEvent`. No live Azure adapters/auth/Foundry workers yet. `docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md` proves a **bounded offline** DEV prototype only. No new DEV deployment authorized by this HLD.
