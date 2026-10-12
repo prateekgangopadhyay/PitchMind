@@ -9,7 +9,7 @@ namespace PitchMind.TestFixtures;
 /// <summary>Builds deterministic, fictional golden data for automated tests only.</summary>
 public static class SyntheticFixtureGenerator
 {
-    public const string Version = "synthetic-v2";
+    public const string Version = "synthetic-v3";
     public const int DefaultSeed = 42;
     public static readonly MatchId FixtureId = FixtureIdForSeed(DefaultSeed);
 
@@ -51,7 +51,14 @@ public static class SyntheticFixtureGenerator
         Add(5400, MatchEventType.FullTime, "", "", "full-time", "complete");
 
         var ordered = events.OrderBy(e => e.Event.ClockSeconds).ThenBy(e => e.Event.Sequence)
-            .Select((e, i) => e with { Event = e.Event with { Sequence = i } }).ToArray();
+            .Select((e, i) => e with
+            {
+                Event = e.Event with
+                {
+                    EventId = StableId(FormattableString.Invariant($"{Version}:{seed}:{e.Event.ClockSeconds}:{i}:{e.Action}")),
+                    Sequence = i
+                }
+            }).ToArray();
         var times = Enumerable.Range(0, 181).Select(i => i * 30)
             .Concat(new[] { 3290, 3293, 3296, 3299, 3304, 3308, 3309 }).Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, home, away, seed)).ToArray();
