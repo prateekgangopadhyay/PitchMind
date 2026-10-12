@@ -1,4 +1,4 @@
-name: pitchmind-local
+name: pitchmind
 
 services:
   postgres:
@@ -38,7 +38,9 @@ services:
 
 volumes:
   postgres-data:
+    name: pitchmind_postgres_data
   redis-data:
+    name: pitchmind_redis_data
 
 networks:
   local:
