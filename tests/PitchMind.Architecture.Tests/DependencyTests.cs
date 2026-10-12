@@ -254,6 +254,72 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsCandidateCoordinateAliasUsedAsPlayerShorthand()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-player-shorthand-numeric-alias-");
+        try
+        {
+            var inlineSource = Path.Combine(sourceRoot.FullName, "InlinePlayerFrame.tsx");
+            File.WriteAllText(inlineSource,
+                $"const x = {firstX};\n" +
+                "const frame = { playerPositions: [{ x }] };\n");
+            var aliasedSource = Path.Combine(sourceRoot.FullName, "AliasedPlayerFrame.tsx");
+            File.WriteAllText(aliasedSource,
+                $"const x = {firstX};\n" +
+                "const positions = [{ x }];\n" +
+                "const frame = { playerPositions: positions };\n");
+
+            var violations = FindFixtureDataMarkers(
+                [inlineSource, aliasedSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Contains(violations, item => item.Path == inlineSource && item.Line.Contains($"x = {firstX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == aliasedSource && item.Line.Contains($"x = {firstX}", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_IgnoresCandidateCoordinateAliasNotUsedByPlayerShorthand()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-unreferenced-coordinate-alias-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            File.WriteAllText(source,
+                $"const x = {firstX};\n" +
+                "const positions = [{ x: 25 }];\n" +
+                "const frame = { playerPositions: positions };\n" +
+                "const layout = { x };\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsFeedNumbersInAliasedPlayerRecordsIncludedInPlayerPositions()
     {
         var root = FindRepositoryRoot();
@@ -940,9 +1006,13 @@ public sealed class DependencyTests
                     var matchesCandidateValue = numericValue is not null &&
                         numericMarkers.TryGetValue(propertyName, out var values) &&
                         values.Contains(numericValue);
+                    var referencedAsPlayerShorthand = matchesCandidateValue &&
+                        PlayerNumericProperties.Contains(propertyName) &&
+                        IsReferencedAsPlayerPositionShorthand(source, propertyName, match.Index, Path.GetExtension(path));
                     var playerFieldOutsidePlayerPositions = PlayerNumericProperties.Contains(propertyName) &&
                         !IsInsidePlayerPositionsArray(source, match.Index) &&
-                        !referencedPlayerRecordSpans.Any(span => match.Index > span.Start && match.Index < span.End);
+                        !referencedPlayerRecordSpans.Any(span => match.Index > span.Start && match.Index < span.End) &&
+                        !referencedAsPlayerShorthand;
                     if ((ambiguousAlias || matchesCandidateValue) && !playerFieldOutsidePlayerPositions)
                     {
                         matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
@@ -955,6 +1025,79 @@ public sealed class DependencyTests
         }
 
         return violations;
+    }
+
+    private static bool IsReferencedAsPlayerPositionShorthand(
+        string source,
+        string propertyName,
+        int declarationIndex,
+        string extension)
+    {
+        var declarationScope = GetBraceScopeAt(source, declarationIndex);
+        var positionAssignments = Regex.Matches(
+            source,
+            @"\bplayerPositions\b\s*[:=]\s*",
+            RegexOptions.CultureInvariant);
+        foreach (Match assignment in positionAssignments)
+        {
+            var assignmentScope = GetBraceScopeAt(source, assignment.Index);
+            if (!IsScopeVisibleAt(declarationScope, assignmentScope))
+            {
+                continue;
+            }
+
+            var valueIndex = assignment.Index + assignment.Length;
+            var collection = new Regex(
+                    @"\G\s*(?<open>\[)",
+                    RegexOptions.CultureInvariant)
+                .Match(source, valueIndex);
+            if (!collection.Success)
+            {
+                var arrayAlias = new Regex(
+                        @"\G\s*(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)",
+                        RegexOptions.CultureInvariant)
+                    .Match(source, valueIndex);
+                if (!arrayAlias.Success)
+                {
+                    continue;
+                }
+
+                var arrayName = arrayAlias.Groups["name"].Value.TrimStart('@');
+                var arrayDeclaration = Regex.Matches(
+                        source,
+                        @"\b(?<kind>const|let|var)\s+" + Regex.Escape(arrayName) +
+                        @"(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<open>\[)",
+                        RegexOptions.CultureInvariant)
+                    .Cast<Match>()
+                    .FirstOrDefault(match => IsScopeVisibleAt(
+                        GetDeclarationScopeAt(source, match.Index, match.Groups["kind"].Value, extension),
+                        assignmentScope));
+                if (arrayDeclaration is null)
+                {
+                    continue;
+                }
+
+                collection = arrayDeclaration;
+            }
+
+            var openingIndex = collection.Groups["open"].Index;
+            var closingIndex = FindMatchingDelimiter(source, openingIndex);
+            if (closingIndex <= openingIndex)
+            {
+                continue;
+            }
+
+            var shorthandPattern = @"(?<![A-Za-z0-9_$])" + Regex.Escape(propertyName) + @"\s*(?=[,}])";
+            if (Regex.IsMatch(
+                source.AsSpan(openingIndex + 1, closingIndex - openingIndex - 1).ToString(),
+                shorthandPattern,
+                RegexOptions.CultureInvariant))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsInsidePlayerPositionsArray(string source, int propertyIndex)
