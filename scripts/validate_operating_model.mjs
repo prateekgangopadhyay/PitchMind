@@ -42,6 +42,8 @@ function assertGateFailureProbe(pipeline) {
     'Failure probe must execute its dedicated deliberately failing test');
   assert.match(job, /PITCHMIND_GATE_FAILURE_PROBE:\s*'1'\s*(?:#.*)?$/m,
     'Failure probe must activate the test through its scoped environment variable');
+  assert.doesNotMatch(job, /^\s*continueOnError\s*:/im,
+    'Failure probe must not override Azure Pipelines failure propagation');
 }
 
 function assertStackedPrTrigger(pipeline) {
@@ -65,6 +67,8 @@ function gateFailureProbeSelfTest(pipeline) {
     [pipeline.replace('FullyQualifiedName~DeliberateGateFailureProbe', 'FullyQualifiedName~UnrelatedTest'), /dedicated deliberately failing test/],
     [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '0'"), /scoped environment variable/],
     [pipeline.replace("PITCHMIND_GATE_FAILURE_PROBE: '1'", "PITCHMIND_GATE_FAILURE_PROBE: '10'"), /scoped environment variable/],
+    [pipeline.replace('      env:\n        PITCHMIND_GATE_FAILURE_PROBE', '      continueOnError: true\n      env:\n        PITCHMIND_GATE_FAILURE_PROBE'), /override Azure Pipelines failure propagation/],
+    [pipeline.replace('      env:\n        PITCHMIND_GATE_FAILURE_PROBE', '      continueOnError: $(probeMayContinueOnError)\n      env:\n        PITCHMIND_GATE_FAILURE_PROBE'), /override Azure Pipelines failure propagation/],
   ];
   for (const [mutated, expected] of mutations) assert.throws(() => assertGateFailureProbe(mutated), expected);
 }
