@@ -353,6 +353,66 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_IgnoresCandidateCoordinateAliasShadowedByFunctionParameter()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-function-parameter-shadow-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            File.WriteAllText(source,
+                $"const x = {firstX};\n" +
+                "function render(x: number) {\n" +
+                "  return { playerPositions: [{ x }] };\n" +
+                "}\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_IgnoresCandidateCoordinateAliasShadowedByArrowParameter()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-arrow-parameter-shadow-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            File.WriteAllText(source,
+                $"const x = {firstX};\n" +
+                "const render = (x: number) => ({ playerPositions: [{ x }] });\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Empty(violations);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsFeedNumbersInAliasedPlayerRecordsIncludedInPlayerPositions()
     {
         var root = FindRepositoryRoot();
@@ -1193,7 +1253,121 @@ public sealed class DependencyTests
             }
         }
 
+        if (IsShadowedByFunctionParameter(source, propertyName, candidateScope, shorthandIndex))
+        {
+            return true;
+        }
+
         return false;
+    }
+
+    private static bool IsShadowedByFunctionParameter(
+        string source,
+        string propertyName,
+        IReadOnlyList<int> candidateScope,
+        int shorthandIndex)
+    {
+        const string parameter = @"(?<parameters>\([^()]*\)|[A-Za-z_$][A-Za-z0-9_$]*)";
+        var functionPattern =
+            @"\bfunction(?:\s*\*)?\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\s*)?(?:<[^{}()]*>\s*)?" +
+            @"\((?<parameters>[^()]*)\)\s*(?::[^{}]+)?\s*(?<body>\{)";
+        var arrowPattern =
+            parameter + @"\s*=>\s*(?<body>\{)?";
+        foreach (var pattern in new[] { functionPattern, arrowPattern })
+        {
+            foreach (Match function in Regex.Matches(
+                source,
+                pattern,
+                RegexOptions.CultureInvariant | RegexOptions.Singleline))
+            {
+                var parameterNames = function.Groups["parameters"].Value
+                    .Trim('(', ')')
+                    .Split(',')
+                    .Select(segment => Regex.Match(
+                        segment,
+                        @"^\s*(?:\.\.\.)?(?<name>[A-Za-z_$][A-Za-z0-9_$]*)\s*\??",
+                        RegexOptions.CultureInvariant))
+                    .Where(match => match.Success)
+                    .Select(match => match.Groups["name"].Value);
+                if (!parameterNames.Contains(propertyName, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                var bodyStart = function.Groups["body"].Success
+                    ? function.Groups["body"].Index + 1
+                    : function.Index + function.Length;
+                var parameterScope = GetBraceScopeAt(source, bodyStart);
+                bool isUseInsideBody;
+                bool shadowsCandidate;
+                if (pattern == arrowPattern && !function.Groups["body"].Success)
+                {
+                    var expressionEnd = FindArrowExpressionEnd(source, bodyStart);
+                    isUseInsideBody = shorthandIndex >= bodyStart && shorthandIndex < expressionEnd;
+                    shadowsCandidate = IsScopeVisibleAt(candidateScope, parameterScope);
+                }
+                else
+                {
+                    isUseInsideBody = IsScopeVisibleAt(parameterScope, GetBraceScopeAt(source, shorthandIndex));
+                    shadowsCandidate = parameterScope.Count > candidateScope.Count &&
+                        IsScopeVisibleAt(candidateScope, parameterScope);
+                }
+
+                if (isUseInsideBody && shadowsCandidate)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static int FindArrowExpressionEnd(string source, int expressionStart)
+    {
+        var delimiters = new Stack<char>();
+        var quote = '\0';
+        var escaped = false;
+        for (var index = expressionStart; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (quote != '\0')
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (current == '\\')
+                {
+                    escaped = true;
+                }
+                else if (current == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (current is '\'' or '"' or '`')
+            {
+                quote = current;
+            }
+            else if (current is '(' or '[' or '{')
+            {
+                delimiters.Push(current switch { '(' => ')', '[' => ']', _ => '}' });
+            }
+            else if (delimiters.Count > 0 && current == delimiters.Peek())
+            {
+                delimiters.Pop();
+            }
+            else if (delimiters.Count == 0 && current is ';' or ',' or '\r' or '\n')
+            {
+                return index;
+            }
+        }
+
+        return source.Length;
     }
 
     private static bool IsInsidePlayerPositionsArray(string source, int propertyIndex)
