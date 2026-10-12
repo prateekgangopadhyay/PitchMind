@@ -2,6 +2,8 @@
 
 PostgreSQL 16 and Redis 7.4 run in Docker Desktop under Compose project `pitchmind`. The ports bind only to 127.0.0.1. The default project uses the existing `pitchmind_postgres_data` and `pitchmind_redis_data` volumes. When `COMPOSE_PROJECT_NAME` is overridden for an isolated test stack, volume names follow that project so test containers cannot attach to the default project's data. The PostgreSQL service is pinned to `postgres:16-alpine`, matching the reported existing local database major version. `dev-down.sh` preserves the volumes; `dev-reset.sh` removes them only after explicit confirmation. Compose configuration tests check the image and volume names offline. This config does not migrate data or verify runtime compatibility. All checkouts on this machine using project `pitchmind` share the same containers; `dev-down.sh` from any such checkout stops the shared stack. Existing-service readiness was checked without starting or stopping containers. **These are development-only containers**; Azure environments use managed Azure services.
 
+PostgreSQL data directories are major-version-specific. The default project keeps the existing volume names while using PostgreSQL 16, matching the restored local volume verified on this machine. If an existing volume was initialized by another PostgreSQL major version, do not reset or remove it and do not start it with an incompatible image. Preserve the volume, restore its original PostgreSQL major, or perform a separately planned and verified database migration before changing the image major. This repository does not automate that migration.
+
 From the repository root:
 
 ```bash
