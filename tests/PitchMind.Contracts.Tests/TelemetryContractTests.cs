@@ -52,6 +52,22 @@ public sealed class TelemetryContractTests
     }
 
     [Fact]
+    public void Decimal_contract_numbers_reject_values_not_exactly_representable_by_dotnet_decimal()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("1e-29");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+
+        var frameNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        frameNode["ball"]!["x"] = JsonNode.Parse("0.12345678901234567890123456789");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(frameNode.ToJsonString(), JsonOptions));
+
+        var boundaryNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        boundaryNode["coordinateSystem"]!["lengthMetres"] = JsonNode.Parse("90.000000000000000000000000001");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(boundaryNode.ToJsonString(), JsonOptions));
+    }
+
+    [Fact]
     public void Canonical_revision_is_distinct_from_schema_version_on_event_and_frame_contracts()
     {
         var eventValue = Event("Pass") with { CanonicalRevision = 7 };
@@ -175,9 +191,22 @@ public sealed class TelemetryContractTests
         Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("elapsedSeconds").GetProperty("maximum").GetInt64());
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceSequence").GetProperty("maximum").GetInt64());
-        Assert.Equal(decimal.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("sourceClockValue").GetProperty("maximum").GetDecimal());
-        Assert.Equal(decimal.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("x").GetProperty("maximum").GetDecimal());
-        Assert.Equal(decimal.MaxValue, frameSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("y").GetProperty("maximum").GetDecimal());
+        var eventDefinitions = eventSchema.RootElement.GetProperty("$defs");
+        Assert.True(eventDefinitions.TryGetProperty("dotnetDecimalNonNegative", out var decimalDefinition));
+        Assert.Equal(0, decimalDefinition.GetProperty("minimum").GetInt32());
+        Assert.False(eventSchema.RootElement.GetProperty("properties").TryGetProperty("dotnetDecimalNonNegative", out _));
+        var decimalBranches = decimalDefinition.GetProperty("anyOf").EnumerateArray().ToArray();
+        Assert.Equal(29, decimalBranches.Length);
+        var scaleFactor = 1m;
+        for (var scale = 0; scale < decimalBranches.Length; scale++)
+        {
+            Assert.Equal(1m / scaleFactor, decimalBranches[scale].GetProperty("multipleOf").GetDecimal());
+            Assert.Equal(decimal.MaxValue / scaleFactor, decimalBranches[scale].GetProperty("maximum").GetDecimal());
+            if (scale < decimalBranches.Length - 1) scaleFactor *= 10m;
+        }
+        Assert.Equal("#/$defs/dotnetDecimalNonNegative", eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("sourceClockValue").GetProperty("$ref").GetString());
+        Assert.Equal("event-envelope.schema.json#/$defs/dotnetDecimalNonNegative", frameSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("x").GetProperty("$ref").GetString());
+        Assert.True(eventDefinitions.TryGetProperty("dotnetDecimalNonNegative", out _));
         Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
         Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
