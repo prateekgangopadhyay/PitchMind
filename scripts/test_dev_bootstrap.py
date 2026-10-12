@@ -36,6 +36,14 @@ class DevBootstrapTests(unittest.TestCase):
             """#!/bin/sh
 set -eu
 printf '%s\\n' \"$*\" >> \"$PITCHMIND_FAKE_DOCKER_LOG\"
+if [ "${1:-}" = context ] && [ "${2:-}" = show ]; then
+  printf '%s\n' "${PITCHMIND_FAKE_DOCKER_CONTEXT:-desktop-linux}"
+  exit 0
+fi
+if [ "${1:-}" = context ] && [ "${2:-}" = inspect ]; then
+  printf '%s\n' "${PITCHMIND_FAKE_DOCKER_ENDPOINT:-unix:///var/run/docker.sock}"
+  exit 0
+fi
 if [ \"${1:-}\" = info ]; then exit \"${PITCHMIND_FAKE_DOCKER_INFO_STATUS:-0}\"; fi
 if [ \"${1:-}\" = compose ]; then
   if [ \"${PITCHMIND_FAKE_ASSERT_COMPOSE_CREDENTIALS_UNSET:-0}\" = 1 ] \\
@@ -109,8 +117,40 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertNotIn(redis_password, result.stdout + result.stderr)
         self.assertEqual(
             self.docker_log.read_text().splitlines(),
-            ["info", "compose --env-file docker/.env -f docker/compose.yml up -d --wait"],
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+                "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
+            ],
         )
+
+    def test_remote_context_fails_before_credentials_or_docker_info(self) -> None:
+        self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+        self.assertFalse((self.root / "docker" / ".env").exists())
+        self.assertFalse(self.openssl_count.exists())
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+            ],
+        )
+
+    def test_remote_docker_host_override_is_rejected(self) -> None:
+        self.env["DOCKER_HOST"] = "tcp://builder.example.invalid:2376"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+        self.assertFalse((self.root / "docker" / ".env").exists())
+        self.assertFalse(self.docker_log.exists())
 
     def test_docker_unavailable_fails_before_creating_local_credentials(self) -> None:
         self.env["PITCHMIND_FAKE_DOCKER_INFO_STATUS"] = "1"
@@ -207,9 +247,15 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertIn("Inspect Docker logs", result.stderr)
         self.assertIn("./scripts/dev-down.sh", result.stderr)
         self.assertIn("volumes are preserved", result.stderr)
-        self.assertEqual(self.docker_log.read_text().splitlines(), [
-            "info", "compose --env-file docker/.env -f docker/compose.yml up -d --wait"
-        ])
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+                "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
+            ],
+        )
 
     def test_placeholder_or_short_existing_password_is_rejected_without_disclosure(self) -> None:
         env_file = self.root / "docker" / ".env"
@@ -224,7 +270,14 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertNotIn("replace-with-random-local-password", result.stderr)
         self.assertNotIn("short", result.stderr)
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
-        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+            ],
+        )
 
     def test_low_diversity_password_is_rejected(self) -> None:
         env_file = self.root / "docker" / ".env"
@@ -236,7 +289,14 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("at least 12 unique hex digits", result.stderr)
-        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+            ],
+        )
 
     def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
         valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -248,13 +308,27 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
         duplicate = self._run("dev-up.sh")
         self.assertNotEqual(duplicate.returncode, 0)
-        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+            ],
+        )
 
         self.docker_log.write_text("")
         env_file.write_text(f"POSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={valid}\n", encoding="utf-8")
         reused = self._run("dev-up.sh")
         self.assertNotEqual(reused.returncode, 0)
-        self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+        self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+            ],
+        )
 
     def test_compose_alternate_password_assignments_are_counted_as_duplicates(self) -> None:
         valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -286,7 +360,14 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("must contain distinct 48-character", result.stderr)
-                self.assertEqual(self.docker_log.read_text().splitlines(), ["info"])
+                self.assertEqual(
+            self.docker_log.read_text().splitlines(),
+            [
+                "context show",
+                "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
+                "info",
+            ],
+        )
 
     def test_stop_keeps_volumes_and_reset_requires_explicit_force_in_noninteractive_mode(self) -> None:
         (self.root / "docker" / ".env").write_text("POSTGRES_PASSWORD=x\nREDIS_PASSWORD=y\n")
