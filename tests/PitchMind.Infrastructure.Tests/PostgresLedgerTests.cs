@@ -107,6 +107,83 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task Version4MigrationPreservesLegacyProjectionsWithoutSourceMetadataAndFailsClosedOnRead()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        var matchId = Guid.NewGuid();
+        var sourceHash = new string('a', 64);
+        var stateHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("{}"))).ToLowerInvariant();
+        try
+        {
+            await using (var dropConstraint = source.CreateCommand(
+                "ALTER TABLE pitchmind.match_projections DROP CONSTRAINT IF EXISTS match_projections_match_source_fk"))
+                await dropConstraint.ExecuteNonQueryAsync();
+            await using (var downgradeVersion = source.CreateCommand(
+                "DELETE FROM pitchmind.schema_versions WHERE version = 4"))
+                await downgradeVersion.ExecuteNonQueryAsync();
+            await using (var legacy = source.CreateCommand("""
+                INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
+                    as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
+                VALUES ($1, NULL, 1, 0, 0, 'legacy-v3', $2, '{}'::jsonb, $3)
+                """))
+            {
+                legacy.Parameters.AddWithValue(matchId);
+                legacy.Parameters.AddWithValue(sourceHash);
+                legacy.Parameters.AddWithValue(stateHash);
+                await legacy.ExecuteNonQueryAsync();
+            }
+            await using (var orphan = source.CreateCommand("""
+                INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
+                    as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
+                VALUES ($1, 1, 2, 0, 0, 'orphan-v3', $2, '{}'::jsonb, $3)
+                """))
+            {
+                orphan.Parameters.AddWithValue(matchId);
+                orphan.Parameters.AddWithValue(sourceHash);
+                orphan.Parameters.AddWithValue(stateHash);
+                await orphan.ExecuteNonQueryAsync();
+            }
+
+            await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+            await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
+                Assert.Equal(4, (int)(await version.ExecuteScalarAsync())!);
+            await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
+                Assert.True((bool)(await validation.ExecuteScalarAsync())!);
+            await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
+            {
+                legacyRow.Parameters.AddWithValue(matchId);
+                Assert.Equal(2L, (long)(await legacyRow.ExecuteScalarAsync())!);
+            }
+
+            var readStore = new PostgresMatchProjectionStore(source);
+            Assert.Null(await readStore.ReadProjectionAsync(matchId, 1, 2, CancellationToken.None));
+
+            await using var rejected = source.CreateCommand("""
+                INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
+                    as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
+                VALUES ($1, 1, 1, 0, 0, 'new-v4', $2, '{}'::jsonb, $3)
+                """);
+            rejected.Parameters.AddWithValue(Guid.NewGuid());
+            rejected.Parameters.AddWithValue(sourceHash);
+            rejected.Parameters.AddWithValue(stateHash);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => rejected.ExecuteNonQueryAsync());
+            Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, exception.SqlState);
+        }
+        finally
+        {
+            await using (var cleanup = source.CreateCommand("DELETE FROM pitchmind.match_projections WHERE match_id = $1"))
+            {
+                cleanup.Parameters.AddWithValue(matchId);
+                await cleanup.ExecuteNonQueryAsync();
+            }
+            await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        }
+    }
+
+    [PostgresIntegrationFact]
     public async Task ProjectionAndInsightProvenanceSurviveDataSourceReopen()
     {
         var matchId = Guid.NewGuid();

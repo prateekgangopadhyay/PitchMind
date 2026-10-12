@@ -45,8 +45,11 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         if (matchId == Guid.Empty || canonicalRevision < 1 || projectionRevision < 1)
             throw new ArgumentOutOfRangeException(projectionRevision < 1 ? nameof(projectionRevision) : nameof(canonicalRevision));
         await using var command = dataSource.CreateCommand("""
-            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_json::text, state_sha256
-            FROM pitchmind.match_projections WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3
+            SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
+                p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256
+            FROM pitchmind.match_projections p
+            JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+            WHERE p.match_id = $1 AND p.canonical_revision = $2 AND p.revision = $3
             """);
         command.Parameters.AddWithValue(matchId);
         command.Parameters.AddWithValue(canonicalRevision);
