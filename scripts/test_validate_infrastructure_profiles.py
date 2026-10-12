@@ -57,6 +57,31 @@ class InfrastructureProfileValidationTests(unittest.TestCase):
         errors = validate_profiles(self.root)
         self.assertTrue(any("restrict environment" in error for error in errors))
 
+    def test_multiline_string_cannot_substitute_for_active_environment_or_module_guards(self) -> None:
+        main = self.root / "infra/main.bicep"
+        source = main.read_text(encoding="utf-8")
+        source = source.replace("@allowed(['dev', 'stage', 'prod'])", "@allowed(['dev'])")
+        source = source.replace(
+            "if (enableDevFoundation && environment == 'dev')",
+            "if (enableDevFoundation)",
+        )
+        source += """
+
+var deceptiveSource = '''
+@allowed(['dev', 'stage', 'prod'])
+param environment string
+module network './modules/networking.bicep' = if (enableDevFoundation && environment == 'dev') {
+module vault './modules/key-vault.bicep' = if (enableDevFoundation && environment == 'dev') {
+'''
+"""
+        main.write_text(source, encoding="utf-8")
+
+        errors = validate_profiles(self.root)
+
+        self.assertTrue(any("restrict environment" in error for error in errors))
+        self.assertTrue(any("guard network" in error for error in errors))
+        self.assertTrue(any("guard vault" in error for error in errors))
+
     def test_json_only_stage_network_override_is_rejected(self) -> None:
         import json
 
