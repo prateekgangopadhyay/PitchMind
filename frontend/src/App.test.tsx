@@ -4,6 +4,16 @@ import { clock, provenanceLabel } from './api';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { contextHref, resolveRoute, selectedTimeFromSearch } from './routes';
+import './styles.css';
+
+describe('PitchMind design tokens', () => {
+  it('uses the platform sans-serif stack without requiring a named external font', () => {
+    const fontFamily = getComputedStyle(document.documentElement).fontFamily;
+    expect(fontFamily).toMatch(/^system-ui/);
+    expect(fontFamily).not.toMatch(/\bInter\b/i);
+  });
+});
+
 describe('Match experience', () => {
   it('renders the route shell and honest loading state without inventing match facts', () => {
     const markup = renderToStaticMarkup(createElement(App));

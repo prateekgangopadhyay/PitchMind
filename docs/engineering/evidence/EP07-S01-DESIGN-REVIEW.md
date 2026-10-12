@@ -94,6 +94,54 @@ On this local candidate, `frontend/`:
 
 Independent named Frontend/UX and Accessibility reviewer, human screen-reader/axe and complete responsive keyboard evidence, retained desktop/mobile/degraded screenshots, additional route contracts, and Product Owner acceptance remain pending. The canonical API was represented by a local test-only stub for the browser inspection; no actual canonical source feed or database-backed production-like run was tested. No deployment or Azure action occurred.
 
+## System font stack follow-up — 2026-10-12
+
+**Story/owner:** EP07-S01, accountable `lead-frontend-engineer`; consults `ui-ux-engineer`, `accessibility-engineer`, Product Owner. **User outcome:** consistent readable typography without requiring a redistributed or external font. **Branch:** `codex/ep07-s01-system-font-stack`, based on PR #103 exact head `4227da8c228bd606054e649fec2eaec8659ad039`; code commit `2622793`. This is stacked below PR #103 → #87 → #83 → #53. No API, domain, match-data, or route contract changed.
+
+`frontend/src/styles.css` previously listed `Inter` ahead of platform fonts. The root stack now begins with `system-ui`, followed by platform sans-serif fallbacks. `frontend/src/App.test.tsx` imports the stylesheet and verifies the computed root family begins with `system-ui` and contains no `Inter`. No font files, packages, external requests, or match-specific content were added.
+
+### Browser observation
+
+The local Vite preview was served at `127.0.0.1:4173` and rendered in Chrome at `/home`. The visible canonical-data unavailable state stayed truthful and readable; no substitute fixture appeared. The browser screenshot was visually inspected in the CUA session but could not be exported to a persistent repository image. The inspected state is a desktop browser view; no mobile/tablet screenshot or actual 200% zoom check is claimed. The canonical API was unavailable, so no successful-data route or match facts were verified here.
+
+### Taste and Vercel review
+
+- Taste: the shared root uses a native system sans-serif stack, preserving React/Vite/CSS, existing dark/emerald tokens and restrained motion. System fonts avoid a network/font-loading dependency and platform-specific font redistribution. No new visual change to spacing, hierarchy, or match content was intended.
+- Vercel Web Interface Guidelines: fetched the current official `command.md` on 2026-10-12. The changed root declaration uses a system font stack and introduces no new asset, layout read, motion, focus, or content behavior. No actionable finding against the changed lines. This is a static rule check, not an accessibility or cross-browser certification.
+
+### Awesome Design critique
+
+Observed in the current Chrome desktop unavailable-data view; scores are limited to this narrow typography follow-up and do not certify the full screen/story.
+
+| Anti-slop category | Result | Evidence for this change |
+|---|---|---|
+| Identity | Strong | Existing PitchMind navy/emerald identity remains unchanged. |
+| Hierarchy | Strong | The Home heading remains the clear focal point. |
+| Typography | Improved | Root now uses platform sans-serif; it no longer prefers the named Inter face. |
+| Layout | Strong | No geometry or spacing changed. |
+| Color/contrast | Strong | No color token changed; no fresh rendered contrast measurement was made. |
+| Interaction | Unverified | This typography-only change adds no interaction, but full browser/keyboard coverage was not repeated. |
+| System | Strong | One root stack is inherited by controls and pages without font downloads. |
+| Product specificity | Strong | The page still explains that canonical match data is unavailable and no demo is substituted. |
+
+AI UI quality process questions (1–5): taste 4, clarity 4, consistency 4, interaction detail 3, reusability 4, cross-tool compatibility 5, audit value 4 = **28/35**. Premium gate: Taste **32/40**, Tech **25/30**, Process **16/20**, Output **3/10**, total **76/100**. Output is limited because no retained screenshot set or multi-viewport inspection is available. This score is not a usability or acceptance verdict.
+
+Top remaining defects: (1) route-level content remains bounded by missing canonical API fields/contracts; (2) current exact-head mobile/tablet screenshots and rendered responsive behavior are unverified; (3) axe, real screen-reader sampling and complete keyboard traversal remain pending. They are outside this font-only slice and remain explicit story acceptance gaps.
+
+### Verification and result
+
+- `cd frontend && npm ci --offline` — completed with Node 22.17.1/npm 11.12.1; 224 packages installed, 0 reported vulnerabilities.
+- `cd frontend && npm test -- --run` — **12 passed, 0 failed**.
+- `cd frontend && npm run build` — passed (TypeScript + Vite production bundle).
+- `cd frontend && npm run lint` — passed.
+- `node scripts/validate_operating_model.mjs` — passed (12 epics, 59 stories, 28 Council skills, 3 design skills, 0 cycles, 2 approval gates).
+- `node scripts/test_design_skills.mjs` — passed.
+- `node scripts/design-slop-scan.mjs frontend/src/App.test.tsx` — passed, 0 warnings.
+- `git diff --check` — passed.
+- No automated browser, axe, screen-reader, mobile/tablet, 200% zoom, measured rendered contrast, or cross-browser check was run. Headless Playwright launch was blocked by macOS process permission (`bootstrap_check_in ... Permission denied`); the visible Chrome preview was inspected manually.
+
+**Result: UNVERIFIED for EP07-S01 acceptance.** The system-font gap and its computed-style regression are implemented locally. Independent UX/accessibility/technical review and Product Owner acceptance remain pending. The PR stack remains draft; no merge or deployment occurred.
+
 ## Responsive navigation follow-up — 2026-10-11
 
 **Candidate base:** PR #83 exact head `4f04368da5da53bd3993ec8f671cc0d2279d28fd`, stacked on PR #53 exact head `2635f7e83d7d8f0c45218da0b11f344008cfb2dd`.
