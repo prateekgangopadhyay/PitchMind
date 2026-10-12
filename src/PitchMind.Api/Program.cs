@@ -12,6 +12,12 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var httpContext = context.HttpContext;
+        await ApiProblem(httpContext, StatusCodes.Status429TooManyRequests, "RATE_LIMITED",
+            "Too many requests", "Retry after the current rate limit window").ExecuteAsync(httpContext);
+    };
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
@@ -25,9 +31,19 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api/v1"))
         context.Response.Headers["X-Contract-Version"] = ContractVersion.V1;
     try { await next(context); }
-    catch (ArgumentException exception)
+    catch (ArgumentException)
     {
-        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request", exception.Message).ExecuteAsync(context);
+        app.Logger.LogInformation("Invalid request for {Path}", context.Request.Path);
+        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request").ExecuteAsync(context);
+    }
+    catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE",
+            "Request body is too large").ExecuteAsync(context);
+    }
+    catch (BadHttpRequestException)
+    {
+        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request").ExecuteAsync(context);
     }
     catch (KeyNotFoundException)
     {
