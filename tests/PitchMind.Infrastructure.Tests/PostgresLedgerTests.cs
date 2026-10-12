@@ -39,7 +39,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -56,6 +56,12 @@ public sealed class PostgresLedgerTests
         var insightId = $"insight-{Guid.NewGuid():N}";
         var insightMatchId = MatchId.New().Value;
         var sourceHash = new string('a', 64);
+        await using (var metadata = source.CreateCommand("INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres) VALUES ($1, 'fixture-v1', 'source-v1', $2, 'synthetic', 105, 68)"))
+        {
+            metadata.Parameters.AddWithValue(insightMatchId);
+            metadata.Parameters.AddWithValue(sourceHash);
+            await metadata.ExecuteNonQueryAsync();
+        }
         await using (var projection = source.CreateCommand("INSERT INTO pitchmind.match_projections (match_id, canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256) VALUES ($1, 1, 1, 3, 90, 'test-v1', $2, '{}'::jsonb, $3)"))
         {
             projection.Parameters.AddWithValue(insightMatchId);
@@ -156,6 +162,19 @@ public sealed class PostgresLedgerTests
                 projection.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, stateJson);
                 projection.Parameters.AddWithValue(stateHash);
                 await projection.ExecuteNonQueryAsync();
+            }
+            await using (var mismatchedProjection = source.CreateCommand("""
+                INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence, as_of_clock_seconds,
+                    algorithm_version, source_sha256, state_json, state_sha256)
+                VALUES ($1, 1, 8, 0, 0, 'aggregate-v1', $2, $3, $4)
+                """))
+            {
+                mismatchedProjection.Parameters.AddWithValue(matchId);
+                mismatchedProjection.Parameters.AddWithValue(new string('f', 64));
+                mismatchedProjection.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, stateJson);
+                mismatchedProjection.Parameters.AddWithValue(stateHash);
+                var exception = await Assert.ThrowsAsync<PostgresException>(() => mismatchedProjection.ExecuteNonQueryAsync());
+                Assert.Equal("23503", exception.SqlState);
             }
             await using (var insight = source.CreateCommand("""
                 INSERT INTO pitchmind.insights(insight_id, match_id, canonical_revision, revision, as_of_sequence,
