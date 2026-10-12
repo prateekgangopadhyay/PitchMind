@@ -66,6 +66,42 @@ it('keeps section navigation available when match data cannot be loaded', async 
   }
 });
 
+it('keeps an unknown route visible and keyboard-recoverable instead of presenting it as Match', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('service unavailable'); }));
+  window.history.pushState({}, '', '#/old-match-route');
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.querySelector('h1')?.textContent).toBe('This page isn’t available');
+    expect(container.textContent).toContain('This PitchMind page could not be found');
+    expect(container.textContent).not.toContain('How is this match being played?');
+    expect(container.querySelector('nav a[aria-current="page"]')).toBeNull();
+    const homeLink = [...container.querySelectorAll('a')].find(link => link.textContent === 'Go to Home')!;
+    await act(async () => { homeLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); });
+    expect(window.location.hash).toBe('#/home');
+    expect(container.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Home');
+    expect(document.activeElement).toBe(container.querySelector('h1'));
+
+    window.history.pushState({}, '', '#/old-match-route');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(container.querySelector('h1')?.textContent).toBe('This page isn’t available');
+    expect(container.querySelector('nav a[aria-current="page"]')).toBeNull();
+
+    window.history.pushState({}, '', '#/analyst?matchId=fixture');
+    await act(async () => { window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(container.querySelector('h1')?.textContent).toBe('What do you want to understand?');
+    expect(container.querySelector('nav a[aria-current="page"]')?.textContent).toBe('Analyst');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    window.history.pushState({}, '', '/');
+    vi.unstubAllGlobals();
+  }
+});
+
 it('retries the failed evidence or analyst action without reloading fixtures', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const fixture = {matchId: 'fixture', version: 'v1', seed: 42, durationSeconds: 5400, home: {id: 'h', name: 'Harbour FC', formation: '4-2-3-1', players: []}, away: {id: 'a', name: 'Ridge Athletic', formation: '4-2-3-1', players: []}};
