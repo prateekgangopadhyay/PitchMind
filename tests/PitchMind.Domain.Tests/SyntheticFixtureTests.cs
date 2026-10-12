@@ -1,4 +1,5 @@
 using PitchMind.Domain.Simulation;
+using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
 using Xunit;
 namespace PitchMind.Domain.Tests;
