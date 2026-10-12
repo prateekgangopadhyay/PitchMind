@@ -70,6 +70,7 @@ public sealed class MatchAggregate
     {
         ArgumentNullException.ThrowIfNull(item);
         var evt = item.Event;
+        if (!Enum.IsDefined(evt.Type)) throw new InvalidOperationException("Event type is not defined.");
         if (evt.MatchId != Id) throw new InvalidOperationException("Event belongs to a different match.");
         if (_appliedEvents.TryGetValue(evt.EventId, out var prior))
         {

@@ -1,5 +1,6 @@
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using PitchMind.Domain.Events;
 using Xunit;
 
 namespace PitchMind.Domain.Tests;
@@ -110,6 +111,24 @@ public sealed class MatchAggregateTests
         Assert.Throws<InvalidOperationException>(() => aggregate.Apply(fixture.Events[1]));
         Assert.Equal(-1, aggregate.Snapshot().LastSequence);
         Assert.Equal(MatchPhase.NotStarted, aggregate.Snapshot().Phase);
+    }
+
+    [Fact]
+    public void UndefinedEventTypeIsRejectedWithoutAdvancingMatchState()
+    {
+        var (aggregate, fixture) = Create();
+        var invalid = fixture.Events[0] with
+        {
+            Event = fixture.Events[0].Event with { Type = (MatchEventType)999 }
+        };
+
+        Assert.Throws<InvalidOperationException>(() => aggregate.Apply(invalid));
+
+        var state = aggregate.Snapshot();
+        Assert.Equal(-1, state.LastSequence);
+        Assert.Equal(0, state.ClockSeconds);
+        Assert.Equal(MatchPhase.NotStarted, state.Phase);
+        Assert.Null(state.PossessionTeamId);
     }
 
     [Fact]
