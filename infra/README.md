@@ -2,7 +2,7 @@
 
 M03 adds a DEV-only network and RBAC Key Vault baseline and tightens storage security. It does **not** deploy resources automatically.
 
-Run `az bicep build --file infra/main.bicep`, then `az bicep build-params --file infra/environments/dev.bicepparam`. Use `./scripts/azure-dev-whatif.sh --resource-group <existing-dev-resource-group>` to preview changes. See [M03 runbook](../docs/engineering/M03-AZURE-DEV.md) for security exceptions, environment isolation, acceptance gates, and deployment prerequisites.
+Run `az bicep build --file infra/main.bicep`, then compile each file under `infra/environments/` with `az bicep build-params`. Run `python3 -m unittest scripts.test_validate_infrastructure_profiles -v` for an offline check that JSON and Bicep parameter profiles agree and only DEV can enable the foundation modules. Use `./scripts/azure-dev-whatif.sh --resource-group <existing-dev-resource-group>` only for an explicitly approved preview; it never deploys. See [M03 runbook](../docs/engineering/M03-AZURE-DEV.md) for security exceptions, environment isolation, acceptance gates, and deployment prerequisites.
 
 ## Explicit offline DEV prototype
 

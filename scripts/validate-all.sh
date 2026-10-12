@@ -12,6 +12,7 @@ dotnet test PitchMind.slnx --no-build -c Release
   npm run lint
 )
 python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
+python3 -m unittest scripts.test_validate_infrastructure_profiles -v
 node scripts/validate_operating_model.mjs
 node scripts/validate_operating_model.mjs --self-test
 node scripts/test_design_skills.mjs
