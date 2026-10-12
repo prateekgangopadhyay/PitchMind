@@ -68,6 +68,10 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("{\"insightId\":", "INVALID_REQUEST")]
+    [InlineData("[]", "INVALID_REQUEST")]
+    [InlineData("{\"insightId\":\"\",\"atSeconds\":10}", "INVALID_REQUEST")]
+    [InlineData("{\"insightId\":7,\"atSeconds\":10}", "INVALID_REQUEST")]
     [InlineData("{\"insightId\":\"missing\"}", "INVALID_REQUEST")]
     [InlineData("{\"insightId\":\"missing\",\"atSeconds\":\"10\"}", "INVALID_REQUEST")]
     [InlineData("{\"insightId\":\"missing\",\"atSeconds\":10.5}", "INVALID_REQUEST")]
