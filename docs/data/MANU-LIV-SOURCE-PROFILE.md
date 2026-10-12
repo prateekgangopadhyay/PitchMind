@@ -6,6 +6,8 @@
 
 **Owner confirmation (2026-10-10):** the repository owner confirmed that the dataset is synthetic and that redistribution is permitted. The JSON has no embedded provenance/rights manifest. No authoritative source data dictionary was supplied; this owner declaration does not resolve clock units/policy, coordinate semantics, player-metric definitions, event mapping or football-realism gates below.
 
+**Data-dictionary clarification (2026-10-12):** the repository owner confirmed that no authoritative field dictionary is available. The generated [observed structural dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) documents field paths, observed JSON shapes, nullability, and measured values for the pinned bytes; it is not a substitute for source-owner semantics. Coordinate units/axes/orientation, clock meaning, player-metric definitions/units, event meaning, and canonical mappings remain unspecified or unverified.
+
 ## Observed source statistics
 | Property | Observed value |
 |---|---|

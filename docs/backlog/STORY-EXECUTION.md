@@ -66,6 +66,10 @@ Coordination: Domain/Application owns immutable fixture and football rules; API 
 | EP12-S02 | Historical tracking and spatial data exploration (M15) | Not accepted; implement only after dependencies and priority gates. No deployment/release evidence recorded. | Data quality/reconciliation tests pass; archive is not canonical truth; fixed costs/ingestion limits receive FinOps approval. |
 | EP12-S03 | Model and partner expansion (M16) | Not accepted; implement only after dependencies and priority gates. No deployment/release evidence recorded. | No resource is deployed without independent product case, approved architecture, security and cost review. |
 
+## EP03-S01 owner data-dictionary clarification — 2026-10-12
+
+The repository owner confirmed that no authoritative source data dictionary is available. A generated observed structural dictionary is documented at [MANU-LIV-OBSERVED-DATA-DICTIONARY.md](../data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md); it records measured JSON shapes and values but does not infer field meaning or units. Coordinate semantics, clock/period semantics, player metric definitions/units, event meaning/mappings, score-side mapping, football realism, and independent rights/privacy review remain unresolved; canonical admission is blocked. See [owner clarification evidence](../engineering/evidence/EP03-S01-OWNER-DICTIONARY-RESPONSE-2026-10-12.md). EP03-S01 remains unverified and unaccepted.
+
 ## Acceptance evidence record per story
 
 Every story record attaches: code paths and change justification; test command/result and fixture version; positive/negative/degraded cases; reviewer for football/security behavior; API/UX proof where relevant; Azure deployment ID/image digest and smoke evidence where relevant; unresolved risk and owner. The current local synthetic path may prove a delta without accepting an entire cloud-dependent story. No release gate is complete merely because this register exists.
