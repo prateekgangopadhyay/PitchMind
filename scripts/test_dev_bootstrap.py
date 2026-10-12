@@ -504,7 +504,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 if isinstance(volume, dict)
             },
             {
-                "postgres-data": "pitchmind_postgres_data",
+                "postgres_data": "pitchmind_postgres_data",
                 "redis-data": "pitchmind_redis_data",
             },
         )
