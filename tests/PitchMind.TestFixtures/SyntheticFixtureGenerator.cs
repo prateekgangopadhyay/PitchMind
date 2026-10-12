@@ -25,7 +25,7 @@ public static class SyntheticFixtureGenerator
         void Add(int clock, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
         {
             var sequence = events.Count;
-            var id = StableId($"{Version}:{seed}:{clock}:{sequence}:{action}");
+            var id = StableId(FormattableString.Invariant($"{Version}:{seed}:{clock}:{sequence}:{action}"));
             var evt = MatchEvent.Create(id, fixtureId, sequence, type, clock, clock < 2700 ? 1 : 2,
                 new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(clock));
             events.Add(new(evt, team, player, action, outcome, related));
@@ -92,5 +92,6 @@ public static class SyntheticFixtureGenerator
 
     private static Guid StableId(string text) => new(SHA256.HashData(Encoding.UTF8.GetBytes(text)).AsSpan(0, 16));
 
-    private static MatchId FixtureIdForSeed(int seed) => new(StableId($"{Version}:match:{seed}"));
+    private static MatchId FixtureIdForSeed(int seed) =>
+        new(StableId(FormattableString.Invariant($"{Version}:match:{seed}")));
 }

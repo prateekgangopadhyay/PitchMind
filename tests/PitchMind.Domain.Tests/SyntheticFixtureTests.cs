@@ -1,3 +1,4 @@
+using System.Globalization;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
@@ -35,6 +36,8 @@ public sealed class SyntheticFixtureTests
         Assert.NotEqual(first.MatchId, differentSeed.MatchId);
         Assert.Equal(first.Events, repeated.Events);
         Assert.NotEqual(first.Events, differentSeed.Events);
+        Assert.Empty(first.Events.Select(item => item.Event.EventId)
+            .Intersect(differentSeed.Events.Select(item => item.Event.EventId)));
         Assert.Equal(first.Frames.Count, repeated.Frames.Count);
         for (var index = 0; index < first.Frames.Count; index++)
         {
@@ -46,5 +49,18 @@ public sealed class SyntheticFixtureTests
         }
         Assert.All(first.Events, item => Assert.Equal(first.MatchId, item.Event.MatchId.ToString()));
         Assert.All(differentSeed.Events, item => Assert.Equal(differentSeed.MatchId, item.Event.MatchId.ToString()));
+
+        var previousCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var cultureVariant = SyntheticFixtureGenerator.Generate(seed: 42);
+            Assert.Equal(first.MatchId, cultureVariant.MatchId);
+            Assert.Equal(first.Events, cultureVariant.Events);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 }
