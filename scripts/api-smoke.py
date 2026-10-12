@@ -19,7 +19,16 @@ def request(path, expected=200, payload=None):
     assert response.headers.get("X-Correlation-ID"), path
     if path.startswith("/api/v1/"):
         assert response.headers.get("X-Contract-Version") == "1", path
-    return json.load(response)
+    body = json.load(response)
+    if expected >= 400:
+        assert response.headers.get("Content-Type", "").startswith("application/problem+json"), (path, response.headers)
+        assert isinstance(body["type"], str) and body["type"], (path, body)
+        assert isinstance(body["title"], str) and body["title"], (path, body)
+        assert body["status"] == expected, (path, body)
+        assert body["code"] == "MATCH_DATA_UNAVAILABLE", (path, body)
+        assert body["correlationId"] == response.headers["X-Correlation-ID"], (path, body)
+        assert body["instance"] == path, (path, body)
+    return body
 
 
 request("/api/health")
@@ -29,7 +38,7 @@ match_routes = [
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/events", None),
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/insights", None),
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight", None),
-    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0}),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
 ]
 for route, payload in match_routes:
     problem = request(route, 503, payload)

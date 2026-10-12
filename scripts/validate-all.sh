@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 dotnet restore PitchMind.slnx
 dotnet build PitchMind.slnx --no-restore -c Release
 dotnet test PitchMind.slnx --no-build -c Release
+python3 scripts/api-contract-integration.py
 (
   cd frontend
   if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi

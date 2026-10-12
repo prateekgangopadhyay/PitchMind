@@ -6,34 +6,77 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import urlsplit
 
 base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5080"
 path = f"/api/v1/matches/{uuid.uuid4()}/analyst"
 
 
 def request(body, expected, code, content_type="application/json"):
-    req = urllib.request.Request(
-        base + path,
-        data=body,
-        headers={"Content-Type": content_type},
-    )
-    try:
-        response = urllib.request.urlopen(req, timeout=10)
-    except urllib.error.HTTPError as error:
-        response = error
-    problem = json.load(response)
-    assert response.status == expected, (response.status, problem)
-    assert response.headers.get("Content-Type", "").startswith("application/problem+json"), response.headers
-    assert response.headers.get("X-Contract-Version") == "1", response.headers
-    assert response.headers.get("X-Correlation-ID") == problem["correlationId"], problem
+    if content_type is None:
+        target = urlsplit(base)
+        connection = http.client.HTTPConnection(target.hostname, target.port, timeout=10)
+        connection.request("POST", path, body=body, headers={})
+        response = connection.getresponse()
+        status = response.status
+        headers = response.headers
+        payload = response.read()
+        connection.close()
+        problem = json.loads(payload)
+        assert status == expected, (status, problem)
+    else:
+        req = urllib.request.Request(
+            base + path,
+            data=body,
+            headers={"Content-Type": content_type},
+        )
+        try:
+            response = urllib.request.urlopen(req, timeout=10)
+        except urllib.error.HTTPError as error:
+            response = error
+        problem = json.load(response)
+        headers = response.headers
+        assert response.status == expected, (response.status, problem)
+    assert headers.get("Content-Type", "").startswith("application/problem+json"), headers
+    assert headers.get("X-Contract-Version") == "1", headers
+    assert headers.get("X-Correlation-ID") == problem["correlationId"], problem
+    assert isinstance(problem["type"], str) and problem["type"], problem
+    assert isinstance(problem["title"], str) and problem["title"], problem
     assert problem["status"] == expected and problem["code"] == code, problem
+    assert problem["instance"] == path, problem
     return problem
 
 
 request(b"{", 400, "INVALID_REQUEST")
-request(b'{"insightId":"i","atSeconds":5401,"audience":"fan"}', 400, "INVALID_REQUEST")
+invalid_requests = [
+    b"[]",
+    b'{"insightId":"","atSeconds":0,"audience":"fan"}',
+    b'{"insightId":"   ","atSeconds":0,"audience":"fan"}',
+    b'{"insightId":7,"atSeconds":0,"audience":"fan"}',
+    b'{"insightId":"i","audience":"fan"}',
+    b'{"insightId":"i","atSeconds":"0","audience":"fan"}',
+    b'{"insightId":"i","atSeconds":1.5,"audience":"fan"}',
+    b'{"insightId":"i","atSeconds":-1,"audience":"fan"}',
+    b'{"insightId":"i","atSeconds":5401,"audience":"fan"}',
+    b'{"insightId":"i","atSeconds":0}',
+    b'{"atSeconds":0,"audience":"fan"}',
+    b'{"insightId":"i","atSeconds":0,"audience":"Fan"}',
+    b'{"insightId":"i","atSeconds":0,"audience":1}',
+]
+for body in invalid_requests:
+    request(body, 400, "INVALID_REQUEST")
 request(b'{"insightId":"i","atSeconds":0,"audience":"fan"}', 415,
         "UNSUPPORTED_MEDIA_TYPE", "text/plain")
+request(b'{"insightId":"i","atSeconds":0,"audience":"fan"}', 415,
+        "UNSUPPORTED_MEDIA_TYPE", None)
+
+# The configured Kestrel limit is inclusive: exactly 4096 bytes is processed,
+# while a larger request is rejected with a typed 413 response.
+prefix = b'{"insightId":"i","atSeconds":5400,"audience":"fan","padding":"'
+suffix = b'"}'
+padding_length = 4096 - len(prefix) - len(suffix)
+assert padding_length >= 0
+request(prefix + b"x" * padding_length + suffix, 503, "MATCH_DATA_UNAVAILABLE")
 request(b'{"insightId":"' + b"x" * 5000 + b'","atSeconds":0,"audience":"fan"}',
         413, "REQUEST_TOO_LARGE")
 
@@ -51,8 +94,9 @@ assert response.getheader("Content-Type", "").startswith("application/problem+js
 assert response.getheader("X-Contract-Version") == "1", response.getheaders()
 assert response.getheader("X-Correlation-ID") == problem["correlationId"], problem
 assert problem["status"] == 413 and problem["code"] == "REQUEST_TOO_LARGE", problem
+assert problem["instance"] == path, problem
 connection.close()
 
 request(b'{"insightId":"i","atSeconds":5400,"audience":"analyst"}',
         503, "MATCH_DATA_UNAVAILABLE")
-print("PASS: malformed/invalid request=400, unsupported media=415, oversized content-length/chunked=413, valid request fails closed=503")
+print("PASS: malformed/invalid Analyst matrix=400, unsupported media=415, exact 4096-byte request=503, oversized content-length/chunked=413, valid boundary request fails closed=503")
