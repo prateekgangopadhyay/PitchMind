@@ -25,6 +25,16 @@ def reject_non_json_constant(value: str) -> None:
     raise ValueError(f"Non-standard JSON constant: {value}")
 
 
+def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object members instead of silently keeping the last value."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def json_type(value: Any) -> str:
     if value is None:
         return "null"
@@ -89,6 +99,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
     manifest = json.loads(
         manifest_path.read_text(encoding="utf-8"),
         parse_constant=reject_non_json_constant,
+        object_pairs_hook=reject_duplicate_json_keys,
     )
     policy = manifest["source"]
     digest = sha256(source_bytes).hexdigest()
@@ -97,6 +108,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
     events = json.loads(
         source_bytes.decode("utf-8-sig"),
         parse_constant=reject_non_json_constant,
+        object_pairs_hook=reject_duplicate_json_keys,
     )
     if not isinstance(events, list) or len(events) != policy["expectedEventCount"]:
         raise ValueError("Source event array does not match the manifest event count")
