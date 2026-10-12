@@ -254,6 +254,57 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsFeedNumbersInAliasedPlayerRecordsIncludedInPlayerPositions()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstPosition = feed.RootElement[0].GetProperty("playerPositions")[0];
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-aliased-player-record-");
+        try
+        {
+            var tsxSource = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "PlayerFrame.cs");
+            File.WriteAllText(tsxSource,
+                "const sourcePlayer = {\n" +
+                $"  x: {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"  y: {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"  speed: {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"  heartRate: {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "};\n" +
+                "const playerAlias = sourcePlayer;\n" +
+                "const positionRecords = [playerAlias];\n" +
+                "const frame = { playerPositions: positionRecords };");
+            File.WriteAllText(csharpSource,
+                "var sourcePlayer = new {\n" +
+                $"  x = {firstPosition.GetProperty("x").GetRawText()},\n" +
+                $"  y = {firstPosition.GetProperty("y").GetRawText()},\n" +
+                $"  speed = {firstPosition.GetProperty("speed").GetRawText()},\n" +
+                $"  heartRate = {firstPosition.GetProperty("heartRate").GetRawText()}\n" +
+                "};\n" +
+                "var playerAlias = sourcePlayer;\n" +
+                "var positionRecords = new[] { playerAlias };\n" +
+                "var frame = new { playerPositions = positionRecords };");
+
+            var violations = FindFixtureDataMarkers(
+                [tsxSource, csharpSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Equal(8, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("x:", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == tsxSource && item.Line.Contains("speed:", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("x =", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("heartRate =", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_RejectsQuotedAndMultilineNumericPropertyLiterals()
     {
         var root = FindRepositoryRoot();
@@ -629,7 +680,8 @@ public sealed class DependencyTests
                         numericMarkers.TryGetValue(propertyName, out var values) &&
                         values.Contains(numericValue);
                     var playerFieldOutsidePlayerPositions = PlayerNumericProperties.Contains(propertyName) &&
-                        !IsInsidePlayerPositionsArray(source, match.Index);
+                        !IsInsidePlayerPositionsArray(source, match.Index) &&
+                        !IsInsideReferencedPlayerRecord(source, match.Index);
                     if ((ambiguousAlias || matchesCandidateValue) && !playerFieldOutsidePlayerPositions)
                     {
                         matchingLines.Add(1 + source.AsSpan(0, match.Index).Count('\n'));
@@ -674,6 +726,191 @@ public sealed class DependencyTests
         }
 
         return depth > 0;
+    }
+
+    private static bool IsInsideReferencedPlayerRecord(string source, int propertyIndex)
+    {
+        var referencedVariables = FindPlayerPositionVariables(source);
+        if (referencedVariables.Count == 0)
+        {
+            return false;
+        }
+
+        var declarations = Regex.Matches(
+            source,
+            @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:new\s*)?(?<open>\{)",
+            RegexOptions.CultureInvariant);
+        foreach (Match declaration in declarations)
+        {
+            var name = declaration.Groups["name"].Value.TrimStart('@');
+            if (!referencedVariables.Contains(name))
+            {
+                continue;
+            }
+
+            var openingIndex = declaration.Groups["open"].Index;
+            var closingIndex = FindMatchingDelimiter(source, openingIndex);
+            if (closingIndex > propertyIndex && propertyIndex > openingIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static HashSet<string> FindPlayerPositionVariables(string source)
+    {
+        var variables = new HashSet<string>(StringComparer.Ordinal);
+        var positionAssignments = Regex.Matches(
+            source,
+            @"\bplayerPositions\b\s*[:=]\s*",
+            RegexOptions.CultureInvariant);
+        foreach (Match assignment in positionAssignments)
+        {
+            var valueIndex = assignment.Index + assignment.Length;
+            var collection = new Regex(
+                    @"\G\s*(?:new\s*\[\s*\]\s*)?(?<open>\[|\{)",
+                    RegexOptions.CultureInvariant)
+                .Match(source, valueIndex);
+            if (collection.Success)
+            {
+                var opening = collection.Groups["open"].Value[0];
+                var openingIndex = collection.Groups["open"].Index;
+                var closingIndex = FindMatchingDelimiter(source, openingIndex);
+                if (closingIndex > openingIndex && (opening == '[' ||
+                    source.AsSpan(valueIndex, openingIndex - valueIndex).Contains("new[]", StringComparison.Ordinal)))
+                {
+                    AddIdentifiers(source.AsSpan(openingIndex + 1, closingIndex - openingIndex - 1), variables);
+                }
+
+                continue;
+            }
+
+            var alias = new Regex(
+                    @"\G\s*(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)",
+                    RegexOptions.CultureInvariant)
+                .Match(source, valueIndex);
+            if (alias.Success)
+            {
+                variables.Add(alias.Groups["name"].Value.TrimStart('@'));
+            }
+        }
+
+        var arrayDeclarations = Regex.Matches(
+            source,
+            @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?<prefix>new\s*\[\s*\]\s*)?(?<open>\[|\{)",
+            RegexOptions.CultureInvariant);
+        var aliasDeclarations = Regex.Matches(
+            source,
+            @"\b(?:const|let|var)\s+(?<name>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?<reference>@?[A-Za-z_$][A-Za-z0-9_$]*)\s*;?",
+            RegexOptions.CultureInvariant);
+
+        for (var pass = 0; pass <= arrayDeclarations.Count + aliasDeclarations.Count; pass++)
+        {
+            var changed = false;
+            foreach (Match declaration in arrayDeclarations)
+            {
+                var name = declaration.Groups["name"].Value.TrimStart('@');
+                if (!variables.Contains(name))
+                {
+                    continue;
+                }
+
+                var opening = declaration.Groups["open"].Value[0];
+                if (opening == '{' && !declaration.Groups["prefix"].Success)
+                {
+                    continue;
+                }
+
+                var openingIndex = declaration.Groups["open"].Index;
+                var closingIndex = FindMatchingDelimiter(source, openingIndex);
+                if (closingIndex > openingIndex)
+                {
+                    changed |= AddIdentifiers(
+                        source.AsSpan(openingIndex + 1, closingIndex - openingIndex - 1),
+                        variables);
+                }
+            }
+
+            foreach (Match alias in aliasDeclarations)
+            {
+                var name = alias.Groups["name"].Value.TrimStart('@');
+                if (variables.Contains(name))
+                {
+                    changed |= variables.Add(alias.Groups["reference"].Value.TrimStart('@'));
+                }
+            }
+
+            if (!changed)
+            {
+                break;
+            }
+        }
+
+        return variables;
+    }
+
+    private static bool AddIdentifiers(ReadOnlySpan<char> source, ISet<string> identifiers)
+    {
+        var changed = false;
+        foreach (Match match in Regex.Matches(source.ToString(), @"@?[A-Za-z_$][A-Za-z0-9_$]*", RegexOptions.CultureInvariant))
+        {
+            changed |= identifiers.Add(match.Value.TrimStart('@'));
+        }
+
+        return changed;
+    }
+
+    private static int FindMatchingDelimiter(string source, int openingIndex)
+    {
+        var opening = source[openingIndex];
+        var closing = opening switch
+        {
+            '[' => ']',
+            '{' => '}',
+            '(' => ')',
+            _ => throw new ArgumentOutOfRangeException(nameof(openingIndex))
+        };
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+        for (var index = openingIndex; index < source.Length; index++)
+        {
+            var current = source[index];
+            if (quote != '\0')
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (current == '\\')
+                {
+                    escaped = true;
+                }
+                else if (current == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (current is '\'' or '"' or '`')
+            {
+                quote = current;
+            }
+            else if (current == opening)
+            {
+                depth++;
+            }
+            else if (current == closing && --depth == 0)
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static IReadOnlyDictionary<string, string> ReadNumericAliases(string source, out IReadOnlySet<string> ambiguousAliases)
