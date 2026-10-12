@@ -11,6 +11,7 @@ steps:
     dotnet test PitchMind.slnx --no-build -c Release \
       --logger "trx;LogFileName=pitchmind-tests.trx" \
       --results-directory "$(Agent.TempDirectory)/pitchmind-dotnet-results"
+    python3 scripts/api-contract-integration.py
   displayName: Restore, build and test solution
 - task: PublishTestResults@2
   displayName: Publish .NET test results
