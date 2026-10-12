@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-SCRIPTS = ("dev-up.sh", "dev-down.sh", "dev-reset.sh")
+SCRIPTS = ("dev-up.sh", "dev-down.sh", "dev-reset.sh", "dev-health.sh")
 
 
 class DevBootstrapTests(unittest.TestCase):
@@ -23,8 +23,13 @@ class DevBootstrapTests(unittest.TestCase):
         self.root = Path(self.temp.name) / "repo"
         (self.root / "scripts").mkdir(parents=True)
         (self.root / "docker").mkdir()
+        (self.root / "scripts" / "lib").mkdir()
         for script in SCRIPTS:
             shutil.copy2(REPOSITORY / "scripts" / script, self.root / "scripts" / script)
+        shutil.copy2(
+            REPOSITORY / "scripts" / "lib" / "local-docker-target.sh",
+            self.root / "scripts" / "lib" / "local-docker-target.sh",
+        )
         shutil.copy2(REPOSITORY / "docker" / "compose.yml", self.root / "docker" / "compose.yml")
 
         self.bin = Path(self.temp.name) / "bin"
@@ -45,11 +50,16 @@ if [ "${1:-}" = context ] && [ "${2:-}" = inspect ]; then
   exit 0
 fi
 if [ \"${1:-}\" = info ]; then exit \"${PITCHMIND_FAKE_DOCKER_INFO_STATUS:-0}\"; fi
+if [ \"${1:-}\" = inspect ]; then printf 'healthy\\n'; exit 0; fi
 if [ \"${1:-}\" = compose ]; then
   if [ \"${PITCHMIND_FAKE_ASSERT_COMPOSE_CREDENTIALS_UNSET:-0}\" = 1 ] \\
     && { [ \"${POSTGRES_PASSWORD+x}\" = x ] || [ \"${REDIS_PASSWORD+x}\" = x ]; }; then
     exit 73
   fi
+  case " $* " in
+    *" ps -q postgres "*) printf 'fake-postgres\n'; exit 0 ;;
+    *" ps -q redis "*) printf 'fake-redis\n'; exit 0 ;;
+  esac
   exit \"${PITCHMIND_FAKE_COMPOSE_STATUS:-0}\"
 fi
 exit 0
@@ -546,6 +556,74 @@ services:
         self.assertFalse(self._published_ports_are_loopback(config), published_ports)
         self.assertIn("0.0.0.0", {port.get("host_ip") for _, port in published_ports})
         self.assertIn(None, {port.get("host_ip") for _, port in published_ports})
+
+    def _write_local_credentials(self) -> None:
+        (self.root / "docker" / ".env").write_text(
+            "POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\n"
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+
+    def test_remote_context_blocks_stop_reset_and_health_before_service_calls(self) -> None:
+        self._write_local_credentials()
+        commands = {"dev-down.sh": (), "dev-reset.sh": ("--force",), "dev-health.sh": ()}
+        for script, args in commands.items():
+            with self.subTest(script=script):
+                self.docker_log.unlink(missing_ok=True)
+                self.env["DOCKER_CONTEXT"] = "remote-builder"
+                self.env["DOCKER_HOST"] = "unix:///var/run/docker.sock"
+                self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "ssh://builder@example.invalid"
+
+                result = self._run(script, *args)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+                self.assertEqual(
+                    self.docker_log.read_text().splitlines(),
+                    ['context inspect remote-builder --format {{(index .Endpoints "docker").Host}}'],
+                )
+
+    def test_remote_host_blocks_stop_reset_and_health_before_docker_calls(self) -> None:
+        self._write_local_credentials()
+        commands = {"dev-down.sh": (), "dev-reset.sh": ("--force",), "dev-health.sh": ()}
+        for script, args in commands.items():
+            with self.subTest(script=script):
+                self.docker_log.unlink(missing_ok=True)
+                self.env.pop("DOCKER_CONTEXT", None)
+                self.env["DOCKER_HOST"] = "tcp://builder.example.invalid:2376"
+
+                result = self._run(script, *args)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Refusing non-local Docker endpoint", result.stderr)
+                self.assertFalse(self.docker_log.exists())
+
+
+    def test_local_context_allows_stop_reset_and_health(self) -> None:
+        self._write_local_credentials()
+        commands = {"dev-down.sh": (), "dev-reset.sh": ("--force",), "dev-health.sh": ()}
+        for script, args in commands.items():
+            with self.subTest(script=script):
+                self.docker_log.unlink(missing_ok=True)
+                self.env.pop("DOCKER_CONTEXT", None)
+                self.env.pop("DOCKER_HOST", None)
+                self.env["PITCHMIND_FAKE_DOCKER_ENDPOINT"] = "unix:///var/run/docker.sock"
+
+                result = self._run(script, *args)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                commands_run = self.docker_log.read_text().splitlines()
+                self.assertEqual(commands_run[0], "context show")
+                self.assertIn(
+                    'context inspect desktop-linux --format {{(index .Endpoints "docker").Host}}',
+                    commands_run,
+                )
+                if script == "dev-health.sh":
+                    self.assertTrue(any(command.endswith("ps -q postgres") for command in commands_run))
+                    self.assertTrue(any(command.endswith("ps -q redis") for command in commands_run))
+                else:
+                    self.assertTrue(any(" down" in f" {command}" for command in commands_run))
 
 
 if __name__ == "__main__":
