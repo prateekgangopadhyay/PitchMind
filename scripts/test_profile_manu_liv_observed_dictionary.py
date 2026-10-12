@@ -124,15 +124,41 @@ class ObservedDictionaryInputValidationTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, message):
                         generator.render(source, manifest)
 
+    def test_non_standard_json_constants_are_rejected_in_source_and_manifest(self) -> None:
+        valid_source = b'[{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,"eventType":"Pass","outcome":"Complete","metadata":{},"playerPositions":[]}]'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+
+            source.write_bytes(valid_source.replace(b'"metadata":{}', b'"metadata":{"value":NaN}'))
+            manifest.write_text(json.dumps({
+                "manifestVersion": "test",
+                "status": "candidate_not_canonical",
+                "source": {
+                    "path": "candidate.json",
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "byteSize": source.stat().st_size,
+                    "expectedEventCount": 1,
+                },
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Non-standard JSON constant: NaN"):
+                generator.render(source, manifest)
+
+            source.write_bytes(valid_source)
+            manifest.write_text('{"manifestVersion":NaN}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Non-standard JSON constant: NaN"):
+                generator.render(source, manifest)
+
 
 class ObservedDictionaryNumericCardinalityTests(unittest.TestCase):
     def test_numeric_values_use_numeric_equality_and_keep_booleans_separate(self) -> None:
         profile = generator.profile_fields([
-            {"value": 2},
-            {"value": 2.0},
+            {"value": 0},
+            {"value": 0.0},
+            {"value": False},
+            {"value": 1},
             {"value": True},
-            {"value": "2"},
-            {"value": 3},
         ])
 
         self.assertEqual(profile["value"]["distinct"], 4)

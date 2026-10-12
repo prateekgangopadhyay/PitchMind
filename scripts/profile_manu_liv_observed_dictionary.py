@@ -20,6 +20,11 @@ DEFAULT_MANIFEST = ROOT / "data/simulations/manu-liv-candidate-manifest.json"
 DEFAULT_OUTPUT = ROOT / "docs/data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md"
 
 
+def reject_non_json_constant(value: str) -> None:
+    """Reject Python's optional NaN/Infinity extensions to the JSON grammar."""
+    raise ValueError(f"Non-standard JSON constant: {value}")
+
+
 def json_type(value: Any) -> str:
     if value is None:
         return "null"
@@ -81,12 +86,18 @@ def field_table(title: str, rows: list[dict[str, Any]]) -> list[str]:
 
 def render(source_path: Path, manifest_path: Path) -> str:
     source_bytes = source_path.read_bytes()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(
+        manifest_path.read_text(encoding="utf-8"),
+        parse_constant=reject_non_json_constant,
+    )
     policy = manifest["source"]
     digest = sha256(source_bytes).hexdigest()
     if len(source_bytes) != policy["byteSize"] or digest != policy["sha256"]:
         raise ValueError("Source bytes do not match the candidate manifest; dictionary not generated")
-    events = json.loads(source_bytes.decode("utf-8-sig"))
+    events = json.loads(
+        source_bytes.decode("utf-8-sig"),
+        parse_constant=reject_non_json_constant,
+    )
     if not isinstance(events, list) or len(events) != policy["expectedEventCount"]:
         raise ValueError("Source event array does not match the manifest event count")
     if not events:
