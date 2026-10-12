@@ -40,6 +40,34 @@ class CanonicalTopologyTargetContractTests(unittest.TestCase):
             with self.subTest(resource=name):
                 self.assertEqual(declaration, "if (deployCanonicalTopology) {")
 
+    def test_provisioning_modules_cannot_bypass_the_opt_in_guard(self):
+        def unguarded_modules(source):
+            declarations = re.findall(
+                r"(?m)^[ \t]*module[ \t]+(\w+)[ \t]+'[^']+'[ \t]*=[ \t]*(?:\r?\n[ \t]*)?([^\r\n]+)",
+                source,
+            )
+            return [
+                name
+                for name, expression in declarations
+                if expression.strip() != "if (deployCanonicalTopology) {"
+            ]
+
+        self.assertEqual([], unguarded_modules(self.template))
+
+        unguarded_fixture = self.template + (
+            "\nmodule hiddenWorkload './workload.bicep' = {\n"
+            "  name: 'workload'\n"
+            "}\n"
+        )
+        self.assertEqual(["hiddenWorkload"], unguarded_modules(unguarded_fixture))
+
+        guarded_fixture = self.template + (
+            "\nmodule optionalWorkload './workload.bicep' = if (deployCanonicalTopology) {\n"
+            "  name: 'workload'\n"
+            "}\n"
+        )
+        self.assertEqual([], unguarded_modules(guarded_fixture))
+
     def test_disabled_outputs_do_not_dereference_undeployed_resources(self):
         guarded_outputs = (
             "postgresServerId",
