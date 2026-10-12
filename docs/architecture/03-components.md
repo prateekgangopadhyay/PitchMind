@@ -8,7 +8,8 @@
 
 ```mermaid
 flowchart TB
-  API["PitchMind.Api Program.cs / HTTP routes"] --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
+  API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
+  API --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
   API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
@@ -17,7 +18,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
+The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. It does not configure authentication, managed identity, or service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but does not yet drive the C# service.
 
 ## Target Ports and Adapters
 

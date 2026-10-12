@@ -9,6 +9,35 @@ namespace PitchMind.Contracts.Tests;
 
 public sealed class V1ContractCompatibilityTests
 {
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("development")]
+    public void Local_runtime_profile_is_allowed_only_in_Development(string environmentName)
+    {
+        RuntimeProfileGuard.Validate(environmentName, "local");
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    public void Azure_runtime_profile_is_allowed_in_supported_host_environments(string environmentName)
+    {
+        RuntimeProfileGuard.Validate(environmentName, "azure");
+    }
+
+    [Theory]
+    [InlineData("Development", null)]
+    [InlineData("Development", "unknown")]
+    [InlineData("Local", "local")]
+    [InlineData("Staging", "local")]
+    [InlineData("Production", "local")]
+    [InlineData("Test", "azure")]
+    public void Runtime_profile_guard_rejects_missing_or_incompatible_profiles(string environmentName, string? runtimeProfile)
+    {
+        Assert.Throws<InvalidOperationException>(() => RuntimeProfileGuard.Validate(environmentName, runtimeProfile));
+    }
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]
