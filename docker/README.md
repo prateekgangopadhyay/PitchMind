@@ -1,6 +1,6 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Named volumes persist data. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 17 and Redis 7.4 run in Docker Desktop under Compose project `pitchmind`. The ports bind only to 127.0.0.1. Compose explicitly reuses the `pitchmind_postgres_data` and `pitchmind_redis_data` named volumes so a project-name change cannot silently create empty replacement stores. `dev-down.sh` preserves these volumes; `dev-reset.sh` removes them only after explicit confirmation. **These are development-only containers**; Azure environments use managed Azure services.
 
 From the repository root:
 
