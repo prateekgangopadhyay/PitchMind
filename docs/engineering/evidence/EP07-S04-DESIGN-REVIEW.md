@@ -24,3 +24,51 @@ The match page was rendered locally at a selected time of 55:09 in period 2 usin
 - A populated candidate-feed canonical pitch was not demonstrated. The repository has no tracking-frame admission writer. Migration v4 leaves legacy rows without a recorded canonical admission revision unserved; new admission must write that lineage. The focused reader/migration test used generic fabricated test records, not source JSON. The candidate dataset remains structurally profiled; coordinate units, player metrics, football realism and canonical mappings are still unapproved.
 - The current canonical API limits selected time to 5,400 seconds while the candidate source reaches 5,761 seconds (96:01). The source cannot be replayed to full time until the canonical API/time contract is revised and verified by its accountable workstream.
 - Independent technical review and Product Owner acceptance remain pending. This design inspection is not acceptance evidence.
+
+## PR #57 follow-up — selected-time slider target
+
+**Result:** Partial verification; EP07-S04 remains unverified and unaccepted.
+
+**Scope:** The selected-time range input in the canonical Match screen. Its UA-rendered track had no minimum hit-area size. This change sets a 44px minimum height while preserving the native range control, focus styling, `aria-valuetext`, and selected-time behavior.
+
+**Code:** `frontend/src/styles.css` and `frontend/e2e/selected-time-accessibility.spec.ts`.
+
+**Browser evidence:** [320px Chromium screenshot](assets/ep07-s04-mobile-slider-after.png). The page uses explicitly synthetic test-only API responses and does not demonstrate source-feed admission or canonical football semantics.
+
+### Taste pass
+
+- Kept the existing React/Vite/CSS design and emerald selected-time accent.
+- Enlarged the control's hit area without adding visual decoration or animation. Added Playwright only as development/test tooling; no runtime dependency changed.
+- The page retains its existing responsive layout and selected-time context.
+
+### Web Design Guidelines audit
+
+Fetched the official raw guideline document on 2026-10-12 from [Vercel Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md). The narrow change keeps the native range control keyboard-operable and visibly focused while enlarging its mobile hit area. It does not override the browser's default touch handling; pinch-zoom behavior was not exercised.
+
+No unrelated findings were audited as part of this bounded CSS change. The existing label and native keyboard semantics were exercised by Playwright; no screen-reader or WCAG conformance claim is made.
+
+### Awesome Design critique
+
+| Area | Assessment | Evidence or limit |
+|---|---|---|
+| Identity | Strong | Screenshot shows existing PitchMind wordmark and dark navy/emerald style. |
+| Hierarchy | Strong | Match heading, score and selected clock stay visible above the slider. |
+| Typography | Strong | Selected match clock is readable and remains explicit at 320px. |
+| Layout | Strong | No horizontal overflow at 320px in Chromium. |
+| Color and contrast | Weak / unmeasured | This change did not measure color contrast. |
+| Interaction | Strong for tested path | Native range semantics, 44px bounding height and keyboard increment passed. Touch hardware was not sampled. |
+| System | Strong for tested path | Responsive page and selected-time scoreboard stay synchronized in the mocked browser journey. |
+| Product specificity | Strong | Slider label says “Selected match time”; page provenance label remains visible. |
+
+The premium rubric is scoped to this small control change, not the full screen: Taste 31/40, Tech 27/30, Process 16/20, Output 7/10 (81/100). The lower contrast and Output scores reflect unmeasured contrast, no real touch hardware, and the absence of canonical-feed evidence. This score does not approve the overall screen or waive WCAG requirements.
+
+AI UI quality rubric (review-process fit only): taste 4/5, clarity 4/5, consistency 4/5, interaction 4/5, reuse 3/5, cross-tool compatibility 4/5, audit value 4/5 (27/35). It is not a usability score.
+
+### Executed tests and remaining evidence
+
+- `npm run test:e2e`: 1/1 passed in Chromium; asserts 44px bounding height, keyboard time increment, synchronized scoreboard, and 320px no-overflow.
+- `npm test -- --run`: 19/19 passed.
+- `npm run build`, `npm run lint`, `node scripts/validate_operating_model.mjs`, `node scripts/test_design_skills.mjs`, and `git diff --check`: passed.
+- Not run: axe, screen-reader sampling, 200% zoom, manual touch-device evaluation, measured contrast, canonical-feed journey, independent human review, Product Owner acceptance.
+
+No architecture, API, domain, database, canonical data, or Azure behavior changed. No Azure resource or deployment action was performed.
