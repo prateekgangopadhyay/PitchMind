@@ -1,0 +1,78 @@
+{
+  "generatorMeasurements": {
+    "complete": true,
+    "fullRunSeconds": 0.9983766249497421,
+    "localSinkRatePerSecond": 500.8130073409619,
+    "localSinkReceivedRecords": 500,
+    "maxInMemoryQueueDepth": 1,
+    "plannedRecords": 500,
+    "queueCapacityRecords": 1024,
+    "replayedEventIdSequenceSha256": "995b1f10c90815034a0bec709bf316a5f21e116062f8f047b29bf08f2e96f174",
+    "replayedPayloadSha256": "939f357039563c3f3b096802c700cc869cfda620dc84ec748d533e332f77985a",
+    "scheduleWindowSeconds": 1.0,
+    "scheduledRatePerSecond": 500.0,
+    "scheduledRecords": 500
+  },
+  "ingestionMeasurements": {
+    "acceptedRecords": null,
+    "backpressureRecoverySeconds": null,
+    "consumerLag": null,
+    "databaseLatencyPercentilesMs": null,
+    "duplicateRecords": null,
+    "quarantinedRecords": null,
+    "status": "not_measured"
+  },
+  "measurementScope": "local_rate_scheduler_and_in_memory_discard_sink",
+  "profile": {
+    "durationOverrideUsed": true,
+    "durationSeconds": 1.0,
+    "partitionMode": "single-source-match",
+    "payloadMode": "opaque-source-record-order",
+    "profileAgreement": {
+      "acceptanceBudgets": {
+        "acceptedRecordLoss": null,
+        "backpressureRecoverySeconds": null,
+        "consumerLagMs": null,
+        "endToEndLatencyP95Ms": null,
+        "endToEndLatencyP99Ms": null
+      },
+      "approvedAtUtc": null,
+      "approvedBy": null,
+      "status": "pending"
+    },
+    "profileId": "candidate-feed-single-match-pending-agreement",
+    "profileSchemaVersion": "1.0",
+    "targetEventsPerSecond": 500
+  },
+  "reportSchemaVersion": "1.0",
+  "runId": "cc0de432-c628-430b-89c2-2917ab5b8e37",
+  "source": {
+    "byteSize": 28601013,
+    "fixtureVersion": null,
+    "matchCount": 1,
+    "matchIds": [
+      "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+    ],
+    "orderedEventIdSequenceSha256": "1573be4a52ddd73f6f73e221980858a633443d722426eff8d1ed142dd738c260",
+    "payloadBytesPreservedWithoutReserialization": true,
+    "provenanceIsEmbeddedInSource": false,
+    "provenanceLabel": "owner-confirmed-synthetic",
+    "recordCount": 2199,
+    "recordsAreReplayedInSourceOrder": true,
+    "replayCyclesRepeatOriginalEventIdsAndSequences": true,
+    "repositoryPath": "data/simulations/manu-liv-match-dataset.json",
+    "sha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "sourceVersion": null
+  },
+  "startedAtUtc": "2026-10-11T21:32:54.238471+00:00",
+  "status": "generator_only_not_ingestion_evidence",
+  "storyId": "EP03-S05",
+  "unsupported": [
+    "No broker, event worker, database, API, or Azure endpoint was exercised.",
+    "Generator throughput is not ingestion throughput and does not prove zero data loss.",
+    "The source contains a single match; multi-match partition mixes are unsupported.",
+    "Payloads are opaque source records; semantic payload mixes and payload shaping are unsupported.",
+    "Consumer lag, accepted/duplicate/quarantine counts, end-to-end latency, and recovery are unmeasured.",
+    "The source clock, coordinates, player metrics, canonical event mapping, and football realism are not validated by this harness."
+  ]
+}

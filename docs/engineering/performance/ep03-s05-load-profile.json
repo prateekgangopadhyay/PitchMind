@@ -1,0 +1,40 @@
+{
+  "profileSchemaVersion": "1.0",
+  "storyId": "EP03-S05",
+  "profileId": "candidate-feed-single-match-pending-agreement",
+  "source": {
+    "path": "data/simulations/manu-liv-match-dataset.json",
+    "format": "json-array",
+    "sourceVersion": null,
+    "fixtureVersion": null,
+    "expectedSha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "eventIdKey": "eventId",
+    "sequenceKey": "sequence",
+    "matchIdKey": "matchId",
+    "provenanceLabel": "owner-confirmed-synthetic",
+    "maxBytes": 50000000,
+    "maxRecords": 10000
+  },
+  "workload": {
+    "mode": "generator-only-local-in-memory",
+    "targetEventsPerSecond": 500,
+    "durationSeconds": null,
+    "payloadMode": "opaque-source-record-order",
+    "payloadMixApproval": null,
+    "partitionMode": "single-source-match",
+    "partitionMixApproval": null,
+    "queueCapacityRecords": 1024
+  },
+  "agreement": {
+    "status": "pending",
+    "approvedBy": null,
+    "approvedAtUtc": null,
+    "acceptanceBudgets": {
+      "consumerLagMs": null,
+      "acceptedRecordLoss": null,
+      "backpressureRecoverySeconds": null,
+      "endToEndLatencyP95Ms": null,
+      "endToEndLatencyP99Ms": null
+    }
+  }
+}
