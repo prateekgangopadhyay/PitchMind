@@ -21,4 +21,4 @@ All commands ran in the local working tree on 2026-10-12.
 | Observed dictionary regeneration | `PYTHONDONTWRITEBYTECODE=1 python3 scripts/profile_manu_liv_observed_dictionary.py --output /private/tmp/pitchmind-ep03-strict-dictionary.md` | Output compared byte-for-byte with the tracked observed dictionary. |
 | Patch whitespace | `git diff --check` | Passed. |
 
-The change is published as draft PR #164, stacked on PR #80. No canonical import or match API exposure was performed. No Azure resource, deployment, or environment was touched. Independent review is in progress; Product Owner acceptance remains pending.
+The change was independently reviewed with no blockers, merged as PR #164 into PR #80 at `e9b696219485149aad8569dde71383209043c53c`, and the reviewed PR #80 stack was merged into PR #77 at `e90181c918303fd36e07d9bf37adc5639cca5849`. No canonical import or match API exposure was performed. No Azure resource, deployment, or environment was touched. Product Owner acceptance remains pending.
