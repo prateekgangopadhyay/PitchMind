@@ -11,6 +11,7 @@ import argparse
 from collections import Counter
 from hashlib import sha256
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,14 @@ DEFAULT_OUTPUT = ROOT / "docs/data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md"
 def reject_non_json_constant(value: str) -> None:
     """Reject Python's optional NaN/Infinity extensions to the JSON grammar."""
     raise ValueError(f"Non-standard JSON constant: {value}")
+
+
+def finite_json_float(value: str) -> float:
+    """Reject syntactically valid numbers that overflow Python's float range."""
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"Non-finite JSON number: {value}")
+    return parsed
 
 
 def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -99,6 +108,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
     manifest = json.loads(
         manifest_path.read_text(encoding="utf-8"),
         parse_constant=reject_non_json_constant,
+        parse_float=finite_json_float,
         object_pairs_hook=reject_duplicate_json_keys,
     )
     policy = manifest["source"]
@@ -108,6 +118,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
     events = json.loads(
         source_bytes.decode("utf-8-sig"),
         parse_constant=reject_non_json_constant,
+        parse_float=finite_json_float,
         object_pairs_hook=reject_duplicate_json_keys,
     )
     if not isinstance(events, list) or len(events) != policy["expectedEventCount"]:

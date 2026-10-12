@@ -150,6 +150,32 @@ class ObservedDictionaryInputValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Non-standard JSON constant: NaN"):
                 generator.render(source, manifest)
 
+    def test_overflowing_json_float_is_rejected_before_dictionary_aggregation(self) -> None:
+        valid_source = b'[{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,"eventType":"Pass","outcome":"Complete","metadata":{},"playerPositions":[]}]'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+
+            source.write_bytes(valid_source.replace(b'"metadata":{}', b'"metadata":{"value":1e999}'))
+            manifest.write_text(json.dumps({
+                "manifestVersion": "test",
+                "status": "candidate_not_canonical",
+                "source": {
+                    "path": "candidate.json",
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "byteSize": source.stat().st_size,
+                    "expectedEventCount": 1,
+                },
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Non-finite JSON number: 1e999"):
+                generator.render(source, manifest)
+
+            source.write_bytes(valid_source)
+            manifest.write_text('{"manifestVersion":"test","value":1e999}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Non-finite JSON number: 1e999"):
+                generator.render(source, manifest)
+
     def test_duplicate_object_keys_are_rejected_in_source_and_manifest(self) -> None:
         valid_event = (
             b'{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,'

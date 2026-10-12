@@ -345,8 +345,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output and (
             _aliases_existing_file(args.output, args.source)
             or _aliases_existing_file(args.output, args.manifest)
+            or _aliases_existing_file(args.output, args.domain_source)
+            or _aliases_existing_file(args.output, Path(__file__))
         ):
-            raise AuditError("Report output must not overwrite the source or manifest")
+            raise AuditError("Report output must not overwrite the source, manifest, domain source, or audit script")
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         result = audit_data(args.source.read_bytes(), manifest, args.domain_source.read_text(encoding="utf-8"))
         rendered = json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
