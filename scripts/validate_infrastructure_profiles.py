@@ -48,7 +48,7 @@ def _bicepparam_values(path: Path) -> dict[str, object]:
 
 
 def _without_bicep_comments_and_strings(source: str) -> str:
-    """Mask comments and string literals while preserving line boundaries for source checks."""
+    """Mask comments and strings, preserving only the literal needed by the guard grammar."""
     characters = list(source)
     index = 0
 
@@ -85,7 +85,8 @@ def _without_bicep_comments_and_strings(source: str) -> str:
                     index += 1
                     break
                 index += 1
-            mask(start, index)
+            if source[start:index] != "'dev'":
+                mask(start, index)
         else:
             index += 1
 
@@ -122,7 +123,7 @@ def validate_profiles(repo_root: Path) -> list[str]:
     modules: dict[str, list[str]] = {}
     for name, expression in declarations:
         modules.setdefault(name, []).append(expression.strip())
-    required_guard = re.compile(r"if \(enableDevFoundation && environment ==\s*\) \{")
+    required_guard = re.compile(r"if \(enableDevFoundation && environment == 'dev'\) \{")
     for module_name in ("network", "vault"):
         module_guards = modules.get(module_name, [])
         if len(module_guards) != 1 or not required_guard.fullmatch(module_guards[0]):
