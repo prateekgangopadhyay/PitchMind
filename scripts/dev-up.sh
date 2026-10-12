@@ -16,6 +16,37 @@ require_regular_credentials_file() {
 
 require_regular_credentials_file
 command -v docker >/dev/null || { echo "Docker CLI not installed" >&2; exit 1; }
+
+require_local_docker_target() {
+  local endpoint context
+  if [[ -n "${DOCKER_CONTEXT:-}" ]]; then
+    context="$DOCKER_CONTEXT"
+    endpoint="$(docker context inspect "$context" --format '{{(index .Endpoints "docker").Host}}')" || {
+      echo "Unable to inspect the selected Docker context; refusing to start local services." >&2
+      exit 1
+    }
+  elif [[ -n "${DOCKER_HOST:-}" ]]; then
+    endpoint="$DOCKER_HOST"
+  else
+    context="$(docker context show)" || {
+      echo "Unable to identify the selected Docker context; refusing to start local services." >&2
+      exit 1
+    }
+    endpoint="$(docker context inspect "$context" --format '{{(index .Endpoints "docker").Host}}')" || {
+      echo "Unable to inspect the selected Docker context; refusing to start local services." >&2
+      exit 1
+    }
+  fi
+
+  # This bootstrap handles local Docker Desktop/Engine sockets only. A TCP, SSH,
+  # or other context can send local credentials and containers to another host.
+  [[ "$endpoint" == unix:///* ]] || {
+    echo "Refusing non-local Docker endpoint; select a local Unix-socket Docker context before starting services." >&2
+    exit 1
+  }
+}
+
+require_local_docker_target
 docker info >/dev/null || { echo "Start Docker Desktop first" >&2; exit 1; }
 if [[ ! -f docker/.env ]]; then
   command -v openssl >/dev/null || { echo "OpenSSL required for local password generation" >&2; exit 1; }
