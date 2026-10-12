@@ -60,7 +60,8 @@ def report_for(events, domain_source="public enum MatchEventType { Pass, Goal, P
         "status": "candidate_not_canonical",
         "source": {"path": "fixture.json", "sha256": audit.sha256(data).hexdigest(),
                    "byteSize": len(data), "expectedEventCount": len(events)},
-        "match": {"sourceClockUnit": "seconds", "sequenceStart": 1},
+        "match": {"sourceClockUnit": None, "sourceClockUnitStatus": "unverified",
+                  "clockAndPeriodChecks": "candidate-file-structural-regression-only", "sequenceStart": 1},
         "coordinates": {"unit": None, "axisConvention": None, "pitchDimensionsMetres": None,
                         "status": "unverified"},
         "playerMetrics": {"status": "unvalidated", "unitsAndValidity": "unverified",
@@ -71,7 +72,14 @@ def report_for(events, domain_source="public enum MatchEventType { Pass, Goal, P
 
 
 class CandidateQualityAuditTests(unittest.TestCase):
-    def test_report_output_cannot_alias_and_overwrite_source_or_manifest(self):
+    def test_clock_report_does_not_infer_units_from_field_name(self):
+        report = report_for([event(1, clock=10)])
+        self.assertIsNone(report["chronology"]["clockUnitDeclaredByManifest"])
+        self.assertEqual(report["chronology"]["clockUnitStatusByManifest"], "unverified")
+        self.assertEqual(report["chronology"]["clockValueSpan"], 0)
+        self.assertTrue(report["chronology"]["checksAreCandidateStructuralOnly"])
+
+    def test_report_output_cannot_alias_and_overwrite_any_audit_input_or_audit_script(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             source = root / "candidate.json"
@@ -93,23 +101,33 @@ class CandidateQualityAuditTests(unittest.TestCase):
             manifest.write_bytes(manifest_bytes)
             domain_source.write_text("public enum MatchEventType { Pass }", encoding="utf-8")
 
-            for protected_path, protected_bytes in ((source, source_bytes), (manifest, manifest_bytes)):
-                with self.subTest(protected=protected_path.name, alias="direct"):
-                    self.assertEqual(self._run_audit(source, manifest, domain_source, protected_path), 2)
-                    self.assertEqual(protected_path.read_bytes(), protected_bytes)
-
-                for alias_kind in ("symlink", "hardlink"):
-                    alias = root / f"{protected_path.name}-{alias_kind}-alias"
-                    try:
-                        if alias_kind == "symlink":
-                            alias.symlink_to(protected_path)
-                        else:
-                            alias.hardlink_to(protected_path)
-                    except (OSError, NotImplementedError) as exc:
-                        self.skipTest(f"{alias_kind} aliases are unavailable: {exc}")
-                    with self.subTest(protected=protected_path.name, alias=alias_kind):
-                        self.assertEqual(self._run_audit(source, manifest, domain_source, alias), 2)
+            audit_script = root / "audit_manu_liv_candidate_quality.py"
+            audit_script_bytes = SCRIPT.read_bytes()
+            audit_script.write_bytes(audit_script_bytes)
+            original_module_path = audit.__file__
+            audit.__file__ = str(audit_script)
+            try:
+                for protected_path, protected_bytes in (
+                    (source, source_bytes), (manifest, manifest_bytes),
+                    (domain_source, domain_source.read_bytes()), (audit_script, audit_script_bytes)
+                ):
+                    with self.subTest(protected=protected_path.name, alias="direct"):
+                        self.assertEqual(self._run_audit(source, manifest, domain_source, protected_path), 2)
                         self.assertEqual(protected_path.read_bytes(), protected_bytes)
+                    for alias_kind in ("symlink", "hardlink"):
+                        alias = root / f"{protected_path.name}-{alias_kind}-alias"
+                        try:
+                            if alias_kind == "symlink":
+                                alias.symlink_to(protected_path)
+                            else:
+                                alias.hardlink_to(protected_path)
+                        except (OSError, NotImplementedError) as exc:
+                            self.skipTest(f"{alias_kind} aliases are unavailable: {exc}")
+                        with self.subTest(protected=protected_path.name, alias=alias_kind):
+                            self.assertEqual(self._run_audit(source, manifest, domain_source, alias), 2)
+                            self.assertEqual(protected_path.read_bytes(), protected_bytes)
+            finally:
+                audit.__file__ = original_module_path
 
     @staticmethod
     def _run_audit(source: Path, manifest: Path, domain_source: Path, output: Path) -> int:
