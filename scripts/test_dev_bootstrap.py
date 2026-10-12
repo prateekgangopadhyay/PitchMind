@@ -518,6 +518,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
     def test_compose_resolves_the_existing_local_volume_names_offline(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
 
+        self.assertEqual(config.get("name"), "pitchmind")
         services = config.get("services", {})
         self.assertIsInstance(services, dict)
         self.assertEqual(services["postgres"].get("image"), "postgres:16-alpine")
