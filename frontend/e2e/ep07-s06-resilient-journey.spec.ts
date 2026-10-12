@@ -62,6 +62,9 @@ test('audience mode changes disclosure while preserving selected-time facts', as
 
   const score = page.getByRole('region', { name: 'Canonical match score' });
   const matchFacts = await score.innerText();
+  const truthClass = page.getByLabel('Insight category: observed');
+  await expect(truthClass).toBeVisible();
+  const truthClassText = await truthClass.innerText();
   await expect(score).toContainText('55:09');
   await expect(score).toContainText('1');
   await expect(page.getByText(insightSummary)).toBeVisible();
@@ -74,6 +77,8 @@ test('audience mode changes disclosure while preserving selected-time facts', as
   await page.getByText('Recorded conditions and limitations').click();
   await expect(page.getByText('Test fixture only')).toBeVisible();
   expect(await score.innerText()).toBe(matchFacts);
+  await expect(truthClass).toBeVisible();
+  expect(await truthClass.innerText()).toBe(truthClassText);
   await expect(page.getByText(insightSummary)).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
@@ -108,7 +113,10 @@ test('keeps canonical score available when optional reads, including AI-related 
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('all interactive controls expose a non-empty accessible name in the selected-time view', async ({ page }) => {
+// Narrow DOM heuristic only: inspects native anchors, buttons, and form
+// controls against a subset of naming attributes. It misses aria-labelledby,
+// custom role widgets, name computation, keyboard behavior, and assistive technology.
+test('native links, buttons, and form controls have a detectable name', async ({ page }) => {
   await stubCanonicalMatch(page);
   await openSelectedMatch(page);
 
