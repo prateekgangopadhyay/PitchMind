@@ -6,6 +6,8 @@ namespace PitchMind.Infrastructure.Feeds;
 /// Replays validated candidate records locally without mapping them to canonical football facts.
 /// The consumer controls backpressure by requesting the next item and persists ResumeCursor only
 /// after it has safely handled the corresponding raw envelope.
+/// The configured rate paces records within this enumeration; a resumed enumeration emits its first
+/// record immediately, so callers needing an aggregate session-wide cap must preserve pacing state.
 /// </summary>
 public static class LocalCandidateFeedReplayProducer
 {
