@@ -20,6 +20,21 @@ DEFAULT_MANIFEST = ROOT / "data/simulations/manu-liv-candidate-manifest.json"
 DEFAULT_OUTPUT = ROOT / "docs/data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md"
 
 
+def reject_non_json_constant(value: str) -> None:
+    """Reject Python's optional NaN/Infinity extensions to the JSON grammar."""
+    raise ValueError(f"Non-standard JSON constant: {value}")
+
+
+def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object members instead of silently keeping the last value."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def json_type(value: Any) -> str:
     if value is None:
         return "null"
@@ -50,8 +65,12 @@ def profile_fields(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "types": dict(sorted(Counter(json_type(value) for value in present).items())),
             "missing": len(rows) - len(present),
             "null": sum(value is None for value in present),
-            "distinct": len({json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                        separators=(",", ":")) for value in nonnull}),
+            "distinct": len({
+                ("number", value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+                else ("json", json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")))
+                for value in nonnull
+            }),
             "minimum": min(numeric) if numeric else None,
             "maximum": max(numeric) if numeric else None,
         }
@@ -77,12 +96,20 @@ def field_table(title: str, rows: list[dict[str, Any]]) -> list[str]:
 
 def render(source_path: Path, manifest_path: Path) -> str:
     source_bytes = source_path.read_bytes()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(
+        manifest_path.read_text(encoding="utf-8"),
+        parse_constant=reject_non_json_constant,
+        object_pairs_hook=reject_duplicate_json_keys,
+    )
     policy = manifest["source"]
     digest = sha256(source_bytes).hexdigest()
     if len(source_bytes) != policy["byteSize"] or digest != policy["sha256"]:
         raise ValueError("Source bytes do not match the candidate manifest; dictionary not generated")
-    events = json.loads(source_bytes.decode("utf-8-sig"))
+    events = json.loads(
+        source_bytes.decode("utf-8-sig"),
+        parse_constant=reject_non_json_constant,
+        object_pairs_hook=reject_duplicate_json_keys,
+    )
     if not isinstance(events, list) or len(events) != policy["expectedEventCount"]:
         raise ValueError("Source event array does not match the manifest event count")
     if not events:
@@ -114,7 +141,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
         f"**Provenance:** manifest records synthetic provenance and redistribution permission as repository-owner-confirmed on {policy.get('provenanceConfirmedOn')}. Independent rights/privacy review is `{policy.get('independentRightsPrivacyReview')}`. This declaration does not validate semantics or football realism.", "",
         f"**Reproduce:** from the repository root, run `python3 scripts/profile_manu_liv_observed_dictionary.py`. The command validates manifest size/hash before replacing this Markdown file. Pass `--output /path/outside/repository/report.md` to write elsewhere.", "",
         "## Interpretation limits", "",
-        "- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls and count values as JSON values.",
+        "- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls; numeric values compare by numeric equality (`2` and `2.0` count once), while other JSON values compare by canonical JSON representation.",
         "- Numeric ranges are raw values only. Coordinate units, axis/origin/orientation, attack direction, and pitch dimensions are **UNSPECIFIED / UNVERIFIED**. No conversion or distance inference is supported.",
         "- `clockSeconds` is an integer field; the source unit is **UNSPECIFIED / UNVERIFIED**. The `Seconds` suffix is part of the field name and is not an authoritative data dictionary. Whether values denote elapsed match time, period-local time, stoppage time, or the meaning of period markers is also unverified.",
         "- Manifest-pinned clock ordering, period labels, and marker row values are candidate-file structural regression checks only. They do not establish time units, period meanings, football semantics, or approval for other feeds.",
