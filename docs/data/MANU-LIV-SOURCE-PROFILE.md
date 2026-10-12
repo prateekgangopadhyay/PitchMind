@@ -17,7 +17,7 @@
 | Player-position rows | Event-attached; this does not establish dense or continuous tracking |
 | Provenance | Manifest records owner-confirmed synthetic provenance and redistribution permission; independent rights/privacy review is pending |
 
-These measurements describe the pinned file only. The [observed data dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) lists field types, missing and null counts, numeric ranges, cardinalities, event/outcome counts, and source-order checks.
+These measurements describe the pinned file only. The [observed data dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) lists field types, missing and null counts, numeric ranges, cardinalities, event/outcome counts, and source-order checks. The [candidate football-data quality audit](../engineering/evidence/EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-12.md) records aggregate metric, score, event-type, and substitution/card-frame observations while keeping their meaning explicitly unverified.
 
 ## Semantics and football review
 
