@@ -72,6 +72,56 @@ def report_for(events, domain_source="public enum MatchEventType { Pass, Goal, P
 
 
 class CandidateQualityAuditTests(unittest.TestCase):
+    def test_cli_rejects_duplicate_and_non_standard_manifest_json(self):
+        source_bytes = json.dumps([event(1)], separators=(",", ":")).encode()
+        invalid_manifests = (
+            b'{"source":{"sha256":"first"},"source":{"sha256":"last"}}',
+            b'{"source":{"expectedEventCount":NaN}}',
+        )
+        for manifest_bytes in invalid_manifests:
+            with self.subTest(manifest=manifest_bytes), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = root / "candidate.json"
+                manifest = root / "manifest.json"
+                domain_source = root / "MatchEvent.cs"
+                output = root / "report.json"
+                source.write_bytes(source_bytes)
+                manifest.write_bytes(manifest_bytes)
+                domain_source.write_text("public enum MatchEventType { Pass }", encoding="utf-8")
+
+                self.assertEqual(self._run_audit(source, manifest, domain_source, output), 2)
+                self.assertFalse(output.exists())
+
+    def test_duplicate_json_keys_are_rejected_in_source_objects_at_any_depth(self):
+        for raw in (
+            b'[{"eventId":"first","eventId":"last"}]',
+            b'[{"metadata":{"score":"1-0","score":"2-0"}}]',
+        ):
+            with self.subTest(raw=raw):
+                manifest = {
+                    "source": {
+                        "sha256": audit.sha256(raw).hexdigest(),
+                        "byteSize": len(raw),
+                        "expectedEventCount": 1,
+                    }
+                }
+                with self.assertRaisesRegex(audit.AuditError, "Duplicate JSON object key"):
+                    audit.audit_data(raw, manifest, "public enum MatchEventType { Pass }")
+
+    def test_non_standard_and_overflowing_json_numbers_are_rejected(self):
+        for raw in (b'[{"value":NaN}]', b'[{"value":Infinity}]', b'[{"value":-Infinity}]',
+                    b'[{"value":1e999}]'):
+            with self.subTest(raw=raw):
+                manifest = {
+                    "source": {
+                        "sha256": audit.sha256(raw).hexdigest(),
+                        "byteSize": len(raw),
+                        "expectedEventCount": 1,
+                    }
+                }
+                with self.assertRaisesRegex(audit.AuditError, "Non-standard JSON numeric constant|Non-finite JSON number"):
+                    audit.audit_data(raw, manifest, "public enum MatchEventType { Pass }")
+
     def test_clock_report_does_not_infer_units_from_field_name(self):
         report = report_for([event(1, clock=10)])
         self.assertIsNone(report["chronology"]["clockUnitDeclaredByManifest"])

@@ -25,10 +25,52 @@ EVENT_COORDINATES = ("pitchX", "pitchY", "ballX", "ballY", "endX", "endY")
 CANONICAL_ENUM = "src/PitchMind.Domain/Events/MatchEvent.cs"
 ENUM_PATTERN = re.compile(r"public\s+enum\s+MatchEventType\s*\{([^}]*)\}")
 SCORE_PATTERN = re.compile(r"^(\d+)-(\d+)$")
+MAX_JSON_INTEGER_DIGITS = 1024
 
 
 class AuditError(ValueError):
     """The pinned source or audit inputs are invalid."""
+
+
+def _reject_constant(value: str) -> Any:
+    raise AuditError(f"Non-standard JSON numeric constant {value!r} is not accepted")
+
+
+def _finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise AuditError("Non-finite JSON number is not accepted")
+    return parsed
+
+
+def _bounded_int(value: str) -> int:
+    digits = value[1:] if value.startswith("-") else value
+    if len(digits) > MAX_JSON_INTEGER_DIGITS:
+        raise AuditError("JSON integer exceeds the supported size")
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise AuditError("JSON integer is invalid or exceeds the supported size") from exc
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON properties instead of silently keeping the last value."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise AuditError(f"Duplicate JSON object key {key!r} is not accepted")
+        result[key] = value
+    return result
+
+
+def _strict_json_loads(value: str | bytes) -> Any:
+    return json.loads(
+        value,
+        parse_constant=_reject_constant,
+        parse_float=_finite_float,
+        parse_int=_bounded_int,
+        object_pairs_hook=_unique_object,
+    )
 
 
 def _aliases_existing_file(left: Path, right: Path) -> bool:
@@ -83,7 +125,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     if len(data) != source_policy.get("byteSize") or observed_hash != source_policy.get("sha256"):
         raise AuditError("Source bytes do not match manifest size and SHA-256")
     try:
-        events = json.loads(data.decode("utf-8-sig"))
+        events = _strict_json_loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AuditError("Candidate source is not UTF-8 JSON") from exc
     if not isinstance(events, list) or not events or any(not isinstance(event, dict) for event in events):
@@ -349,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
             or _aliases_existing_file(args.output, Path(__file__))
         ):
             raise AuditError("Report output must not overwrite the source, manifest, domain source, or audit script")
-        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        manifest = _strict_json_loads(args.manifest.read_text(encoding="utf-8"))
         result = audit_data(args.source.read_bytes(), manifest, args.domain_source.read_text(encoding="utf-8"))
         rendered = json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
         if args.output:

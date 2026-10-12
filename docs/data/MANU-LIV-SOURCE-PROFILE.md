@@ -19,7 +19,7 @@
 | `clockSeconds` raw field values | 0..5761, nondecreasing. Unit and elapsed/period-local/stoppage-time semantics are **UNSPECIFIED / UNVERIFIED**; the field-name suffix is not source authority. |
 | Raw `period` labels | 1: 1035 records, 2: 1164 records. Labels are preserved; their domain meaning is unverified. |
 | Teams | Manchester United: 1123 event records; Liverpool: 1076 |
-| Events titled Goal | 6: 3 United, 3 Liverpool; final score 3–3 |
+| Rows labelled `Goal` | 6: 3 per source team; goal metadata snapshots end with `3–3`, but score-side order and canonical score authority are **UNSPECIFIED / UNVERIFIED** |
 | Other major events | 2 substitutions; 1 red card; half/full time markers |
 | Player positions | 48,048 observations across 2,199 event-attached `playerPositions` arrays; 24 distinct `teamName + playerName` identities |
 | Player/ball coordinate min/max | each axis between 2 and 98; pass `endX` spans 0..100. **Units unspecified**; values look normalized, not metres. |
