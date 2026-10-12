@@ -175,6 +175,9 @@ public sealed class TelemetryContractTests
         Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("elapsedSeconds").GetProperty("maximum").GetInt64());
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceSequence").GetProperty("maximum").GetInt64());
+        Assert.Equal(decimal.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("sourceClockValue").GetProperty("maximum").GetDecimal());
+        Assert.Equal(decimal.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("x").GetProperty("maximum").GetDecimal());
+        Assert.Equal(decimal.MaxValue, frameSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("y").GetProperty("maximum").GetDecimal());
         Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
         Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));

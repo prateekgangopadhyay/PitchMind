@@ -22,7 +22,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["x", "y"],
-      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 79228162514264337593543950335 },
+        "y": { "type": "number", "minimum": 0, "maximum": 79228162514264337593543950335 }
+      }
     },
     "player": {
       "type": "object",
