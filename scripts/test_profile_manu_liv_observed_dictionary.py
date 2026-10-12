@@ -125,5 +125,18 @@ class ObservedDictionaryInputValidationTests(unittest.TestCase):
                         generator.render(source, manifest)
 
 
+class ObservedDictionaryNumericCardinalityTests(unittest.TestCase):
+    def test_numeric_values_use_numeric_equality_and_keep_booleans_separate(self) -> None:
+        profile = generator.profile_fields([
+            {"value": 2},
+            {"value": 2.0},
+            {"value": True},
+            {"value": "2"},
+            {"value": 3},
+        ])
+
+        self.assertEqual(profile["value"]["distinct"], 4)
+
+
 if __name__ == "__main__":
     unittest.main()

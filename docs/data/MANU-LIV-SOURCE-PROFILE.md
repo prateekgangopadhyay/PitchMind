@@ -41,7 +41,7 @@
 | Substitution | 2 | RedCard | 1 |
 | FullTime | 1 | | |
 
-**Football quality concern:** 124 shot events and 254 fouls in a single match are not a plausible ordinary professional match profile. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
+**Football quality review prompt:** The source contains 124 rows labeled as shots and 254 labeled as fouls. These counts appear unusually high, but source event definitions, deduplication rules, and counting methodology are unavailable; the counts alone do not establish football plausibility. The simulation requires football-domain review and may need calibrated selection/labeling for a believable replay. Do not silently delete, rewrite or claim the dataset represents a real EPL match; retain the raw input and document any derived/demo replay subset.
 
 ## Clock, coordinate and identity conversion — REQUIRED
 - Current offline C# assumes 0..5400 seconds, one 90-minute fixture, 0-based sequence, a 105×68 **metre** coordinate frame and 8 supported event kinds. **None of these assumptions can be applied directly to this source.** The candidate field is named `clockSeconds`, but its unit and clock semantics remain unverified until supported by a source-owner data dictionary.

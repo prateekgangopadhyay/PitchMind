@@ -10,7 +10,7 @@
 
 ## Interpretation limits
 
-- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls and count values as JSON values.
+- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls; numeric values compare by numeric equality (`2` and `2.0` count once), while other JSON values compare by canonical JSON representation.
 - Numeric ranges are raw values only. Coordinate units, axis/origin/orientation, attack direction, and pitch dimensions are **UNSPECIFIED / UNVERIFIED**. No conversion or distance inference is supported.
 - `clockSeconds` is an integer field; the source unit is **UNSPECIFIED / UNVERIFIED**. The `Seconds` suffix is part of the field name and is not an authoritative data dictionary. Whether values denote elapsed match time, period-local time, stoppage time, or the meaning of period markers is also unverified.
 - Manifest-pinned clock ordering, period labels, and marker row values are candidate-file structural regression checks only. They do not establish time units, period meanings, football semantics, or approval for other feeds.
@@ -95,8 +95,8 @@ The JSON root is an array with 2,199 event objects and 48,048 event-attached pla
 | `teamId` | `string` 48048 | 0 | 0 | 2 | — |
 | `teamName` | `string` 48048 | 0 | 0 | 2 | — |
 | `touches` | `integer` 48048 | 0 | 0 | 289 | 0–289 |
-| `x` | `integer` 112, `number` 47936 | 0 | 0 | 963 | 2.0–98.0 |
-| `y` | `integer` 51, `number` 47997 | 0 | 0 | 941 | 2.0–98.0 |
+| `x` | `integer` 112, `number` 47936 | 0 | 0 | 961 | 2.0–98.0 |
+| `y` | `integer` 51, `number` 47997 | 0 | 0 | 940 | 2.0–98.0 |
 
 ## Observed categorical values and order checks
 

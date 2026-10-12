@@ -50,8 +50,12 @@ def profile_fields(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "types": dict(sorted(Counter(json_type(value) for value in present).items())),
             "missing": len(rows) - len(present),
             "null": sum(value is None for value in present),
-            "distinct": len({json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                        separators=(",", ":")) for value in nonnull}),
+            "distinct": len({
+                ("number", value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+                else ("json", json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")))
+                for value in nonnull
+            }),
             "minimum": min(numeric) if numeric else None,
             "maximum": max(numeric) if numeric else None,
         }
@@ -114,7 +118,7 @@ def render(source_path: Path, manifest_path: Path) -> str:
         f"**Provenance:** manifest records synthetic provenance and redistribution permission as repository-owner-confirmed on {policy.get('provenanceConfirmedOn')}. Independent rights/privacy review is `{policy.get('independentRightsPrivacyReview')}`. This declaration does not validate semantics or football realism.", "",
         f"**Reproduce:** from the repository root, run `python3 scripts/profile_manu_liv_observed_dictionary.py`. The command validates manifest size/hash before replacing this Markdown file. Pass `--output /path/outside/repository/report.md` to write elsewhere.", "",
         "## Interpretation limits", "",
-        "- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls and count values as JSON values.",
+        "- Field names, JSON types, nulls, ranges, distinct counts, and source-order aggregates below are measured from the pinned bytes. For the tables, “missing keys” means a key is absent in an object; “explicit nulls” means it is present with JSON `null`. Distinct counts exclude nulls; numeric values compare by numeric equality (`2` and `2.0` count once), while other JSON values compare by canonical JSON representation.",
         "- Numeric ranges are raw values only. Coordinate units, axis/origin/orientation, attack direction, and pitch dimensions are **UNSPECIFIED / UNVERIFIED**. No conversion or distance inference is supported.",
         "- `clockSeconds` is an integer field; the source unit is **UNSPECIFIED / UNVERIFIED**. The `Seconds` suffix is part of the field name and is not an authoritative data dictionary. Whether values denote elapsed match time, period-local time, stoppage time, or the meaning of period markers is also unverified.",
         "- Manifest-pinned clock ordering, period labels, and marker row values are candidate-file structural regression checks only. They do not establish time units, period meanings, football semantics, or approval for other feeds.",
