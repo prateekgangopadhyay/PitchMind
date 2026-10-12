@@ -150,6 +150,45 @@ class ObservedDictionaryInputValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Non-standard JSON constant: NaN"):
                 generator.render(source, manifest)
 
+    def test_duplicate_object_keys_are_rejected_in_source_and_manifest(self) -> None:
+        valid_event = (
+            b'{"eventId":"event-1","sequence":1,"clockSeconds":0,"period":1,'
+            b'"eventType":"Pass","outcome":"Complete","metadata":{},"playerPositions":[]}'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "candidate.json"
+            manifest = root / "manifest.json"
+
+            duplicate_source = valid_event.replace(
+                b'"eventType":"Pass"', b'"eventType":"Pass","eventType":"Goal"'
+            )
+            source.write_bytes(b"[" + duplicate_source + b"]")
+            manifest.write_text(json.dumps({
+                "manifestVersion": "test",
+                "status": "candidate_not_canonical",
+                "source": {
+                    "path": "candidate.json",
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "byteSize": source.stat().st_size,
+                    "expectedEventCount": 1,
+                },
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Duplicate JSON object key: eventType"):
+                generator.render(source, manifest)
+
+            source.write_bytes(b"[" + valid_event + b"]")
+            manifest.write_text(
+                '{"manifestVersion":"test","status":"candidate_not_canonical",'
+                '"source":{"path":"candidate.json","sha256":"' + hashlib.sha256(source.read_bytes()).hexdigest()
+                + '","byteSize":' + str(source.stat().st_size) + ',"expectedEventCount":1},'
+                '"source":{"path":"candidate.json","sha256":"' + hashlib.sha256(source.read_bytes()).hexdigest()
+                + '","byteSize":' + str(source.stat().st_size) + ',"expectedEventCount":1}}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "Duplicate JSON object key: source"):
+                generator.render(source, manifest)
+
 
 class ObservedDictionaryNumericCardinalityTests(unittest.TestCase):
     def test_numeric_values_use_numeric_equality_and_keep_booleans_separate(self) -> None:
