@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -13,6 +14,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PitchMind.Api;
 using Xunit;
@@ -112,6 +114,38 @@ public sealed class AuthorizationAbuseControlTests
         using var apiResponse = await browserClient.GetAsync(
             $"/api/v1/canonical/matches/{MatchId}/summary?atSeconds=120&access_token=browser-test-token");
         Assert.Equal(HttpStatusCode.Unauthorized, apiResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task SignalR_access_token_is_not_written_to_hosting_request_logs()
+    {
+        const string accessToken = "browser-test-token";
+        var loggerProvider = new CapturingLoggerProvider();
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            ApiTestAuthentication.Configure(builder);
+            builder.UseEnvironment("Development");
+            builder.UseSetting("Runtime:Profile", "local");
+            builder.UseSetting("Realtime:Provider", "local");
+            builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Runtime:Profile"] = "local",
+                ["Realtime:Provider"] = "local"
+            }));
+            builder.ConfigureLogging(logging => logging.AddProvider(loggerProvider));
+        });
+
+        var filterRules = factory.Services.GetRequiredService<IOptions<LoggerFilterOptions>>().Value.Rules;
+        Assert.Contains(filterRules, rule => rule.CategoryName == "Microsoft.AspNetCore.Hosting" && rule.LogLevel == LogLevel.Warning);
+
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsync(
+            $"/hubs/matches/negotiate?negotiateVersion=1&access_token={accessToken}", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var hostingLogs = string.Join(Environment.NewLine,
+            loggerProvider.Messages.Where(message => message.StartsWith("Microsoft.AspNetCore.Hosting", StringComparison.Ordinal)));
+        Assert.DoesNotContain(accessToken, hostingLogs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -524,4 +558,28 @@ public sealed class AuthorizationAbuseControlTests
     }
 
     private sealed record ProblemBody(string Code);
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<string> messages = new();
+
+        public IReadOnlyCollection<string> Messages => messages.ToArray();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, messages);
+
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(string categoryName, ConcurrentQueue<string> messages) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                messages.Enqueue($"{categoryName}:{formatter(state, exception)}");
+            }
+        }
+    }
 }

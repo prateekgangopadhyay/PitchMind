@@ -9,8 +9,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
+// SignalR browser clients can send the bearer token in access_token on the
+// hub query string. Hosting request-start diagnostics include that full URL.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.Warning);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
 builder.Services.AddHealthChecks();
 var issuer = builder.Configuration["Authentication:Authority"];
