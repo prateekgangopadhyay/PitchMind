@@ -29,3 +29,9 @@ The correction test changes the scoring team and actor in a new offline fixture 
 ## Limits and outstanding review
 
 No PostgreSQL replay, canonical event-envelope rebuild, persisted roster seed, source-feed admission, candidate-feed football certification, CI pipeline, independent formal review, or Product Owner approval is claimed. The parent EP04-S04 PR remains a draft, and these goldens do not satisfy the program's approval gate. No Azure resources were changed.
+
+## Combined PR #214 head verification
+
+The goldens were rerun in the full Release solution suite on exact combined PR #214 head `d8fd5dab7afdb2d60aa6abe4c1d408aa2fd378a9` after PR #215 merged. Application tests passed **27/27**, including all six checkpoints and corrected-input isolation; Contracts 27/27, Domain 28/28, and Architecture 5/5 also passed. The solution aggregate was 87 passed, 0 failed; 18 Infrastructure PostgreSQL tests were skipped because the suite invocation had no test connection. A separate local HTTP smoke on this same head verified the 3308/3309 boundary, stable repeated output hash with version pins, event-prefix cutoff, and 400 `INVALID_REQUEST` for an unsupported fixture version. Full command and response evidence is recorded in [EP04-S04 replay verification](EP04-S04-REPLAY-2026-10-13.md).
+
+`node scripts/validate_operating_model.mjs --self-test` and `git diff --check` passed after this evidence update. The candidate goldens still await Product Owner review; this rerun does not establish canonical PostgreSQL replay, candidate-feed approval, or story acceptance. PR #214's prior approval predates its current aggregate head. No Azure resources or deployments were touched.
