@@ -1,0 +1,86 @@
+{
+  "fixtureVersion": "synthetic-v2",
+  "fixtureSeed": 42,
+  "fixtureContentSha256": "ce5a5a99a056053626758f7e3d92e47fad89215a6509c65475b60936153e793b",
+  "approval": "candidate-regression-goldens-pending-product-owner-review",
+  "snapshots": [
+    {
+      "selectedElapsedSeconds": 0,
+      "replayOutputSha256": "4433fec588fdcda5d161d6d02e4f2bfa2bafa976ff37868bbc8ed0c393080e06",
+      "lastSequence": 0,
+      "period": 1,
+      "phase": "firsthalf",
+      "homeScore": 0,
+      "awayScore": 0,
+      "yellowCards": 0,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 0
+    },
+    {
+      "selectedElapsedSeconds": 2700,
+      "replayOutputSha256": "4481f9e3671a4f3af7bfbae29292ef81a765c57560e19e417793d82f25a7c5f1",
+      "lastSequence": 92,
+      "period": 2,
+      "phase": "secondhalf",
+      "homeScore": 0,
+      "awayScore": 0,
+      "yellowCards": 1,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 0
+    },
+    {
+      "selectedElapsedSeconds": 3308,
+      "replayOutputSha256": "2b98dd6acfb4128f56b76d85fd0ab3f25ea4e40be5399ac67f70a697c3f3ddad",
+      "lastSequence": 117,
+      "period": 2,
+      "phase": "secondhalf",
+      "homeScore": 0,
+      "awayScore": 0,
+      "yellowCards": 1,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 0
+    },
+    {
+      "selectedElapsedSeconds": 3309,
+      "replayOutputSha256": "3dab0eaddc254b208739407438be670f2495cc9e9289f88c8cd65454a8084628",
+      "lastSequence": 118,
+      "period": 2,
+      "phase": "secondhalf",
+      "homeScore": 1,
+      "awayScore": 0,
+      "yellowCards": 1,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 1
+    },
+    {
+      "selectedElapsedSeconds": 3600,
+      "replayOutputSha256": "011430ac7e01513da74a83d6fa8b10e427c8dd8b403aceb0b993200f4d03b6e4",
+      "lastSequence": 128,
+      "period": 2,
+      "phase": "secondhalf",
+      "homeScore": 1,
+      "awayScore": 0,
+      "yellowCards": 1,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 1
+    },
+    {
+      "selectedElapsedSeconds": 5400,
+      "replayOutputSha256": "55d582d93ac0d5f5bdfbd3f033f6b9086976ab290ca77a3e4c8956b6c5823abe",
+      "lastSequence": 190,
+      "period": 2,
+      "phase": "fulltime",
+      "homeScore": 1,
+      "awayScore": 1,
+      "yellowCards": 1,
+      "homeActivePlayers": 11,
+      "awayActivePlayers": 11,
+      "insightCount": 1
+    }
+  ]
+}

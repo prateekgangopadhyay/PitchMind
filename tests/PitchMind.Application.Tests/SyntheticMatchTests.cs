@@ -1,5 +1,6 @@
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Simulation;
+using System.Text.Json;
 using Xunit;
 namespace PitchMind.Application.Tests;
 public sealed class SyntheticMatchTests
@@ -47,6 +48,60 @@ public sealed class SyntheticMatchTests
         Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, replayAlgorithmVersion: "unknown"));
         Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, detectorVersion: "unknown"));
         Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, replayInputSha256: new string('0', 64)));
+    }
+    [Fact] public void CandidateReplayGoldenSnapshotsPinSelectedTimeFootballState()
+    {
+        var goldenPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "ep04-s05-synthetic-v2-replay-goldens.json");
+        var golden = JsonSerializer.Deserialize<ReplayGoldenDocument>(File.ReadAllText(goldenPath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        Assert.Equal("candidate-regression-goldens-pending-product-owner-review", golden.Approval);
+        var service = new SyntheticMatchService();
+
+        foreach (var expected in golden.Snapshots)
+        {
+            var replay = service.ReplayAt(expected.SelectedElapsedSeconds, golden.FixtureVersion, golden.FixtureSeed,
+                SyntheticMatchService.ReplayAlgorithmVersion, PressingSequenceDetector.Version, golden.FixtureContentSha256);
+            Assert.Equal(expected.ReplayOutputSha256, replay.ReplayOutputSha256);
+            Assert.Equal(expected.LastSequence, replay.State.LastSequence);
+            Assert.Equal(expected.Period, replay.State.Period);
+            Assert.Equal(expected.Phase, replay.State.Phase.ToString().ToLowerInvariant());
+            Assert.Equal(expected.HomeScore, replay.State.HomeScore);
+            Assert.Equal(expected.AwayScore, replay.State.AwayScore);
+            Assert.Equal(expected.YellowCards, replay.State.Players.Sum(player => player.YellowCards));
+            Assert.Equal(expected.HomeActivePlayers, replay.State.HomeActivePlayers);
+            Assert.Equal(expected.AwayActivePlayers, replay.State.AwayActivePlayers);
+            Assert.Equal(expected.InsightCount, replay.Insights.Count);
+        }
+    }
+    [Fact] public void CorrectedFixtureInputKeepsEventIdentityAndDoesNotMutatePriorReplayVersion()
+    {
+        var source = SyntheticFixtureGenerator.Generate();
+        var originalService = new SyntheticMatchService(source);
+        var originalReplay = originalService.ReplayAt(3309);
+        var goal = source.Events.Single(item => item.Event.Type == PitchMind.Domain.Events.MatchEventType.Goal &&
+            item.Event.ClockSeconds == 3309);
+        var awayPlayer = source.Frames.Single(frame => frame.ClockSeconds == 0).Players
+            .First(player => player.TeamId == source.Away.Id).PlayerId;
+        var correctedEvents = source.Events.Select(item => item.Event.EventId == goal.Event.EventId
+            ? item with { TeamId = source.Away.Id, PlayerId = awayPlayer }
+            : item).ToArray();
+        var correctedFixture = source with
+        {
+            Version = "synthetic-v2-correction-1",
+            Events = Array.AsReadOnly(correctedEvents)
+        };
+
+        var correctedReplay = new SyntheticMatchService(correctedFixture).ReplayAt(3309);
+        var correctedGoal = correctedReplay.Events.Single(item => item.Event.Type == PitchMind.Domain.Events.MatchEventType.Goal);
+
+        Assert.Equal(goal.Event.EventId, correctedGoal.Event.EventId);
+        Assert.Equal(goal.Event.Sequence, correctedGoal.Event.Sequence);
+        Assert.Equal(0, correctedReplay.State.HomeScore);
+        Assert.Equal(1, correctedReplay.State.AwayScore);
+        Assert.NotEqual(originalReplay.FixtureVersion, correctedReplay.FixtureVersion);
+        Assert.NotEqual(originalReplay.ReplayInputSha256, correctedReplay.ReplayInputSha256);
+        Assert.NotEqual(originalReplay.ReplayOutputSha256, correctedReplay.ReplayOutputSha256);
+        Assert.Equal(originalReplay.ReplayOutputSha256, originalService.ReplayAt(3309).ReplayOutputSha256);
     }
     [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
     {
@@ -207,4 +262,10 @@ public sealed class SyntheticMatchTests
         Assert.Contains("Estuary United", service.Explain(insight.Id, 3309)!.Text);
         Assert.DoesNotContain("Harbour", service.Explain(insight.Id, 3309)!.Text);
     }
+
+    private sealed record ReplayGoldenDocument(string FixtureVersion, int FixtureSeed, string FixtureContentSha256,
+        string Approval, IReadOnlyList<ReplayGoldenSnapshot> Snapshots);
+    private sealed record ReplayGoldenSnapshot(int SelectedElapsedSeconds, string ReplayOutputSha256, long LastSequence,
+        int Period, string Phase, int HomeScore, int AwayScore, int YellowCards, int HomeActivePlayers,
+        int AwayActivePlayers, int InsightCount);
 }
