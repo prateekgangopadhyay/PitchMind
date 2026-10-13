@@ -706,6 +706,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await IsolateOutboxAsync(source);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
 
         var publisher = new DelayedPublisher(TimeSpan.FromMilliseconds(300));
