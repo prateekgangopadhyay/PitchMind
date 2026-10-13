@@ -102,6 +102,38 @@ public sealed class CanonicalMatchEventWriterTests
         Assert.Equal(0, aggregate.Snapshot().LastSequence);
         Assert.Equal(2, store.Updates.Count);
         Assert.All(store.Updates, update => Assert.Equal(0, update.State.LastSequence));
+        Assert.Equal(1, store.MaximumConcurrentCommits);
+    }
+
+    [Fact]
+    public async Task DirectAggregateMutationWaitsForCanonicalCommit()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var aggregate = CreateAggregate(fixture);
+        var kickoff = fixture.Events[0];
+        var nextEvent = fixture.Events[1];
+        var store = new RecordingStore { HoldCommit = true };
+        var writer = new CanonicalMatchEventWriter(store);
+
+        var append = writer.AppendAsync(aggregate, kickoff, 1, "match-state-v1", SourceSha256, CancellationToken.None);
+        await store.CommitStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var mutationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var directMutation = Task.Run(() =>
+        {
+            mutationStarted.TrySetResult();
+            aggregate.Apply(nextEvent);
+        });
+        await mutationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        Assert.False(directMutation.IsCompleted);
+
+        store.ReleaseCommit.TrySetResult();
+        await append;
+        await directMutation;
+
+        Assert.Equal(0, Assert.Single(store.PersistedUpdates).State.LastSequence);
+        Assert.Equal(1, aggregate.Snapshot().LastSequence);
     }
 
     private static MatchAggregate CreateAggregate(SyntheticFixture fixture)
@@ -122,30 +154,58 @@ public sealed class CanonicalMatchEventWriterTests
         public Exception? FailureBeforeCommit { get; set; }
         public Exception? FailureAfterCommit { get; set; }
         public TimeSpan Delay { get; init; }
+        public bool HoldCommit { get; init; }
+        public TaskCompletionSource CommitStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseCommit { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _activeCommits;
+        private int _maximumConcurrentCommits;
+        public int MaximumConcurrentCommits => Volatile.Read(ref _maximumConcurrentCommits);
 
         public async Task<CanonicalUpdateCommitResult> CommitAsync(CanonicalUpdate update, CancellationToken cancellationToken)
         {
-            if (FailureBeforeCommit is { } before)
+            var active = Interlocked.Increment(ref _activeCommits);
+            UpdateMaximum(active);
+            try
             {
-                FailureBeforeCommit = null;
-                throw before;
+                if (FailureBeforeCommit is { } before)
+                {
+                    FailureBeforeCommit = null;
+                    throw before;
+                }
+                if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
+                CommitStarted.TrySetResult();
+                if (HoldCommit) await ReleaseCommit.Task.WaitAsync(cancellationToken);
+                Updates.Add(update);
+                if (_committed.TryGetValue(update.Event.EventId, out var prior))
+                {
+                    if (prior.Event != update.Event || prior.State.LastSequence != update.State.LastSequence ||
+                        prior.State.HomeScore != update.State.HomeScore || prior.State.AwayScore != update.State.AwayScore)
+                        throw new InvalidOperationException("Conflicting event retry.");
+                    return CanonicalUpdateCommitResult.AlreadyCommitted;
+                }
+                _committed.Add(update.Event.EventId, update);
+                if (FailureAfterCommit is { } after)
+                {
+                    FailureAfterCommit = null;
+                    throw after;
+                }
+                return CanonicalUpdateCommitResult.Committed;
             }
-            if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
-            Updates.Add(update);
-            if (_committed.TryGetValue(update.Event.EventId, out var prior))
+            finally
             {
-                if (prior.Event != update.Event || prior.State.LastSequence != update.State.LastSequence ||
-                    prior.State.HomeScore != update.State.HomeScore || prior.State.AwayScore != update.State.AwayScore)
-                    throw new InvalidOperationException("Conflicting event retry.");
-                return CanonicalUpdateCommitResult.AlreadyCommitted;
+                Interlocked.Decrement(ref _activeCommits);
             }
-            _committed.Add(update.Event.EventId, update);
-            if (FailureAfterCommit is { } after)
+
+            void UpdateMaximum(int value)
             {
-                FailureAfterCommit = null;
-                throw after;
+                var observed = Volatile.Read(ref _maximumConcurrentCommits);
+                while (value > observed)
+                {
+                    var exchanged = Interlocked.CompareExchange(ref _maximumConcurrentCommits, value, observed);
+                    if (exchanged == observed) return;
+                    observed = exchanged;
+                }
             }
-            return CanonicalUpdateCommitResult.Committed;
         }
     }
 }
