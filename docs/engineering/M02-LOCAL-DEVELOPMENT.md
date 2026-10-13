@@ -1,6 +1,6 @@
 # M02 — Reproducible local developer workstation
 
-**Environment:** LOCAL only. PostgreSQL 17 and Redis 7.4 run in Docker Compose; the offline ASP.NET API and Vite frontend run as local processes. No Azure account, Azure CLI login, or Azure credentials are required. DEV, STAGE, and PRODUCTION continue to use Azure services only.
+**Environment:** LOCAL only. Docker Compose defaults to PostgreSQL 16 and Redis 7.4; set `POSTGRES_IMAGE` to match an existing PostgreSQL data volume's major version. The offline ASP.NET API and Vite frontend run as local processes. See the [Docker infrastructure guide](../../docker/README.md) before starting services with an existing volume. No Azure account, Azure CLI login, or Azure credentials are required. DEV, STAGE, and PRODUCTION continue to use Azure services only.
 
 ## Prerequisites
 
