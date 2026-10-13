@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Runtime.ExceptionServices;
 using Npgsql;
 using PitchMind.Application.Abstractions;
 
@@ -23,6 +24,7 @@ public sealed class PostgresOutboxDispatcher(
     public async Task<OutboxDispatchResult> DispatchOneAsync(CancellationToken cancellationToken)
     {
         if (maxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(maxAttempts));
+        if (_leaseDuration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(leaseDuration));
         var claimToken = Guid.NewGuid();
         var claim = await ClaimAsync(claimToken, cancellationToken);
         if (claim is null) return OutboxDispatchResult.NoMessage;
@@ -30,10 +32,14 @@ public sealed class PostgresOutboxDispatcher(
 
         try
         {
-            await publisher.PublishAsync(claim.MessageId, claim.Payload, cancellationToken);
+            await PublishWithLeaseRenewalAsync(claim, claimToken, cancellationToken);
             await CompleteAsync(claim.MessageId, claimToken, cancellationToken);
             PublishedMessages.Add(1);
             return OutboxDispatchResult.Published;
+        }
+        catch (OutboxLeaseLostException)
+        {
+            throw;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -46,6 +52,75 @@ public sealed class PostgresOutboxDispatcher(
             if (result == OutboxDispatchResult.DeadLettered) DeadLetteredMessages.Add(1);
             else RetriedMessages.Add(1);
             return result;
+        }
+    }
+
+    private async Task PublishWithLeaseRenewalAsync(ClaimedMessage claim, Guid claimToken,
+        CancellationToken cancellationToken)
+    {
+        using var publishLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var renewalTask = RenewUntilCancelledAsync(claim.MessageId, claimToken, publishLifetime);
+        Exception? publishFailure = null;
+        try
+        {
+            await publisher.PublishAsync(claim.MessageId, claim.Payload, publishLifetime.Token);
+        }
+        catch (Exception exception)
+        {
+            publishFailure = exception;
+        }
+        finally
+        {
+            publishLifetime.Cancel();
+        }
+
+        Exception? renewalFailure = null;
+        try
+        {
+            await renewalTask;
+        }
+        catch (OperationCanceledException) when (publishLifetime.IsCancellationRequested)
+        {
+            // Normal completion, publisher failure, or host cancellation stops lease renewal.
+        }
+        catch (Exception exception)
+        {
+            renewalFailure = exception;
+        }
+
+        if (renewalFailure is not null) ExceptionDispatchInfo.Capture(renewalFailure).Throw();
+        if (publishFailure is not null) ExceptionDispatchInfo.Capture(publishFailure).Throw();
+    }
+
+    private async Task RenewUntilCancelledAsync(Guid messageId, Guid claimToken,
+        CancellationTokenSource publishLifetime)
+    {
+        var interval = TimeSpan.FromTicks(Math.Max(1, _leaseDuration.Ticks / 3));
+        using var timer = new PeriodicTimer(interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(publishLifetime.Token))
+            {
+                await using var command = dataSource.CreateCommand("""
+                    UPDATE pitchmind.outbox SET lease_expires_at = now() + $3
+                    WHERE message_id = $1 AND claim_token = $2 AND published_at IS NULL
+                      AND lease_expires_at > now()
+                    """);
+                command.Parameters.AddWithValue(messageId);
+                command.Parameters.AddWithValue(claimToken);
+                command.Parameters.AddWithValue(_leaseDuration);
+                if (await command.ExecuteNonQueryAsync(publishLifetime.Token) != 1)
+                    throw new OutboxLeaseLostException();
+            }
+        }
+        catch (OperationCanceledException) when (publishLifetime.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            publishLifetime.Cancel();
+            throw;
         }
     }
 
@@ -126,4 +201,6 @@ public sealed class PostgresOutboxDispatcher(
     }
 
     private sealed record ClaimedMessage(Guid MessageId, string Payload, int Attempt, DateTimeOffset CreatedAt);
+    private sealed class OutboxLeaseLostException() : InvalidOperationException(
+        "Outbox lease expired or was lost while publication was in progress.");
 }

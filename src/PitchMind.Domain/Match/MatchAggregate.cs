@@ -68,6 +68,35 @@ public sealed class MatchAggregate
             throw new ArgumentException("The initial active roster must have 11 known players for each team.", nameof(activePlayerIds));
     }
 
+    private MatchAggregate(MatchAggregate source)
+    {
+        Id = source.Id;
+        _homeTeamId = source._homeTeamId;
+        _awayTeamId = source._awayTeamId;
+        _provenance = source._provenance;
+        _playerTeams = new(source._playerTeams, StringComparer.Ordinal);
+        _activePlayers = new(source._activePlayers, StringComparer.Ordinal);
+        foreach (var (playerId, cautions) in source._yellowCards) _yellowCards.Add(playerId, cautions);
+        _dismissedPlayers.UnionWith(source._dismissedPlayers);
+        _appliedEvents = new(source._appliedEvents);
+        _lastAppliedEventId = source._lastAppliedEventId;
+        _lastSequence = source._lastSequence;
+        _clockSeconds = source._clockSeconds;
+        _period = source._period;
+        _homeScore = source._homeScore;
+        _awayScore = source._awayScore;
+        _possessionTeamId = source._possessionTeamId;
+        _phase = source._phase;
+    }
+
+    /// <summary>Returns a fork with the supplied event applied, leaving this aggregate unchanged.</summary>
+    public MatchAggregate Preview(SimulationEvent item)
+    {
+        var preview = new MatchAggregate(this);
+        preview.Apply(item);
+        return preview;
+    }
+
     public void Apply(SimulationEvent item)
     {
         ArgumentNullException.ThrowIfNull(item);
