@@ -1,6 +1,6 @@
 # Canonical event ledger — implemented local slice
 
-`PostgresMatchEventStore` implements `IMatchEventStore`; `PostgresMatchProjectionStore` persists source metadata and reads revisioned state and insight provenance. `PostgresCanonicalUpdateStore` is the aggregate-derived write path: it assigns the next per-match `canonical_revision` while holding a transaction-scoped match lock and writes the event, projection, and stable-ID outbox intent in one transaction. The dispatcher and inbox are separate PostgreSQL adapters and are not registered in the API/EventWorker host. Source admission, public API integration, broker transport and end-to-end feed ingestion remain separate work; the offline API fixture is not backed by this ledger.
+`PostgresMatchEventStore` implements `IMatchEventStore`; `PostgresMatchProjectionStore` persists source metadata and reads revisioned state and insight provenance. `PostgresCanonicalUpdateStore` is the aggregate-derived write path: while holding a transaction-scoped match lock, it verifies the aggregate’s predecessor state hash, sequence, clock, source identity and provenance against the immediately preceding persisted projection (and validates the initial state for sequence zero). It then assigns the next per-match `canonical_revision` and writes the event, projection, and stable-ID outbox intent in one transaction. The dispatcher and inbox are separate PostgreSQL adapters and are not registered in the API/EventWorker host. Source admission, public API integration, broker transport and end-to-end feed ingestion remain separate work; the offline API fixture is not backed by this ledger.
 
 Npgsql is pinned to **10.0.3**, verified against the [official release](https://github.com/npgsql/npgsql/releases/tag/v10.0.3). Data source pooling, parameterized SQL and asynchronous transactions follow [official Npgsql usage guidance](https://www.npgsql.org/doc/basic-usage.html).
 
@@ -14,7 +14,7 @@ Npgsql is pinned to **10.0.3**, verified against the [official release](https://
 - Reads order by sequence. A single query sees a consistent PostgreSQL statement snapshot; later appends require another read. The caller cancellation token applies to connection opening, all queries, commit and streaming reads.
 - Advisory hash collisions serialize unrelated matches without allowing different histories to merge. This is single-database atomicity, not cross-system exactly-once delivery.
 
-`CanonicalUpdate` can be created only from a `MatchAggregate` after the exact latest event was applied. The writer checks contiguous event sequence, assigns `canonical_revision` under the per-match lock, stores that admission revision on event/projection/outbox, and keeps the projection `revision` separately versioned. Exact retries verify event content, projection state hash and outbox payload. `PostgresMatchEventStore.AppendAsync` remains an event-only API and does not create an outbox entry.
+`CanonicalUpdate` can be created only from a `MatchAggregate` after the exact latest event was applied, and carries the aggregate’s immutable predecessor snapshot. The writer checks that snapshot against persisted predecessor projection state under the per-match lock, checks contiguous event sequence, assigns `canonical_revision`, stores that admission revision on event/projection/outbox, and keeps the projection `revision` separately versioned. Exact retries verify event content, projection state hash and outbox payload. `PostgresMatchEventStore.AppendAsync` remains an event-only API and does not create an outbox entry.
 
 ## Migration and runtime identities
 
@@ -55,3 +55,6 @@ The dispatcher and transaction adapters are not registered in the API/EventWorke
 
 
 After adding the per-match predecessor guard and a concurrent-dispatch regression, the Infrastructure PostgreSQL suite passed 16/16 (0 failed, 0 skipped) on a fresh isolated PostgreSQL 16 database. The new test holds revision 1 inside a publisher lease, verifies a second worker cannot claim revision 2, then verifies revision 2 publishes after revision 1 completes. Source change is code commit `c0bb5833ceae51089022796581a996f32850f9a7` on the exact PR #27 base.
+
+
+On local follow-up code commit `1991f03e1e22b58fa2f59d3463ce5092169a0f0c`, the Infrastructure PostgreSQL harness passed 18/18 (0 failed, 0 skipped) including rejection of a canonical update built from divergent prior aggregate history; see [follow-up evidence](../engineering/evidence/EP04-S03-RESTACK-2026-10-13.md).
