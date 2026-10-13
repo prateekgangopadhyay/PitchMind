@@ -573,6 +573,43 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task CanonicalUpdateRejectsAggregateBuiltFromDivergentPriorHistory()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        var (persistedKickoff, _) = BuildUpdate(matchId);
+        await RegisterSourceAsync(source, persistedKickoff);
+        var store = new PostgresCanonicalUpdateStore(source);
+        Assert.Equal(CanonicalUpdateCommitResult.Committed,
+            await store.CommitAsync(persistedKickoff, CancellationToken.None));
+
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var divergentAggregate = new MatchAggregate(matchId, "home", "away", players,
+            players.Select(p => p.Item1), "approved-synthetic-test");
+        var divergentKickoff = MatchEvent.Create(Guid.NewGuid(), matchId, 0, MatchEventType.KickOff, 0, 1, DateTimeOffset.UtcNow);
+        divergentAggregate.Apply(new SimulationEvent(divergentKickoff, "away", "away-1", "kickoff", "started"));
+        var pass = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 1, 1, DateTimeOffset.UtcNow);
+        divergentAggregate.Apply(new SimulationEvent(pass, "away", "away-1", "pass", "complete"));
+        var divergentUpdate = CanonicalUpdate.FromAppliedAggregate(divergentAggregate, pass, 2,
+            "aggregate-v1", persistedKickoff.SourceSha256);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => store.CommitAsync(divergentUpdate, CancellationToken.None));
+        Assert.Contains("Aggregate history diverges", error.Message, StringComparison.Ordinal);
+        await using var counts = source.CreateCommand("""
+            SELECT (SELECT count(*) FROM pitchmind.match_events WHERE match_id = $1),
+                   (SELECT count(*) FROM pitchmind.match_projections WHERE match_id = $1),
+                   (SELECT count(*) FROM pitchmind.outbox WHERE match_id = $1)
+            """);
+        counts.Parameters.AddWithValue(matchId.Value);
+        await using var reader = await counts.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.Equal(1L, reader.GetInt64(1));
+        Assert.Equal(1L, reader.GetInt64(2));
+    }
+
+    [PostgresIntegrationFact]
     public async Task OutboxRecoversAfterPublishFailureAndInboxAppliesEffectOnce()
     {
         await using var source = Source();
