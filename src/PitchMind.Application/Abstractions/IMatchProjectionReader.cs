@@ -15,8 +15,12 @@ public sealed record SelectedMatchProjection(
     string StateSha256);
 
 public sealed record MatchReplaySnapshot(SelectedMatchProjection Projection, IReadOnlyList<MatchEvent> Events,
-    MatchReplaySeed? Seed, MatchReplayContext? Context, IReadOnlyList<SimulationEvent> ReplayEvents,
+    MatchReplaySeed? Seed, MatchReplayContext? Context, MatchReplaySourceIdentity SourceIdentity,
+    IReadOnlyList<SimulationEvent> ReplayEvents,
     IReadOnlyList<MatchReplayFrame> Frames);
+
+public sealed record MatchReplaySourceIdentity(string FixtureVersion, string Provenance,
+    double PitchLengthMetres, double PitchWidthMetres);
 
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader

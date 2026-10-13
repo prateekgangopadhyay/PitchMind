@@ -896,10 +896,13 @@ public sealed class PostgresLedgerTests
         var evidenceTimes = fixture.Events.Where(item => item.Event.ClockSeconds is >= 3290 and <= 3309)
             .Where(item => item.Action is "back-pass" or "press-arrival" or "pressured-pass" or "high-regain" or "cutback" or "shot" or "goal")
             .Select(item => item.Event.ClockSeconds).ToArray();
+        var evidenceFrames = evidenceTimes.Select(clock => fixture.Frames.Single(frame => frame.ClockSeconds == clock))
+            .Append(fixture.Frames.Single(frame => frame.ClockSeconds == 3290) with { Id = "frame-extra-3290" })
+            .OrderBy(frame => frame.ClockSeconds).ThenBy(frame => frame.Id, StringComparer.Ordinal).ToArray();
         long frameSequence = 0;
-        foreach (var clock in evidenceTimes)
+        foreach (var fixtureFrame in evidenceFrames)
         {
-            var fixtureFrame = fixture.Frames.Single(frame => frame.ClockSeconds == clock);
+            var clock = fixtureFrame.ClockSeconds;
             var period = fixture.Events.Single(item => item.Event.ClockSeconds == clock).Event.Period;
             var payload = JsonSerializer.Serialize(fixtureFrame, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             await using var insertFrame = source.CreateCommand("""
@@ -924,10 +927,29 @@ public sealed class PostgresLedgerTests
         Assert.NotNull(result);
         var insight = Assert.Single(result.DerivedInsights);
         Assert.Equal(7, insight.EventIds.Count);
-        Assert.Equal(7, insight.FrameIds.Count);
+        Assert.Equal(8, insight.FrameIds.Count);
         Assert.Equal(3309, insight.ClockSeconds);
         Assert.DoesNotContain(fixture.Events.Where(item => item.Event.ClockSeconds > 3309),
             item => result.Events.Any(matchEvent => matchEvent.EventId == item.Event.EventId));
+
+        await using (var corruptContext = source.CreateCommand("""
+            UPDATE pitchmind.matches
+            SET replay_context_json = jsonb_set(replay_context_json, '{fixtureVersion}', '"unregistered-fixture"'::jsonb)
+            WHERE match_id = $1
+            """))
+        {
+            corruptContext.Parameters.AddWithValue(matchId.Value);
+            Assert.Equal(1, await corruptContext.ExecuteNonQueryAsync());
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None));
+        await using (var restoreContext = source.CreateCommand("UPDATE pitchmind.matches SET replay_context_json = $2 WHERE match_id = $1"))
+        {
+            restoreContext.Parameters.AddWithValue(matchId.Value);
+            restoreContext.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb,
+                JsonSerializer.Serialize(context, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            Assert.Equal(1, await restoreContext.ExecuteNonQueryAsync());
+        }
 
         await using (var corruptFrame = source.CreateCommand("""
             UPDATE pitchmind.tracking_frames SET payload = jsonb_set(payload, '{id}', '"tampered-frame-id"'::jsonb)

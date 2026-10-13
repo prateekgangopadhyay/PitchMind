@@ -134,7 +134,8 @@ public static class PressingSequenceDetector
             var arrival = arrivalFrames.Length == 1 ? arrivalFrames[0] : null;
             var attacker = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.PlayerId);
             var keeper = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.RelatedPlayerId);
-            if (frames.Length != ordered.Length || arrivalFrames.Length != 1 || attacker is null || keeper is null) continue;
+            if (ordered.Any(item => frames.All(frame => frame.ClockSeconds != item.Event.ClockSeconds)) ||
+                arrivalFrames.Length != 1 || attacker is null || keeper is null) continue;
             if (trigger.Event.Type != MatchEventType.Pass || press.Event.Type != MatchEventType.Pressure || response.Event.Type != MatchEventType.Pass
                 || regain.Event.Type != MatchEventType.Turnover || cutback.Event.Type != MatchEventType.Pass || shot.Event.Type != MatchEventType.Shot || goal.Event.Type != MatchEventType.Goal) continue;
             var distance = Math.Sqrt(Math.Pow(attacker.X - keeper.X, 2) + Math.Pow(attacker.Y - keeper.Y, 2));

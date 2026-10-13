@@ -64,7 +64,7 @@ public sealed class GetMatchAtQueryServiceTests
             fixture.CoordinateConvention, fixture.Provenance);
         var sourceHash = new string('a', 64);
 
-        async Task<MatchAtResult> Replay(int selectedSeconds)
+        async Task<MatchAtResult> Replay(int selectedSeconds, bool addExtraTrackingSample = false)
         {
             var events = fixture.Events.Where(item => item.Event.ClockSeconds <= selectedSeconds).ToArray();
             var aggregate = MatchAggregate.FromReplaySeed(matchId, replaySeed);
@@ -74,7 +74,13 @@ public sealed class GetMatchAtQueryServiceTests
             var stateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson)));
             var projection = new SelectedMatchProjection(state, 1, 1, state.LastSequence, state.ClockSeconds,
                 "aggregate-v1", sourceHash, stateHash);
-            var frames = fixture.Frames.Where(frame => frame.ClockSeconds <= selectedSeconds)
+            var selectedFrames = fixture.Frames.Where(frame => frame.ClockSeconds <= selectedSeconds).ToList();
+            if (addExtraTrackingSample)
+            {
+                var nonArrival = selectedFrames.Single(frame => frame.ClockSeconds == 3290);
+                selectedFrames.Add(nonArrival with { Id = "frame-extra-3290" });
+            }
+            var frames = selectedFrames.OrderBy(frame => frame.ClockSeconds).ThenBy(frame => frame.Id, StringComparer.Ordinal)
                 .Select((frame, index) => new MatchReplayFrame(frame, index,
                     frame.ClockSeconds < fixture.HalfTimeSeconds ? 1 : 2, "metres-v1", sourceHash)).ToArray();
             var reader = new ProjectionReaderFake(projection, events.Select(item => item.Event).ToArray(), replaySeed,
@@ -86,11 +92,13 @@ public sealed class GetMatchAtQueryServiceTests
         var before = await Replay(3308);
         var atGoal = await Replay(3309);
         var repeated = await Replay(3309);
+        var withExtraSameSecondSample = await Replay(3309, addExtraTrackingSample: true);
 
         Assert.Empty(before.DerivedInsights);
         Assert.NotEqual(before.DerivedOutputSha256, atGoal.DerivedOutputSha256);
         var insight = Assert.Single(atGoal.DerivedInsights);
         Assert.Equal(7, insight.EventIds.Count);
+        Assert.Equal(8, Assert.Single(withExtraSameSecondSample.DerivedInsights).FrameIds.Count);
         Assert.Equal(atGoal.DerivedOutputSha256, repeated.DerivedOutputSha256);
         Assert.Equal(atGoal.ReplayInputSha256, repeated.ReplayInputSha256);
         Assert.Equal(JsonSerializer.Serialize(atGoal.DerivedInsights), JsonSerializer.Serialize(repeated.DerivedInsights));
@@ -293,7 +301,10 @@ public sealed class GetMatchAtQueryServiceTests
             await foreach (var item in ReadReplayEventsAtAsync(selected, selectedSeconds, cancellationToken)) selectedReplayEvents.Add(item);
             var selectedFrames = new List<MatchReplayFrame>();
             await foreach (var item in ReadReplayFramesAtAsync(selected, selectedSeconds, cancellationToken)) selectedFrames.Add(item);
-            return new(selected, selectedEvents, replaySeed, replayContext, selectedReplayEvents, selectedFrames);
+            var sourceIdentity = replayContext is null ? new MatchReplaySourceIdentity("", "", 0, 0) :
+                new MatchReplaySourceIdentity(replayContext.FixtureVersion, replayContext.Provenance,
+                    replayContext.PitchLengthMetres, replayContext.PitchWidthMetres);
+            return new(selected, selectedEvents, replaySeed, replayContext, sourceIdentity, selectedReplayEvents, selectedFrames);
         }
 
         public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection selectedProjection,

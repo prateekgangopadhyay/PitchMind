@@ -39,7 +39,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             )
             SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
                    p.algorithm_version, p.source_sha256, p.state_sha256, p.state_json::text,
-                   m.replay_seed_json::text, m.replay_context_json::text,
+                   m.replay_seed_json::text, m.replay_context_json::text, m.fixture_version, m.provenance,
+                   m.pitch_length_metres, m.pitch_width_metres,
                    COALESCE((SELECT jsonb_agg(jsonb_build_object('payload', e.payload, 'sequence', e.sequence,
                        'clockSeconds', e.clock_seconds, 'period', e.period) ORDER BY e.sequence)::text
                        FROM pitchmind.match_events e WHERE e.match_id = p.match_id AND e.canonical_revision <= p.canonical_revision
@@ -74,9 +75,11 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             ?? throw new InvalidDataException("Persisted replay seed is empty.");
         var context = reader.IsDBNull(9) ? null : JsonSerializer.Deserialize<MatchReplayContext>(reader.GetString(9), JsonOptions)
             ?? throw new InvalidDataException("Persisted replay context is empty.");
-        var indexedEvents = JsonSerializer.Deserialize<List<IndexedEvent>>(reader.GetString(10), JsonOptions) ?? [];
-        var indexedReplayEvents = JsonSerializer.Deserialize<List<IndexedReplayEvent>>(reader.GetString(11), JsonOptions) ?? [];
-        var indexedFrames = JsonSerializer.Deserialize<List<IndexedFrame>>(reader.GetString(12), JsonOptions) ?? [];
+        var sourceIdentity = new MatchReplaySourceIdentity(reader.GetString(10), reader.GetString(11),
+            (double)reader.GetDecimal(12), (double)reader.GetDecimal(13));
+        var indexedEvents = JsonSerializer.Deserialize<List<IndexedEvent>>(reader.GetString(14), JsonOptions) ?? [];
+        var indexedReplayEvents = JsonSerializer.Deserialize<List<IndexedReplayEvent>>(reader.GetString(15), JsonOptions) ?? [];
+        var indexedFrames = JsonSerializer.Deserialize<List<IndexedFrame>>(reader.GetString(16), JsonOptions) ?? [];
 
         var events = indexedEvents.Select(item =>
         {
@@ -111,7 +114,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
                 throw new InvalidDataException("Persisted tracking frame metadata is inconsistent with the selected source.");
             return new MatchReplayFrame(frame, item.Sequence, item.Period, item.CoordinateVersion, item.SourceSha256.Trim());
         }).ToArray();
-        return new(projection, Array.AsReadOnly(events), seed, context, Array.AsReadOnly(replayEvents), Array.AsReadOnly(frames));
+        return new(projection, Array.AsReadOnly(events), seed, context, sourceIdentity, Array.AsReadOnly(replayEvents), Array.AsReadOnly(frames));
     }
 
     private static void ValidateProjection(MatchId matchId, SelectedMatchProjection projection)

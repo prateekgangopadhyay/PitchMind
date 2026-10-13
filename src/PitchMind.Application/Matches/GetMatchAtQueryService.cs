@@ -72,7 +72,7 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
 
         var context = snapshot.Context
             ?? throw new InvalidDataException("Match has no immutable replay context; derived outputs cannot be replayed.");
-        ValidateReplayContext(context, seed, projection);
+        ValidateReplayContext(context, seed, snapshot.SourceIdentity, projection);
         var playerTeams = seed.Players.ToDictionary(player => player.PlayerId, player => player.TeamId, StringComparer.Ordinal);
         var replayFrames = new List<MatchReplayFrame>();
         foreach (var item in snapshot.Frames)
@@ -116,7 +116,7 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
     private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private static void ValidateReplayContext(MatchReplayContext context, MatchReplaySeed seed,
-        SelectedMatchProjection projection)
+        MatchReplaySourceIdentity sourceIdentity, SelectedMatchProjection projection)
     {
         if (context.SchemaVersion != "match-replay-context-v1" || string.IsNullOrWhiteSpace(context.FixtureVersion) ||
             string.IsNullOrWhiteSpace(context.HomeTeamName) || string.IsNullOrWhiteSpace(context.AwayTeamName) ||
@@ -130,7 +130,10 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             !context.CoordinateConvention.Contains("attacking direction", StringComparison.OrdinalIgnoreCase) ||
             !context.CoordinateConvention.Contains($"changes at {context.HalfTimeSeconds}", StringComparison.OrdinalIgnoreCase) ||
             !double.IsFinite(context.PitchLengthMetres) || !double.IsFinite(context.PitchWidthMetres) ||
-            projection.State.Provenance != context.Provenance)
+            context.FixtureVersion != sourceIdentity.FixtureVersion || context.Provenance != sourceIdentity.Provenance ||
+            context.PitchLengthMetres != sourceIdentity.PitchLengthMetres ||
+            context.PitchWidthMetres != sourceIdentity.PitchWidthMetres ||
+            seed.Provenance != sourceIdentity.Provenance || projection.State.Provenance != sourceIdentity.Provenance)
             throw new InvalidDataException("Immutable replay context is incomplete, unsupported, or inconsistent with the match source.");
     }
 
