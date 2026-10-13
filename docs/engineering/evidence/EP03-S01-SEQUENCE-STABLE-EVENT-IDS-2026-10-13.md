@@ -1,7 +1,7 @@
 # EP03-S01 final-sequence event identity evidence
 
-**Code commit:** `5cf19afeef8220a0d49f8bd346a80106f47ffe35`  
-**Parent stack:** PR #204 head `87df3b2a6d6ba755294eeb63885b3ae8c90adb3d`  
+**Restacked code commit:** `a714fed` (same code delta as `5cf19afeef8220a0d49f8bd346a80106f47ffe35`)
+**Parent stack:** PR #204 was merged into PR #135's feature branch at `cb1e350e1f9a6b50e74ea81117e2d7cf8e0cfee7`; this child is restacked on that exact parent.
 **Scope:** deterministic identity in the fictional seeded fixture; candidate-source IDs and data are unchanged.
 
 ## Change
@@ -10,7 +10,7 @@ The generator previously assigned event IDs while appending events, then sorted 
 
 ## Verification
 
-On .NET SDK 10.0.401, the focused `PitchMind.Domain.Tests` Release suite passed **5/5, 0 failed, 0 skipped**. The exact generator and test files from this code commit were copied into the cached-assets test clone and verified byte-identical with `cmp`; the test command used `--no-restore` because NuGet restore/audit could not reach the configured vulnerability endpoint. VSTest's first sandboxed attempt was denied a loopback bind; the local-permission rerun passed.
+On .NET SDK 10.0.401, the focused `PitchMind.Domain.Tests` Release suite passed **5/5, 0 failed, 0 skipped** on the restacked exact code. The command was `dotnet test tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false`; restore completed from locally available packages. VSTest ran with local execution permission.
 
 The regression checks final-sequence-derived IDs for every fixture event, contiguous event sequence, same-seed repeatability, cross-seed match identity and event-GUID disjointness, per-event match identity, and repeatability across Arabic current culture. The Council dependency-DAG self-test and `git diff --check` passed. Independent read-only review confirmed that the ID and sequence use the same final index, the version bump avoids reusing `synthetic-v2` for changed IDs, and found no code blocker.
 
