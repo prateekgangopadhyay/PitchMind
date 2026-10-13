@@ -12,14 +12,14 @@
     "sequenceEnd": 2199,
     "synthetic": true,
     "provenance": "repository-owner-confirmed",
-    "provenanceConfirmedOn": "2026-10-08",
+    "provenanceConfirmedOn": "2026-10-10",
     "redistributionPermission": "repository-owner-confirmed",
     "independentRightsPrivacyReview": "pending"
   },
   "match": {
     "expectedMatchCount": 1,
     "expectedTeamCount": 2,
-    "sourceClockUnit": "seconds",
+    "sourceClockUnit": "unverified",
     "preserveSourceClockWithoutNormalization": true,
     "allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker": ["Pass"],
     "expectedPeriods": [1, 2],

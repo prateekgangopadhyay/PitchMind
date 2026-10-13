@@ -4,7 +4,7 @@
 
 **Source:** `data/simulations/manu-liv-match-dataset.json`; 28,601,013 bytes; SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; manifest `data/simulations/manu-liv-candidate-manifest.json` v1.0.0; status `candidate_not_canonical`.
 
-**Provenance:** the repository owner confirmed synthetic provenance and redistribution permission on 2026-10-10. Independent rights/privacy review remains pending. The manifest inherited from PR #115 still records 2026-10-08; reconcile that stale confirmation date separately. This owner declaration does not validate semantics or football realism.
+**Provenance:** the repository owner confirmed synthetic provenance and redistribution permission on 2026-10-10. The candidate manifest records that declaration; independent rights/privacy review remains pending. This owner declaration does not validate semantics or football realism.
 
 **Structural statistics:** generated from the exact source bytes with the field-profile generator present on current `main` (blob `e832da1e9576ea2ea1979cd204a9a0754de82108`), which checks manifest byte size and SHA-256 before profiling. This documentation-only child does not add or change the generator. The tables are structural counts; the interpretation/evidence gates below are explicit documentation and are not inferred by the generator.
 
