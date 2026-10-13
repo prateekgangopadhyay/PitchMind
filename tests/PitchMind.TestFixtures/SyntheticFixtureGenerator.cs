@@ -9,11 +9,13 @@ namespace PitchMind.TestFixtures;
 /// <summary>Builds deterministic, fictional golden data for automated tests only.</summary>
 public static class SyntheticFixtureGenerator
 {
-    public const string Version = "synthetic-v1";
-    public static readonly MatchId FixtureId = new(new Guid("876855d7-86d3-4a34-9b51-2dd8c9799a91"));
+    public const string Version = "synthetic-v2";
+    public const int DefaultSeed = 42;
+    public static readonly MatchId FixtureId = FixtureIdForSeed(DefaultSeed);
 
-    public static SyntheticFixture Generate(int seed = 42)
+    public static SyntheticFixture Generate(int seed = DefaultSeed)
     {
+        var fixtureId = FixtureIdForSeed(seed);
         var roles = new[] { "GK", "RB", "CB", "CB", "LB", "CM", "CM", "AM", "RW", "ST", "LW" };
         SyntheticTeam Team(string id, string name) => new(id, name, "4-2-3-1", Array.AsReadOnly(roles.Select((role, i) =>
             new SyntheticPlayer($"{id}-{i + 1}", $"{name.Split(' ')[0]} Player {i + 1}", id, i + 1, role)).ToArray()));
@@ -23,8 +25,8 @@ public static class SyntheticFixtureGenerator
         void Add(int clock, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
         {
             var sequence = events.Count;
-            var id = StableId($"{Version}:{seed}:{clock}:{sequence}:{action}");
-            var evt = MatchEvent.Create(id, FixtureId, sequence, type, clock, clock < 2700 ? 1 : 2,
+            var id = StableId(FormattableString.Invariant($"{Version}:{seed}:{clock}:{sequence}:{action}"));
+            var evt = MatchEvent.Create(id, fixtureId, sequence, type, clock, clock < 2700 ? 1 : 2,
                 new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(clock));
             events.Add(new(evt, team, player, action, outcome, related));
         }
@@ -53,7 +55,7 @@ public static class SyntheticFixtureGenerator
         var times = Enumerable.Range(0, 181).Select(i => i * 30)
             .Concat(new[] { 3290, 3293, 3296, 3299, 3304, 3308, 3309 }).Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, home, away, seed)).ToArray();
-        return new(FixtureId.ToString(), Version, seed, "synthetic", 5400, home, away,
+        return new(fixtureId.ToString(), Version, seed, "synthetic", 5400, home, away,
             Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
     }
 
@@ -89,4 +91,7 @@ public static class SyntheticFixtureGenerator
     }
 
     private static Guid StableId(string text) => new(SHA256.HashData(Encoding.UTF8.GetBytes(text)).AsSpan(0, 16));
+
+    private static MatchId FixtureIdForSeed(int seed) =>
+        new(StableId(FormattableString.Invariant($"{Version}:match:{seed}")));
 }
