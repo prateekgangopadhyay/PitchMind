@@ -1,13 +1,17 @@
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Application.Abstractions;
 
 public sealed class CanonicalUpdate
 {
-    private CanonicalUpdate(MatchEvent @event, MatchState state, int revision, string algorithmVersion, string sourceSha256)
+    private CanonicalUpdate(MatchEvent @event, SimulationEvent sourceEvent, MatchReplaySeed replaySeed,
+        MatchState state, int revision, string algorithmVersion, string sourceSha256)
     {
         Event = @event;
+        SourceEvent = sourceEvent;
+        ReplaySeed = replaySeed;
         State = state;
         Revision = revision;
         AlgorithmVersion = algorithmVersion;
@@ -15,6 +19,8 @@ public sealed class CanonicalUpdate
     }
 
     public MatchEvent Event { get; }
+    public SimulationEvent SourceEvent { get; }
+    public MatchReplaySeed ReplaySeed { get; }
     public MatchState State { get; }
     public int Revision { get; }
     public string AlgorithmVersion { get; }
@@ -28,7 +34,8 @@ public sealed class CanonicalUpdate
         var state = aggregate.SnapshotAfter(appliedEvent);
         if (aggregate.Id != appliedEvent.MatchId || state.LastSequence != appliedEvent.Sequence || state.ClockSeconds != appliedEvent.ClockSeconds)
             throw new InvalidOperationException("Aggregate projection does not match its applied canonical event.");
-        return new CanonicalUpdate(appliedEvent, state, revision, algorithmVersion, sourceSha256);
+        return new CanonicalUpdate(appliedEvent, aggregate.AppliedSourceEvent(appliedEvent), aggregate.ReplaySeed,
+            state, revision, algorithmVersion, sourceSha256);
     }
 }
 

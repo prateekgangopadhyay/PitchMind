@@ -5,6 +5,7 @@ using Npgsql;
 using NpgsqlTypes;
 using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
+using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Infrastructure.Storage;
 
@@ -19,6 +20,7 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         var stateJson = JsonSerializer.Serialize(update.State, JsonOptions);
         var stateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson)));
         var eventJson = JsonSerializer.Serialize(update.Event);
+        var sourceEventJson = JsonSerializer.Serialize(update.SourceEvent, JsonOptions);
         var messageId = update.Event.EventId;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -52,8 +54,8 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             update.Event.ClockSeconds, update.AlgorithmVersion, update.SourceSha256, stateHash, update.State), JsonOptions);
 
         await using (var command = new NpgsqlCommand("""
-            INSERT INTO pitchmind.match_events(event_id, match_id, canonical_revision, sequence, event_type, clock_seconds, period, occurred_at, payload)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO pitchmind.match_events(event_id, match_id, canonical_revision, sequence, event_type, clock_seconds, period, occurred_at, payload, source_event_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """, connection, transaction))
         {
             command.Parameters.AddWithValue(update.Event.EventId);
@@ -65,6 +67,7 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             command.Parameters.AddWithValue(update.Event.Period);
             command.Parameters.AddWithValue(update.Event.OccurredAt.ToUniversalTime());
             command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, eventJson);
+            command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, sourceEventJson);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -138,13 +141,17 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
     private static async Task<bool> IsExactRetryAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
         CanonicalUpdate update, string eventJson, string stateHash, CancellationToken cancellationToken)
     {
-        await using var eventCommand = new NpgsqlCommand("SELECT payload::text, canonical_revision FROM pitchmind.match_events WHERE event_id = $1", connection, transaction);
+        var sourceEventJson = JsonSerializer.Serialize(update.SourceEvent, JsonOptions);
+        await using var eventCommand = new NpgsqlCommand("SELECT payload::text, canonical_revision, source_event_json::text FROM pitchmind.match_events WHERE event_id = $1", connection, transaction);
         eventCommand.Parameters.AddWithValue(update.Event.EventId);
         await using var eventReader = await eventCommand.ExecuteReaderAsync(cancellationToken);
         if (!await eventReader.ReadAsync(cancellationToken) || eventReader.IsDBNull(1)) return false;
         var storedEvent = eventReader.GetString(0);
         var canonicalRevision = eventReader.GetInt64(1);
+        var storedSourceEvent = eventReader.IsDBNull(2) ? null : eventReader.GetString(2);
         if (JsonSerializer.Deserialize<PitchMind.Domain.Events.MatchEvent>(storedEvent) != update.Event) return false;
+        var storedEnvelope = storedSourceEvent is null ? null : JsonSerializer.Deserialize<SimulationEvent>(storedSourceEvent, JsonOptions);
+        if (storedEnvelope != update.SourceEvent) return false;
         await eventReader.DisposeAsync();
 
         await using var projectionCommand = new NpgsqlCommand("SELECT state_sha256 FROM pitchmind.match_projections WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3 AND as_of_sequence = $4", connection, transaction);

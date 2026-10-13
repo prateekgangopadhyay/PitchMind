@@ -6,6 +6,9 @@ namespace PitchMind.Domain.Match;
 public enum MatchPhase { NotStarted, FirstHalf, HalfTime, SecondHalf, FullTime }
 
 public sealed record MatchPlayerState(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
+public sealed record MatchReplayPlayer(string PlayerId, string TeamId);
+public sealed record MatchReplaySeed(string HomeTeamId, string AwayTeamId, IReadOnlyList<MatchReplayPlayer> Players,
+    IReadOnlyList<string> ActivePlayerIds, string Provenance, string SchemaVersion = "match-replay-seed-v1");
 
 public sealed record MatchState(
     string MatchId,
@@ -32,6 +35,7 @@ public sealed class MatchAggregate
     private readonly Dictionary<string, int> _yellowCards = new(StringComparer.Ordinal);
     private readonly HashSet<string> _dismissedPlayers = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, SimulationEvent> _appliedEvents = [];
+    private readonly MatchReplaySeed _replaySeed;
     private Guid? _lastAppliedEventId;
     private long _lastSequence = -1;
     private int _clockSeconds;
@@ -65,6 +69,29 @@ public sealed class MatchAggregate
             _activePlayers.Count(p => _playerTeams[p] == homeTeamId) != 11 ||
             _activePlayers.Count(p => _playerTeams[p] == awayTeamId) != 11)
             throw new ArgumentException("The initial active roster must have 11 known players for each team.", nameof(activePlayerIds));
+        _replaySeed = new MatchReplaySeed(homeTeamId, awayTeamId,
+            Array.AsReadOnly(_playerTeams.OrderBy(p => p.Key, StringComparer.Ordinal)
+                .Select(p => new MatchReplayPlayer(p.Key, p.Value)).ToArray()),
+            Array.AsReadOnly(_activePlayers.Order(StringComparer.Ordinal).ToArray()), provenance);
+    }
+
+    public MatchReplaySeed ReplaySeed => _replaySeed;
+
+    public static MatchAggregate FromReplaySeed(MatchId id, MatchReplaySeed seed)
+    {
+        ArgumentNullException.ThrowIfNull(seed);
+        if (seed.SchemaVersion != "match-replay-seed-v1" || seed.Players is null || seed.ActivePlayerIds is null)
+            throw new InvalidDataException("Replay seed version or roster is unsupported.");
+        return new MatchAggregate(id, seed.HomeTeamId, seed.AwayTeamId,
+            seed.Players.Select(player => (player.PlayerId, player.TeamId)), seed.ActivePlayerIds, seed.Provenance);
+    }
+
+    public SimulationEvent AppliedSourceEvent(MatchEvent expectedEvent)
+    {
+        ArgumentNullException.ThrowIfNull(expectedEvent);
+        if (!_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent)
+            throw new InvalidOperationException("Replay source must be the exact event applied to this aggregate.");
+        return applied;
     }
 
     public void Apply(SimulationEvent item)

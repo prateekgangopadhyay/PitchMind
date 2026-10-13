@@ -2,6 +2,10 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Runtime.CompilerServices;
 using Xunit;
 
@@ -13,9 +17,18 @@ public sealed class GetMatchAtQueryServiceTests
     public async Task ComposesProjectionAndOnlyItsSelectedTimeEventWindow()
     {
         var matchId = MatchId.New();
-        var projection = Projection(matchId, canonicalRevision: 2, projectionRevision: 2, sequence: 1, clock: 3308);
-        var events = new[] { Event(matchId, 0, 0), Event(matchId, 1, 3308) };
-        var reader = new ProjectionReaderFake(projection, events);
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var aggregate = new MatchAggregate(matchId, "home", "away", players, players.Select(p => p.Item1), "synthetic");
+        var kickoff = new SimulationEvent(Event(matchId, 0, 0) with { Type = MatchEventType.KickOff }, "home", "home-1", "kickoff", "started");
+        var pass = new SimulationEvent(Event(matchId, 1, 3308), "home", "home-2", "pass", "complete");
+        aggregate.Apply(kickoff);
+        aggregate.Apply(pass);
+        var state = aggregate.Snapshot();
+        var stateJson = JsonSerializer.Serialize(state, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var stateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson)));
+        var projection = new SelectedMatchProjection(state, 2, 2, 1, 3308, "aggregate-v1", new string('a', 64), stateHash);
+        var events = new[] { kickoff.Event, pass.Event };
+        var reader = new ProjectionReaderFake(projection, events, aggregate.ReplaySeed, [kickoff, pass]);
         var query = new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1");
 
         var result = await new GetMatchAtQueryService(reader).ExecuteAsync(query, CancellationToken.None);
@@ -26,6 +39,8 @@ public sealed class GetMatchAtQueryServiceTests
         Assert.Equal(2, result.Projection.ProjectionRevision);
         Assert.Equal(new long[] { 0, 1 }, result.Events.Select(item => item.Sequence));
         Assert.Equal(query, reader.LastQuery);
+        Assert.Equal(stateHash, result.ReplaySha256);
+        Assert.Equal(stateJson, JsonSerializer.Serialize(result.ReplayedState, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 
     [Fact]
@@ -97,7 +112,8 @@ public sealed class GetMatchAtQueryServiceTests
         MatchEvent.Create(Guid.NewGuid(), matchId, sequence, MatchEventType.Pass, clock, 1, DateTimeOffset.UnixEpoch.AddSeconds(clock));
 
     private sealed class ProjectionReaderFake(SelectedMatchProjection? projection,
-        IReadOnlyList<MatchEvent> events) : IMatchProjectionReader
+        IReadOnlyList<MatchEvent> events, MatchReplaySeed? replaySeed = null,
+        IReadOnlyList<SimulationEvent>? replayEvents = null) : IMatchProjectionReader
     {
         public GetMatchAtQuery? LastQuery { get; private set; }
         public List<MatchEvent> EventsRead { get; } = [];
@@ -116,6 +132,20 @@ public sealed class GetMatchAtQueryServiceTests
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 EventsRead.Add(item);
+                yield return item;
+                await Task.Yield();
+            }
+        }
+
+        public Task<MatchReplaySeed?> ReadReplaySeedAsync(MatchId matchId, CancellationToken cancellationToken) =>
+            Task.FromResult(replaySeed);
+
+        public async IAsyncEnumerable<SimulationEvent> ReadReplayEventsAtAsync(SelectedMatchProjection selectedProjection,
+            int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            foreach (var item in replayEvents ?? [])
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 yield return item;
                 await Task.Yield();
             }

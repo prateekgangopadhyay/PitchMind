@@ -7,6 +7,7 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Infrastructure.Storage;
 
@@ -98,6 +99,60 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         }
         if (expectedSequence != persistedSequence + 1)
             throw new InvalidDataException("Selected-time event window does not reach the projection sequence.");
+    }
+
+    public async Task<MatchReplaySeed?> ReadReplaySeedAsync(MatchId matchId, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT replay_seed_json::text FROM pitchmind.matches WHERE match_id = $1");
+        command.Parameters.AddWithValue(matchId.Value);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        if (value is null or DBNull) return null;
+        var seed = JsonSerializer.Deserialize<MatchReplaySeed>((string)value, JsonOptions)
+            ?? throw new InvalidDataException("Persisted replay seed is empty.");
+        if (seed.SchemaVersion != "match-replay-seed-v1" || string.IsNullOrWhiteSpace(seed.Provenance))
+            throw new InvalidDataException("Persisted replay seed version or provenance is invalid.");
+        return seed;
+    }
+
+    public async IAsyncEnumerable<SimulationEvent> ReadReplayEventsAtAsync(SelectedMatchProjection projection,
+        int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        if (selectedSeconds is < 0 or > MaximumMatchSeconds || projection.AsOfClockSeconds > selectedSeconds)
+            throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (!Guid.TryParse(projection.State.MatchId, out var parsedMatchId) || parsedMatchId == Guid.Empty)
+            throw new InvalidDataException("Persisted projection has an invalid match ID.");
+        var matchId = new MatchId(parsedMatchId);
+        var persistedSequence = await VerifyPersistedProjectionAsync(matchId, projection, cancellationToken);
+        await using var command = dataSource.CreateCommand("""
+            SELECT source_event_json::text, payload::text, sequence, clock_seconds, period
+            FROM pitchmind.match_events
+            WHERE match_id = $1 AND canonical_revision <= $2 AND sequence <= $3 AND clock_seconds <= $4
+            ORDER BY sequence
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
+        command.Parameters.AddWithValue(persistedSequence);
+        command.Parameters.AddWithValue(selectedSeconds);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        long expectedSequence = 0;
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (reader.IsDBNull(0)) throw new InvalidDataException("Canonical event is missing its immutable replay source envelope.");
+            var item = JsonSerializer.Deserialize<SimulationEvent>(reader.GetString(0), JsonOptions)
+                ?? throw new InvalidDataException("Canonical replay source event is empty.");
+            var indexedEvent = JsonSerializer.Deserialize<MatchEvent>(reader.GetString(1))
+                ?? throw new InvalidDataException("Canonical event payload is empty.");
+            MatchEventValidator.Validate(item.Event);
+            if (item.Event != indexedEvent || item.Event.MatchId != matchId || item.Event.Sequence != expectedSequence ||
+                reader.GetInt64(2) != expectedSequence || item.Event.ClockSeconds != reader.GetInt32(3) ||
+                item.Event.Period != reader.GetInt32(4) || item.Event.ClockSeconds > selectedSeconds)
+                throw new InvalidDataException("Canonical replay envelope does not match its immutable indexed event.");
+            expectedSequence++;
+            yield return item;
+        }
+        if (expectedSequence != persistedSequence + 1)
+            throw new InvalidDataException("Replay event prefix does not reach the selected projection sequence.");
     }
 
     private async Task<long> VerifyPersistedProjectionAsync(MatchId matchId, SelectedMatchProjection projection,

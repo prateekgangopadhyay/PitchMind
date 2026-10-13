@@ -1,5 +1,6 @@
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Application.Abstractions;
 
@@ -20,5 +21,10 @@ public interface IMatchProjectionReader
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken);
 
     IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection, int selectedSeconds,
+        CancellationToken cancellationToken);
+
+    Task<MatchReplaySeed?> ReadReplaySeedAsync(MatchId matchId, CancellationToken cancellationToken);
+
+    IAsyncEnumerable<SimulationEvent> ReadReplayEventsAtAsync(SelectedMatchProjection projection, int selectedSeconds,
         CancellationToken cancellationToken);
 }

@@ -19,8 +19,8 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var command = new NpgsqlCommand("""
-            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (match_id) DO NOTHING
+            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres, replay_seed_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (match_id) DO NOTHING
             """, connection, transaction))
         {
             AddMetadata(command, metadata);
@@ -29,6 +29,7 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using (var command = new NpgsqlCommand("""
             SELECT fixture_version = $2 AND source_version = $3 AND source_sha256 = $4 AND provenance = $5
                 AND pitch_length_metres = $6 AND pitch_width_metres = $7
+                AND replay_seed_json IS NOT DISTINCT FROM $8::jsonb
             FROM pitchmind.matches WHERE match_id = $1
             """, connection, transaction))
         {
@@ -185,5 +186,10 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         command.Parameters.AddWithValue(value.Provenance);
         command.Parameters.AddWithValue(value.PitchLengthMetres);
         command.Parameters.AddWithValue(value.PitchWidthMetres);
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb,
+            Value = value.ReplaySeed is null ? DBNull.Value : JsonSerializer.Serialize(value.ReplaySeed, JsonOptions)
+        });
     }
 }

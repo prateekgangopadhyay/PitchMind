@@ -47,7 +47,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -160,7 +160,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(5, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(6, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -428,7 +428,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -450,7 +450,7 @@ public sealed class PostgresLedgerTests
     private static Task RegisterSourceAsync(NpgsqlDataSource source, CanonicalUpdate update) =>
         new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
             new MatchSourceMetadata(update.Event.MatchId.Value, "fixture-v1", "source-v1", update.SourceSha256,
-                "approved-synthetic-test", 105m, 68m), CancellationToken.None);
+                "approved-synthetic-test", 105m, 68m, update.ReplaySeed), CancellationToken.None);
 
     [PostgresIntegrationFact]
     public async Task CanonicalEventProjectionAndOutboxCommitTogetherAndExactRetryIsIdempotent()
@@ -464,6 +464,13 @@ public sealed class PostgresLedgerTests
         await RegisterSourceAsync(source, update);
         Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(update, CancellationToken.None));
         Assert.Equal(CanonicalUpdateCommitResult.AlreadyCommitted, await store.CommitAsync(update, CancellationToken.None));
+        var alteredContextAggregate = new MatchAggregate(update.Event.MatchId, "home", "away",
+            Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray(),
+            Enumerable.Range(1, 11).SelectMany(i => new[] { $"home-{i}", $"away-{i}" }), "approved-synthetic-test");
+        alteredContextAggregate.Apply(update.SourceEvent with { Action = "changed-source-action" });
+        var alteredContextUpdate = CanonicalUpdate.FromAppliedAggregate(alteredContextAggregate, update.Event, 1,
+            "aggregate-v1", update.SourceSha256);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.CommitAsync(alteredContextUpdate, CancellationToken.None));
         await using var counts = source.CreateCommand("""
             SELECT (SELECT count(*) FROM pitchmind.match_events WHERE match_id = $1),
                    (SELECT count(*) FROM pitchmind.match_projections WHERE match_id = $1),
@@ -739,7 +746,7 @@ public sealed class PostgresLedgerTests
         var updates = new PostgresCanonicalUpdateStore(source);
         await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
             new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", new string('c', 64),
-                "approved-synthetic-test", 105m, 68m), CancellationToken.None);
+                "approved-synthetic-test", 105m, 68m, aggregate.ReplaySeed), CancellationToken.None);
 
         async Task Apply(long sequence, int clock, MatchEventType type, string playerId, int revision)
         {
@@ -768,8 +775,16 @@ public sealed class PostgresLedgerTests
             new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1"), CancellationToken.None);
         Assert.NotNull(applicationResult);
         Assert.Equal(0, applicationResult.Projection.State.HomeScore);
+        Assert.Equal(applicationResult.Projection.StateSha256, applicationResult.ReplaySha256);
         Assert.Equal(new long[] { 0, 1 }, applicationResult.Events.Select(e => e.Sequence));
         Assert.DoesNotContain(applicationResult.Events, e => e.Type == MatchEventType.Goal);
+        for (var replay = 0; replay < 5; replay++)
+        {
+            var rerun = await new GetMatchAtQueryService(reader).ExecuteAsync(
+                new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1"), CancellationToken.None);
+            Assert.Equal(applicationResult.ReplaySha256, rerun!.ReplaySha256);
+            Assert.Equal(JsonSerializer.Serialize(applicationResult.ReplayedState), JsonSerializer.Serialize(rerun.ReplayedState));
+        }
 
         var atGoal = await reader.GetAtAsync(matchId, 3309, 3, "aggregate-v1", CancellationToken.None);
         Assert.NotNull(atGoal);
