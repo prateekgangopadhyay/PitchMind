@@ -122,6 +122,17 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             timeout=timeout,
         )
 
+    def _write_valid_env(self, image: str | None = None) -> Path:
+        env_file = self.root / "docker" / ".env"
+        values = [
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef",
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210",
+        ]
+        if image is not None:
+            values.insert(0, f"POSTGRES_IMAGE={image}")
+        env_file.write_text("\n".join(values) + "\n", encoding="utf-8")
+        return env_file
+
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
         self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
         result = self._run("dev-up.sh")
@@ -147,6 +158,72 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
+
+    def test_generated_credentials_select_default_postgres_image(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = dict(
+            line.split("=", 1)
+            for line in (self.root / "docker" / ".env").read_text().splitlines()
+        )
+        self.assertEqual(values["POSTGRES_IMAGE"], "postgres:17-alpine")
+        self.assertIn("up -d --wait", self.docker_log.read_text())
+
+    def test_env_file_image_override_matches_existing_postgres_volume(self) -> None:
+        self._write_valid_env("postgres:16-alpine")
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = self.docker_log.read_text()
+        self.assertIn("target=/pgdata,readonly", log)
+        self.assertIn(" postgres:16-alpine -c cat /pgdata/PG_VERSION", log)
+        self.assertIn("up -d --wait", log)
+
+    def test_process_image_override_takes_precedence_for_volume_guard(self) -> None:
+        self._write_valid_env("postgres:17-alpine")
+        self.env["POSTGRES_IMAGE"] = "postgres:16-alpine"
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = self.docker_log.read_text()
+        self.assertIn(" postgres:16-alpine -c cat /pgdata/PG_VERSION", log)
+        self.assertIn("up -d --wait", log)
+
+    def test_invalid_and_duplicate_postgres_image_settings_fail_closed(self) -> None:
+        valid_postgres = "0123456789abcdef0123456789abcdef0123456789abcdef"
+        valid_redis = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        cases = (
+            f"POSTGRES_IMAGE=latest\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
+            f"POSTGRES_IMAGE=postgres:16-alpine\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
+        )
+
+        for contents in cases:
+            with self.subTest(contents=contents.splitlines()[:2]):
+                self.docker_log.unlink(missing_ok=True)
+                (self.root / "docker" / ".env").write_text(contents, encoding="utf-8")
+
+                result = self._run("dev-up.sh")
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("up -d --wait", self.docker_log.read_text())
+
+    def test_selected_image_major_mismatch_fails_before_compose_start(self) -> None:
+        self._write_valid_env("postgres:16-alpine")
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "17"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("POSTGRES_IMAGE requests 16", result.stderr)
+        self.assertIn("data volume was not changed", result.stderr)
+        self.assertNotIn("up -d --wait", self.docker_log.read_text())
 
     def test_orphaned_postgres_volume_major_mismatch_fails_before_compose_up(self) -> None:
         self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"

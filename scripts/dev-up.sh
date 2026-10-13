@@ -25,7 +25,7 @@ if [[ ! -f docker/.env ]]; then
   umask 077
   postgres_password="$(openssl rand -hex 24)"
   redis_password="$(openssl rand -hex 24)"
-  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
+  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
 require_regular_credentials_file
@@ -60,8 +60,37 @@ postgres_major() {
   fi
 }
 
+read_local_postgres_image() {
+  local line count=0 value=""
+  if [[ ${POSTGRES_IMAGE+x} ]]; then
+    value="${POSTGRES_IMAGE}"
+    [[ -n "$value" ]] || value="postgres:17-alpine"
+  else
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?POSTGRES_IMAGE([[:space:]]|=|:|$) ]] || continue
+      count=$((count + 1))
+      if [[ "$line" =~ ^POSTGRES_IMAGE=([^[:space:]#]+)$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      else
+        echo "docker/.env must contain at most one plain POSTGRES_IMAGE=postgres:<major>-alpine setting; Compose image was not started." >&2
+        return 1
+      fi
+    done < docker/.env
+    [[ "$count" -le 1 ]] || {
+      echo "docker/.env contains duplicate POSTGRES_IMAGE settings; Compose image was not started." >&2
+      return 1
+    }
+    [[ "$count" -eq 1 ]] || value="postgres:17-alpine"
+  fi
+  [[ "$value" =~ ^postgres:[0-9]+-alpine$ ]] || {
+    echo "POSTGRES_IMAGE must be a postgres:<major>-alpine image; Compose image was not started." >&2
+    return 1
+  }
+  printf '%s' "$value"
+}
+
 ensure_existing_postgres_volume_compatible() {
-  local postgres_volume existing_volumes volume_name volume_exists=0 configured_image configured_major data_version data_major
+  local configured_image="$1" postgres_volume existing_volumes volume_name volume_exists=0 configured_major data_version data_major
   postgres_volume="$(awk '
     /^  postgres-data:$/ { in_volume = 1; next }
     /^  [^ ]/ { in_volume = 0 }
@@ -76,13 +105,8 @@ ensure_existing_postgres_volume_compatible() {
     [[ "$volume_name" == "$postgres_volume" ]] && volume_exists=1
   done <<< "$existing_volumes"
   [[ "$volume_exists" -eq 1 ]] || return 0
-  configured_image="$(awk '
-    /^  postgres:$/ { in_postgres = 1; next }
-    /^  [^ ]/ { in_postgres = 0 }
-    in_postgres && /^    image:/ { print $2; exit }
-  ' docker/compose.yml)"
   if ! configured_major="$(postgres_major "$configured_image")"; then
-    echo "Cannot verify the configured PostgreSQL major version; refusing Compose startup to protect local data." >&2
+    echo "Cannot verify the configured PostgreSQL image; refusing Compose startup to protect local data." >&2
     return 1
   fi
   if ! data_version="$(docker run --rm --pull=never --network none \
@@ -98,7 +122,7 @@ ensure_existing_postgres_volume_compatible() {
     return 1
   fi
   if [[ "$configured_major" != "$data_major" ]]; then
-    echo "Refusing Compose startup: volume $postgres_volume contains PostgreSQL major version $data_major but docker/compose.yml requests $configured_major. The data volume was not changed. Back up and perform a PostgreSQL major-version migration before changing the configured image." >&2
+    echo "Refusing Compose startup: volume $postgres_volume contains PostgreSQL major version $data_major but POSTGRES_IMAGE requests $configured_major. The data volume was not changed. Back up and perform a PostgreSQL major-version migration before changing the configured image." >&2
     return 1
   fi
 }
@@ -110,7 +134,10 @@ if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
   exit 1
 fi
 
-ensure_existing_postgres_volume_compatible
+if ! postgres_image="$(read_local_postgres_image)"; then
+  exit 1
+fi
+ensure_existing_postgres_volume_compatible "$postgres_image"
 
 if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
   docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
