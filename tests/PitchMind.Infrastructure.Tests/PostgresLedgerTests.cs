@@ -928,6 +928,18 @@ public sealed class PostgresLedgerTests
         Assert.Equal(3309, insight.ClockSeconds);
         Assert.DoesNotContain(fixture.Events.Where(item => item.Event.ClockSeconds > 3309),
             item => result.Events.Any(matchEvent => matchEvent.EventId == item.Event.EventId));
+
+        await using (var corruptFrame = source.CreateCommand("""
+            UPDATE pitchmind.tracking_frames SET payload = jsonb_set(payload, '{id}', '"tampered-frame-id"'::jsonb)
+            WHERE match_id = $1 AND frame_id = $2
+            """))
+        {
+            corruptFrame.Parameters.AddWithValue(matchId.Value);
+            corruptFrame.Parameters.AddWithValue(insight.FrameIds[0]);
+            Assert.Equal(1, await corruptFrame.ExecuteNonQueryAsync());
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None));
     }
 
     [PostgresIntegrationFact]

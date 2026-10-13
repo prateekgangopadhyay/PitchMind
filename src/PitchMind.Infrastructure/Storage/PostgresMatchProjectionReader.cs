@@ -48,7 +48,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
                        'sequence', e.sequence, 'clockSeconds', e.clock_seconds, 'period', e.period) ORDER BY e.sequence)::text
                        FROM pitchmind.match_events e WHERE e.match_id = p.match_id AND e.canonical_revision <= p.canonical_revision
                          AND e.sequence <= p.as_of_sequence AND e.clock_seconds <= $2), '[]'),
-                   COALESCE((SELECT jsonb_agg(jsonb_build_object('frame', f.payload, 'sequence', f.sequence, 'period', f.period,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('frame', f.payload, 'frameId', f.frame_id, 'sequence', f.sequence, 'period', f.period,
                        'clockSeconds', f.clock_seconds, 'coordinateVersion', f.coordinate_version, 'sourceSha256', f.source_sha256)
                        ORDER BY f.clock_seconds, f.sequence, f.frame_id)::text
                        FROM pitchmind.tracking_frames f WHERE f.match_id = p.match_id
@@ -107,7 +107,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         {
             var frame = JsonSerializer.Deserialize<TrackingFrame>(item.Frame.GetRawText(), JsonOptions)
                 ?? throw new InvalidDataException("Persisted tracking frame is empty.");
-            if (frame.ClockSeconds != item.ClockSeconds || frame.Id.Length == 0 || item.SourceSha256.Trim() != sourceHash)
+            if (frame.ClockSeconds != item.ClockSeconds || frame.Id != item.FrameId || item.SourceSha256.Trim() != sourceHash)
                 throw new InvalidDataException("Persisted tracking frame metadata is inconsistent with the selected source.");
             return new MatchReplayFrame(frame, item.Sequence, item.Period, item.CoordinateVersion, item.SourceSha256.Trim());
         }).ToArray();
@@ -125,7 +125,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
 
     private sealed record IndexedEvent(JsonElement Payload, long Sequence, int ClockSeconds, int Period);
     private sealed record IndexedReplayEvent(JsonElement Source, JsonElement Payload, long Sequence, int ClockSeconds, int Period);
-    private sealed record IndexedFrame(JsonElement Frame, long Sequence, int Period, int ClockSeconds,
+    private sealed record IndexedFrame(JsonElement Frame, string FrameId, long Sequence, int Period, int ClockSeconds,
         string CoordinateVersion, string SourceSha256);
 
     public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
