@@ -24,6 +24,7 @@ public sealed record MatchState(
 /// <summary>Deterministic in-memory projection of ordered match facts. Persistence and correction storage are adapters.</summary>
 public sealed class MatchAggregate
 {
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
     private readonly string _homeTeamId;
     private readonly string _awayTeamId;
     private readonly string _provenance;
@@ -68,7 +69,74 @@ public sealed class MatchAggregate
             throw new ArgumentException("The initial active roster must have 11 known players for each team.", nameof(activePlayerIds));
     }
 
+    private MatchAggregate(MatchAggregate source)
+    {
+        Id = source.Id;
+        _homeTeamId = source._homeTeamId;
+        _awayTeamId = source._awayTeamId;
+        _provenance = source._provenance;
+        _playerTeams = new(source._playerTeams, StringComparer.Ordinal);
+        _activePlayers = new(source._activePlayers, StringComparer.Ordinal);
+        foreach (var (playerId, cautions) in source._yellowCards) _yellowCards.Add(playerId, cautions);
+        _dismissedPlayers.UnionWith(source._dismissedPlayers);
+        _appliedEvents = new(source._appliedEvents);
+        _lastAppliedEventId = source._lastAppliedEventId;
+        _stateBeforeLastAppliedEvent = source._stateBeforeLastAppliedEvent;
+        _lastSequence = source._lastSequence;
+        _clockSeconds = source._clockSeconds;
+        _period = source._period;
+        _homeScore = source._homeScore;
+        _awayScore = source._awayScore;
+        _possessionTeamId = source._possessionTeamId;
+        _phase = source._phase;
+    }
+
+    /// <summary>
+    /// Acquires exclusive mutation ownership for a multi-step application operation.
+    /// Ordinary Apply calls wait until this lease is released.
+    /// </summary>
+    public async ValueTask<MutationLease> AcquireMutationLeaseAsync(CancellationToken cancellationToken = default)
+    {
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return new MutationLease(this);
+    }
+
+    /// <summary>Returns a fork with the supplied event applied, leaving this aggregate unchanged.</summary>
+    public MatchAggregate Preview(SimulationEvent item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _mutationGate.Wait();
+        try
+        {
+            return PreviewCore(item);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
     public void Apply(SimulationEvent item)
+    {
+        _mutationGate.Wait();
+        try
+        {
+            ApplyCore(item);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private MatchAggregate PreviewCore(SimulationEvent item)
+    {
+        var preview = new MatchAggregate(this);
+        preview.ApplyCore(item);
+        return preview;
+    }
+
+    private void ApplyCore(SimulationEvent item)
     {
         ArgumentNullException.ThrowIfNull(item);
         var evt = item.Event;
@@ -85,7 +153,7 @@ public sealed class MatchAggregate
         if (_phase == MatchPhase.FullTime) throw new InvalidOperationException("No event may follow full time.");
 
         ValidateTransition(item);
-        var stateBeforeEvent = Snapshot();
+        var stateBeforeEvent = SnapshotCore();
         ApplyTransition(item);
         _appliedEvents.Add(evt.EventId, item);
         _lastAppliedEventId = evt.EventId;
@@ -97,23 +165,52 @@ public sealed class MatchAggregate
     public MatchState SnapshotBefore(MatchEvent expectedEvent)
     {
         ArgumentNullException.ThrowIfNull(expectedEvent);
-        if (_lastAppliedEventId != expectedEvent.EventId ||
-            !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent ||
-            _stateBeforeLastAppliedEvent is null)
-            throw new InvalidOperationException("A canonical projection predecessor must come from this aggregate immediately before its exact latest event.");
-        return _stateBeforeLastAppliedEvent;
+        _mutationGate.Wait();
+        try
+        {
+            if (_lastAppliedEventId != expectedEvent.EventId ||
+                !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent ||
+                _stateBeforeLastAppliedEvent is null)
+                throw new InvalidOperationException("A canonical projection predecessor must come from this aggregate immediately before its exact latest event.");
+            return _stateBeforeLastAppliedEvent;
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
     }
 
     public MatchState SnapshotAfter(MatchEvent expectedEvent)
     {
         ArgumentNullException.ThrowIfNull(expectedEvent);
-        if (_lastAppliedEventId != expectedEvent.EventId ||
-            !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent)
-            throw new InvalidOperationException("A canonical projection must come from this aggregate after applying the exact event.");
-        return Snapshot();
+        _mutationGate.Wait();
+        try
+        {
+            if (_lastAppliedEventId != expectedEvent.EventId ||
+                !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent)
+                throw new InvalidOperationException("A canonical projection must come from this aggregate after applying the exact event.");
+            return SnapshotCore();
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
     }
 
     public MatchState Snapshot()
+    {
+        _mutationGate.Wait();
+        try
+        {
+            return SnapshotCore();
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private MatchState SnapshotCore()
     {
         return new(Id.ToString(), _clockSeconds, _period, _phase, _homeScore, _awayScore, _possessionTeamId,
             _activePlayers.Count(p => _playerTeams[p] == _homeTeamId),
@@ -122,6 +219,27 @@ public sealed class MatchAggregate
                 .Select(p => new MatchPlayerState(p.Key, p.Value, _activePlayers.Contains(p.Key),
                     _dismissedPlayers.Contains(p.Key), _yellowCards.GetValueOrDefault(p.Key))).ToArray()),
             _lastSequence, _provenance);
+    }
+
+    /// <summary>Exclusive access to preview and apply an event across a persistence await.</summary>
+    public sealed class MutationLease : IDisposable
+    {
+        private MatchAggregate? _aggregate;
+
+        internal MutationLease(MatchAggregate aggregate) => _aggregate = aggregate;
+
+        public MatchAggregate Preview(SimulationEvent item) => GetAggregate().PreviewCore(item);
+
+        public void Apply(SimulationEvent item) => GetAggregate().ApplyCore(item);
+
+        public void Dispose()
+        {
+            var aggregate = Interlocked.Exchange(ref _aggregate, null);
+            aggregate?._mutationGate.Release();
+        }
+
+        private MatchAggregate GetAggregate() =>
+            _aggregate ?? throw new ObjectDisposedException(nameof(MutationLease));
     }
 
     private void ValidateTransition(SimulationEvent item)

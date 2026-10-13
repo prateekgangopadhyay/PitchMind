@@ -700,6 +700,29 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task LongPublicationRenewsLeaseAndRemainsExclusive()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await IsolateOutboxAsync(source);
+        var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
+        await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
+
+        var publisher = new DelayedPublisher(TimeSpan.FromMilliseconds(300));
+        var firstDispatch = new PostgresOutboxDispatcher(source, publisher,
+            leaseDuration: TimeSpan.FromMilliseconds(60)).DispatchOneAsync(CancellationToken.None);
+        await publisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(180);
+
+        var competingPublisher = new CountingPublisher();
+        Assert.Equal(OutboxDispatchResult.NoMessage,
+            await new PostgresOutboxDispatcher(source, competingPublisher).DispatchOneAsync(CancellationToken.None));
+        Assert.Equal(0, competingPublisher.Publications);
+        Assert.Equal(OutboxDispatchResult.Published, await firstDispatch);
+    }
+
+    [PostgresIntegrationFact]
     public async Task LaterRevisionWaitsUntilEarlierSameMatchOutboxMessageIsTerminal()
     {
         await using var source = Source();
@@ -797,6 +820,16 @@ public sealed class PostgresLedgerTests
             MessageId = messageId;
             Started.TrySetResult();
             await Release.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class DelayedPublisher(TimeSpan duration) : IOutboxPublisher
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Task.Delay(duration, cancellationToken);
         }
     }
 
