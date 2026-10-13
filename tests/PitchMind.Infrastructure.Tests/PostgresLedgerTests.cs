@@ -446,6 +446,11 @@ public sealed class PostgresLedgerTests
 
     private static CanonicalUpdate Update(MatchId matchId) => BuildUpdate(matchId).Update;
 
+    private static Task RegisterSourceAsync(NpgsqlDataSource source, CanonicalUpdate update) =>
+        new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
+            new MatchSourceMetadata(update.Event.MatchId.Value, "fixture-v1", "source-v1", update.SourceSha256,
+                "approved-synthetic-test", 105m, 68m), CancellationToken.None);
+
     [PostgresIntegrationFact]
     public async Task CanonicalEventProjectionAndOutboxCommitTogetherAndExactRetryIsIdempotent()
     {
@@ -455,6 +460,7 @@ public sealed class PostgresLedgerTests
         var (update, aggregate) = BuildUpdate(MatchId.New());
         var store = new PostgresCanonicalUpdateStore(source);
 
+        await RegisterSourceAsync(source, update);
         Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(update, CancellationToken.None));
         Assert.Equal(CanonicalUpdateCommitResult.AlreadyCommitted, await store.CommitAsync(update, CancellationToken.None));
         await using var counts = source.CreateCommand("""
@@ -492,6 +498,7 @@ public sealed class PostgresLedgerTests
         aggregate.Apply(new SimulationEvent(kickoff, "home", "home-1", "kickoff", "started"));
         var kickoffUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, kickoff, 1, "aggregate-v1", new string('a', 64));
         var store = new PostgresCanonicalUpdateStore(source);
+        await RegisterSourceAsync(source, kickoffUpdate);
         Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(kickoffUpdate, CancellationToken.None));
         var goal = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Goal, 120, 1, DateTimeOffset.UtcNow);
         aggregate.Apply(new SimulationEvent(goal, "home", "home-2", "shot", "goal"));
@@ -539,6 +546,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await IsolateOutboxAsync(source);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
 
         await using (var prepare = source.CreateCommand("CREATE TABLE pitchmind.consumer_effect_test (message_id uuid PRIMARY KEY, count integer NOT NULL)"))
@@ -568,6 +576,7 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         var triggerSuffix = Guid.NewGuid().ToString("N");
         var functionName = $"reject_outbox_{triggerSuffix}";
         var triggerName = $"reject_outbox_{triggerSuffix}";
@@ -610,6 +619,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await IsolateOutboxAsync(source);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
         var dispatcher = new PostgresOutboxDispatcher(source, new AlwaysFailPublisher(), maxAttempts: 2);
 
@@ -637,6 +647,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await IsolateOutboxAsync(source);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
         var publisher = new BlockingPublisher();
         var firstDispatcher = new PostgresOutboxDispatcher(source, publisher, leaseDuration: TimeSpan.FromMinutes(1));
@@ -665,6 +676,7 @@ public sealed class PostgresLedgerTests
         var kickoff = MatchEvent.Create(Guid.NewGuid(), matchId, 0, MatchEventType.KickOff, 0, 1, DateTimeOffset.UtcNow);
         aggregate.Apply(new SimulationEvent(kickoff, "home", "home-1", "kickoff", "started"));
         var kickoffUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, kickoff, 1, "aggregate-v1", new string('a', 64));
+        await RegisterSourceAsync(source, kickoffUpdate);
         Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(kickoffUpdate, CancellationToken.None));
 
         var goal = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Goal, 120, 1, DateTimeOffset.UtcNow);
@@ -697,6 +709,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await IsolateOutboxAsync(source);
         var update = Update(MatchId.New());
+        await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
         var blockedPublisher = new BlockingPublisher();
         using var cancellation = new CancellationTokenSource();
