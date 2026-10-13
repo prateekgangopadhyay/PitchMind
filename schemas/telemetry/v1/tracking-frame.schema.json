@@ -23,8 +23,8 @@
       "additionalProperties": false,
       "required": ["x", "y"],
       "properties": {
-        "x": { "type": "number", "minimum": 0, "maximum": 79228162514264337593543950335 },
-        "y": { "type": "number", "minimum": 0, "maximum": 79228162514264337593543950335 }
+        "x": { "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" },
+        "y": { "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }
       }
     },
     "player": {
@@ -42,8 +42,8 @@
       "additionalProperties": false,
       "required": ["lengthMetres", "widthMetres", "unit", "axisOrigin", "teamDirections"],
       "properties": {
-        "lengthMetres": { "type": "number", "minimum": 90, "maximum": 120 },
-        "widthMetres": { "type": "number", "minimum": 45, "maximum": 90 },
+        "lengthMetres": { "allOf": [{ "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }, { "minimum": 90, "maximum": 120 }] },
+        "widthMetres": { "allOf": [{ "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }, { "minimum": 45, "maximum": 90 }] },
         "unit": { "enum": ["metres", "normalized_0_1", "percent_0_100"] },
         "axisOrigin": { "enum": ["bottom_left", "top_left"] },
         "teamDirections": {
