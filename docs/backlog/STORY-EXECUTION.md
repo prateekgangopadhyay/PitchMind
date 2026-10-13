@@ -1,6 +1,6 @@
 # Story execution register
 
-Execution companion to [the authoritative 59 stories](HACKATHON-MVP-EPICS.md). Generated from existing acceptance criteria; does not introduce duplicate stories. Snapshot: 2026-10-08. Status `implementation underway` is not acceptance. Root release evidence must link passing tests, deployed artifacts and owner review before `Verified / accepted`.
+Execution companion to [the authoritative 59 stories](HACKATHON-MVP-EPICS.md). Product Owner pass/fail decisions and comments are recorded separately in the [Product Owner acceptance ledger](PRODUCT-OWNER-ACCEPTANCE-LEDGER.md); this register remains the authority for overall story execution status. Generated from existing acceptance criteria; does not introduce duplicate stories. Snapshot: 2026-10-08. Status `implementation underway` is not acceptance. Root release evidence must link passing tests, deployed artifacts and owner review before `Verified / accepted`.
 
 Coordination: Domain/Application owns immutable fixture and football rules; API owns selected-time contracts; frontend consumes those contracts; infrastructure owns Azure adapters/delivery. Merge at stable IDs, metre coordinates and selected elapsed time. Existing health routes remain. Architecture changes update C4/LLD/ADR in the same change. Parallel local development does not waive Azure acceptance. Issue creation in an external tracker is deferred; this is the versioned repository story system.
 
