@@ -162,6 +162,16 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             !IsSha256(value.SourceSha256) || string.IsNullOrWhiteSpace(value.Provenance) ||
             !FootballPitchDimensions.AreValid((double)value.PitchLengthMetres, (double)value.PitchWidthMetres))
             throw new ArgumentException("Match source metadata is incomplete or invalid.", nameof(value));
+        if (value.ReplaySeed is not null)
+        {
+            if (value.ReplaySeed.Provenance != value.Provenance)
+                throw new ArgumentException("Replay seed provenance must match the immutable match source.", nameof(value));
+            try { _ = MatchAggregate.FromReplaySeed(new(value.MatchId), value.ReplaySeed); }
+            catch (Exception exception) when (exception is ArgumentException or InvalidDataException or NullReferenceException)
+            {
+                throw new ArgumentException("Replay seed roster is invalid.", nameof(value), exception);
+            }
+        }
     }
 
     private static void Validate(PersistedMatchProjection value)

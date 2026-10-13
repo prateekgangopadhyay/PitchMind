@@ -26,6 +26,7 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await LockMatchAsync(connection, transaction, update.Event.MatchId.ToString(), cancellationToken);
+        await EnsureReplaySeedRegisteredAsync(connection, transaction, update, cancellationToken);
 
         if (await EventExistsAsync(connection, transaction, update.Event.EventId, cancellationToken))
         {
@@ -128,6 +129,23 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction);
         command.Parameters.AddWithValue(matchId);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task EnsureReplaySeedRegisteredAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        CanonicalUpdate update, CancellationToken cancellationToken)
+    {
+        var seedJson = JsonSerializer.Serialize(update.ReplaySeed, JsonOptions);
+        await using var command = new NpgsqlCommand("""
+            SELECT replay_seed_json = $2::jsonb AND provenance = $3
+            FROM pitchmind.matches
+            WHERE match_id = $1 AND source_sha256 = $4
+            """, connection, transaction);
+        command.Parameters.AddWithValue(update.Event.MatchId.Value);
+        command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, seedJson);
+        command.Parameters.AddWithValue(update.ReplaySeed.Provenance);
+        command.Parameters.AddWithValue(update.SourceSha256);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+            throw new InvalidOperationException("Canonical update replay seed does not match the immutable registered match source.");
     }
 
     private static async Task<bool> EventExistsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid eventId,

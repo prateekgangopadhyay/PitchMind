@@ -462,6 +462,16 @@ public sealed class PostgresLedgerTests
         var store = new PostgresCanonicalUpdateStore(source);
 
         await RegisterSourceAsync(source, update);
+        var mismatchedPlayers = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") })
+            .Append(("home-12", "home")).ToArray();
+        var mismatchedActivePlayers = mismatchedPlayers.Select(player => player.Item1)
+            .Where(player => player != "home-11").ToArray();
+        var mismatchedSeedAggregate = new MatchAggregate(update.Event.MatchId, "home", "away", mismatchedPlayers,
+            mismatchedActivePlayers, "approved-synthetic-test");
+        mismatchedSeedAggregate.Apply(update.SourceEvent);
+        var mismatchedSeedUpdate = CanonicalUpdate.FromAppliedAggregate(mismatchedSeedAggregate, update.Event, 1,
+            "aggregate-v1", update.SourceSha256);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.CommitAsync(mismatchedSeedUpdate, CancellationToken.None));
         Assert.Equal(CanonicalUpdateCommitResult.Committed, await store.CommitAsync(update, CancellationToken.None));
         Assert.Equal(CanonicalUpdateCommitResult.AlreadyCommitted, await store.CommitAsync(update, CancellationToken.None));
         var alteredContextAggregate = new MatchAggregate(update.Event.MatchId, "home", "away",
