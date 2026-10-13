@@ -88,6 +88,7 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
     [InlineData("{\"insightId\":\"missing\",\"atSeconds\":9999999999999999999999999999999999999999}", "INVALID_TIME")]
     [InlineData("{\"insightId\":\"missing\",\"atSeconds\":10,\"audience\":\"coach\"}", "INVALID_REQUEST")]
     [InlineData("{\"insightId\":\"missing\",\"atSeconds\":10,\"audience\":3}", "INVALID_REQUEST")]
+    [InlineData("{\"insightId\":\"missing\",\"atSeconds\":10,\"audience\":null}", "INVALID_REQUEST")]
     public async Task Invalid_analyst_request_fields_return_a_typed_problem(string body, string code)
     {
         using var response = await Client.PostAsync(AnalystPath, new StringContent(body, Encoding.UTF8, "application/json"));
