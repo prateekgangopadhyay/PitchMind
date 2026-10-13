@@ -1,7 +1,7 @@
 # EP01-S05 local security-gate evidence — 2026-10-12
 
-**Story:** EP01-S05 — Quality, security and developer readiness gate  
-**Environment:** local macOS workstation; Docker scanner containers only  
+**Story:** EP01-S05 — Quality, security and developer readiness gate
+**Environment:** local macOS workstation; Docker scanner containers only
 **Parent:** draft PR #17, exact base `48b1e95a5c5e5f4c129147ea9d136f679acf3d83`
 **Restack:** PR #109 head `5b573764e7f47b99bc774889a98e1291a5e6ba26` was based on parent revision `9862c49eb5654a8f704b23f0264b0927e086dfc5`; the child commits were replayed onto the current PR #17 head after GitHub reported the stack nonmergeable.
 **Code revision tested:** `0d26bb77f317075a9120c40ad514c36a8a3e05e6`
