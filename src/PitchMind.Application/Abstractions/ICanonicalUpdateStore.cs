@@ -7,12 +7,13 @@ namespace PitchMind.Application.Abstractions;
 public sealed class CanonicalUpdate
 {
     private CanonicalUpdate(MatchEvent @event, SimulationEvent sourceEvent, MatchReplaySeed replaySeed,
-        MatchState state, int revision, string algorithmVersion, string sourceSha256)
+        MatchState state, MatchState priorState, int revision, string algorithmVersion, string sourceSha256)
     {
         Event = @event;
         SourceEvent = sourceEvent;
         ReplaySeed = replaySeed;
         State = state;
+        PriorState = priorState;
         Revision = revision;
         AlgorithmVersion = algorithmVersion;
         SourceSha256 = sourceSha256;
@@ -22,6 +23,7 @@ public sealed class CanonicalUpdate
     public SimulationEvent SourceEvent { get; }
     public MatchReplaySeed ReplaySeed { get; }
     public MatchState State { get; }
+    public MatchState PriorState { get; }
     public int Revision { get; }
     public string AlgorithmVersion { get; }
     public string SourceSha256 { get; }
@@ -32,10 +34,13 @@ public sealed class CanonicalUpdate
         ArgumentNullException.ThrowIfNull(aggregate);
         ArgumentNullException.ThrowIfNull(appliedEvent);
         var state = aggregate.SnapshotAfter(appliedEvent);
+        var priorState = aggregate.SnapshotBefore(appliedEvent);
         if (aggregate.Id != appliedEvent.MatchId || state.LastSequence != appliedEvent.Sequence || state.ClockSeconds != appliedEvent.ClockSeconds)
             throw new InvalidOperationException("Aggregate projection does not match its applied canonical event.");
+        if (priorState.MatchId != appliedEvent.MatchId.ToString() || priorState.LastSequence != appliedEvent.Sequence - 1)
+            throw new InvalidOperationException("Aggregate predecessor does not match the canonical event sequence.");
         return new CanonicalUpdate(appliedEvent, aggregate.AppliedSourceEvent(appliedEvent), aggregate.ReplaySeed,
-            state, revision, algorithmVersion, sourceSha256);
+            state, priorState, revision, algorithmVersion, sourceSha256);
     }
 }
 
