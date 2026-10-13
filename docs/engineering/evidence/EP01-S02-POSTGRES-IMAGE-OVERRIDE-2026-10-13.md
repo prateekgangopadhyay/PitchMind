@@ -31,3 +31,6 @@ The source/script tree tested here was ``20c1076366166938250d282c03c8f9d77730fb6
 - Cleanup removed only this project's containers, network, and volumes plus the temporary ``docker/.env``. Final inspection found no test-project containers or volumes; shared ``pitchmind`` PostgreSQL and Redis remained healthy on 127.0.0.1:5432 and 127.0.0.1:6379.
 
 This is same-machine LOCAL runtime evidence, not a clean-machine or cross-machine volume-compatibility test. Hosted CI, exact-current-head human review, and Product Owner acceptance remain pending; EP01-S02 remains unaccepted. No Azure resources or deployments were changed.
+
+
+The separate destructive-reset check used disposable project ``pitchmind-pr117-resetcheck`` on ports 35435/36382. PostgreSQL 16 and Redis 7.4 became healthy, then ``./scripts/dev-reset.sh --force`` removed only that project's containers, network, and project-scoped volumes. The shared ``pitchmind_postgres_data``/``pitchmind_redis_data`` volumes and healthy shared services remained. The reset command retained its local credential file as documented; the test harness removed its temporary file after verification.
