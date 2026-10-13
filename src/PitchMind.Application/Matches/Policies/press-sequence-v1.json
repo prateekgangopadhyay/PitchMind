@@ -1,0 +1,45 @@
+{
+  "version": "press-sequence-v1",
+  "reviewStatus": "demonstration-pending-review",
+  "triggerToGoalWindowSeconds": 25,
+  "pressureToResponseWindowSeconds": 10,
+  "responseToRegainWindowSeconds": 10,
+  "regainToGoalWindowSeconds": 15,
+  "maximumPressureDistanceMetres": 3.0,
+  "requiredActionSequence": [
+    "back-pass",
+    "press-arrival",
+    "pressured-pass",
+    "high-regain",
+    "cutback",
+    "shot",
+    "goal"
+  ],
+  "requiredEventTypeSequence": [
+    "Pass",
+    "Pressure",
+    "Pass",
+    "Turnover",
+    "Pass",
+    "Shot",
+    "Goal"
+  ],
+  "requiredOutcomes": {
+    "trigger": "complete",
+    "response": "incomplete",
+    "regain": "won",
+    "goal": "scored"
+  },
+  "conditions": [
+    "The opponent completes a back-pass before the pressure sequence.",
+    "A named opposing presser is within {distance} metres of the goalkeeper in the sampled arrival frame.",
+    "The pressured pass is incomplete within {responseWindow} seconds.",
+    "The pressing team records a regain within {regainWindow} seconds.",
+    "The same team produces a cutback, shot, and goal within {outcomeWindow} seconds of the regain."
+  ],
+  "limitations": [
+    "This is an unreviewed synthetic demonstration policy, not a league-calibrated threshold set.",
+    "Sparse fixture frames are snapshots; they do not establish continuous movement or pressure intensity.",
+    "The sequence supports a pressing interpretation but does not establish player intent, manager intent, or causality."
+  ]
+}

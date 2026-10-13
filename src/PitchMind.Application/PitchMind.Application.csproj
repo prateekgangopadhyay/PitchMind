@@ -1,3 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup><ProjectReference Include="../PitchMind.Domain/PitchMind.Domain.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PitchMind.Domain/PitchMind.Domain.csproj" />
+    <EmbeddedResource Include="Matches/Policies/press-sequence-v1.json" />
+  </ItemGroup>
 </Project>

@@ -25,6 +25,34 @@ public sealed class SyntheticMatchTests
         var events = fixture.Events.Select(e => e.Action == "pressured-pass" ? e with { Outcome = "complete" } : e).ToArray();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
     }
+    [Fact] public void DemonstrationPolicyIsVersionedUnreviewedAndDrivesEvidenceText()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var policy = PressingSequenceDetector.DemonstrationPolicy;
+        var service = new SyntheticMatchService(fixture);
+        var insight = service.GetInsights(5400).Single();
+        var evidence = service.GetEvidence(insight.Id, 5400)!;
+
+        Assert.Equal("press-sequence-v1", policy.Version);
+        Assert.Equal("demonstration-pending-review", policy.ReviewStatus);
+        Assert.Equal(policy.Version, insight.DetectorVersion);
+        Assert.Contains(evidence.Conditions, condition => condition.Contains("within 3 metres", StringComparison.Ordinal));
+        Assert.Contains(policy.Limitations, limitation => limitation.Contains("unreviewed synthetic demonstration", StringComparison.Ordinal));
+    }
+    [Fact] public void DetectorUsesPolicyDistanceInsteadOfAnEmbeddedThreshold()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var stricterPolicy = PressingSequenceDetector.DemonstrationPolicy with { MaximumPressureDistanceMetres = 0.1 };
+
+        Assert.Empty(PressingSequenceDetector.Detect(fixture, 5400, stricterPolicy));
+    }
+    [Fact] public void DetectorRejectsInvalidPolicyOverrides()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var invalidPolicy = PressingSequenceDetector.DemonstrationPolicy with { RequiredActionSequence = Array.Empty<string>() };
+
+        Assert.Throws<InvalidOperationException>(() => PressingSequenceDetector.Detect(fixture, 5400, invalidPolicy));
+    }
     [Fact] public void UnrelatedRegainIsNotAttributedToPress()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
