@@ -2,7 +2,7 @@
 
 ## Revision and scope
 
-Code revision: `bb8124fa192cbc7914455c1daef51f900d832e49`, based on exact PR #221 head `1b48cf10dfa5aa151e6575e26919966e04b30a03` (itself stacked on PR #209 head `39c9058eda728da3fa489fd90ff8313c0f2df31e`). This is a local feature branch prepared for a draft stacked PR; it has not been pushed or independently approved.
+Code revision: `bb8124fa192cbc7914455c1daef51f900d832e49`, originally based on PR #221 head `1b48cf10dfa5aa151e6575e26919966e04b30a03` (itself stacked on PR #209 head `39c9058eda728da3fa489fd90ff8313c0f2df31e`). It was published as PR #222 and merged into PR #221 at `2ae55872f3669921a9d1ef04728533ea33657e8c`.
 
 An independent read-only review of PR #221 at `1b48cf10dfa5aa151e6575e26919966e04b30a03` found two P2 gaps: public `MatchAggregate.Apply` could mutate while `CanonicalMatchEventWriter` awaited persistence, and the previous same-aggregate test did not assert that store commits never overlapped.
 
@@ -23,4 +23,4 @@ A full solution restore was attempted separately but has not completed; no solut
 
 ## Review and remaining
 
-Independent re-review of `bb8124fa192cbc7914455c1daef51f900d832e49` and exact-head GitHub review remain pending. EP04-S03 remains partial and unaccepted. No API/EventWorker registration, broker transport, external fencing, checkpoint/order enforcement, or Azure integration is claimed. No Azure resources or deployments were changed.
+An independent read-only re-review of PR #222 at exact head `ece93ffde8af93a4b777f29d4bc9b0d5ccac062d` confirmed both reported gaps were fixed and found no new actionable issue. A second independent read-only review of PR #221 at exact head `2ae55872f3669921a9d1ef04728533ea33657e8c` confirmed those fixes in the full parent diff; no new code correctness issue was found. The reviewers did not run tests or submit formal GitHub reviews. This documentation correction records review state only; it does not add test evidence. EP04-S03 remains partial and unaccepted. No API/EventWorker registration, broker transport, external fencing, checkpoint/order enforcement, or Azure integration is claimed. No Azure resources or deployments were changed.
