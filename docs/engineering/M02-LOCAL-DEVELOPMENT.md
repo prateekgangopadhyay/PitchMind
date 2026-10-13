@@ -17,7 +17,7 @@ From the repository root:
 ```bash
 ./scripts/dev-up.sh
 ./scripts/dev-health.sh
-dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
 
 In another terminal, verify all three local processes/services:
@@ -40,6 +40,7 @@ This stops the Compose services and preserves the named data volumes. To delete 
 
 - Compose publishes PostgreSQL and Redis only on `127.0.0.1`; containers have health checks and named persistent volumes.
 - The first start generates separate OpenSSL random passwords in gitignored `docker/.env`, mode `0600`. Existing credential files are also restricted to the current user. Never commit or share this file, and never reuse these passwords in Azure.
+- The local API requires `Development` and `Runtime:Profile=local`. Azure-hosted profiles use `Runtime:Profile=azure`; local profile selection is rejected outside Development.
 - The API command above binds to loopback. Do not bind local development endpoints to `0.0.0.0`.
 - LOCAL containers and adapters must not be used by deployed Azure environments. Local success is not evidence of Azure integration, deployment readiness, or story acceptance.
 

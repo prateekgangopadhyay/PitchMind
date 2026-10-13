@@ -6,6 +6,8 @@ public static class ContractVersion
     public const string V1 = "1";
 }
 
+public sealed record AnalystRequest(string InsightId, int AtSeconds, string Audience);
+
 public sealed record PlayerResponse(string Id, string Name, string TeamId, int ShirtNumber, string Role);
 public sealed record TeamResponse(string Id, string Name, string Formation, IReadOnlyList<PlayerResponse> Players);
 public sealed record PitchPositionResponse(string PlayerId, string TeamId, double X, double Y);

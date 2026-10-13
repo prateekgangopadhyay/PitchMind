@@ -52,7 +52,7 @@ stages:
       displayName: Validate repository and Compose configuration
     - bash: |
         set -euo pipefail
-        python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
+        python3 -m unittest discover -s scripts -p 'test_*.py' -v
         test -f docs/backlog/STORY-WORKPACK-INDEX.md
         test -f docs/architecture/06-target-azure-hld.md
         test -f docs/architecture/07-football-analytics-detailed-lld.md

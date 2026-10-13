@@ -84,10 +84,10 @@ function check() {
   assert.equal(stories.length, 59, 'Exactly 59 authoritative backlog stories required');
   assert.equal(reg.roles.length, 28, 'Exactly 28 Council roles required');
   assert.equal(design.councilRoleCount, 28, 'Design skills are not accountable Council roles');
-  assert.equal(design.skillCount, 3, 'Exactly three design skill sources are required');
-  assert.equal(design.skills.length, 3, 'Exactly three design skill entries are required');
-  assert.deepEqual(design.skills.map(x=>x.name).sort(), ['awesome-design-audit','design-taste-frontend','web-design-guidelines'],
-    'All three named design specialties must be registered');
+  assert.equal(design.skillCount, 5, 'Exactly five design skill sources are required');
+  assert.equal(design.skills.length, 5, 'Exactly five design skill entries are required');
+  assert.deepEqual(design.skills.map(x=>x.name).sort(), ['awesome-design-audit','design-taste-frontend','emil-design-eng','impeccable','web-design-guidelines'],
+    'All five named design specialties must be registered');
   assert.equal(new Set(reg.roles.map(x => x.name)).size, 28, 'Duplicate role');
   assert.equal(plan.stories.length, 59, 'Story routes missing');
   assert.equal(new Set(plan.stories.map(x => x.storyId)).size, 59, 'Duplicate routed story');
@@ -96,9 +96,9 @@ function check() {
     .filter(x => x.isDirectory()).map(x => x.name);
   const designSlugs = design.skills.map(x => x.name);
   const councilSlugs = reg.roles.map(x => x.name);
-  assert.equal(new Set([...councilSlugs,...designSlugs]).size,31,'Skill names must be unique across groups');
+  assert.equal(new Set([...councilSlugs,...designSlugs]).size,33,'Skill names must be unique across all 33 skill directories');
   assert.deepEqual(allSlugs.sort(), [...councilSlugs,...designSlugs].sort(),
-    'Disk skills must match the 28 Council roles plus 3 design skills');
+    'Disk skills must match the 28 Council roles plus 5 design skills');
   const seen = new Set();
   for (const role of reg.roles) {
     const file = role.skillFile;
@@ -134,7 +134,8 @@ function check() {
   }
   for (const file of ['docs/design/PITCHMIND-DESIGN-SYSTEM.md',
     'docs/design/FRONTEND-DESIGN-DELIVERY.md','docs/design/VENDOR-SOURCES.md',
-    'docs/design/vendor/taste-skill-LICENSE.txt','scripts/test_design_skills.mjs']) {
+    'docs/design/vendor/taste-skill-LICENSE.txt',
+    'docs/design/vendor/emil-design-eng-LICENSE.txt','scripts/test_design_skills.mjs']) {
     assert.ok(existsSync(path.join(root,file)), 'Missing design governance or test '+file);
   }
   for (const role of ['ui-ux-engineer','lead-frontend-engineer','accessibility-engineer','qa-architect']) {

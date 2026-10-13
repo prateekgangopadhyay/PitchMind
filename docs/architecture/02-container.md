@@ -8,13 +8,15 @@
 flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
   A --> H["Health endpoints"]
-  A --> R["Match routes: 503 MATCH_DATA_UNAVAILABLE"]
+  A --> MR["Match routes: 503 MATCH_DATA_UNAVAILABLE"]
   T["Deterministic test golden generator"] -. test assemblies only .-> Tests["Automated tests"]
   L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
-  J["Candidate synthetic JSON + manifest"] -. "not canonically imported" .-> P
+  J["Candidate synthetic JSON"] -. "bounded raw schema parsing" .-> R["ManuLivCandidateFeedReader"]
+  R -. "LOCAL paced raw replay; caller-managed resume cursor" .-> RP["LocalCandidateFeedReplayProducer"]
+  RP -. "no canonical admission or persistence" .-> X["Clock / units / identity semantics unresolved"]
 ```
 
-The current PostgreSQL adapter persists `MatchEvent` but does **not** provide match frames, projections, evidence or a transactional outbox. Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE`; the analyst endpoint may return `429` when rate-limited before its handler. Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable these routes. The former generated scenario now exists only in test assemblies. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
+The current PostgreSQL adapter persists `MatchEvent` but does **not** provide match frames, projections, evidence or a transactional outbox. Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE`; the analyst endpoint may return `429` when rate-limited before its handler. Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable these routes. The former generated scenario now exists only in test assemblies. `ManuLivCandidateFeedReader` parses raw candidate records and their source hash; `LocalCandidateFeedReplayProducer` emits those records in order at a bounded local rate and returns a source-bound resume cursor for the caller to persist after handling. Neither component maps or persists canonical football facts, and this local producer is not the target Event Hubs adapter. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
 
 ## TARGET — canonical Azure platform
 

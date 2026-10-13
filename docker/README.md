@@ -1,6 +1,8 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Named volumes persist data. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Compose uses the stable `pitchmind` project name and explicitly named `pitchmind_postgres_data` / `pitchmind_redis_data` volumes, so the configured defaults use the same project and data-volume identities as the existing local PitchMind services. **These are development-only containers**; Azure environments use managed Azure services.
+
+The explicit volume names are shared across Compose project names. For an isolated runtime check, override both volume names as well as the project name; changing only the project name still uses the PitchMind data volumes.
 
 From the repository root:
 
@@ -12,7 +14,7 @@ From the repository root:
 In a second terminal, run the local API:
 
 ```bash
-dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
 
 Back at the repository root, check readiness and later stop the services:
@@ -22,10 +24,10 @@ Back at the repository root, check readiness and later stop the services:
 ./scripts/dev-down.sh
 ```
 
-The first run creates `docker/.env` with independent random passwords and restricts it to the current user. It is gitignored. Never share its contents. The API is a separate local process, bound to loopback by the command above; `/health` is the readiness endpoint. `./scripts/dev-api-health.sh` checks API readiness independently, and the optional URL to `dev-health.sh` checks the API after PostgreSQL and Redis.
+The first run creates `docker/.env` with independent random passwords and restricts it to the current user. It is gitignored. Never share its contents. On each start, the bootstrap requires exactly one distinct 48-character lowercase hexadecimal password for PostgreSQL and Redis, each containing at least 12 unique hex digits. This rejects the committed example placeholders and low-diversity or ambiguous values. If validation fails, replace both values locally with strong random values and rerun the command. The values are never printed by the bootstrap. The API is a separate local process, bound to loopback by the command above; `/health` is the readiness endpoint. `./scripts/dev-api-health.sh` checks API readiness independently, and the optional URL to `dev-health.sh` checks the API after PostgreSQL and Redis.
 
 To stop the services and preserve data, run `./scripts/dev-down.sh`. To delete both data volumes, run `./scripts/dev-reset.sh` and type `RESET` at its prompt. For automation, `./scripts/dev-reset.sh --force` explicitly skips the prompt. Reset retains `docker/.env`; restarting reuses the local credentials.
 
-The M01 API and workers still use scaffold adapters; these database/cache containers are not yet wired into canonical persistence or caching. Azure credentials are not required to run the local API.
+The local API requires the resolved .NET environment name to be `Development` and `Runtime:Profile=local`. EP06-S04 adds Entra authentication for the Azure profile, which requires `Production` plus `Runtime:Profile=azure` and Entra authority/audience. These local guards are not deployment identity validation. The API currently has no canonical match read adapter: its match routes return typed `503 MATCH_DATA_UNAVAILABLE` until validated source data and canonical PostgreSQL read composition are available. Starting PostgreSQL and Redis here does not configure those adapters. Azure credentials are not required to run the local API.
 
 Troubleshooting: start Docker Desktop, run `docker info`, then `docker compose --env-file docker/.env -f docker/compose.yml ps`. If ports 5432 or 6379 are occupied, edit docker/.env to select free host ports.
