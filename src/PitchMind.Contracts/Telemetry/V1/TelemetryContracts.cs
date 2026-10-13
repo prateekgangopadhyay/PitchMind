@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PitchMind.Contracts.Telemetry.V1;
 
 /// <summary>Transport-neutral, versioned telemetry contracts. Provider values remain provenance, not canonical facts.</summary>
@@ -53,6 +55,7 @@ public sealed record MatchTimeV1
     /// <summary>Canonical elapsed seconds; no implicit 90-minute cap is applied.</summary>
     public required long ElapsedSeconds { get; init; }
     /// <summary>Unmodified value from the source clock.</summary>
+    [JsonConverter(typeof(ExactDecimalJsonConverter))]
     public required decimal SourceClockValue { get; init; }
     public required string SourceClockUnit { get; init; }
     public required string SourceClockBasis { get; init; }
@@ -78,7 +81,9 @@ public sealed record SourceReferenceV1
 
 public sealed record PitchCoordinateSystemV1
 {
+    [JsonConverter(typeof(ExactDecimalJsonConverter))]
     public required decimal LengthMetres { get; init; }
+    [JsonConverter(typeof(ExactDecimalJsonConverter))]
     public required decimal WidthMetres { get; init; }
     /// <summary>metres, normalized_0_1, or percent_0_100.</summary>
     public required string Unit { get; init; }
@@ -96,7 +101,9 @@ public sealed record TeamAttackingDirectionV1
 
 public sealed record PitchPointV1
 {
+    [JsonConverter(typeof(ExactDecimalJsonConverter))]
     public required decimal X { get; init; }
+    [JsonConverter(typeof(ExactDecimalJsonConverter))]
     public required decimal Y { get; init; }
 }
 

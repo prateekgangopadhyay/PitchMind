@@ -65,6 +65,37 @@ public sealed class TelemetryContractTests
         var boundaryNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
         boundaryNode["coordinateSystem"]!["lengthMetres"] = JsonNode.Parse("90.000000000000000000000000001");
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(boundaryNode.ToJsonString(), JsonOptions));
+
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("79228162514264337593543950336");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+    }
+
+    [Theory]
+    [InlineData("0.0000000000000000000000000001")]
+    [InlineData("1.2300")]
+    [InlineData("79.228162514264337593543950335")]
+    [InlineData("79228162514264337593543950335")]
+    [InlineData("0e999999999999999999999")]
+    public void Decimal_contract_preserves_exact_values_at_supported_scale_and_coefficient(string rawValue)
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse(rawValue);
+
+        var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions)!;
+
+        var expected = rawValue[0] == '0' && (rawValue.Contains('e') || rawValue.Contains('E'))
+            ? 0m
+            : decimal.Parse(rawValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(expected, restored.MatchTime.SourceClockValue);
+    }
+
+    [Fact]
+    public void Decimal_contract_rejects_extreme_exponents_with_a_json_error()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("1e-2147483648");
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
     }
 
     [Fact]
@@ -207,8 +238,9 @@ public sealed class TelemetryContractTests
         Assert.Equal("#/$defs/dotnetDecimalNonNegative", eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("sourceClockValue").GetProperty("$ref").GetString());
         Assert.Equal("event-envelope.schema.json#/$defs/dotnetDecimalNonNegative", frameSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("x").GetProperty("$ref").GetString());
         Assert.True(eventDefinitions.TryGetProperty("dotnetDecimalNonNegative", out _));
-        Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
-        Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
+        var lengthBounds = frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("allOf")[1];
+        Assert.Equal(90, lengthBounds.GetProperty("minimum").GetInt32());
+        Assert.Equal(120, lengthBounds.GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
         Assert.Equal(64, eventSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("teamDirections").GetProperty("maxItems").GetInt32());
         Assert.Equal("null", eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").GetProperty("properties").GetProperty("end").GetProperty("anyOf")[1].GetProperty("type").GetString());
