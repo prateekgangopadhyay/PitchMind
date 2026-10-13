@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-dotnet restore PitchMind.slnx
+dotnet restore PitchMind.slnx --locked-mode
 python3 scripts/check_nuget_vulnerabilities.py PitchMind.slnx
 dotnet build PitchMind.slnx --no-restore -c Release
 dotnet test PitchMind.slnx --no-build -c Release

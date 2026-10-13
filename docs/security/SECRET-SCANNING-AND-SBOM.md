@@ -22,6 +22,14 @@ are disabled, and output must be outside the source tree. Local validation
 removes its temporary SBOM after checking the SPDX JSON structure. Azure DevOps
 publishes its source SBOM as the `security-evidence` build artifact.
 
+NuGet dependencies are represented by committed `packages.lock.json` files for
+all .NET projects. `Directory.Build.props` enables lock generation and CI/local
+validation restores in locked mode. Syft excludes generated `.git`, `node_modules`,
+`bin`, `obj`, `dist`, Python cache and virtual-environment directories; it still
+catalogs dependency lock/manifests. A regression test confirms transitive NuGet
+packages are included from a lock file while generated package manifests are
+excluded. This keeps the source inventory stable before and after local builds.
+
 `scripts/validate-all.sh` runs both fixture tests and the actual repository scan
 and source SBOM generation. The Azure DevOps PR validation job runs the same
 checks and publishes the SBOM artifact. These are source-tree PR checks, not a

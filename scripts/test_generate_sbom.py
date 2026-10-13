@@ -24,6 +24,23 @@ class GenerateSbomTests(unittest.TestCase):
                 '{"name":"pitchmind-sbom-fixture","version":"1.0.0"}\n',
                 encoding="utf-8",
             )
+            (source / "packages.lock.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "dependencies": {
+                            "net10.0": {
+                                "sbom-fixture-transitive": {
+                                    "type": "Transitive",
+                                    "resolved": "2.4.6",
+                                    "contentHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
             generated_packages = [
                 source / "web" / "node_modules" / "generated-package" / "package.json",
                 source / "src" / "Example" / "obj" / "project.assets.json",
@@ -65,6 +82,14 @@ class GenerateSbomTests(unittest.TestCase):
         self.assertNotIn(
             "generated-output-must-not-be-cataloged",
             {package["name"] for package in document["packages"]},
+        )
+        self.assertIn(
+            ("sbom-fixture-transitive", "2.4.6"),
+            {
+                (package["name"], package.get("versionInfo"))
+                for package in document["packages"]
+            },
+            "SBOM must retain transitive dependencies from NuGet lock files",
         )
 
     def test_output_inside_source_is_rejected_without_creating_directories(self):
