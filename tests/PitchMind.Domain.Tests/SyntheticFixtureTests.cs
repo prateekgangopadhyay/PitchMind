@@ -1,5 +1,6 @@
 using PitchMind.Domain.Simulation;
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -43,6 +44,113 @@ public sealed class SyntheticFixtureTests
         Assert.Equal("synthetic", first.Provenance);
     }
 
+    [Fact] public void VersionedSyntheticFixtureMatchesGoldenFingerprint()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        Assert.Equal("4d0e5cba88bfaaf596946bf7ebb50dcca18262e0bed3506ededeaf440189d67b", Fingerprint(fixture));
+
+        var players = fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId));
+        var activePlayers = fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId);
+        var aggregate = new MatchAggregate(new(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id,
+            players, activePlayers, fixture.Provenance);
+        foreach (var item in fixture.Events) aggregate.Apply(item);
+        var stateJson = JsonSerializer.Serialize(aggregate.Snapshot());
+        var stateFingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson)));
+        Assert.Equal("e18412b8a6c72dba5a73f5dcebc01cacee644db0938750486cdb97a05736176b", stateFingerprint);
+    }
+
+    [Fact] public void CorrectedFixtureReplayPreservesIdentityTimeAndProvenanceAndChangesStateDeterministically()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        var originalGoal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
+        var correction = new FixtureEventCorrection(
+            2,
+            "correction-home-goal-classification-v1",
+            originalGoal.Event.EventId,
+            fixture.Provenance,
+            originalGoal with { Event = originalGoal.Event with { Type = MatchEventType.Shot } });
+
+        var correctedEvents = FixtureCorrectionHistory.Resolve(fixture, [correction]);
+        var repeatedEvents = FixtureCorrectionHistory.Resolve(fixture, [correction]);
+        var originalState = Replay(fixture, fixture.Events).Snapshot();
+        var correctedState = Replay(fixture, correctedEvents).Snapshot();
+        var repeatedState = Replay(fixture, repeatedEvents).Snapshot();
+
+        Assert.Equal(fixture.Events, FixtureCorrectionHistory.Resolve(fixture, []));
+        Assert.Equal(fixture.Provenance, correctedState.Provenance);
+        Assert.Equal((0, 1), (correctedState.HomeScore, correctedState.AwayScore));
+        Assert.Equal(originalState.LastSequence, correctedState.LastSequence);
+        Assert.Equal(originalState.ClockSeconds, correctedState.ClockSeconds);
+        Assert.Equal(JsonSerializer.Serialize(correctedState), JsonSerializer.Serialize(repeatedState));
+        Assert.Equal("92e3808bd73bb4e6596128a78078fbeabf01b1f33ec807d1bafa32fc3c31d6ba", Fingerprint(correctedState));
+        Assert.Equal(originalGoal, fixture.Events.Single(item => item.Event.EventId == originalGoal.Event.EventId));
+
+        var correctedGoalSlot = correctedEvents.Single(item => item.Event.EventId == originalGoal.Event.EventId);
+        Assert.Equal(originalGoal.Event.EventId, correctedGoalSlot.Event.EventId);
+        Assert.Equal(originalGoal.Event.MatchId, correctedGoalSlot.Event.MatchId);
+        Assert.Equal(originalGoal.Event.Sequence, correctedGoalSlot.Event.Sequence);
+        Assert.Equal(originalGoal.Event.Period, correctedGoalSlot.Event.Period);
+        Assert.Equal(originalGoal.Event.ClockSeconds, correctedGoalSlot.Event.ClockSeconds);
+        Assert.Equal(originalGoal.Event.OccurredAt, correctedGoalSlot.Event.OccurredAt);
+        Assert.Equal(fixture.Events.Select(item => item.Event.Sequence), correctedEvents.Select(item => item.Event.Sequence));
+    }
+
+    [Fact] public void LatestCorrectionRevisionWinsWithoutMutatingEarlierHistory()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        var goal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
+        var first = new FixtureEventCorrection(2, "correction-v2", goal.Event.EventId, fixture.Provenance,
+            goal with { Event = goal.Event with { Type = MatchEventType.Shot } });
+        var second = new FixtureEventCorrection(3, "correction-v3", goal.Event.EventId, fixture.Provenance, goal);
+
+        var afterFirst = FixtureCorrectionHistory.Resolve(fixture, [first]);
+        var afterBoth = FixtureCorrectionHistory.Resolve(fixture, [second, first]);
+
+        Assert.Equal(MatchEventType.Shot, afterFirst.Single(item => item.Event.EventId == goal.Event.EventId).Event.Type);
+        Assert.Equal(MatchEventType.Goal, afterBoth.Single(item => item.Event.EventId == goal.Event.EventId).Event.Type);
+        Assert.Equal(1, Replay(fixture, afterBoth).Snapshot().HomeScore);
+    }
+
+    [Theory]
+    [InlineData("eventId")]
+    [InlineData("matchId")]
+    [InlineData("sequence")]
+    [InlineData("period")]
+    [InlineData("clock")]
+    [InlineData("occurredAt")]
+    public void CorrectionRejectsChangesToEventIdentityOrMatchTime(string changedField)
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        var source = fixture.Events.First(item => item.Event.Type == MatchEventType.Pass);
+        var replacementEvent = changedField switch
+        {
+            "eventId" => source.Event with { EventId = Guid.NewGuid() },
+            "matchId" => source.Event with { MatchId = new(Guid.NewGuid()) },
+            "sequence" => source.Event with { Sequence = source.Event.Sequence + 1 },
+            "period" => source.Event with { Period = source.Event.Period == 1 ? 2 : 1 },
+            "clock" => source.Event with { ClockSeconds = source.Event.ClockSeconds + 1 },
+            "occurredAt" => source.Event with { OccurredAt = source.Event.OccurredAt.AddSeconds(1) },
+            _ => throw new ArgumentOutOfRangeException(nameof(changedField))
+        };
+        var correction = new FixtureEventCorrection(2, "invalid-correction", source.Event.EventId, fixture.Provenance,
+            source with { Event = replacementEvent });
+
+        var failure = Assert.Throws<InvalidOperationException>(() => FixtureCorrectionHistory.Resolve(fixture, [correction]));
+        Assert.Contains("preserve the original event ID", failure.Message);
+    }
+
+    [Fact] public void CorrectionHistoryRejectsConflictingCorrectionsAtTheSameRevision()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        var goal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
+        var first = new FixtureEventCorrection(2, "correction-a", goal.Event.EventId, fixture.Provenance,
+            goal with { Event = goal.Event with { Type = MatchEventType.Shot } });
+        var conflict = new FixtureEventCorrection(2, "correction-b", goal.Event.EventId, fixture.Provenance, goal);
+
+        var failure = Assert.Throws<InvalidOperationException>(() => FixtureCorrectionHistory.Resolve(fixture, [first, conflict]));
+        Assert.Contains("conflicting replacements", failure.Message);
+    }
+
     [Fact] public void ScenarioIncludesPeriodsCardsSubstitutionAndLegalScoreTransitions()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
@@ -84,7 +192,8 @@ public sealed class SyntheticFixtureTests
         var definition = JsonNode.Parse(ReadDefinition())!;
         definition["scenarioEvents"]![0]!["period"] = 2;
 
-        Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(definition.ToJsonString()));
+        var failure = Assert.Throws<InvalidOperationException>(() => SyntheticFixtureGenerator.GenerateFromDefinitionJson(definition.ToJsonString()));
+        Assert.Contains("period does not match its match clock", failure.Message);
     }
 
     [Fact] public void DefinitionRejectsDuplicateTerminalMarkers()
@@ -153,5 +262,21 @@ public sealed class SyntheticFixtureTests
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(fixture));
         return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    private static string Fingerprint(MatchState state)
+    {
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(state));
+        return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    private static MatchAggregate Replay(SyntheticFixture fixture, IEnumerable<SimulationEvent> events)
+    {
+        var players = fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId));
+        var activePlayers = fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId);
+        var aggregate = new MatchAggregate(new(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id,
+            players, activePlayers, fixture.Provenance);
+        foreach (var item in events) aggregate.Apply(item);
+        return aggregate;
     }
 }
