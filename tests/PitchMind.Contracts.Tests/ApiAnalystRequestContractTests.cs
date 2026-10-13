@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Xunit;
@@ -13,14 +12,13 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
     private HttpClient? _client;
     private string? _analystPath;
     private readonly StringBuilder _output = new();
+    private readonly TaskCompletionSource<Uri> _listeningAddress = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task InitializeAsync()
     {
         var repository = FindRepositoryRoot();
         var apiProject = Path.Combine(repository, "src", "PitchMind.Api", "PitchMind.Api.csproj");
         var configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Parent?.Name ?? "Release";
-        var port = ReserveLoopbackPort();
-        var address = $"http://127.0.0.1:{port}";
         var start = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = repository,
@@ -34,7 +32,7 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
         foreach (var argument in new[]
                  {
                      "run", "--no-build", "--configuration", configuration, "--project", apiProject,
-                     "--", "--urls", address
+                     "--", "--urls", "http://127.0.0.1:0"
                  })
             start.ArgumentList.Add(argument);
 
@@ -43,7 +41,16 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
         _api.ErrorDataReceived += (_, eventArgs) => AppendOutput(eventArgs.Data);
         _api.BeginOutputReadLine();
         _api.BeginErrorReadLine();
-        _client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(3) };
+
+        var startupTimeout = Task.Delay(TimeSpan.FromSeconds(30));
+        var startup = await Task.WhenAny(_listeningAddress.Task, _api.WaitForExitAsync(), startupTimeout);
+        if (startup == startupTimeout)
+            throw new TimeoutException($"Local API did not announce its listening address. Output: {Output}");
+        if (startup != _listeningAddress.Task)
+            throw new InvalidOperationException($"Local API exited before becoming ready. Output: {Output}");
+
+        var address = await _listeningAddress.Task;
+        _client = new HttpClient { BaseAddress = address, Timeout = TimeSpan.FromSeconds(3) };
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
         while (DateTimeOffset.UtcNow < deadline)
@@ -118,17 +125,21 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
         throw new DirectoryNotFoundException("Could not locate PitchMind.slnx from the contract test output directory.");
     }
 
-    private static int ReserveLoopbackPort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
-
     private void AppendOutput(string? line)
     {
         if (line is not null)
+        {
             lock (_output) _output.AppendLine(line);
+            const string listeningMarker = "Now listening on:";
+            var markerIndex = line.IndexOf(listeningMarker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
+            {
+                var addressText = line[(markerIndex + listeningMarker.Length)..].Trim();
+                if (Uri.TryCreate(addressText, UriKind.Absolute, out var address) &&
+                    address.Scheme == Uri.UriSchemeHttp && address.Host == "127.0.0.1" && address.Port > 0)
+                    _listeningAddress.TrySetResult(address);
+            }
+        }
     }
 
     private string Output
