@@ -26,10 +26,11 @@ At combined PR #209 head `692da9a6c62b32926fe1c875f33a0ac08a9ad6ee`:
 - `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --no-restore --disable-build-servers -p:NuGetAudit=false -v:q`: **28 passed, 0 failed, 0 skipped**.
 - `dotnet test tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj -c Release --no-restore --disable-build-servers -p:NuGetAudit=false -v:q`: **28 passed, 0 failed, 0 skipped**.
 - Initial Infrastructure run without a test connection: **19 skipped**; this did not provide PostgreSQL integration evidence.
-- After confirming the existing local PostgreSQL 16 service and its `pitchmind_postgres_data` volume, `COMPOSE_PROJECT_NAME=pitchmind ./scripts/test-postgres.sh` created and dropped a uniquely named test database: **19 passed, 0 failed, 0 skipped**. The real PostgreSQL integration tests ran on this combined code head without touching other databases.
+- Against the already-running local PostgreSQL 16 service, `COMPOSE_PROJECT_NAME=pitchmind ./scripts/test-postgres.sh` created and dropped a uniquely named test database: **19 passed, 0 failed, 0 skipped**. This verifies the combined code against that existing PostgreSQL 16 service only; it does not verify the repository's declared PostgreSQL 17 configuration.
+- Against a fresh disposable PostgreSQL 17 container using the repository's declared `postgres:17-alpine` image (local image ID `sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24`), the Infrastructure test project passed: **19 passed, 0 failed, 0 skipped**. The container had no volume mount and was removed by the test command's cleanup trap. Credentials were generated for the run and not persisted.
 - The full solution restore/test was not completed on this combined head.
 
-The first Docker check ran before elevated socket access was available. A read-only elevated inspection later confirmed the already-running `pitchmind-postgres-1` PostgreSQL 16 container was healthy and mounted on `pitchmind_postgres_data`; the isolated integration script then completed and removed its test database. No service/container configuration or persistent-volume contents were changed, and no Azure resources were changed.
+A read-only Docker inspection confirmed the already-running `pitchmind-postgres-1` PostgreSQL 16 container was healthy and mounted on `pitchmind_postgres_data`; that legacy-service run used and removed only its uniquely named test database. The separate PostgreSQL 17 run used a disposable container with no volume. No persistent-volume contents or Azure resources were changed.
 
 ## Review and remaining
 
