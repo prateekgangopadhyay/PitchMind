@@ -1,6 +1,6 @@
 # EP01-S02 PostgreSQL image override evidence
 
-**Code revision:** `5508915f6e64c3f254287366c2543a18263efe81`  
+**Code revision:** `5508915f6e64c3f254287366c2543a18263efe81`
 **Scope:** local PostgreSQL image selection for existing Compose volumes; no Azure resources or deployment.
 
 ## Verification performed
