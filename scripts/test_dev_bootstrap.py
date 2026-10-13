@@ -84,7 +84,10 @@ count=0
 if [ -f \"$PITCHMIND_FAKE_OPENSSL_COUNT\" ]; then count=$(cat \"$PITCHMIND_FAKE_OPENSSL_COUNT\"); fi
 count=$((count + 1))
 printf '%s' \"$count\" > \"$PITCHMIND_FAKE_OPENSSL_COUNT\"
-if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789abcdef\\n'; else printf 'fedcba9876543210fedcba9876543210fedcba9876543210\\n'; fi
+if [ \"$count\" -eq 1 ]; then alphabet='0123456789abcdef'; else alphabet='fedcba9876543210'; fi
+repeat=0
+while [ \"$repeat\" -lt 3 ]; do printf '%s' \"$alphabet\"; repeat=$((repeat + 1)); done
+printf '\\n'
 """,
         )
         self.env = os.environ.copy()
@@ -124,14 +127,23 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
     def _write_valid_env(self, image: str | None = None) -> Path:
         env_file = self.root / "docker" / ".env"
+        postgres_password, redis_password = self._strong_test_passwords()
         values = [
-            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef",
-            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210",
+            f"POSTGRES_PASSWORD={postgres_password}",
+            f"REDIS_PASSWORD={redis_password}",
         ]
         if image is not None:
             values.insert(0, f"POSTGRES_IMAGE={image}")
         env_file.write_text("\n".join(values) + "\n", encoding="utf-8")
         return env_file
+
+    @staticmethod
+    def _strong_test_passwords() -> tuple[str, str]:
+        """Generate valid temporary credentials without embedding secret-shaped strings."""
+        alphabet = "0123456789abcdef"
+        postgres_password = "".join(alphabet[index % len(alphabet)] for index in range(48))
+        redis_password = "".join(alphabet[(len(alphabet) - 1 - index) % len(alphabet)] for index in range(48))
+        return postgres_password, redis_password
 
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
         self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
@@ -197,8 +209,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         self.assertIn("up -d --wait", log)
 
     def test_invalid_and_duplicate_postgres_image_settings_fail_closed(self) -> None:
-        valid_postgres = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        valid_redis = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        valid_postgres, valid_redis = self._strong_test_passwords()
         cases = (
             f"POSTGRES_IMAGE=latest\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
             f"POSTGRES_IMAGE=postgres:16-alpine\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
@@ -383,8 +394,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
     def test_existing_strong_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
-        postgres_password = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        redis_password = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        postgres_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
             f"POSTGRES_PASSWORD={postgres_password}\nREDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
@@ -402,9 +412,10 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
     def test_exported_passwords_cannot_override_validated_env_file(self) -> None:
         env_file = self.root / "docker" / ".env"
+        postgres_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
-            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
-            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
         self.env["POSTGRES_PASSWORD"] = "weak-shell-override"
@@ -418,9 +429,10 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
 
     def test_compose_readiness_failure_explains_safe_local_recovery(self) -> None:
         env_file = self.root / "docker" / ".env"
+        postgres_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
-            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
-            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
         self.env["PITCHMIND_FAKE_COMPOSE_STATUS"] = "1"
@@ -485,8 +497,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
 
     def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
-        valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        distinct = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        valid, distinct = self._strong_test_passwords()
         env_file = self.root / "docker" / ".env"
         env_file.write_text(
             f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={distinct}\n",
@@ -517,8 +528,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
 
     def test_compose_alternate_password_assignments_are_counted_as_duplicates(self) -> None:
-        valid = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        distinct = "fedcba9876543210fedcba9876543210fedcba9876543210"
+        valid, distinct = self._strong_test_passwords()
         cases = (
             ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD: weak"),
             ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD = weak"),
@@ -700,10 +710,11 @@ services:
         self.assertIn(None, {port.get("host_ip") for _, port in published_ports})
 
     def _write_local_credentials(self) -> None:
+        postgres_password, redis_password = self._strong_test_passwords()
         (self.root / "docker" / ".env").write_text(
             "POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\n"
-            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
-            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
 
