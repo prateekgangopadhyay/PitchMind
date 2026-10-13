@@ -16,12 +16,15 @@ flowchart TB
   Match --> Replay["Selected-time projection/evidence/fallback"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL canonical ledger")]
   ProjectionRead["PostgresMatchProjectionStore: metadata + projection/provenance read"] --> DB
+  CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
+  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (transport adapter not registered)"]
+  Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The version 2 schema migration defines metadata, frames, revisioned projection, evidence, quarantine, checkpoint and outbox tables. `PostgresMatchProjectionStore` now records immutable match source metadata and reads persisted projection state plus insight provenance, verifying source/state hashes and that event/frame evidence is not later than the insight sequence. Atomic event+projection+outbox writes remain owned by `PostgresCanonicalUpdateStore` in the stacked EP04-S03 workstream; this read store does not duplicate that write path. The current offline API still does not consume the PostgreSQL read store. Competition linkage and source-feed ingestion remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The PostgreSQL v4 migration adds the projection-to-source provenance foreign key while preserving v3 canonical admission revisions. The v5 migration adds outbox lease/retry/dead-letter state and a consumer inbox. `PostgresMatchProjectionStore` records immutable source metadata and reads persisted projection state and insight provenance, checking hashes and selected-sequence bounds. `PostgresCanonicalUpdateStore` verifies aggregate predecessor state hash/clock/sequence and immutable source identity against persisted history, then commits event, canonical/projection revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` provides leased at-least-once publication with bounded retries; `PostgresConsumerInbox` couples same-database effects to dedupe receipts. These infrastructure primitives are not registered in the API/EventWorker runtime; there is no Azure broker publisher, metrics exporter/alert, or projection API read path. Competition linkage, source import and persisted correction workflows remain unimplemented. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
@@ -40,6 +43,7 @@ flowchart TB
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
     Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    CanonicalPorts["ICanonicalUpdateStore / IOutboxPublisher / consumer inbox"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -62,6 +66,10 @@ flowchart TB
   Query --> Ports
   Explain --> Ports
   Pg -. "implements" .-> Ports
+  Pg -. "implements canonical update ports" .-> CanonicalPorts
+  Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
+  OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
+  Pg -. "implements consumer inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports
