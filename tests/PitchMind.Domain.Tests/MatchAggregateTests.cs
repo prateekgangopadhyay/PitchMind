@@ -28,6 +28,24 @@ public sealed class MatchAggregateTests
     }
 
     [Fact]
+    public void EmptyEventIdIsRejectedWithoutChangingState()
+    {
+        var (aggregate, fixture) = Create();
+        var invalidEvent = fixture.Events[0] with
+        {
+            Event = fixture.Events[0].Event with { EventId = Guid.Empty }
+        };
+
+        Assert.Throws<InvalidOperationException>(() => aggregate.Apply(invalidEvent));
+
+        var state = aggregate.Snapshot();
+        Assert.Equal(-1, state.LastSequence);
+        Assert.Equal(MatchPhase.NotStarted, state.Phase);
+        Assert.Equal(0, state.HomeScore);
+        Assert.Equal(0, state.AwayScore);
+    }
+
+    [Fact]
     public void ReusedEventIdWithDifferentPayloadIsRejectedWithoutChangingState()
     {
         var (aggregate, fixture) = Create();
