@@ -19,8 +19,8 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var command = new NpgsqlCommand("""
-            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres, replay_seed_json)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (match_id) DO NOTHING
+            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres, replay_seed_json, replay_context_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (match_id) DO NOTHING
             """, connection, transaction))
         {
             AddMetadata(command, metadata);
@@ -30,6 +30,7 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             SELECT fixture_version = $2 AND source_version = $3 AND source_sha256 = $4 AND provenance = $5
                 AND pitch_length_metres = $6 AND pitch_width_metres = $7
                 AND replay_seed_json IS NOT DISTINCT FROM $8::jsonb
+                AND replay_context_json IS NOT DISTINCT FROM $9::jsonb
             FROM pitchmind.matches WHERE match_id = $1
             """, connection, transaction))
         {
@@ -81,7 +82,7 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             SELECT i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary, i.conditions_json::text,
                 m.fixture_version, m.source_version, m.source_sha256, m.provenance, m.pitch_length_metres, m.pitch_width_metres,
                 p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256,
-                i.canonical_revision
+                i.canonical_revision, m.replay_seed_json::text, m.replay_context_json::text
             FROM pitchmind.insights i
             JOIN pitchmind.matches m ON m.match_id = i.match_id
             JOIN pitchmind.match_projections p ON p.match_id = i.match_id AND p.revision = i.revision
@@ -99,8 +100,12 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             truthClass = reader.GetString(4);
             summary = reader.GetString(5);
             conditionsJson = reader.GetString(6);
+            var replaySeed = reader.IsDBNull(20) ? null : JsonSerializer.Deserialize<MatchReplaySeed>(reader.GetString(20), JsonOptions)
+                ?? throw new InvalidDataException("Persisted match replay seed is empty.");
+            var replayContext = reader.IsDBNull(21) ? null : JsonSerializer.Deserialize<MatchReplayContext>(reader.GetString(21), JsonOptions)
+                ?? throw new InvalidDataException("Persisted match replay context is empty.");
             source = new(matchId, reader.GetString(7), reader.GetString(8), reader.GetString(9).Trim(),
-                reader.GetString(10), reader.GetDecimal(11), reader.GetDecimal(12));
+                reader.GetString(10), reader.GetDecimal(11), reader.GetDecimal(12), replaySeed, replayContext);
             Validate(source);
             var projectionSourceSha = reader.GetString(16).Trim();
             if (!string.Equals(projectionSourceSha, source.SourceSha256, StringComparison.Ordinal))
@@ -172,6 +177,20 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
                 throw new ArgumentException("Replay seed roster is invalid.", nameof(value), exception);
             }
         }
+        if (value.ReplayContext is not null)
+        {
+            var context = value.ReplayContext;
+            if (context.SchemaVersion != "match-replay-context-v1" || context.FixtureVersion != value.FixtureVersion ||
+                context.Provenance != value.Provenance || string.IsNullOrWhiteSpace(context.HomeTeamName) ||
+                string.IsNullOrWhiteSpace(context.AwayTeamName) || context.DurationSeconds is < 1 or > 5400 ||
+                context.HalfTimeSeconds <= 0 || context.HalfTimeSeconds >= context.DurationSeconds ||
+                context.CoordinateVersion != "metres-v1" ||
+                !context.CoordinateConvention.Contains("metre", StringComparison.OrdinalIgnoreCase) ||
+                !double.IsFinite(context.PitchLengthMetres) || !double.IsFinite(context.PitchWidthMetres) ||
+                context.PitchLengthMetres != (double)value.PitchLengthMetres ||
+                context.PitchWidthMetres != (double)value.PitchWidthMetres)
+                throw new ArgumentException("Replay context must be immutable, versioned, metric, and match its registered source.", nameof(value));
+        }
     }
 
     private static void Validate(PersistedMatchProjection value)
@@ -200,6 +219,11 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         {
             NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb,
             Value = value.ReplaySeed is null ? DBNull.Value : JsonSerializer.Serialize(value.ReplaySeed, JsonOptions)
+        });
+        command.Parameters.Add(new NpgsqlParameter
+        {
+            NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb,
+            Value = value.ReplayContext is null ? DBNull.Value : JsonSerializer.Serialize(value.ReplayContext, JsonOptions)
         });
     }
 }

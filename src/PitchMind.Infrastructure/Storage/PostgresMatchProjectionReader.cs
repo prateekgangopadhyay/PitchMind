@@ -17,6 +17,117 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     private const int MaximumMatchSeconds = 5400;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>One SQL statement gives the replay a single PostgreSQL MVCC snapshot across all source inputs.</summary>
+    public async Task<MatchReplaySnapshot?> ReadReplaySnapshotAtAsync(MatchId matchId, int selectedSeconds,
+        long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
+    {
+        if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
+        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (upToCanonicalRevision <= 0) throw new ArgumentOutOfRangeException(nameof(upToCanonicalRevision));
+        if (string.IsNullOrWhiteSpace(algorithmVersion)) throw new ArgumentException("Algorithm version is required.", nameof(algorithmVersion));
+
+        await using var command = dataSource.CreateCommand("""
+            WITH selected AS (
+                SELECT p.match_id, p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
+                       p.algorithm_version, p.source_sha256, p.state_sha256, p.state_json
+                FROM pitchmind.match_projections p
+                JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+                WHERE p.match_id = $1 AND p.as_of_clock_seconds <= $2
+                  AND p.canonical_revision <= $3 AND p.algorithm_version = $4
+                ORDER BY p.as_of_clock_seconds DESC, p.as_of_sequence DESC, p.canonical_revision DESC, p.revision DESC
+                LIMIT 1
+            )
+            SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
+                   p.algorithm_version, p.source_sha256, p.state_sha256, p.state_json::text,
+                   m.replay_seed_json::text, m.replay_context_json::text,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('payload', e.payload, 'sequence', e.sequence,
+                       'clockSeconds', e.clock_seconds, 'period', e.period) ORDER BY e.sequence)::text
+                       FROM pitchmind.match_events e WHERE e.match_id = p.match_id AND e.canonical_revision <= p.canonical_revision
+                         AND e.sequence <= p.as_of_sequence AND e.clock_seconds <= $2), '[]'),
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('source', e.source_event_json, 'payload', e.payload,
+                       'sequence', e.sequence, 'clockSeconds', e.clock_seconds, 'period', e.period) ORDER BY e.sequence)::text
+                       FROM pitchmind.match_events e WHERE e.match_id = p.match_id AND e.canonical_revision <= p.canonical_revision
+                         AND e.sequence <= p.as_of_sequence AND e.clock_seconds <= $2), '[]'),
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object('frame', f.payload, 'sequence', f.sequence, 'period', f.period,
+                       'clockSeconds', f.clock_seconds, 'coordinateVersion', f.coordinate_version, 'sourceSha256', f.source_sha256)
+                       ORDER BY f.clock_seconds, f.sequence, f.frame_id)::text
+                       FROM pitchmind.tracking_frames f WHERE f.match_id = p.match_id
+                         AND f.canonical_revision <= p.canonical_revision AND f.clock_seconds <= $2), '[]')
+            FROM selected p JOIN pitchmind.matches m ON m.match_id = p.match_id
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(upToCanonicalRevision);
+        command.Parameters.AddWithValue(algorithmVersion);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        var state = JsonSerializer.Deserialize<MatchState>(reader.GetString(7), JsonOptions)
+            ?? throw new InvalidDataException("Persisted match projection is empty.");
+        var sourceHash = reader.GetString(5).Trim();
+        var stateHash = reader.GetString(6).Trim();
+        var projection = new SelectedMatchProjection(state, reader.GetInt64(0), reader.GetInt32(1), reader.GetInt64(2),
+            reader.GetInt32(3), reader.GetString(4), sourceHash, stateHash);
+        ValidateProjection(matchId, projection);
+
+        var seed = reader.IsDBNull(8) ? null : JsonSerializer.Deserialize<MatchReplaySeed>(reader.GetString(8), JsonOptions)
+            ?? throw new InvalidDataException("Persisted replay seed is empty.");
+        var context = reader.IsDBNull(9) ? null : JsonSerializer.Deserialize<MatchReplayContext>(reader.GetString(9), JsonOptions)
+            ?? throw new InvalidDataException("Persisted replay context is empty.");
+        var indexedEvents = JsonSerializer.Deserialize<List<IndexedEvent>>(reader.GetString(10), JsonOptions) ?? [];
+        var indexedReplayEvents = JsonSerializer.Deserialize<List<IndexedReplayEvent>>(reader.GetString(11), JsonOptions) ?? [];
+        var indexedFrames = JsonSerializer.Deserialize<List<IndexedFrame>>(reader.GetString(12), JsonOptions) ?? [];
+
+        var events = indexedEvents.Select(item =>
+        {
+            var matchEvent = JsonSerializer.Deserialize<MatchEvent>(item.Payload.GetRawText(), JsonOptions)
+                ?? throw new InvalidDataException("Canonical ledger event is empty.");
+            MatchEventValidator.Validate(matchEvent);
+            if (matchEvent.MatchId != matchId || matchEvent.Sequence != item.Sequence ||
+                matchEvent.ClockSeconds != item.ClockSeconds || matchEvent.Period != item.Period)
+                throw new InvalidDataException("Canonical event payload does not match its indexed metadata.");
+            return matchEvent;
+        }).ToArray();
+        var replayEvents = indexedReplayEvents.Select(item =>
+        {
+            if (item.Source.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                throw new InvalidDataException("Canonical event is missing its immutable replay source envelope.");
+            var replayEvent = JsonSerializer.Deserialize<SimulationEvent>(item.Source.GetRawText(), JsonOptions)
+                ?? throw new InvalidDataException("Canonical replay source event is empty.");
+            var matchEvent = JsonSerializer.Deserialize<MatchEvent>(item.Payload.GetRawText(), JsonOptions)
+                ?? throw new InvalidDataException("Canonical event payload is empty.");
+            MatchEventValidator.Validate(replayEvent.Event);
+            if (replayEvent.Event != matchEvent || replayEvent.Event.MatchId != matchId ||
+                replayEvent.Event.Sequence != item.Sequence || replayEvent.Event.ClockSeconds != item.ClockSeconds ||
+                replayEvent.Event.Period != item.Period)
+                throw new InvalidDataException("Canonical replay envelope does not match its indexed event.");
+            return replayEvent;
+        }).ToArray();
+        var frames = indexedFrames.Select(item =>
+        {
+            var frame = JsonSerializer.Deserialize<TrackingFrame>(item.Frame.GetRawText(), JsonOptions)
+                ?? throw new InvalidDataException("Persisted tracking frame is empty.");
+            if (frame.ClockSeconds != item.ClockSeconds || frame.Id.Length == 0 || item.SourceSha256.Trim() != sourceHash)
+                throw new InvalidDataException("Persisted tracking frame metadata is inconsistent with the selected source.");
+            return new MatchReplayFrame(frame, item.Sequence, item.Period, item.CoordinateVersion, item.SourceSha256.Trim());
+        }).ToArray();
+        return new(projection, Array.AsReadOnly(events), seed, context, Array.AsReadOnly(replayEvents), Array.AsReadOnly(frames));
+    }
+
+    private static void ValidateProjection(MatchId matchId, SelectedMatchProjection projection)
+    {
+        var canonicalJson = JsonSerializer.Serialize(projection.State, JsonOptions);
+        var computedHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson)));
+        if (computedHash != projection.StateSha256 || projection.State.MatchId != matchId.ToString() ||
+            projection.State.LastSequence != projection.AsOfSequence || projection.State.ClockSeconds != projection.AsOfClockSeconds)
+            throw new InvalidDataException("Persisted projection metadata does not match its state.");
+    }
+
+    private sealed record IndexedEvent(JsonElement Payload, long Sequence, int ClockSeconds, int Period);
+    private sealed record IndexedReplayEvent(JsonElement Source, JsonElement Payload, long Sequence, int ClockSeconds, int Period);
+    private sealed record IndexedFrame(JsonElement Frame, long Sequence, int Period, int ClockSeconds,
+        string CoordinateVersion, string SourceSha256);
+
     public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
     {
@@ -114,6 +225,19 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         return seed;
     }
 
+    public async Task<MatchReplayContext?> ReadReplayContextAsync(MatchId matchId, CancellationToken cancellationToken)
+    {
+        await using var command = dataSource.CreateCommand("SELECT replay_context_json::text FROM pitchmind.matches WHERE match_id = $1");
+        command.Parameters.AddWithValue(matchId.Value);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        if (value is null or DBNull) return null;
+        var context = JsonSerializer.Deserialize<MatchReplayContext>((string)value, JsonOptions)
+            ?? throw new InvalidDataException("Persisted replay context is empty.");
+        if (context.SchemaVersion != "match-replay-context-v1")
+            throw new InvalidDataException("Persisted replay context version is unsupported.");
+        return context;
+    }
+
     public async IAsyncEnumerable<SimulationEvent> ReadReplayEventsAtAsync(SelectedMatchProjection projection,
         int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -153,6 +277,49 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         }
         if (expectedSequence != persistedSequence + 1)
             throw new InvalidDataException("Replay event prefix does not reach the selected projection sequence.");
+    }
+
+    public async IAsyncEnumerable<MatchReplayFrame> ReadReplayFramesAtAsync(SelectedMatchProjection projection,
+        int selectedSeconds, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        if (selectedSeconds is < 0 or > MaximumMatchSeconds || projection.AsOfClockSeconds > selectedSeconds)
+            throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (!Guid.TryParse(projection.State.MatchId, out var parsedMatchId) || parsedMatchId == Guid.Empty)
+            throw new InvalidDataException("Persisted projection has an invalid match ID.");
+        var matchId = new MatchId(parsedMatchId);
+        _ = await VerifyPersistedProjectionAsync(matchId, projection, cancellationToken);
+        await using var command = dataSource.CreateCommand("""
+            SELECT frame_id, sequence, period, clock_seconds, coordinate_version, source_sha256, payload::text
+            FROM pitchmind.tracking_frames
+            WHERE match_id = $1 AND canonical_revision <= $2 AND clock_seconds <= $3
+            ORDER BY clock_seconds, sequence, frame_id
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
+        command.Parameters.AddWithValue(selectedSeconds);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var frameIds = new HashSet<string>(StringComparer.Ordinal);
+        long previousSequence = -1;
+        int previousClock = -1;
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var id = reader.GetString(0);
+            var sequence = reader.GetInt64(1);
+            var period = reader.GetInt32(2);
+            var clock = reader.GetInt32(3);
+            var coordinateVersion = reader.GetString(4);
+            var sourceSha256 = reader.GetString(5).Trim();
+            var frame = JsonSerializer.Deserialize<TrackingFrame>(reader.GetString(6), JsonOptions)
+                ?? throw new InvalidDataException("Persisted tracking frame is empty.");
+            if (!frameIds.Add(id) || frame.Id != id || sequence <= previousSequence || clock < previousClock ||
+                frame.ClockSeconds != clock || clock > selectedSeconds || period is < 1 or > 2 ||
+                string.IsNullOrWhiteSpace(coordinateVersion) || sourceSha256 != projection.SourceSha256)
+                throw new InvalidDataException("Persisted tracking frame metadata is inconsistent with the selected source prefix.");
+            previousSequence = sequence;
+            previousClock = clock;
+            yield return new MatchReplayFrame(frame, sequence, period, coordinateVersion, sourceSha256);
+        }
     }
 
     private async Task<long> VerifyPersistedProjectionAsync(MatchId matchId, SelectedMatchProjection projection,
