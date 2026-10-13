@@ -14,10 +14,18 @@ public sealed record FixtureEventCorrection(
     string Provenance,
     SimulationEvent Replacement);
 
+/// <summary>A replay event with immutable source identity and any applied correction lineage.</summary>
+public sealed record ResolvedFixtureEvent(
+    SimulationEvent Event,
+    string SourceProvenance,
+    long? CorrectionRevision,
+    string? CorrectionId,
+    string? CorrectionProvenance);
+
 /// <summary>Resolves an immutable fixture plus correction history into ordered replay input.</summary>
 public static class FixtureCorrectionHistory
 {
-    public static IReadOnlyList<SimulationEvent> Resolve(
+    public static IReadOnlyList<ResolvedFixtureEvent> Resolve(
         SyntheticFixture fixture,
         IEnumerable<FixtureEventCorrection> corrections)
     {
@@ -31,7 +39,7 @@ public static class FixtureCorrectionHistory
         var sourceEvents = fixture.Events.ToDictionary(item => item.Event.EventId);
         var correctionIds = new HashSet<string>(StringComparer.Ordinal);
         var correctedAtRevision = new HashSet<(long Revision, Guid EventId)>();
-        var effectiveEvents = new Dictionary<Guid, SimulationEvent>();
+        var effectiveEvents = new Dictionary<Guid, FixtureEventCorrection>();
 
         foreach (var correction in history.OrderBy(item => item.Revision))
         {
@@ -47,11 +55,14 @@ public static class FixtureCorrectionHistory
                 throw new InvalidOperationException("A correction revision cannot contain conflicting replacements for the same event.");
 
             ValidatePreservedEventIdentity(original.Event, correction.Replacement.Event);
-            effectiveEvents[correction.TargetEventId] = correction.Replacement;
+            effectiveEvents[correction.TargetEventId] = correction;
         }
 
         return Array.AsReadOnly(fixture.Events
-            .Select(item => effectiveEvents.GetValueOrDefault(item.Event.EventId, item))
+            .Select(item => effectiveEvents.TryGetValue(item.Event.EventId, out var correction)
+                ? new ResolvedFixtureEvent(correction.Replacement, fixture.Provenance, correction.Revision,
+                    correction.CorrectionId, correction.Provenance)
+                : new ResolvedFixtureEvent(item, fixture.Provenance, null, null, null))
             .ToArray());
     }
 

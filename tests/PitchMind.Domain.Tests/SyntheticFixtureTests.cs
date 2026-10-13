@@ -68,15 +68,18 @@ public sealed class SyntheticFixtureTests
             "correction-home-goal-classification-v1",
             originalGoal.Event.EventId,
             fixture.Provenance,
-            originalGoal with { Event = originalGoal.Event with { Type = MatchEventType.Shot } });
+            originalGoal with { Event = originalGoal.Event with { Type = MatchEventType.Shot }, Action = "shot", Outcome = "on-target" });
 
         var correctedEvents = FixtureCorrectionHistory.Resolve(fixture, [correction]);
         var repeatedEvents = FixtureCorrectionHistory.Resolve(fixture, [correction]);
         var originalState = Replay(fixture, fixture.Events).Snapshot();
-        var correctedState = Replay(fixture, correctedEvents).Snapshot();
-        var repeatedState = Replay(fixture, repeatedEvents).Snapshot();
+        var correctedState = Replay(fixture, correctedEvents.Select(item => item.Event)).Snapshot();
+        var repeatedState = Replay(fixture, repeatedEvents.Select(item => item.Event)).Snapshot();
 
-        Assert.Equal(fixture.Events, FixtureCorrectionHistory.Resolve(fixture, []));
+        var unchangedEvents = FixtureCorrectionHistory.Resolve(fixture, []);
+        Assert.Equal(fixture.Events, unchangedEvents.Select(item => item.Event));
+        Assert.All(unchangedEvents, item => Assert.Equal(fixture.Provenance, item.SourceProvenance));
+        Assert.All(unchangedEvents, item => Assert.Null(item.CorrectionProvenance));
         Assert.Equal(fixture.Provenance, correctedState.Provenance);
         Assert.Equal((0, 1), (correctedState.HomeScore, correctedState.AwayScore));
         Assert.Equal(originalState.LastSequence, correctedState.LastSequence);
@@ -85,14 +88,20 @@ public sealed class SyntheticFixtureTests
         Assert.Equal("92e3808bd73bb4e6596128a78078fbeabf01b1f33ec807d1bafa32fc3c31d6ba", Fingerprint(correctedState));
         Assert.Equal(originalGoal, fixture.Events.Single(item => item.Event.EventId == originalGoal.Event.EventId));
 
-        var correctedGoalSlot = correctedEvents.Single(item => item.Event.EventId == originalGoal.Event.EventId);
-        Assert.Equal(originalGoal.Event.EventId, correctedGoalSlot.Event.EventId);
-        Assert.Equal(originalGoal.Event.MatchId, correctedGoalSlot.Event.MatchId);
-        Assert.Equal(originalGoal.Event.Sequence, correctedGoalSlot.Event.Sequence);
-        Assert.Equal(originalGoal.Event.Period, correctedGoalSlot.Event.Period);
-        Assert.Equal(originalGoal.Event.ClockSeconds, correctedGoalSlot.Event.ClockSeconds);
-        Assert.Equal(originalGoal.Event.OccurredAt, correctedGoalSlot.Event.OccurredAt);
-        Assert.Equal(fixture.Events.Select(item => item.Event.Sequence), correctedEvents.Select(item => item.Event.Sequence));
+        var correctedGoalSlot = correctedEvents.Single(item => item.Event.Event.EventId == originalGoal.Event.EventId);
+        Assert.Equal(originalGoal.Event.EventId, correctedGoalSlot.Event.Event.EventId);
+        Assert.Equal(originalGoal.Event.MatchId, correctedGoalSlot.Event.Event.MatchId);
+        Assert.Equal(originalGoal.Event.Sequence, correctedGoalSlot.Event.Event.Sequence);
+        Assert.Equal(originalGoal.Event.Period, correctedGoalSlot.Event.Event.Period);
+        Assert.Equal(originalGoal.Event.ClockSeconds, correctedGoalSlot.Event.Event.ClockSeconds);
+        Assert.Equal(originalGoal.Event.OccurredAt, correctedGoalSlot.Event.Event.OccurredAt);
+        Assert.Equal("shot", correctedGoalSlot.Event.Action);
+        Assert.Equal("on-target", correctedGoalSlot.Event.Outcome);
+        Assert.Equal(fixture.Provenance, correctedGoalSlot.SourceProvenance);
+        Assert.Equal(correction.Provenance, correctedGoalSlot.CorrectionProvenance);
+        Assert.Equal(correction.CorrectionId, correctedGoalSlot.CorrectionId);
+        Assert.Equal(correction.Revision, correctedGoalSlot.CorrectionRevision);
+        Assert.Equal(fixture.Events.Select(item => item.Event.Sequence), correctedEvents.Select(item => item.Event.Event.Sequence));
     }
 
     [Fact] public void LatestCorrectionRevisionWinsWithoutMutatingEarlierHistory()
@@ -106,9 +115,9 @@ public sealed class SyntheticFixtureTests
         var afterFirst = FixtureCorrectionHistory.Resolve(fixture, [first]);
         var afterBoth = FixtureCorrectionHistory.Resolve(fixture, [second, first]);
 
-        Assert.Equal(MatchEventType.Shot, afterFirst.Single(item => item.Event.EventId == goal.Event.EventId).Event.Type);
-        Assert.Equal(MatchEventType.Goal, afterBoth.Single(item => item.Event.EventId == goal.Event.EventId).Event.Type);
-        Assert.Equal(1, Replay(fixture, afterBoth).Snapshot().HomeScore);
+        Assert.Equal(MatchEventType.Shot, afterFirst.Single(item => item.Event.Event.EventId == goal.Event.EventId).Event.Event.Type);
+        Assert.Equal(MatchEventType.Goal, afterBoth.Single(item => item.Event.Event.EventId == goal.Event.EventId).Event.Event.Type);
+        Assert.Equal(1, Replay(fixture, afterBoth.Select(item => item.Event)).Snapshot().HomeScore);
     }
 
     [Theory]
@@ -144,7 +153,7 @@ public sealed class SyntheticFixtureTests
         var fixture = SyntheticFixtureGenerator.Generate(123);
         var goal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
         var first = new FixtureEventCorrection(2, "correction-a", goal.Event.EventId, fixture.Provenance,
-            goal with { Event = goal.Event with { Type = MatchEventType.Shot } });
+            goal with { Event = goal.Event with { Type = MatchEventType.Shot }, Action = "shot", Outcome = "on-target" });
         var conflict = new FixtureEventCorrection(2, "correction-b", goal.Event.EventId, fixture.Provenance, goal);
 
         var failure = Assert.Throws<InvalidOperationException>(() => FixtureCorrectionHistory.Resolve(fixture, [first, conflict]));
