@@ -5,10 +5,12 @@ namespace PitchMind.Application.Abstractions;
 
 public sealed class CanonicalUpdate
 {
-    private CanonicalUpdate(MatchEvent @event, MatchState state, int revision, string algorithmVersion, string sourceSha256)
+    private CanonicalUpdate(MatchEvent @event, MatchState state, MatchState priorState, int revision,
+        string algorithmVersion, string sourceSha256)
     {
         Event = @event;
         State = state;
+        PriorState = priorState;
         Revision = revision;
         AlgorithmVersion = algorithmVersion;
         SourceSha256 = sourceSha256;
@@ -16,6 +18,7 @@ public sealed class CanonicalUpdate
 
     public MatchEvent Event { get; }
     public MatchState State { get; }
+    public MatchState PriorState { get; }
     public int Revision { get; }
     public string AlgorithmVersion { get; }
     public string SourceSha256 { get; }
@@ -26,9 +29,12 @@ public sealed class CanonicalUpdate
         ArgumentNullException.ThrowIfNull(aggregate);
         ArgumentNullException.ThrowIfNull(appliedEvent);
         var state = aggregate.SnapshotAfter(appliedEvent);
+        var priorState = aggregate.SnapshotBefore(appliedEvent);
         if (aggregate.Id != appliedEvent.MatchId || state.LastSequence != appliedEvent.Sequence || state.ClockSeconds != appliedEvent.ClockSeconds)
             throw new InvalidOperationException("Aggregate projection does not match its applied canonical event.");
-        return new CanonicalUpdate(appliedEvent, state, revision, algorithmVersion, sourceSha256);
+        if (priorState.MatchId != appliedEvent.MatchId.ToString() || priorState.LastSequence != appliedEvent.Sequence - 1)
+            throw new InvalidOperationException("Aggregate predecessor does not match the canonical event sequence.");
+        return new CanonicalUpdate(appliedEvent, state, priorState, revision, algorithmVersion, sourceSha256);
     }
 }
 
