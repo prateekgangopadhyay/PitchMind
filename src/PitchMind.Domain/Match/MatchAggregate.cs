@@ -80,6 +80,7 @@ public sealed class MatchAggregate
         _dismissedPlayers.UnionWith(source._dismissedPlayers);
         _appliedEvents = new(source._appliedEvents);
         _lastAppliedEventId = source._lastAppliedEventId;
+        _stateBeforeLastAppliedEvent = source._stateBeforeLastAppliedEvent;
         _lastSequence = source._lastSequence;
         _clockSeconds = source._clockSeconds;
         _period = source._period;
