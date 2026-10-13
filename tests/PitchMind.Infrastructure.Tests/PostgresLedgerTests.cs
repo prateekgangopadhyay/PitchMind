@@ -753,28 +753,33 @@ public sealed class PostgresLedgerTests
         await Apply(2, 3309, MatchEventType.Goal, "home-3", 3);
 
         var reader = new PostgresMatchProjectionReader(source);
-        var beforeGoal = await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None);
+        var beforeGoal = await reader.GetAtAsync(matchId, 3308, 3, "aggregate-v1", CancellationToken.None);
         Assert.NotNull(beforeGoal);
-        Assert.Equal(2, beforeGoal.Revision);
+        Assert.Equal(2, beforeGoal.CanonicalRevision);
+        Assert.Equal(2, beforeGoal.ProjectionRevision);
         Assert.Equal(0, beforeGoal.State.HomeScore);
         Assert.Equal(3308, beforeGoal.AsOfClockSeconds);
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
         Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
 
-        var atGoal = await reader.GetAtAsync(matchId, 3309, null, CancellationToken.None);
+        var atGoal = await reader.GetAtAsync(matchId, 3309, 3, "aggregate-v1", CancellationToken.None);
         Assert.NotNull(atGoal);
+        Assert.Equal(3, atGoal.CanonicalRevision);
         Assert.Equal(1, atGoal.State.HomeScore);
         Assert.Equal(3, (await ReadSelected(reader, atGoal, 3309)).Count);
 
-        var pinned = await reader.GetAtAsync(matchId, 3309, 2, CancellationToken.None);
+        var pinned = await reader.GetAtAsync(matchId, 3309, 2, "aggregate-v1", CancellationToken.None);
         Assert.NotNull(pinned);
-        Assert.Equal(2, pinned.Revision);
+        Assert.Equal(2, pinned.CanonicalRevision);
+        Assert.Equal(2, pinned.ProjectionRevision);
         Assert.Equal(0, pinned.State.HomeScore);
+        Assert.Equal(new long[] { 0, 1 }, (await ReadSelected(reader, pinned, 3309)).Select(e => e.Sequence));
+        Assert.Null(await reader.GetAtAsync(matchId, 3309, 3, "aggregate-v2", CancellationToken.None));
         await Assert.ThrowsAsync<InvalidDataException>(() => ReadSelected(reader,
             beforeGoal with { AsOfSequence = beforeGoal.AsOfSequence + 1 }, 3309));
         Assert.Equal(beforeGoal.StateSha256,
-            (await reader.GetAtAsync(matchId, 3308, null, CancellationToken.None))!.StateSha256);
+            (await reader.GetAtAsync(matchId, 3308, 3, "aggregate-v1", CancellationToken.None))!.StateSha256);
         var drainer = new PostgresOutboxDispatcher(source, new CountingPublisher());
         for (var i = 0; i < 3; i++) Assert.Equal(OutboxDispatchResult.Published, await drainer.DispatchOneAsync(CancellationToken.None));
     }
@@ -785,8 +790,9 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var reader = new PostgresMatchProjectionReader(source);
-        Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, null, CancellationToken.None));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, null, CancellationToken.None));
+        Assert.Null(await reader.GetAtAsync(MatchId.New(), 5400, 1, "aggregate-v1", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5401, 1, "aggregate-v1", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5400, 0, "aggregate-v1", CancellationToken.None));
     }
 
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,

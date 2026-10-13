@@ -17,34 +17,37 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
-        int? maximumRevision, CancellationToken cancellationToken)
+        long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
     {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
         if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
-        if (maximumRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumRevision));
+        if (upToCanonicalRevision <= 0) throw new ArgumentOutOfRangeException(nameof(upToCanonicalRevision));
+        if (string.IsNullOrWhiteSpace(algorithmVersion)) throw new ArgumentException("Algorithm version is required.", nameof(algorithmVersion));
 
         await using var command = dataSource.CreateCommand("""
-            SELECT revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256,
+            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256,
                    state_sha256, state_json::text
             FROM pitchmind.match_projections
             WHERE match_id = $1 AND as_of_clock_seconds <= $2
-              AND ($3::integer IS NULL OR revision <= $3)
-            ORDER BY as_of_clock_seconds DESC, as_of_sequence DESC, revision DESC
+              AND canonical_revision <= $3 AND algorithm_version = $4
+            ORDER BY as_of_clock_seconds DESC, as_of_sequence DESC, canonical_revision DESC, revision DESC
             LIMIT 1
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(selectedSeconds);
-        command.Parameters.AddWithValue((object?)maximumRevision ?? DBNull.Value);
+        command.Parameters.AddWithValue(upToCanonicalRevision);
+        command.Parameters.AddWithValue(algorithmVersion);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
-        var revision = reader.GetInt32(0);
-        var asOfSequence = reader.GetInt64(1);
-        var asOfClock = reader.GetInt32(2);
-        var algorithmVersion = reader.GetString(3);
-        var sourceHash = reader.GetString(4).Trim();
-        var storedStateHash = reader.GetString(5).Trim();
-        var stateJson = reader.GetString(6);
+        var canonicalRevision = reader.GetInt64(0);
+        var projectionRevision = reader.GetInt32(1);
+        var asOfSequence = reader.GetInt64(2);
+        var asOfClock = reader.GetInt32(3);
+        var selectedAlgorithmVersion = reader.GetString(4);
+        var sourceHash = reader.GetString(5).Trim();
+        var storedStateHash = reader.GetString(6).Trim();
+        var stateJson = reader.GetString(7);
         var state = JsonSerializer.Deserialize<MatchState>(stateJson, JsonOptions)
             ?? throw new InvalidDataException("Persisted match projection is empty.");
         var canonicalStateJson = JsonSerializer.Serialize(state, JsonOptions);
@@ -54,7 +57,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         if (state.MatchId != matchId.ToString() || state.LastSequence != asOfSequence || state.ClockSeconds != asOfClock)
             throw new InvalidDataException("Persisted projection metadata does not match its state.");
 
-        return new SelectedMatchProjection(state, revision, asOfSequence, asOfClock, algorithmVersion, sourceHash, storedStateHash);
+        return new SelectedMatchProjection(state, canonicalRevision, projectionRevision, asOfSequence, asOfClock,
+            selectedAlgorithmVersion, sourceHash, storedStateHash);
     }
 
     public async IAsyncEnumerable<MatchEvent> ReadEventsAtAsync(SelectedMatchProjection projection,
@@ -72,10 +76,11 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         await using var command = dataSource.CreateCommand("""
             SELECT payload::text, sequence, clock_seconds, period
             FROM pitchmind.match_events
-            WHERE match_id = $1 AND sequence <= $2 AND clock_seconds <= $3
+            WHERE match_id = $1 AND canonical_revision <= $2 AND sequence <= $3 AND clock_seconds <= $4
             ORDER BY sequence
             """);
         command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
         command.Parameters.AddWithValue(persistedSequence);
         command.Parameters.AddWithValue(selectedSeconds);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -102,10 +107,11 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             SELECT as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_sha256,
                    state_json::text
             FROM pitchmind.match_projections
-            WHERE match_id = $1 AND revision = $2
+            WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3
             """);
         command.Parameters.AddWithValue(matchId.Value);
-        command.Parameters.AddWithValue(projection.Revision);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
+        command.Parameters.AddWithValue(projection.ProjectionRevision);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
             throw new InvalidDataException("Projection revision is not present in the canonical store.");
