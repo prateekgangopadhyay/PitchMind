@@ -85,7 +85,7 @@ Use staged immutable condition evaluations:
 5. **Exploitation:** same possession, ordered progression/cutback, optional shot and goal, within `maxOutcomeMs`; a goal can strengthen outcome but cannot establish strategy.
 6. **Counterexamples and limitations:** press outside exposure window, wrong participant, opponent wins possession, missing frame, incomplete tracking, cross-half boundary, event gap, mislabeled pass, simple turnover without coordinated pressure.
 Every stage records `{name,passed,observed,threshold,coverage,evidenceRefs,exclusionReason}`. Scenarios and thresholds come from versioned football policy JSON reviewed by Product Owner and analyst (not unversioned C# literals). Detector output is `evidence-supported-pattern` unless stronger proof is reviewed; never label inferred coach intention as observed fact.
-**Current `press-sequence-v1`** requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. It is a **demonstration-specific policy**, not league-calibrated universal football truth.
+**Current `press-sequence-v1`** is stored at `src/PitchMind.Application/Matches/Policies/press-sequence-v1.json` and requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. `reviewStatus` remains `demonstration-pending-review`: this file externalizes the prior offline-demo behavior and is not a PO/analyst-approved football dictionary or league-calibrated universal football truth. It applies only to the existing metre-based offline fixture; do not apply its distance rule to the unitless candidate feed until its source mapping, units, and orientation are approved.
 
 ```mermaid
 flowchart TD
