@@ -1,8 +1,8 @@
 # EP01-S03 exact-head verification — 2026-10-13
 
-**Story:** EP01-S03, Azure DevOps validation pipeline  
-**Tested integrated code revision:** `44819ef473241c5938e441627b45cc9ec699f5bc` (PR #21 head at verification time)  
-**Environment:** disposable local clone, macOS; .NET 10 and Node 22 toolchains.  
+**Story:** EP01-S03, Azure DevOps validation pipeline
+**Tested integrated code revision:** `44819ef473241c5938e441627b45cc9ec699f5bc` (PR #21 head at verification time)
+**Environment:** disposable local clone, macOS; .NET 10 and Node 22 toolchains.
 **Scope:** local validation of the integrated story implementation; not an Azure DevOps hosted run.
 
 ## Observed results
