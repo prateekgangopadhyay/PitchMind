@@ -16,6 +16,38 @@ public sealed class SyntheticMatchTests
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
+    [Fact] public void VersionPinnedReplayIsDeterministicAndContainsOnlySelectedTimeOutputs()
+    {
+        var first = new SyntheticMatchService().ReplayAt(3308);
+        var repeated = new SyntheticMatchService().ReplayAt(3308, first.FixtureVersion, first.FixtureSeed,
+            first.ReplayAlgorithmVersion, first.DetectorVersion, first.ReplayInputSha256);
+        var afterGoal = new SyntheticMatchService().ReplayAt(3309, first.FixtureVersion, first.FixtureSeed,
+            first.ReplayAlgorithmVersion, first.DetectorVersion, first.ReplayInputSha256);
+
+        Assert.Equal("offline-synthetic-fixture", first.ExecutionMode);
+        Assert.Null(first.CanonicalRevision);
+        Assert.Equal(first.ReplayInputSha256, repeated.ReplayInputSha256);
+        Assert.Equal(first.ReplayOutputSha256, repeated.ReplayOutputSha256);
+        Assert.NotEqual(first.ReplayOutputSha256, afterGoal.ReplayOutputSha256);
+        Assert.Equal(0, first.State.HomeScore);
+        Assert.Empty(first.Insights);
+        Assert.DoesNotContain(first.Events, item => item.Event.EventId == afterGoal.Events.Single(item => item.Event.Type == PitchMind.Domain.Events.MatchEventType.Goal).Event.EventId);
+        Assert.All(first.Events, item => Assert.True(item.Event.ClockSeconds <= first.SelectedElapsedSeconds));
+        Assert.All(first.Insights, item => Assert.True(item.ClockSeconds <= first.SelectedElapsedSeconds));
+        Assert.True(first.State.Frame.ClockSeconds <= first.SelectedElapsedSeconds);
+        Assert.Equal(1, afterGoal.State.HomeScore);
+        Assert.Single(afterGoal.Insights);
+    }
+    [Fact] public void VersionPinnedReplayRejectsUnavailableInputsAndAlgorithms()
+    {
+        var service = new SyntheticMatchService();
+
+        Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, fixtureVersion: "unknown"));
+        Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, fixtureSeed: 41));
+        Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, replayAlgorithmVersion: "unknown"));
+        Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, detectorVersion: "unknown"));
+        Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, replayInputSha256: new string('0', 64)));
+    }
     [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
     {
         var service = new SyntheticMatchService();

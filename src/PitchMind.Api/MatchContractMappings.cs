@@ -1,4 +1,5 @@
 using PitchMind.Domain.Simulation;
+using PitchMind.Application.Matches;
 
 namespace PitchMind.Api;
 
@@ -65,6 +66,21 @@ public static class MatchContractMappings
         explanation.Text,
         Array.AsReadOnly(explanation.EventIds.ToArray()),
         Array.AsReadOnly(explanation.Limitations.ToArray()));
+
+    public static ReplayResponse ToResponse(this MatchReplaySnapshot replay) => new(
+        replay.ExecutionMode,
+        replay.MatchId,
+        replay.SelectedElapsedSeconds,
+        replay.FixtureVersion,
+        replay.FixtureSeed,
+        replay.ReplayAlgorithmVersion,
+        replay.DetectorVersion,
+        replay.ReplayInputSha256,
+        replay.ReplayOutputSha256,
+        replay.CanonicalRevision,
+        replay.State.ToResponse(),
+        Array.AsReadOnly(replay.Events.Select(ToResponse).ToArray()),
+        Array.AsReadOnly(replay.Insights.Select(ToResponse).ToArray()));
 
     private static TeamResponse ToResponse(this SyntheticTeam team) => new(
         team.Id, team.Name, team.Formation,

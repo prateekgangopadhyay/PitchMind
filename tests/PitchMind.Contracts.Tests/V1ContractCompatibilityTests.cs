@@ -69,6 +69,25 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void Replay_contract_pins_versions_and_keeps_canonical_revision_explicitly_unavailable_offline()
+    {
+        var replay = new SyntheticMatchService().ReplayAt(3308).ToResponse();
+
+        AssertJsonProperties(replay, "executionMode", "matchId", "selectedElapsedSeconds", "fixtureVersion", "fixtureSeed",
+            "replayAlgorithmVersion", "detectorVersion", "replayInputSha256", "replayOutputSha256", "canonicalRevision",
+            "state", "events", "insights");
+        Assert.Equal("offline-synthetic-fixture", replay.ExecutionMode);
+        Assert.Null(replay.CanonicalRevision);
+        Assert.Equal(64, replay.ReplayInputSha256.Length);
+        Assert.Equal(64, replay.ReplayOutputSha256.Length);
+        Assert.All(replay.Events, item => Assert.True(item.Event.ClockSeconds <= replay.SelectedElapsedSeconds));
+        Assert.All(replay.Insights, item => Assert.True(item.ClockSeconds <= replay.SelectedElapsedSeconds));
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(replay, Json));
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("canonicalRevision").ValueKind);
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
         var source = SyntheticFixtureGenerator.Generate();

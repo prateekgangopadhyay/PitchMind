@@ -73,6 +73,22 @@ public sealed record ExplanationResponse(
     IReadOnlyList<Guid> EventIds,
     IReadOnlyList<string> Limitations);
 
+/// <summary>A version-pinned selected-time response from the offline synthetic replay path.</summary>
+public sealed record ReplayResponse(
+    string ExecutionMode,
+    string MatchId,
+    int SelectedElapsedSeconds,
+    string FixtureVersion,
+    int FixtureSeed,
+    string ReplayAlgorithmVersion,
+    string DetectorVersion,
+    string ReplayInputSha256,
+    string ReplayOutputSha256,
+    long? CanonicalRevision,
+    MatchStateResponse State,
+    IReadOnlyList<SimulationEventResponse> Events,
+    IReadOnlyList<InsightResponse> Insights);
+
 public sealed record ApiProblemResponse(
     string Type,
     string Title,

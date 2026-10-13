@@ -60,6 +60,10 @@ match.AddEndpointFilter(async (context, next) =>
     return id.ToString() == matches.Fixture.MatchId ? await next(context) : ApiProblem(context.HttpContext, StatusCodes.Status404NotFound, "MATCH_NOT_FOUND", "Match not found");
 });
 match.MapGet("/state", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetState(atSeconds ?? 0).ToResponse()));
+match.MapGet("/replay", (int atSeconds, string? fixtureVersion, int? fixtureSeed, string? replayAlgorithmVersion,
+    string? detectorVersion, string? replayInputSha256, SyntheticMatchService matches) =>
+    Results.Ok(matches.ReplayAt(atSeconds, fixtureVersion, fixtureSeed, replayAlgorithmVersion, detectorVersion,
+        replayInputSha256).ToResponse()));
 match.MapGet("/events", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetEvents(atSeconds ?? 0).Select(item => item.ToResponse())));
 match.MapGet("/insights", (int? atSeconds, SyntheticMatchService matches) => Results.Ok(matches.GetInsights(atSeconds ?? 0).Select(insight => insight.ToResponse())));
 match.MapGet("/evidence/{insightId}", (string insightId, int? atSeconds, SyntheticMatchService matches, HttpContext context) =>
