@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
@@ -762,6 +763,13 @@ public sealed class PostgresLedgerTests
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
         Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
+
+        var applicationResult = await new GetMatchAtQueryService(reader).ExecuteAsync(
+            new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1"), CancellationToken.None);
+        Assert.NotNull(applicationResult);
+        Assert.Equal(0, applicationResult.Projection.State.HomeScore);
+        Assert.Equal(new long[] { 0, 1 }, applicationResult.Events.Select(e => e.Sequence));
+        Assert.DoesNotContain(applicationResult.Events, e => e.Type == MatchEventType.Goal);
 
         var atGoal = await reader.GetAtAsync(matchId, 3309, 3, "aggregate-v1", CancellationToken.None);
         Assert.NotNull(atGoal);
