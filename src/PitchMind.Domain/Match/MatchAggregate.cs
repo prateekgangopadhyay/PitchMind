@@ -37,6 +37,7 @@ public sealed class MatchAggregate
     private readonly Dictionary<Guid, SimulationEvent> _appliedEvents = [];
     private readonly MatchReplaySeed _replaySeed;
     private Guid? _lastAppliedEventId;
+    private MatchState? _stateBeforeLastAppliedEvent;
     private long _lastSequence = -1;
     private int _clockSeconds;
     private int _period = 1;
@@ -111,11 +112,23 @@ public sealed class MatchAggregate
         if (_phase == MatchPhase.FullTime) throw new InvalidOperationException("No event may follow full time.");
 
         ValidateTransition(item);
+        var stateBeforeEvent = Snapshot();
         ApplyTransition(item);
         _appliedEvents.Add(evt.EventId, item);
         _lastAppliedEventId = evt.EventId;
+        _stateBeforeLastAppliedEvent = stateBeforeEvent;
         _lastSequence = evt.Sequence;
         _clockSeconds = evt.ClockSeconds;
+    }
+
+    public MatchState SnapshotBefore(MatchEvent expectedEvent)
+    {
+        ArgumentNullException.ThrowIfNull(expectedEvent);
+        if (_lastAppliedEventId != expectedEvent.EventId ||
+            !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent ||
+            _stateBeforeLastAppliedEvent is null)
+            throw new InvalidOperationException("A canonical projection predecessor must come from this aggregate immediately before its exact latest event.");
+        return _stateBeforeLastAppliedEvent;
     }
 
     public MatchState SnapshotAfter(MatchEvent expectedEvent)

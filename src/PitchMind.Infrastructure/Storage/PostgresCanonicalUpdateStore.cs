@@ -6,6 +6,7 @@ using NpgsqlTypes;
 using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Simulation;
+using PitchMind.Domain.Match;
 
 namespace PitchMind.Infrastructure.Storage;
 
@@ -19,6 +20,8 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         Validate(update);
         var stateJson = JsonSerializer.Serialize(update.State, JsonOptions);
         var stateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson)));
+        var priorStateJson = JsonSerializer.Serialize(update.PriorState, JsonOptions);
+        var priorStateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(priorStateJson)));
         var eventJson = JsonSerializer.Serialize(update.Event);
         var sourceEventJson = JsonSerializer.Serialize(update.SourceEvent, JsonOptions);
         var messageId = update.Event.EventId;
@@ -41,6 +44,9 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             update.Event.MatchId.Value, cancellationToken);
         if (expectedSequence != update.Event.Sequence)
             throw new InvalidOperationException("Sequence conflict, gap or out-of-order event; reconciliation required.");
+
+        await ValidateMatchSourceAsync(connection, transaction, update, cancellationToken);
+        await ValidatePredecessorAsync(connection, transaction, update, expectedSequence, priorStateHash, cancellationToken);
 
         var canonicalRevision = await ScalarLongAsync(connection, transaction,
             "SELECT COALESCE(MAX(canonical_revision), 0) + 1 FROM pitchmind.match_events WHERE match_id = $1",
@@ -121,6 +127,66 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         if (update.State.MatchId != update.Event.MatchId.ToString() || update.State.LastSequence != update.Event.Sequence ||
             update.State.ClockSeconds != update.Event.ClockSeconds)
             throw new InvalidOperationException("Projection match, sequence, and selected clock must match the canonical event.");
+        if (update.PriorState.MatchId != update.Event.MatchId.ToString() ||
+            update.PriorState.LastSequence != update.Event.Sequence - 1)
+            throw new InvalidOperationException("Projection predecessor must immediately precede the canonical event.");
+        if (!string.Equals(update.State.Provenance, update.PriorState.Provenance, StringComparison.Ordinal))
+            throw new InvalidOperationException("Projection provenance cannot change while applying a canonical event.");
+    }
+
+    private static async Task ValidateMatchSourceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        CanonicalUpdate update, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("""
+            SELECT source_sha256 = $2 AND provenance = $3
+            FROM pitchmind.matches
+            WHERE match_id = $1
+            """, connection, transaction);
+        command.Parameters.AddWithValue(update.Event.MatchId.Value);
+        command.Parameters.AddWithValue(update.SourceSha256);
+        command.Parameters.AddWithValue(update.PriorState.Provenance);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+            throw new InvalidOperationException("Aggregate source hash and provenance must match the immutable registered match source.");
+    }
+
+    private static async Task ValidatePredecessorAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        CanonicalUpdate update, long expectedSequence, string priorStateHash, CancellationToken cancellationToken)
+    {
+        if (expectedSequence == 0)
+        {
+            var state = update.PriorState;
+            if (state.LastSequence != -1 || state.ClockSeconds != 0 || state.Period != 1 ||
+                state.Phase != MatchPhase.NotStarted || state.HomeScore != 0 || state.AwayScore != 0 ||
+                state.PossessionTeamId is not null || state.HomeActivePlayers != 11 || state.AwayActivePlayers != 11 ||
+                state.Players.Count(player => player.Active && player.TeamId == update.ReplaySeed.HomeTeamId) != 11 ||
+                state.Players.Count(player => player.Active && player.TeamId == update.ReplaySeed.AwayTeamId) != 11 ||
+                state.Players.Select(player => player.PlayerId).Distinct(StringComparer.Ordinal).Count() != state.Players.Count ||
+                state.Players.Any(player => player.Dismissed || player.YellowCards != 0))
+                throw new InvalidOperationException("The initial aggregate state is not a valid canonical match starting state.");
+            return;
+        }
+
+        await using var command = new NpgsqlCommand("""
+            SELECT p.state_sha256, p.as_of_clock_seconds, p.as_of_sequence
+            FROM pitchmind.match_events e
+            JOIN pitchmind.match_projections p
+              ON p.match_id = e.match_id AND p.canonical_revision = e.canonical_revision
+            WHERE e.match_id = $1 AND e.sequence = $2
+            ORDER BY e.canonical_revision DESC, p.revision DESC
+            LIMIT 1
+            """, connection, transaction);
+        command.Parameters.AddWithValue(update.Event.MatchId.Value);
+        command.Parameters.AddWithValue(expectedSequence - 1);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1) || reader.IsDBNull(2))
+            throw new InvalidOperationException("The canonical predecessor has no persisted projection; rebuild from the canonical ledger.");
+        var storedStateHash = reader.GetString(0).Trim();
+        var storedClockSeconds = reader.GetInt32(1);
+        var storedSequence = reader.GetInt64(2);
+        if (storedSequence != expectedSequence - 1 ||
+            !string.Equals(storedStateHash, priorStateHash, StringComparison.Ordinal) ||
+            storedClockSeconds != update.PriorState.ClockSeconds)
+            throw new InvalidOperationException("Aggregate history diverges from the persisted canonical predecessor; rebuild from the canonical ledger.");
     }
 
     private static async Task LockMatchAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string matchId,
