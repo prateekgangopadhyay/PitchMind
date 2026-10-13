@@ -55,6 +55,7 @@ public static class FixtureCorrectionHistory
                 throw new InvalidOperationException("A correction revision cannot contain conflicting replacements for the same event.");
 
             ValidatePreservedEventIdentity(original.Event, correction.Replacement.Event);
+            ValidateGoalEnvelopeSemantics(correction.Replacement);
             effectiveEvents[correction.TargetEventId] = correction;
         }
 
@@ -73,5 +74,14 @@ public static class FixtureCorrectionHistory
             replacement.Period != original.Period || replacement.OccurredAt != original.OccurredAt)
             throw new InvalidOperationException(
                 "A correction must preserve the original event ID, match ID, sequence, period, clock, and occurred-at time.");
+    }
+
+    private static void ValidateGoalEnvelopeSemantics(SimulationEvent replacement)
+    {
+        var isGoalType = replacement.Event.Type == MatchEventType.Goal;
+        var hasGoalAction = string.Equals(replacement.Action, "goal", StringComparison.Ordinal);
+        var hasScoredOutcome = string.Equals(replacement.Outcome, "scored", StringComparison.Ordinal);
+        if (isGoalType != (hasGoalAction && hasScoredOutcome) || (!isGoalType && (hasGoalAction || hasScoredOutcome)))
+            throw new InvalidOperationException("Goal event type, action, and scored outcome must remain consistent in a fixture correction.");
     }
 }

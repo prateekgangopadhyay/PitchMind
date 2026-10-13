@@ -109,7 +109,7 @@ public sealed class SyntheticFixtureTests
         var fixture = SyntheticFixtureGenerator.Generate(123);
         var goal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
         var first = new FixtureEventCorrection(2, "correction-v2", goal.Event.EventId, fixture.Provenance,
-            goal with { Event = goal.Event with { Type = MatchEventType.Shot } });
+            goal with { Event = goal.Event with { Type = MatchEventType.Shot }, Action = "shot", Outcome = "on-target" });
         var second = new FixtureEventCorrection(3, "correction-v3", goal.Event.EventId, fixture.Provenance, goal);
 
         var afterFirst = FixtureCorrectionHistory.Resolve(fixture, [first]);
@@ -158,6 +158,19 @@ public sealed class SyntheticFixtureTests
 
         var failure = Assert.Throws<InvalidOperationException>(() => FixtureCorrectionHistory.Resolve(fixture, [first, conflict]));
         Assert.Contains("conflicting replacements", failure.Message);
+    }
+
+    [Fact] public void CorrectionHistoryRejectsGoalActionAndOutcomeOnNonGoalEvent()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate(123);
+        var goal = fixture.Events.Single(item => item.Event.Type == MatchEventType.Goal && item.TeamId == fixture.Home.Id);
+        var contradictoryCorrection = new FixtureEventCorrection(2, "contradictory-goal-correction",
+            goal.Event.EventId, fixture.Provenance, goal with { Event = goal.Event with { Type = MatchEventType.Shot } });
+
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+            FixtureCorrectionHistory.Resolve(fixture, [contradictoryCorrection]));
+
+        Assert.Contains("Goal event type, action, and scored outcome must remain consistent", failure.Message);
     }
 
     [Fact] public void ScenarioIncludesPeriodsCardsSubstitutionAndLegalScoreTransitions()
