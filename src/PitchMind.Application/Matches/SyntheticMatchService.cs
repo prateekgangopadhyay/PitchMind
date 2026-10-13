@@ -105,6 +105,14 @@ public static class PressingSequenceDetector
     public const string Version = "press-sequence-v1";
     public static IReadOnlyList<TacticalInsight> Detect(SyntheticFixture fixture, int selectedClock)
     {
+        ArgumentNullException.ThrowIfNull(fixture);
+        return Detect(new MatchReplayFixture(fixture.MatchId, fixture.Home.Id, fixture.Home.Name,
+            fixture.Away.Id, fixture.Away.Name, fixture.Events, fixture.Frames), selectedClock);
+    }
+
+    public static IReadOnlyList<TacticalInsight> Detect(MatchReplayFixture fixture, int selectedClock)
+    {
+        ArgumentNullException.ThrowIfNull(fixture);
         var available = fixture.Events.Where(e => e.Event.ClockSeconds <= selectedClock).ToArray();
         var results = new List<TacticalInsight>();
         foreach (var trigger in available.Where(e => e.Action == "back-pass" && e.Outcome == "complete"))
@@ -122,16 +130,18 @@ public static class PressingSequenceDetector
             if (new[] { regain, cutback, shot, goal }.Any(e => e.TeamId != press.TeamId) || goal.Outcome != "scored") continue;
             if (response.Event.ClockSeconds - press.Event.ClockSeconds > 10 || regain.Event.ClockSeconds - response.Event.ClockSeconds > 10 || goal.Event.ClockSeconds - regain.Event.ClockSeconds > 15) continue;
             var frames = fixture.Frames.Where(f => ordered.Any(e => e.Event.ClockSeconds == f.ClockSeconds)).ToArray();
-            var arrival = frames.SingleOrDefault(f => f.ClockSeconds == press.Event.ClockSeconds);
+            var arrivalFrames = frames.Where(f => f.ClockSeconds == press.Event.ClockSeconds).ToArray();
+            var arrival = arrivalFrames.Length == 1 ? arrivalFrames[0] : null;
             var attacker = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.PlayerId);
             var keeper = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.RelatedPlayerId);
-            if (frames.Length != ordered.Length || attacker is null || keeper is null) continue;
+            if (ordered.Any(item => frames.All(frame => frame.ClockSeconds != item.Event.ClockSeconds)) ||
+                arrivalFrames.Length != 1 || attacker is null || keeper is null) continue;
             if (trigger.Event.Type != MatchEventType.Pass || press.Event.Type != MatchEventType.Pressure || response.Event.Type != MatchEventType.Pass
                 || regain.Event.Type != MatchEventType.Turnover || cutback.Event.Type != MatchEventType.Pass || shot.Event.Type != MatchEventType.Shot || goal.Event.Type != MatchEventType.Goal) continue;
             var distance = Math.Sqrt(Math.Pow(attacker.X - keeper.X, 2) + Math.Pow(attacker.Y - keeper.Y, 2));
             if (!double.IsFinite(distance) || distance > 3) continue;
             results.Add(new($"press-{trigger.Event.EventId:D}", fixture.MatchId, goal.Event.ClockSeconds,
-                "Press followed by regain and goal", $"{(press.TeamId == fixture.Home.Id ? fixture.Home.Name : fixture.Away.Name)}'s press is followed by a high regain, cutback and goal.",
+                "Press followed by regain and goal", $"{(press.TeamId == fixture.HomeTeamId ? fixture.HomeTeamName : fixture.AwayTeamName)}'s press is followed by a high regain, cutback and goal.",
                 "evidence-supported-pattern", Version, Array.AsReadOnly(ordered.Select(e => e.Event.EventId).ToArray()), Array.AsReadOnly(frames.Select(f => f.Id).ToArray())));
         }
         return results.AsReadOnly();

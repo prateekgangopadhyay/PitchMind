@@ -47,7 +47,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -134,6 +134,16 @@ public sealed class PostgresLedgerTests
             await using (var dropOutboxConstraint = source.CreateCommand(
                 "ALTER TABLE pitchmind.outbox DROP CONSTRAINT IF EXISTS outbox_event_admission_revision_fk"))
                 await dropOutboxConstraint.ExecuteNonQueryAsync();
+            await using (var legacyMatch = source.CreateCommand("""
+                INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance,
+                    pitch_length_metres, pitch_width_metres, replay_seed_json, replay_context_json)
+                VALUES ($1, 'legacy-fixture', 'legacy-source', $2, 'legacy-unverified', 105, 68, NULL, NULL)
+                """))
+            {
+                legacyMatch.Parameters.AddWithValue(matchId);
+                legacyMatch.Parameters.AddWithValue(new string('b', 64));
+                await legacyMatch.ExecuteNonQueryAsync();
+            }
             await using (var legacy = source.CreateCommand("""
                 INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
                     as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
@@ -160,13 +170,18 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(6, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(7, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
             {
                 legacyRow.Parameters.AddWithValue(matchId);
                 Assert.Equal(2L, (long)(await legacyRow.ExecuteScalarAsync())!);
+            }
+            await using (var legacyContext = source.CreateCommand("SELECT replay_seed_json IS NULL AND replay_context_json IS NULL FROM pitchmind.matches WHERE match_id = $1"))
+            {
+                legacyContext.Parameters.AddWithValue(matchId);
+                Assert.True((bool)(await legacyContext.ExecuteScalarAsync())!);
             }
 
             var readStore = new PostgresMatchProjectionStore(source);
@@ -428,7 +443,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -754,21 +769,44 @@ public sealed class PostgresLedgerTests
         var aggregate = new MatchAggregate(matchId, "home", "away", players,
             players.Select(p => p.Item1), "approved-synthetic-test");
         var updates = new PostgresCanonicalUpdateStore(source);
+        var sourceHash = new string('c', 64);
+        var replayContext = new MatchReplayContext("fixture-v1", "Home", "Away", 5400, 2700, 105, 68,
+            "metres-v1", "metre coordinates, x=0..105, y=0..68; attacking direction changes at 2700 seconds", "approved-synthetic-test");
         await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
-            new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", new string('c', 64),
-                "approved-synthetic-test", 105m, 68m, aggregate.ReplaySeed), CancellationToken.None);
+            new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", sourceHash,
+                "approved-synthetic-test", 105m, 68m, aggregate.ReplaySeed, replayContext), CancellationToken.None);
 
         async Task Apply(long sequence, int clock, MatchEventType type, string playerId, int revision)
         {
             var evt = MatchEvent.Create(Guid.NewGuid(), matchId, sequence, type, clock, 1, DateTimeOffset.UtcNow);
             aggregate.Apply(new SimulationEvent(evt, "home", playerId, type.ToString(), type == MatchEventType.Goal ? "scored" : "complete"));
-            var update = CanonicalUpdate.FromAppliedAggregate(aggregate, evt, revision, "aggregate-v1", new string('c', 64));
+            var update = CanonicalUpdate.FromAppliedAggregate(aggregate, evt, revision, "aggregate-v1", sourceHash);
             await updates.CommitAsync(update, CancellationToken.None);
         }
 
         await Apply(0, 0, MatchEventType.KickOff, "home-1", 1);
         await Apply(1, 3308, MatchEventType.Pass, "home-2", 2);
         await Apply(2, 3309, MatchEventType.Goal, "home-3", 3);
+
+        foreach (var frame in new[] { ("frame-0", 0, 1, 1L), ("frame-3308", 3308, 2, 2L), ("frame-3309", 3309, 2, 3L) })
+        {
+            var payload = JsonSerializer.Serialize(new TrackingFrame(frame.Item1, frame.Item2, 52.5, 34, []),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            await using var insertFrame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, canonical_revision, sequence, period, clock_seconds,
+                    coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, $4, $5, $6, 'metres-v1', '{}'::jsonb, $7, $8)
+                """);
+            insertFrame.Parameters.AddWithValue(matchId.Value);
+            insertFrame.Parameters.AddWithValue(frame.Item1);
+            insertFrame.Parameters.AddWithValue(frame.Item4);
+            insertFrame.Parameters.AddWithValue(frame.Item4 - 1);
+            insertFrame.Parameters.AddWithValue(frame.Item3);
+            insertFrame.Parameters.AddWithValue(frame.Item2);
+            insertFrame.Parameters.AddWithValue(sourceHash);
+            insertFrame.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, payload);
+            await insertFrame.ExecuteNonQueryAsync();
+        }
 
         var reader = new PostgresMatchProjectionReader(source);
         var beforeGoal = await reader.GetAtAsync(matchId, 3308, 3, "aggregate-v1", CancellationToken.None);
@@ -782,17 +820,23 @@ public sealed class PostgresLedgerTests
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
 
         var applicationResult = await new GetMatchAtQueryService(reader).ExecuteAsync(
-            new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1"), CancellationToken.None);
+            new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None);
         Assert.NotNull(applicationResult);
         Assert.Equal(0, applicationResult.Projection.State.HomeScore);
         Assert.Equal(applicationResult.Projection.StateSha256, applicationResult.ReplaySha256);
         Assert.Equal(new long[] { 0, 1 }, applicationResult.Events.Select(e => e.Sequence));
         Assert.DoesNotContain(applicationResult.Events, e => e.Type == MatchEventType.Goal);
+        Assert.Empty(applicationResult.DerivedInsights);
+        Assert.Matches("^[0-9a-f]{64}$", applicationResult.DerivedOutputSha256);
+        var selectedFrames = await ReadReplayFrames(reader, applicationResult.Projection, 3308);
+        Assert.Equal(new[] { "frame-0", "frame-3308" }, selectedFrames.Select(frame => frame.Frame.Id));
         for (var replay = 0; replay < 5; replay++)
         {
             var rerun = await new GetMatchAtQueryService(reader).ExecuteAsync(
-                new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1"), CancellationToken.None);
+                new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None);
             Assert.Equal(applicationResult.ReplaySha256, rerun!.ReplaySha256);
+            Assert.Equal(applicationResult.ReplayInputSha256, rerun.ReplayInputSha256);
+            Assert.Equal(applicationResult.DerivedOutputSha256, rerun.DerivedOutputSha256);
             Assert.Equal(JsonSerializer.Serialize(applicationResult.ReplayedState), JsonSerializer.Serialize(rerun.ReplayedState));
         }
 
@@ -818,6 +862,109 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task PostgresReplayDerivesThePersistedSyntheticPressingInsightAtItsSelectedTime()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var matchId = new MatchId(Guid.Parse(fixture.MatchId));
+        var sourceHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+            "approved-synthetic-replay-source-v1")));
+        var activePlayers = fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
+        var aggregate = new MatchAggregate(matchId, fixture.Home.Id, fixture.Away.Id,
+            fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId)),
+            activePlayers, fixture.Provenance);
+        var context = new MatchReplayContext(fixture.Version, fixture.Home.Name, fixture.Away.Name,
+            fixture.DurationSeconds, fixture.HalfTimeSeconds, fixture.PitchLengthMetres, fixture.PitchWidthMetres,
+            "metres-v1", fixture.CoordinateConvention, fixture.Provenance);
+        await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(new MatchSourceMetadata(matchId.Value,
+            fixture.Version, fixture.Version, sourceHash, fixture.Provenance, (decimal)fixture.PitchLengthMetres,
+            (decimal)fixture.PitchWidthMetres, aggregate.ReplaySeed, context), CancellationToken.None);
+
+        var updates = new PostgresCanonicalUpdateStore(source);
+        int goalRevision = 0;
+        foreach (var item in fixture.Events)
+        {
+            aggregate.Apply(item);
+            var revision = checked((int)item.Event.Sequence + 1);
+            await updates.CommitAsync(CanonicalUpdate.FromAppliedAggregate(aggregate, item.Event, revision,
+                "aggregate-v1", sourceHash), CancellationToken.None);
+            if (item.Action == "goal" && item.Event.ClockSeconds == 3309) goalRevision = revision;
+        }
+        Assert.True(goalRevision > 0);
+
+        var evidenceTimes = fixture.Events.Where(item => item.Event.ClockSeconds is >= 3290 and <= 3309)
+            .Where(item => item.Action is "back-pass" or "press-arrival" or "pressured-pass" or "high-regain" or "cutback" or "shot" or "goal")
+            .Select(item => item.Event.ClockSeconds).ToArray();
+        var evidenceFrames = evidenceTimes.Select(clock => fixture.Frames.Single(frame => frame.ClockSeconds == clock))
+            .Append(fixture.Frames.Single(frame => frame.ClockSeconds == 3290) with { Id = "frame-extra-3290" })
+            .OrderBy(frame => frame.ClockSeconds).ThenBy(frame => frame.Id, StringComparer.Ordinal).ToArray();
+        long frameSequence = 0;
+        foreach (var fixtureFrame in evidenceFrames)
+        {
+            var clock = fixtureFrame.ClockSeconds;
+            var period = fixture.Events.Single(item => item.Event.ClockSeconds == clock).Event.Period;
+            var payload = JsonSerializer.Serialize(fixtureFrame, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            await using var insertFrame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, canonical_revision, sequence, period, clock_seconds,
+                    coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, $4, $5, $6, 'metres-v1', '{}'::jsonb, $7, $8)
+                """);
+            insertFrame.Parameters.AddWithValue(matchId.Value);
+            insertFrame.Parameters.AddWithValue(fixtureFrame.Id);
+            insertFrame.Parameters.AddWithValue(goalRevision);
+            insertFrame.Parameters.AddWithValue(frameSequence++);
+            insertFrame.Parameters.AddWithValue(period);
+            insertFrame.Parameters.AddWithValue(clock);
+            insertFrame.Parameters.AddWithValue(sourceHash);
+            insertFrame.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, payload);
+            await insertFrame.ExecuteNonQueryAsync();
+        }
+
+        var result = await new GetMatchAtQueryService(new PostgresMatchProjectionReader(source)).ExecuteAsync(
+            new(matchId, 3309, goalRevision, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None);
+
+        Assert.NotNull(result);
+        var insight = Assert.Single(result.DerivedInsights);
+        Assert.Equal(7, insight.EventIds.Count);
+        Assert.Equal(8, insight.FrameIds.Count);
+        Assert.Equal(3309, insight.ClockSeconds);
+        Assert.DoesNotContain(fixture.Events.Where(item => item.Event.ClockSeconds > 3309),
+            item => result.Events.Any(matchEvent => matchEvent.EventId == item.Event.EventId));
+
+        await using (var corruptContext = source.CreateCommand("""
+            UPDATE pitchmind.matches
+            SET replay_context_json = jsonb_set(replay_context_json, '{fixtureVersion}', '"unregistered-fixture"'::jsonb)
+            WHERE match_id = $1
+            """))
+        {
+            corruptContext.Parameters.AddWithValue(matchId.Value);
+            Assert.Equal(1, await corruptContext.ExecuteNonQueryAsync());
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None));
+        await using (var restoreContext = source.CreateCommand("UPDATE pitchmind.matches SET replay_context_json = $2 WHERE match_id = $1"))
+        {
+            restoreContext.Parameters.AddWithValue(matchId.Value);
+            restoreContext.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb,
+                JsonSerializer.Serialize(context, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            Assert.Equal(1, await restoreContext.ExecuteNonQueryAsync());
+        }
+
+        await using (var corruptFrame = source.CreateCommand("""
+            UPDATE pitchmind.tracking_frames SET payload = jsonb_set(payload, '{id}', '"tampered-frame-id"'::jsonb)
+            WHERE match_id = $1 AND frame_id = $2
+            """))
+        {
+            corruptFrame.Parameters.AddWithValue(matchId.Value);
+            corruptFrame.Parameters.AddWithValue(insight.FrameIds[0]);
+            Assert.Equal(1, await corruptFrame.ExecuteNonQueryAsync());
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressingSequenceDetector.Version), CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
     public async Task PointInTimeProjectionIsMissingForUnknownMatchAndBoundsInvalidTime()
     {
         await using var source = Source();
@@ -834,6 +981,14 @@ public sealed class PostgresLedgerTests
         var events = new List<MatchEvent>();
         await foreach (var item in reader.ReadEventsAtAsync(projection, selectedSeconds, CancellationToken.None)) events.Add(item);
         return events;
+    }
+
+    private static async Task<List<MatchReplayFrame>> ReadReplayFrames(IMatchProjectionReader reader,
+        SelectedMatchProjection projection, int selectedSeconds)
+    {
+        var frames = new List<MatchReplayFrame>();
+        await foreach (var item in reader.ReadReplayFramesAtAsync(projection, selectedSeconds, CancellationToken.None)) frames.Add(item);
+        return frames;
     }
 
     private sealed class DeliverThenLoseAckPublisher(PostgresConsumerInbox inbox, Guid eventId) : IOutboxPublisher
