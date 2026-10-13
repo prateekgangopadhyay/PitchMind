@@ -24,6 +24,19 @@ class GenerateSbomTests(unittest.TestCase):
                 '{"name":"pitchmind-sbom-fixture","version":"1.0.0"}\n',
                 encoding="utf-8",
             )
+            generated_packages = [
+                source / "web" / "node_modules" / "generated-package" / "package.json",
+                source / "src" / "Example" / "obj" / "project.assets.json",
+                source / "src" / "Example" / "bin" / "Debug" / "generated.nuspec",
+                source / "web" / "dist" / "package.json",
+            ]
+            for package_path in generated_packages:
+                package_path.parent.mkdir(parents=True, exist_ok=True)
+                package_path.write_text(
+                    '{"name":"generated-output-must-not-be-cataloged",'
+                    '"version":"9.9.9"}\n',
+                    encoding="utf-8",
+                )
             output = output_dir / "fixture.spdx.json"
 
             result = subprocess.run(
@@ -48,6 +61,10 @@ class GenerateSbomTests(unittest.TestCase):
                 (package["name"], package.get("versionInfo"))
                 for package in document["packages"]
             },
+        )
+        self.assertNotIn(
+            "generated-output-must-not-be-cataloged",
+            {package["name"] for package in document["packages"]},
         )
 
     def test_output_inside_source_is_rejected_without_creating_directories(self):

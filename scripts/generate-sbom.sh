@@ -50,6 +50,14 @@ docker run --rm \
   -v "${sbom_output_parent}:/out:rw" \
   "$syft_image" \
   scan dir:/scan \
+  --exclude '**/.git/**' \
+  --exclude '**/node_modules/**' \
+  --exclude '**/bin/**' \
+  --exclude '**/obj/**' \
+  --exclude '**/dist/**' \
+  --exclude '**/__pycache__/**' \
+  --exclude '**/.venv/**' \
+  --exclude '**/venv/**' \
   --source-name pitchmind-source \
   --source-version "$sbom_version" \
   --quiet \
