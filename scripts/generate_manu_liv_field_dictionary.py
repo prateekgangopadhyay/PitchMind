@@ -109,7 +109,13 @@ def render_dictionary(source_path: Path, manifest_path: Path) -> str:
 
     event_types = Counter(event.get("eventType") for event in events)
     periods = Counter(event.get("period") for event in events)
-    clocks = [event.get("clockSeconds") for event in events if isinstance(event.get("clockSeconds"), int) and not isinstance(event.get("clockSeconds"), bool)]
+    clock_values = [event.get("clockSeconds") for event in events]
+    clocks = [value for value in clock_values if isinstance(value, int) and not isinstance(value, bool)]
+    clock_order = (
+        "nondecreasing"
+        if len(clocks) == len(events) and all(left <= right for left, right in zip(clocks, clocks[1:]))
+        else "not established as nondecreasing"
+    )
     sequences = [event.get("sequence") for event in events if isinstance(event.get("sequence"), int) and not isinstance(event.get("sequence"), bool)]
     frame_sizes = Counter(len(event.get("playerPositions", [])) for event in events if isinstance(event.get("playerPositions"), list))
 
@@ -170,7 +176,7 @@ def render_dictionary(source_path: Path, manifest_path: Path) -> str:
         "| Field | Structural observation | Semantic status |",
         "|---|---|---|",
         f"| `sequence` | integer values {min(sequences)}..{max(sequences)}; {len(set(sequences)):,} distinct in source order | Preserve the original 1-based value; canonical offset/mapping is not approved |",
-        f"| `clockSeconds` | integer values {min(clocks)}..{max(clocks)}; {len(set(clocks)):,} distinct; source order is nondecreasing | Unit, origin, elapsed-vs-period basis, stoppage-time policy and marker semantics are unverified; the field name is not authoritative evidence of seconds |",
+        f"| `clockSeconds` | integer values {min(clocks)}..{max(clocks)}; {len(set(clocks)):,} distinct; source order {clock_order} | Unit, origin, elapsed-vs-period basis, stoppage-time policy and marker semantics are unverified; the field name is not authoritative evidence of seconds |",
         f"| `period` | integer values {', '.join(str(value) for value in sorted(periods))}; counts {', '.join(f'{value}: {count}' for value, count in sorted(periods.items()))} | Period labels/boundaries and their relationship to the clock are unverified |",
         "| `eventId` | unique string in every source record | Preserve exact source ID; do not replace with generated canonical identity |",
         f"| `matchId`, `teamId`, `teamName` | {len(match_ids)} distinct non-null match IDs; {len(team_pairs)} distinct observed team ID/name pairs | Source-to-canonical/competition identity mapping is not approved |",

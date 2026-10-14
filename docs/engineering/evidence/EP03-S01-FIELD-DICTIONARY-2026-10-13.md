@@ -22,7 +22,7 @@ This is evidence for a candidate-data governance slice, not acceptance of EP03-S
 
 | Command | Result |
 |---|---|
-| `python3 -m unittest scripts.test_generate_manu_liv_field_dictionary -v` | 4 passed, 0 failed |
+| `python3 -m unittest scripts.test_generate_manu_liv_field_dictionary -v` | 5 passed, 0 failed |
 | `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_validate_manu_liv_candidate -v` | 21 passed, 0 failed |
 | `python3 -m unittest scripts.test_profile_simulation_feed -v` | 5 passed, 0 failed |
 | `python3 scripts/generate_manu_liv_field_dictionary.py` | Generated dictionary for the pinned SHA above |
@@ -33,3 +33,10 @@ This is evidence for a candidate-data governance slice, not acceptance of EP03-S
 ## Remaining gates
 
 The repository-derived dictionary is not an authoritative source definition. Coordinate units and orientation, clock basis and marker semantics, player metric definitions/units/validity, canonical identity and event mappings, football review, independent rights/privacy review, complete 90-minute fixture behavior and Product Owner acceptance remain open. No .NET suite, PostgreSQL integration, Azure operation or deployment was performed for this documentation/data-governance-only change. EP03-S01 remains unaccepted.
+
+
+## Restack and generator review follow-up
+
+The child was restacked locally on the current EP03-S01 feed-profile parent after its branch had diverged. Conflict resolution retained the parent's corrected manifest contract (`sourceClockField` plus `sourceClockUnitStatus: unverified`) and preserved the raw clock values. The source profile now distinguishes the existing curated inventory from the generated structural distribution report.
+
+An independent exact-head review found that the generator's nondecreasing-clock statement was not computed. The generator now derives the statement only when every record has an integer clock and the values are ordered; a decreasing-clock fixture verifies it does not claim that result otherwise. On the final restacked head, the generator suite passed 5 tests, candidate validator suite passed 22, and source profiler suite passed 5. The dictionary regenerated from source SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; its checked-in output matches byte for byte. Council DAG self-test and diff check passed. A second independent review of the fix is pending. EP03-S01 remains unaccepted; no source semantics, canonical mappings, Azure integration, or deployment are claimed.

@@ -117,7 +117,7 @@ Metadata keys are sparse and their values are JSON strings or null in this sourc
 | Field | Structural observation | Semantic status |
 |---|---|---|
 | `sequence` | integer values 1..2199; 2,199 distinct in source order | Preserve the original 1-based value; canonical offset/mapping is not approved |
-| `clockSeconds` | integer values 0..5761; 2,188 distinct; source order is nondecreasing | Unit, origin, elapsed-vs-period basis, stoppage-time policy and marker semantics are unverified; the field name is not authoritative evidence of seconds |
+| `clockSeconds` | integer values 0..5761; 2,188 distinct; source order nondecreasing | Unit, origin, elapsed-vs-period basis, stoppage-time policy and marker semantics are unverified; the field name is not authoritative evidence of seconds |
 | `period` | integer values 1, 2; counts 1: 1035, 2: 1164 | Period labels/boundaries and their relationship to the clock are unverified |
 | `eventId` | unique string in every source record | Preserve exact source ID; do not replace with generated canonical identity |
 | `matchId`, `teamId`, `teamName` | 1 distinct non-null match IDs; 2 distinct observed team ID/name pairs | Source-to-canonical/competition identity mapping is not approved |

@@ -47,6 +47,7 @@ class FieldDictionaryTests(unittest.TestCase):
         output = dictionary.render_dictionary(self.source, self.manifest)
         self.assertIn("repository-derived structural observations only", output)
         self.assertIn("`clockSeconds`", output)
+        self.assertIn("source order nondecreasing", output)
         self.assertIn("Unit, origin, elapsed-vs-period basis", output)
         self.assertIn("`metadata.metric`", output)
         self.assertIn("null × 1, string × 1", output)
@@ -54,6 +55,17 @@ class FieldDictionaryTests(unittest.TestCase):
         self.assertIn("numeric range 150..151", output)
         self.assertNotIn("source-id-1", output)
         self.assertNotIn("12.5", output)
+
+    def test_reports_clock_order_only_when_derived_from_source_values(self):
+        self.events[0]["clockSeconds"] = 20
+        self.events[1]["clockSeconds"] = 12
+        payload = json.dumps(self.events, separators=(",", ":")).encode()
+        self.source.write_bytes(payload)
+        self.write_manifest(payload)
+
+        output = dictionary.render_dictionary(self.source, self.manifest)
+
+        self.assertIn("source order not established as nondecreasing", output)
 
     def test_rejects_source_bytes_that_do_not_match_manifest(self):
         self.manifest.write_text(json.dumps({"source": {"sha256": "0" * 64, "byteSize": len(self.payload)}}))
