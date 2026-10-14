@@ -45,7 +45,8 @@ def test_manifest(events: list[dict], payload: bytes) -> dict:
             "independentRightsPrivacyReview": "pending",
         },
         "match": {
-            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "seconds",
+            "expectedMatchCount": 1, "expectedTeamCount": 1,
+            "sourceClockField": "clockSeconds", "sourceClockUnitStatus": "unverified",
             "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
             "sourceClockEnd": events[-1]["clockSeconds"],
         },
@@ -70,6 +71,9 @@ class CandidateValidationTests(unittest.TestCase):
         second = validator.validate_source(self.payload, self.manifest)
         self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2, "preserved": True})
         self.assertEqual(first["sourceClock"]["last"], 12)
+        self.assertEqual(first["sourceClock"]["field"], "clockSeconds")
+        self.assertIsNone(first["sourceClock"]["unit"])
+        self.assertEqual(first["sourceClock"]["unitStatus"], "unverified")
         self.assertTrue(first["sourceClock"]["preservedWithoutNormalization"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
         self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
@@ -77,6 +81,11 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertFalse(first["canonicalMappingsApproved"])
         self.assertFalse(first["coordinateUnitsVerified"])
         self.assertFalse(first["playerMetricsValidated"])
+
+    def test_rejects_any_source_clock_unit_claim_without_verified_source_semantics(self):
+        unsupported = {**self.manifest, "match": {**self.manifest["match"], "sourceClockUnit": "seconds"}}
+        with self.assertRaisesRegex(validator.CandidateValidationError, "source clock field"):
+            validator.validate_source(self.payload, unsupported)
 
     def test_ordered_record_digest_covers_fields_beyond_identity_and_time(self):
         baseline = validator.validate_source(self.payload, self.manifest)
