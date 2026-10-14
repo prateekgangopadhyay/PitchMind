@@ -8,6 +8,7 @@ using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using ReplaySnapshot = PitchMind.Application.Abstractions.MatchReplaySnapshot;
 
 namespace PitchMind.Infrastructure.Storage;
 
@@ -18,7 +19,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>One SQL statement gives the replay a single PostgreSQL MVCC snapshot across all source inputs.</summary>
-    public async Task<MatchReplaySnapshot?> ReadReplaySnapshotAtAsync(MatchId matchId, int selectedSeconds,
+    public async Task<ReplaySnapshot?> ReadReplaySnapshotAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
     {
         if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
@@ -40,7 +41,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
             SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
                    p.algorithm_version, p.source_sha256, p.state_sha256, p.state_json::text,
                    m.replay_seed_json::text, m.replay_context_json::text, m.fixture_version, m.provenance,
-                   m.pitch_length_metres, m.pitch_width_metres,
+                   m.pitch_length_metres, m.pitch_width_metres, m.competition_id, m.competition_rules_version,
+                   m.max_substitute_reentries_per_player,
                    COALESCE((SELECT jsonb_agg(jsonb_build_object('payload', e.payload, 'sequence', e.sequence,
                        'clockSeconds', e.clock_seconds, 'period', e.period) ORDER BY e.sequence)::text
                        FROM pitchmind.match_events e WHERE e.match_id = p.match_id AND e.canonical_revision <= p.canonical_revision
@@ -76,10 +78,12 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         var context = reader.IsDBNull(9) ? null : JsonSerializer.Deserialize<MatchReplayContext>(reader.GetString(9), JsonOptions)
             ?? throw new InvalidDataException("Persisted replay context is empty.");
         var sourceIdentity = new MatchReplaySourceIdentity(reader.GetString(10), reader.GetString(11),
-            (double)reader.GetDecimal(12), (double)reader.GetDecimal(13));
-        var indexedEvents = JsonSerializer.Deserialize<List<IndexedEvent>>(reader.GetString(14), JsonOptions) ?? [];
-        var indexedReplayEvents = JsonSerializer.Deserialize<List<IndexedReplayEvent>>(reader.GetString(15), JsonOptions) ?? [];
-        var indexedFrames = JsonSerializer.Deserialize<List<IndexedFrame>>(reader.GetString(16), JsonOptions) ?? [];
+            (double)reader.GetDecimal(12), (double)reader.GetDecimal(13),
+            new MatchCompetitionRules(reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15), reader.IsDBNull(16) ? null : reader.GetInt32(16)));
+        var indexedEvents = JsonSerializer.Deserialize<List<IndexedEvent>>(reader.GetString(17), JsonOptions) ?? [];
+        var indexedReplayEvents = JsonSerializer.Deserialize<List<IndexedReplayEvent>>(reader.GetString(18), JsonOptions) ?? [];
+        var indexedFrames = JsonSerializer.Deserialize<List<IndexedFrame>>(reader.GetString(19), JsonOptions) ?? [];
 
         var events = indexedEvents.Select(item =>
         {
@@ -223,7 +227,7 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         if (value is null or DBNull) return null;
         var seed = JsonSerializer.Deserialize<MatchReplaySeed>((string)value, JsonOptions)
             ?? throw new InvalidDataException("Persisted replay seed is empty.");
-        if (seed.SchemaVersion != "match-replay-seed-v1" || string.IsNullOrWhiteSpace(seed.Provenance))
+        if (seed.SchemaVersion is not ("match-replay-seed-v1" or "match-replay-seed-v2") || string.IsNullOrWhiteSpace(seed.Provenance))
             throw new InvalidDataException("Persisted replay seed version or provenance is invalid.");
         return seed;
     }

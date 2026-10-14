@@ -139,12 +139,18 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
     {
         await using var command = new NpgsqlCommand("""
             SELECT source_sha256 = $2 AND provenance = $3
+                AND competition_id IS NOT DISTINCT FROM $4
+                AND competition_rules_version IS NOT DISTINCT FROM $5
+                AND max_substitute_reentries_per_player IS NOT DISTINCT FROM $6
             FROM pitchmind.matches
             WHERE match_id = $1
             """, connection, transaction);
         command.Parameters.AddWithValue(update.Event.MatchId.Value);
         command.Parameters.AddWithValue(update.SourceSha256);
         command.Parameters.AddWithValue(update.PriorState.Provenance);
+        command.Parameters.AddWithValue((object?)update.PriorState.CompetitionId ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)update.PriorState.CompetitionRulesVersion ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)update.PriorState.MaximumSubstituteReentriesPerPlayer ?? DBNull.Value);
         if (await command.ExecuteScalarAsync(cancellationToken) is not true)
             throw new InvalidOperationException("Aggregate source hash and provenance must match the immutable registered match source.");
     }

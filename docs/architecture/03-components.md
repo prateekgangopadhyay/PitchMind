@@ -8,24 +8,22 @@
 
 ```mermaid
 flowchart TB
-  API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
-  Match --> Aggregate["MatchAggregate deterministic ordered-event reducer"]
-  Aggregate --> State["score, phase, possession, active roster, cautions"]
-  Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]
-  Match --> Press["PressingSequenceDetector"]
-  Match --> Replay["Selected-time projection/evidence/fallback"]
-  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL canonical ledger")]
-  ProjectionRead["PostgresMatchProjectionStore: metadata + projection/provenance read"] --> DB
-  CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
-  PointInTime["Application: GetMatchAtQueryService: selected state + detector replay"] --> ReplayReader["Infrastructure: PostgresMatchProjectionReader: event envelopes + versioned context + bounded frames"] --> DB
-  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (transport adapter not registered)"]
-  Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
+  API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
+  API --> Guard["Ordinary match request → 503; malformed requests → typed 4xx; body capped at 4 KiB including chunked input"]
+  API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
+  Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
+  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  ProjectionRead["PostgresMatchProjectionStore: source metadata + projection/provenance read"] --> DB
+  CanonicalWrite["PostgresCanonicalUpdateStore: event + projection + outbox transaction"] --> DB
+  PointInTime["Internal Application: GetMatchAtQueryService"] --> ReplayReader["PostgresMatchProjectionReader: projection + replay envelope + bounded frames"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
+  Candidate["Candidate JSON"] -. "raw schema only" .-> RawReader["ManuLivCandidateFeedReader"]
+  RawReader -. "not connected to canonical admission" .-> Boundary["Mapping blocked: source semantics unverified"]
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. The PostgreSQL v4 migration adds the projection-to-source provenance foreign key while preserving v3 canonical admission revisions. The v5 migration adds outbox lease/retry/dead-letter state and a consumer inbox. Schema v6 adds nullable replay seed and source-event envelope columns; v7 adds nullable versioned replay context without inventing values for legacy rows. `PostgresMatchProjectionReader.ReadReplaySnapshotAtAsync` returns the selected projection, event envelopes, replay seed/context and tracking frames from one SQL statement, so a replay sees one PostgreSQL MVCC snapshot. The selected frame set is bounded by canonical revision and elapsed clock; each frame retains its independent sequence (same-clock samples are valid), period, metric coordinate version and source hash, and the payload ID must match the indexed frame row ID. The replay context's fixture version, provenance and pitch dimensions must match the registered match metadata. `GetMatchAtQueryService` replays the pure aggregate and verifies the persisted state digest, then executes the exact requested supported detector version (`press-sequence-v1`) against those same-time inputs and returns input/output digests with ordered event/frame evidence IDs. It checks roster activity at each frame time, including substitutions and dismissals, and uses period two at the halftime clock. Additional same-clock frames are allowed when they do not make the press-arrival evidence ambiguous. Missing context, frames, metric coordinate semantics, active-player mappings or source lineage fails closed. This is an internal Application query, is not persisted as a derived-output canonical fact, and is not registered in API/EventWorker runtime. `PostgresMatchProjectionStore` records immutable source metadata and reads persisted projection state and insight provenance, checking hashes and selected-sequence bounds. `PostgresCanonicalUpdateStore` verifies aggregate predecessor state hash/clock/sequence and immutable source identity against persisted history, then commits event, canonical/projection revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` provides leased at-least-once publication with bounded retries; `PostgresConsumerInbox` couples same-database effects to dedupe receipts. These infrastructure primitives are not registered in the API/EventWorker runtime; there is no Azure broker publisher, metrics exporter/alert, or projection API read path. Competition linkage, source import and persisted correction workflows remain unimplemented. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. The in-memory event store is registered only for the local profile; Azure startup does not fall back to it. This does not configure Azure authentication, managed identity, or canonical service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. The PostgreSQL projection and canonical-write stores and the point-in-time query/reader are implementation components but are not registered in API/EventWorker composition; the diagram does not imply a live request path. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `ManuLivCandidateFeedReader` computes the exact source SHA-256 and parses source identity/order/time labels while retaining each original JSON record. It does not map event types, convert coordinates or clocks, persist data, or enable API reads; it is not wired into runtime composition. The candidate therefore still does not drive canonical match service behavior.
 
 ## Target Ports and Adapters
 
@@ -58,9 +56,12 @@ flowchart TB
   BFF["Thin API / role + selected-time guards"] --> Query
   EventWorker2["EventWorker host"] --> Validate
   AgentWorker2["AgentWorker host"] --> Explain
-  Feed --> Validate
-  EventHubs --> Validate
-  Validate --> Facts
+  Feed -. "raw candidate only; never canonical publication" .-> MapSource["Reviewed source mapper"]
+  MapSource --> Validate
+  Validate --> Admission["PostgreSQL canonical admission + revision + outbox in one transaction"]
+  Admission --> EventHubs
+  EventHubs --> ValidateProjection["Consume admitted telemetry for projections"]
+  ValidateProjection --> Facts
   Facts --> Project --> MatchId
   Project --> Detect --> Rules
   Detect --> Evidence
@@ -79,7 +80,7 @@ flowchart TB
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
-- `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
+- Raw candidates carry source hash, original bytes/IDs/order and raw clock labels; they have no `canonicalRevision` and are not canonical envelopes. Only PostgreSQL assigns a positive per-match `canonicalRevision` atomically with an admitted record and its outbox intent. `EventEnvelope` and `TrackingFrame` then carry the source/fixture hash, original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, and observed-vs-interpolated coverage.
 - PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.
 - `MatchTimeContext` fixes match, selected timestamp, revision and period across API, pitch, scoreboard, events, claims and AI.
 - Foundry receives read-only evidence scoped to selected time; separate deterministic validator checks every published claim; malformed model output falls back.

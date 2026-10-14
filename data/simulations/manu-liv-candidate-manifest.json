@@ -12,14 +12,14 @@
     "sequenceEnd": 2199,
     "synthetic": true,
     "provenance": "repository-owner-confirmed",
-    "provenanceConfirmedOn": "2026-10-08",
+    "provenanceConfirmedOn": "2026-10-10",
     "redistributionPermission": "repository-owner-confirmed",
     "independentRightsPrivacyReview": "pending"
   },
   "match": {
     "expectedMatchCount": 1,
     "expectedTeamCount": 2,
-    "sourceClockUnit": "seconds",
+    "sourceClockUnit": "unverified",
     "preserveSourceClockWithoutNormalization": true,
     "allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker": ["Pass"],
     "expectedPeriods": [1, 2],
@@ -28,8 +28,8 @@
       "FullTime": 1
     },
     "requiredEventMarkers": {
-      "HalfTime": { "clockSeconds": 2700, "period": 2 },
-      "FullTime": { "clockSeconds": 5761, "period": 2 }
+      "HalfTime": { "clockRawValue": 2700, "period": 2 },
+      "FullTime": { "clockRawValue": 5761, "period": 2 }
     },
     "sourceClockStart": 0,
     "sourceClockEnd": 5761

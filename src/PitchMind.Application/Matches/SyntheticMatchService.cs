@@ -1,14 +1,19 @@
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace PitchMind.Application.Matches;
 
 /// <summary>Offline fixture read model. Not a durable production event store.</summary>
 public sealed class SyntheticMatchService
 {
+    public const string ReplayAlgorithmVersion = "match-replay-v1";
+    private static readonly JsonSerializerOptions ReplayJsonOptions = new(JsonSerializerDefaults.Web);
+
     public SyntheticFixture Fixture { get; }
-    public SyntheticMatchService() : this(SyntheticFixtureGenerator.Generate()) { }
     public SyntheticMatchService(SyntheticFixture fixture)
     {
         ArgumentNullException.ThrowIfNull(fixture);
@@ -52,18 +57,50 @@ public sealed class SyntheticMatchService
             .Select(player => (player.Id, player.TeamId)).ToArray();
         var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
         var aggregate = new MatchAggregate(new(Guid.Parse(Fixture.MatchId)), Fixture.Home.Id, Fixture.Away.Id,
-            initialPlayers, activeAtKickoff, Fixture.Provenance);
+            initialPlayers, activeAtKickoff, Fixture.Provenance,
+            new(Fixture.CompetitionId, Fixture.CompetitionRulesVersion, Fixture.MaximumSubstituteReentriesPerPlayer));
         foreach (var item in events) aggregate.Apply(item);
         var state = aggregate.Snapshot();
         var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
         return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
             Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
-            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention);
+            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
+            state.CompetitionId, state.CompetitionRulesVersion, state.MaximumSubstituteReentriesPerPlayer);
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {
         ValidateTime(clockSeconds);
         return Array.AsReadOnly(Fixture.Events.Where(e => e.Event.ClockSeconds <= clockSeconds).ToArray());
+    }
+
+    /// <summary>
+    /// Builds one version-pinned selected-time response from the offline synthetic fixture.
+    /// This is not a durable PostgreSQL replay and has no canonical admission revision.
+    /// </summary>
+    public MatchReplaySnapshot ReplayAt(int clockSeconds, string? fixtureVersion = null, int? fixtureSeed = null,
+        string? replayAlgorithmVersion = null, string? detectorVersion = null, string? replayInputSha256 = null)
+    {
+        ValidateTime(clockSeconds);
+        RequirePin("fixtureVersion", fixtureVersion, Fixture.Version);
+        if (fixtureSeed is not null && fixtureSeed != Fixture.Seed)
+            throw new ArgumentException("Requested fixture seed is not available.", nameof(fixtureSeed));
+        RequirePin("replayAlgorithmVersion", replayAlgorithmVersion, ReplayAlgorithmVersion);
+        RequirePin("detectorVersion", detectorVersion, PressingSequenceDetector.Version);
+
+        var state = GetState(clockSeconds);
+        var events = GetEvents(clockSeconds);
+        var insights = GetInsights(clockSeconds);
+        var inputSha256 = HashJson(new ReplayInput(Fixture.Version, Fixture.Seed, Fixture.Provenance,
+            Fixture.DurationSeconds, Fixture.HalfTimeSeconds, Fixture.PitchLengthMetres, Fixture.PitchWidthMetres,
+            Fixture.Home, Fixture.Away, Fixture.CompetitionId, Fixture.CompetitionRulesVersion,
+            Fixture.MaximumSubstituteReentriesPerPlayer, Fixture.Events, Fixture.Frames));
+        RequirePin("replayInputSha256", replayInputSha256, inputSha256);
+
+        var outputSha256 = HashJson(new ReplayOutput(Fixture.MatchId, clockSeconds, Fixture.Version, Fixture.Seed,
+            ReplayAlgorithmVersion, PressingSequenceDetector.Version, inputSha256, state, events, insights));
+        return new MatchReplaySnapshot("offline-synthetic-fixture", Fixture.MatchId, clockSeconds, Fixture.Version,
+            Fixture.Seed, ReplayAlgorithmVersion, PressingSequenceDetector.Version, inputSha256, outputSha256,
+            CanonicalRevision: null, state, events, insights);
     }
     public IReadOnlyList<TacticalInsight> GetInsights(int clockSeconds)
     {
@@ -98,7 +135,31 @@ public sealed class SyntheticMatchService
         if (clockSeconds < 0 || clockSeconds > Fixture.DurationSeconds)
             throw new ArgumentOutOfRangeException(nameof(clockSeconds), $"Clock must be between 0 and {Fixture.DurationSeconds} seconds.");
     }
+
+    private static void RequirePin(string name, string? requested, string actual)
+    {
+        if (requested is not null && !string.Equals(requested, actual, StringComparison.Ordinal))
+            throw new ArgumentException($"Requested {name} is not available.", name);
+    }
+
+    private static string HashJson<T>(T value) => Convert.ToHexStringLower(
+        SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value, ReplayJsonOptions)));
+
+    private sealed record ReplayInput(string FixtureVersion, int Seed, string Provenance, int DurationSeconds,
+        int HalfTimeSeconds, double PitchLengthMetres, double PitchWidthMetres, SyntheticTeam Home,
+        SyntheticTeam Away, string? CompetitionId, string? CompetitionRulesVersion,
+        int? MaximumSubstituteReentriesPerPlayer, IReadOnlyList<SimulationEvent> Events,
+        IReadOnlyList<TrackingFrame> Frames);
+
+    private sealed record ReplayOutput(string MatchId, int SelectedElapsedSeconds, string FixtureVersion, int Seed,
+        string ReplayAlgorithmVersion, string DetectorVersion, string ReplayInputSha256, MatchSnapshot State,
+        IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TacticalInsight> Insights);
 }
+
+public sealed record MatchReplaySnapshot(string ExecutionMode, string MatchId, int SelectedElapsedSeconds,
+    string FixtureVersion, int FixtureSeed, string ReplayAlgorithmVersion, string DetectorVersion,
+    string ReplayInputSha256, string ReplayOutputSha256, long? CanonicalRevision, MatchSnapshot State,
+    IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TacticalInsight> Insights);
 
 public static class PressingSequenceDetector
 {

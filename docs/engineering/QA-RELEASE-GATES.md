@@ -21,6 +21,7 @@
 - Unit xUnit: football rules, coordinate mirror, clock boundaries, deterministic fallback, evidence link invariance; dependency-direction tests.
 - PostgreSQL integration: Compose-isolated database, reject skipped cases, crash after commit/before dispatch, schema backward compatibility, role denials, checkpoint and replay hash.
 - Contract: OpenAPI consumer examples, pagination/revision 409, HTTP 400/401/403/404/413/422/429/503, valid and invalid JSON input.
+- Frontend design: consult five registered specialists (Taste, Impeccable, Emil, Vercel guidelines and independent Awesome) against real changed UI; optional upstream Impeccable CLI is not a release gate. Maintain keyboard, focus, selected-time truth and reduced-motion evidence.
 - Frontend Vitest + Playwright: seven routes, source-only fixture content, live vs selected time, one evidence drill-down, no future events, model-down, keyboard tab, focus return, screen reader alternative to pitch.
 - Azure smoke: only after explicit owner approval; use deployed exact Git SHA and image digest, read-only basic metrics, synthetic ingestion/replay and live reconnect; never claim green from mock results.
 - Reliability: network/PG/Redis/SignalR/Foundry failure, intentionally malformed feed, cancellation, duplicate stream and DLQ recovery. Quarantine rather than silently skip.

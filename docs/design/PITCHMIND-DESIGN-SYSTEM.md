@@ -1,7 +1,7 @@
 # PitchMind — Premium Web Design System
 
 **Status:** Design specification for the seven committed mockups; not evidence that all seven screens have been implemented.  
-**Authority:** [Mockups](../mockups/README.md) → [Product screen contracts](../engineering/FRONTEND-SCREEN-CONTRACTS.md) → [Current API](../api/API.md) → [28-role Council](../operating-model/COUNCIL-SKILL-REGISTRY.json) → [3 specialist design skills](DESIGN-SKILL-REGISTRY.json).
+**Authority:** [Mockups](../mockups/README.md) → [Product screen contracts](../engineering/FRONTEND-SCREEN-CONTRACTS.md) → [Current API](../api/API.md) → [28-role Council](../operating-model/COUNCIL-SKILL-REGISTRY.json) → [5 specialist design skills](DESIGN-SKILL-REGISTRY.json).
 
 ## Product principle
 
@@ -59,6 +59,6 @@ These are **reference tokens**—they describe the existing direction. Actual CS
 
 ## Visual quality testing
 
-The [Taste](../../.github/skills/design-taste-frontend/SKILL.md) design pass proposes hierarchy, spacing, typography and restrained microinteraction. The [Vercel Web Design Guidelines](../../.github/skills/web-design-guidelines/SKILL.md) pass inspects actual TSX/CSS/HTML and records `file:line` accessibility/interaction findings. The [Awesome Design critic](../../.github/skills/awesome-design-audit/SKILL.md) applies three locally vendored rubrics with screenshot proof and scores. Score is *guidance*; factual accuracy, privacy/rights, WCAG access and release safety **cannot** be waived by a beautiful screenshot.
+The [Taste](../../.github/skills/design-taste-frontend/SKILL.md) pass proposes layout and hierarchy. [Impeccable](../../.github/skills/impeccable/SKILL.md) audits/clarifies visual craft, and [Emil design engineering](../../.github/skills/emil-design-eng/SKILL.md) checks useful microinteraction and restrained motion. The [Vercel Web Design Guidelines](../../.github/skills/web-design-guidelines/SKILL.md) pass inspects actual TSX/CSS/HTML and records `file:line` accessibility/interaction findings. The [Awesome Design critic](../../.github/skills/awesome-design-audit/SKILL.md) applies three locally vendored rubrics with screenshot proof and scores. Score is *guidance*; factual accuracy, privacy/rights, WCAG access and release safety **cannot** be waived by a beautiful screenshot.
 
 For every EP07/EP08-S06 PR: attach before/after screenshots at 1440px / 768px / 375px, keyboard/contrast and error-state evidence, copy score or issues, and network/mockup/selected-time reference. Reject untested claims. No auto Azure DEV deployment.
