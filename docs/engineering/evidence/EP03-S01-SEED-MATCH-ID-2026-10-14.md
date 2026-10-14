@@ -2,7 +2,7 @@
 
 ## Change
 
-On code commit `27983ec17947c738a09b752fdc3564d0d316342f`, the test-only `SyntheticFixtureGenerator` derives `matchId` from the fixture version and seed. Repeated generation with one seed retains one match identity; distinct seeds receive distinct identities, and every generated event retains the fixture's match ID. Event IDs remain deterministic and seed-scoped.
+On code commit `68e5bf2f8ac1d8a8dd4f84312623a1bce999f1f6`, the test-only `SyntheticFixtureGenerator` uses fixture version `synthetic-v2` and derives `matchId` from fixture version and seed. Repeated generation with one seed retains one match identity; distinct seeds receive distinct identities, and every generated event retains the fixture's match ID. Event and match IDs format seed values with invariant culture. The version bump ensures the new mapping does not silently change the output contract of `synthetic-v1`.
 
 The source candidate `data/simulations/manu-liv-match-dataset.json` was not consumed or transformed. Its clock, coordinate, metric, event-mapping and football semantics remain unverified as documented by the [candidate profile](../../data/MANU-LIV-SOURCE-PROFILE.md). No canonical admission or production match data change is claimed.
 
@@ -12,12 +12,12 @@ Executed on the code commit above in the isolated local clone:
 
 | Command | Result |
 |---|---:|
-| `dotnet test tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false --logger 'console;verbosity=minimal'` | 5 passed, 0 failed, 0 skipped |
+| `dotnet test tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false --logger 'console;verbosity=minimal'` | 6 passed, 0 failed, 0 skipped |
 | `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false --logger 'console;verbosity=minimal'` | 11 passed, 0 failed, 0 skipped |
 | `dotnet test tests/PitchMind.Contracts.Tests/PitchMind.Contracts.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false --logger 'console;verbosity=minimal'` | 16 passed, 0 failed, 0 skipped |
 | `git diff --check` | passed |
 
-The first sandboxed VSTest attempts could not bind their local communication socket. The same commands were rerun with local execution permission and passed. NuGet audit was disabled. No PostgreSQL integration, hosted CI, Azure operation, independent football review, or Product Owner acceptance was run or is claimed.
+An independent read-only review found and the follow-up fixed the missing fixture version bump and culture-sensitive seed formatting; the review did not run tests. The first sandboxed VSTest attempts could not bind their local communication socket. The same commands were rerun with local execution permission and passed. NuGet audit was disabled. No PostgreSQL integration, hosted CI, Azure operation, independent football review, or Product Owner acceptance was run or is claimed.
 
 ## Status
 
