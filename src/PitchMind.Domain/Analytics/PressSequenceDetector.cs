@@ -1,5 +1,8 @@
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Simulation;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 namespace PitchMind.Domain.Analytics;
 
@@ -35,7 +38,8 @@ public sealed record PressSequenceInput(
     double PitchLengthMetres,
     double PitchWidthMetres,
     IReadOnlyList<SimulationEvent> Events,
-    IReadOnlyList<TrackingFrame> Frames);
+    IReadOnlyList<TrackingFrame> Frames,
+    string SourceSha256);
 
 /// <summary>
 /// Detects one specific synthetic press sequence. The unapproved demo policy and its result
@@ -47,11 +51,14 @@ public static class PressSequenceDetector
     {
         ArgumentNullException.ThrowIfNull(fixture);
         var events = fixture.Events.Where(item => item.Event.ClockSeconds <= selectedTimeSeconds).ToArray();
+        var sourceJson = JsonSerializer.Serialize(fixture, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var sourceSha256 = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sourceJson)));
         var input = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null,
             selectedTimeSeconds, events.Length == 0 ? -1 : events[^1].Event.Sequence,
             fixture.Home.Id, fixture.Home.Name, fixture.Away.Id, fixture.Away.Name,
             "stadium-metres", fixture.PitchLengthMetres, fixture.PitchWidthMetres,
-            Array.AsReadOnly(events), Array.AsReadOnly(fixture.Frames.Where(frame => frame.ClockSeconds <= selectedTimeSeconds).ToArray()));
+            Array.AsReadOnly(events), Array.AsReadOnly(fixture.Frames.Where(frame => frame.ClockSeconds <= selectedTimeSeconds).ToArray()),
+            sourceSha256);
         return Detect(input);
     }
 
@@ -146,6 +153,8 @@ public static class PressSequenceDetector
                 Array.AsReadOnly(frameIds))
             {
                 SourceVersion = input.SourceVersion,
+                SourceSha256 = input.SourceSha256,
+                Provenance = input.Provenance,
                 CanonicalRevision = input.CanonicalRevision,
                 SelectedTimeSeconds = input.SelectedTimeSeconds,
                 ThroughSequence = input.ThroughSequence,
@@ -168,6 +177,7 @@ public static class PressSequenceDetector
     private static void Validate(PressSequenceInput input, PressSequencePolicy policy)
     {
         if (string.IsNullOrWhiteSpace(input.MatchId) || string.IsNullOrWhiteSpace(input.SourceVersion) ||
+            string.IsNullOrWhiteSpace(input.SourceSha256) || !IsSha256(input.SourceSha256) ||
             input.Provenance != "synthetic" || input.SelectedTimeSeconds < 0 ||
             input.CanonicalRevision is <= 0 || string.IsNullOrWhiteSpace(input.HomeTeamId) ||
             string.IsNullOrWhiteSpace(input.AwayTeamId) || input.HomeTeamId == input.AwayTeamId ||
@@ -203,10 +213,14 @@ public static class PressSequenceDetector
                 frame.ClockSeconds > input.SelectedTimeSeconds || !frameIds.Add(frame.Id) ||
                 !double.IsFinite(frame.BallX) || !double.IsFinite(frame.BallY) || frame.BallX < 0 ||
                 frame.BallX > input.PitchLengthMetres || frame.BallY < 0 || frame.BallY > input.PitchWidthMetres ||
+                frame.Players.Select(player => player.PlayerId).Distinct(StringComparer.Ordinal).Count() != frame.Players.Count ||
                 frame.Players.Any(player => !double.IsFinite(player.X) || !double.IsFinite(player.Y) ||
                     player.X < 0 || player.X > input.PitchLengthMetres || player.Y < 0 || player.Y > input.PitchWidthMetres ||
                     (player.TeamId != input.HomeTeamId && player.TeamId != input.AwayTeamId)))
                 throw new InvalidDataException("Tactical input frames must be unique, finite, in-pitch and selected-time bounded.");
         }
     }
+
+    private static bool IsSha256(string value) => value.Length == 64 && value.All(character =>
+        character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
 }

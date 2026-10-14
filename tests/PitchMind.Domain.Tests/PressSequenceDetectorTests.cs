@@ -28,7 +28,8 @@ public sealed class PressSequenceDetectorTests
             fixture.PitchLengthMetres,
             fixture.PitchWidthMetres,
             skippedPrefix,
-            fixture.Frames);
+            fixture.Frames,
+            new string('a', 64));
 
         Assert.Throws<InvalidDataException>(() => PressSequenceDetector.Detect(input));
     }
@@ -57,6 +58,18 @@ public sealed class PressSequenceDetectorTests
         Assert.Throws<InvalidDataException>(() => PressSequenceDetector.Detect(Input(fixture, events: events)));
     }
 
+    [Fact]
+    public void RejectsDuplicatePlayerIdsInTrackingFrameInsteadOfThrowingDuringDetection()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var pressure = fixture.Events.Single(item => item.Action == "press-arrival");
+        var frames = fixture.Frames.Select(frame => frame.ClockSeconds == pressure.Event.ClockSeconds
+            ? frame with { Players = frame.Players.Append(frame.Players[0]).ToArray() }
+            : frame).ToArray();
+
+        Assert.Throws<InvalidDataException>(() => PressSequenceDetector.Detect(Input(fixture, frames)));
+    }
+
     private static PressSequenceInput Input(SyntheticFixture fixture,
         IReadOnlyList<TrackingFrame>? frames = null, IReadOnlyList<SimulationEvent>? events = null)
     {
@@ -64,7 +77,8 @@ public sealed class PressSequenceDetectorTests
         return new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null, 5400,
             selectedEvents.Count == 0 ? -1 : selectedEvents[^1].Event.Sequence,
             fixture.Home.Id, fixture.Home.Name, fixture.Away.Id, fixture.Away.Name, "stadium-metres",
-            fixture.PitchLengthMetres, fixture.PitchWidthMetres, selectedEvents, frames ?? fixture.Frames);
+            fixture.PitchLengthMetres, fixture.PitchWidthMetres, selectedEvents, frames ?? fixture.Frames,
+            new string('a', 64));
     }
 
     [Fact]
@@ -87,7 +101,8 @@ public sealed class PressSequenceDetectorTests
             fixture.PitchLengthMetres,
             fixture.PitchWidthMetres,
             events,
-            fixture.Frames);
+            fixture.Frames,
+            new string('a', 64));
 
         Assert.Throws<ArgumentException>(() => PressSequenceDetector.Detect(input));
     }

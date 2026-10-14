@@ -53,6 +53,8 @@ public static class MatchContractMappings
         Array.AsReadOnly(insight.EventIds.ToArray()),
         Array.AsReadOnly(insight.FrameIds.ToArray()),
         insight.SourceVersion,
+        insight.SourceSha256,
+        insight.Provenance,
         insight.CanonicalRevision,
         insight.SelectedTimeSeconds,
         insight.ThroughSequence,

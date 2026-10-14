@@ -34,6 +34,8 @@ public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds
     string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds)
 {
     public string SourceVersion { get; init; } = "unknown";
+    public string SourceSha256 { get; init; } = "";
+    public string Provenance { get; init; } = "unknown";
     public long? CanonicalRevision { get; init; }
     public int SelectedTimeSeconds { get; init; }
     public long ThroughSequence { get; init; } = -1;

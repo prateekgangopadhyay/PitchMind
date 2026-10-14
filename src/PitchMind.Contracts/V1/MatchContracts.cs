@@ -66,6 +66,8 @@ public sealed record InsightResponse(
     IReadOnlyList<Guid> EventIds,
     IReadOnlyList<string> FrameIds,
     string SourceVersion,
+    string SourceSha256,
+    string Provenance,
     long? CanonicalRevision,
     int SelectedTimeSeconds,
     long ThroughSequence,

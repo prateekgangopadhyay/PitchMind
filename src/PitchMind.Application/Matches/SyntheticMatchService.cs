@@ -37,7 +37,8 @@ public sealed class SyntheticMatchService
                 !double.IsFinite(f.BallX) || f.BallX < 0 || f.BallX > fixture.PitchLengthMetres ||
                 !double.IsFinite(f.BallY) || f.BallY < 0 || f.BallY > fixture.PitchWidthMetres || f.Players.Any(p =>
                 !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > fixture.PitchLengthMetres ||
-                p.Y < 0 || p.Y > fixture.PitchWidthMetres)))
+                p.Y < 0 || p.Y > fixture.PitchWidthMetres)) || fixture.Frames.Any(f =>
+                f.Players.Select(p => p.PlayerId).Distinct(StringComparer.Ordinal).Count() != f.Players.Count))
             throw new ArgumentException("Tracking must use finite in-pitch coordinates.", nameof(fixture));
         if (!fixture.Frames.Any(frame => frame.ClockSeconds == 0))
             throw new ArgumentException("A tracking frame at kickoff (elapsed second zero) is required to initialize the active roster.", nameof(fixture));

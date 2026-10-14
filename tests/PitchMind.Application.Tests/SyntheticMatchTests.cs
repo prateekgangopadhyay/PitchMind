@@ -17,6 +17,8 @@ public sealed class SyntheticMatchTests
         Assert.Equal("simulated", insight.Classification);
         Assert.Equal("press-sequence-v2", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
+        Assert.Equal("synthetic", insight.Provenance);
+        Assert.Matches("^[0-9a-f]{64}$", insight.SourceSha256);
         Assert.False(insight.Publishable);
         Assert.Null(insight.CanonicalRevision);
         Assert.Equal(5400, insight.SelectedTimeSeconds);
@@ -295,6 +297,15 @@ public sealed class SyntheticMatchTests
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var frames = fixture.Frames.Select(f => f with { Players = f.Players.Select(p => p with { X = double.NaN }).ToArray() }).ToArray();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+    }
+    [Fact] public void DuplicateTrackingPlayerIdsAreRejectedAtFixtureBoundary()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Select(frame => frame.ClockSeconds == 3293
+            ? frame with { Players = frame.Players.Append(frame.Players[0]).ToArray() }
+            : frame).ToArray();
+
         Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
     }
     [Theory]
