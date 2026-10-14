@@ -33,6 +33,14 @@ public sealed record SyntheticPossessionPhase(
     string TeamId,
     string Phase);
 
+public enum SyntheticPressCounterexampleKind { MissingTracking, CompletedOpponentPass, WrongTeamRegain, DistantPressArrival }
+
+/// <summary>Named near-miss fixture variants that must not produce the positive press golden.</summary>
+public sealed record SyntheticPressCounterexample(
+    SyntheticPressCounterexampleKind Kind,
+    string Name,
+    SyntheticFixture Fixture);
+
 /// <summary>
 /// A deterministic test scenario with authored line-up changes and phases. Keep this in the
 /// TestFixtures assembly until EP03-S02 defines the versioned canonical event and roster contracts.

@@ -152,4 +152,22 @@ public sealed class SyntheticFixtureTests
         Assert.NotEqual(first.Events.Single(e => e.Type == SyntheticScenarioEventKind.YellowCard).EventId,
             other.Events.Single(e => e.Type == SyntheticScenarioEventKind.YellowCard).EventId);
     }
+
+    [Theory]
+    [InlineData(41)]
+    [InlineData(42)]
+    [InlineData(43)]
+    [InlineData(-19)]
+    public void PossessionAnnotationsAgreeWithSeededCirculationEvents(int seed)
+    {
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed);
+
+        foreach (var source in scenario.Fixture.Events.Where(entry => entry.Action == "circulation"))
+        {
+            var phase = scenario.PossessionPhases.Single(candidate =>
+                candidate.StartClockSeconds <= source.Event.ClockSeconds &&
+                candidate.EndClockSecondsExclusive > source.Event.ClockSeconds);
+            Assert.Equal(source.TeamId, phase.TeamId);
+        }
+    }
 }

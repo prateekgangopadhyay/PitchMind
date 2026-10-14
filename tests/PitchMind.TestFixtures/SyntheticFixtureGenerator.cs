@@ -94,7 +94,7 @@ public static class SyntheticFixtureGenerator
             .ThenBy(entry => entry.EventId)
             .Select((entry, sequence) => entry with { Sequence = sequence })
             .ToArray();
-        var possessionPhases = BuildPossessionPhases(seed, fixture.Home.Id, fixture.Away.Id);
+        var possessionPhases = BuildPossessionPhases(seed, fixture);
         var frames = fixture.Frames.Select(frame => ApplyActiveRoster(frame, events)).ToArray();
         var frozenSquad = Array.AsReadOnly(squad);
         var frozenEvents = Array.AsReadOnly(events);
@@ -112,6 +112,44 @@ public static class SyntheticFixtureGenerator
         return new(fixture, frozenSquad, frozenEvents, frozenPhases, frozenFrames, digest);
     }
 
+    /// <summary>Creates named negative controls for the authored pressing golden.</summary>
+    public static IReadOnlyList<SyntheticPressCounterexample> GeneratePressCounterexamples(int seed = 42)
+    {
+        var fixture = Generate(seed);
+        var missingTracking = fixture with { Frames = Array.Empty<TrackingFrame>() };
+        var completedPass = fixture with
+        {
+            Events = Array.AsReadOnly(fixture.Events.Select(entry => entry.Action == "pressured-pass"
+                ? entry with { Outcome = "complete" }
+                : entry).ToArray())
+        };
+        var wrongTeamRegain = fixture with
+        {
+            Events = Array.AsReadOnly(fixture.Events.Select(entry => entry.Action == "high-regain"
+                ? entry with { TeamId = fixture.Away.Id }
+                : entry).ToArray())
+        };
+        var distantArrival = fixture with
+        {
+            Frames = Array.AsReadOnly(fixture.Frames.Select(frame => frame.ClockSeconds == 3293
+                ? frame with
+                {
+                    Players = Array.AsReadOnly(frame.Players.Select(player => player.PlayerId == "harbour-10"
+                        ? player with { X = 40 }
+                        : player).ToArray())
+                }
+                : frame).ToArray())
+        };
+
+        return Array.AsReadOnly(new[]
+        {
+            new SyntheticPressCounterexample(SyntheticPressCounterexampleKind.MissingTracking, "missing-tracking", missingTracking),
+            new SyntheticPressCounterexample(SyntheticPressCounterexampleKind.CompletedOpponentPass, "completed-opponent-pass", completedPass),
+            new SyntheticPressCounterexample(SyntheticPressCounterexampleKind.WrongTeamRegain, "wrong-team-regain", wrongTeamRegain),
+            new SyntheticPressCounterexample(SyntheticPressCounterexampleKind.DistantPressArrival, "distant-press-arrival", distantArrival)
+        });
+    }
+
     private static SyntheticScenarioEvent Action(int seed, int clock, SyntheticScenarioEventKind kind, string team,
         string player, string? related = null, string? outcome = null)
     {
@@ -121,8 +159,10 @@ public static class SyntheticFixtureGenerator
         return new(id, 0, null, clock, clock < 2700 ? 1 : 2, kind, team, player, related, outcome);
     }
 
-    private static SyntheticPossessionPhase[] BuildPossessionPhases(int seed, string homeId, string awayId)
+    private static SyntheticPossessionPhase[] BuildPossessionPhases(int seed, SyntheticFixture fixture)
     {
+        var homeId = fixture.Home.Id;
+        var awayId = fixture.Away.Id;
         var phases = new List<SyntheticPossessionPhase>();
         for (var start = 0; start < 5400; start += 60)
         {
@@ -137,7 +177,9 @@ public static class SyntheticFixtureGenerator
         phases.RemoveAll(p => p.StartClockSeconds is >= 3240 and < 3360);
         phases.InsertRange(index, new[]
         {
-            new SyntheticPossessionPhase(3240, 3290, 2, homeId, "settled-possession"),
+            new SyntheticPossessionPhase(3240, 3290, 2,
+                fixture.Events.Single(e => e.Event.ClockSeconds == 3270 && e.Action == "circulation").TeamId,
+                "settled-possession"),
             new SyntheticPossessionPhase(3290, 3299, 2, awayId, "opponent-build-up"),
             new SyntheticPossessionPhase(3299, 3304, 2, homeId, "high-regain-transition"),
             new SyntheticPossessionPhase(3304, 3360, 2, homeId, "attacking-exploitation")
