@@ -22,7 +22,7 @@
 | `eventId` | Non-null string; 2,199 distinct values in this file | Source event identity. Preserve exactly; canonical identity policy is a separate contract. |
 | `matchId` | Non-null string; one distinct value | Source match label. No approved canonical fixture mapping. |
 | `sequence` | Non-null integer; contiguous 1–2,199 | Source order is 1-based. Preserve separately from any canonical sequence. |
-| `clockSeconds` | Non-null integer; 0–5,761, nondecreasing in file order | Clock origin, stoppage representation, period reset policy, and relation to elapsed match time are unverified. |
+| `clockSeconds` | Non-null integer field value; 0–5,761, nondecreasing in file order | The field name is observed; its unit, clock origin, stoppage representation, period reset policy, and relation to elapsed match time are unverified. |
 | `period` | Non-null integer; observed values 1 and 2 | Period labels are present; exact clock-boundary semantics and canonical mapping remain unapproved. |
 | `eventType` | Non-null string; 19 distinct values (see vocabulary below) | Source vocabulary only. No event type is canonical until an explicit versioned mapping is reviewed. |
 | `teamId` | Non-null string; two distinct values | Preserve source ID. Canonical identity crosswalk is unapproved. |
