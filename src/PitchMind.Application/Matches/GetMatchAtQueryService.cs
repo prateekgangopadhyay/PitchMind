@@ -1,5 +1,6 @@
 using PitchMind.Application.Abstractions;
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using System.Security.Cryptography;
@@ -29,7 +30,7 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             throw new ArgumentException("Algorithm version is required.", nameof(query));
         if (string.IsNullOrWhiteSpace(query.DetectorVersion))
             throw new ArgumentException("Detector version is required.", nameof(query));
-        if (!string.Equals(query.DetectorVersion, PressingSequenceDetector.Version, StringComparison.Ordinal))
+        if (!string.Equals(query.DetectorVersion, PressSequencePolicy.UnapprovedDemoV2.Version, StringComparison.Ordinal))
             throw new NotSupportedException($"Detector version '{query.DetectorVersion}' is not available for deterministic replay.");
 
         var snapshot = await reader.ReadReplaySnapshotAtAsync(query.MatchId, query.SelectedSeconds,
@@ -96,10 +97,14 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             replayedState.ClockSeconds != projection.AsOfClockSeconds || replaySha256 != projection.StateSha256)
             throw new InvalidDataException("Deterministic replay state does not match the selected persisted projection digest.");
 
-        var fixture = new MatchReplayFixture(query.MatchId.ToString(), seed.HomeTeamId, context.HomeTeamName,
-            seed.AwayTeamId, context.AwayTeamName, Array.AsReadOnly(replayEvents.ToArray()),
-            Array.AsReadOnly(replayFrames.Select(frame => frame.Frame).ToArray()));
-        var derived = PressingSequenceDetector.Detect(fixture, query.SelectedSeconds);
+        var derivedInput = new PressSequenceInput(
+            query.MatchId.ToString(), context.FixtureVersion, context.Provenance, projection.CanonicalRevision,
+            query.SelectedSeconds, projection.AsOfSequence, seed.HomeTeamId, context.HomeTeamName,
+            seed.AwayTeamId, context.AwayTeamName, context.CoordinateVersion,
+            context.PitchLengthMetres, context.PitchWidthMetres,
+            Array.AsReadOnly(replayEvents.ToArray()),
+            Array.AsReadOnly(replayFrames.Select(frame => frame.Frame).ToArray()), projection.SourceSha256);
+        var derived = PressSequenceDetector.Detect(derivedInput);
         var replayInputJson = JsonSerializer.Serialize(new ReplayInput(query.SelectedSeconds, projection.CanonicalRevision,
             projection.AsOfSequence, query.AlgorithmVersion, query.DetectorVersion, context, seed, replayEvents, replayFrames), JsonOptions);
         var replayInputSha256 = Hash(replayInputJson);

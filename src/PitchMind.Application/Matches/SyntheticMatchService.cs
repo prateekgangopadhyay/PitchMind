@@ -1,4 +1,5 @@
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using System.Security.Cryptography;
@@ -36,7 +37,8 @@ public sealed class SyntheticMatchService
                 !double.IsFinite(f.BallX) || f.BallX < 0 || f.BallX > fixture.PitchLengthMetres ||
                 !double.IsFinite(f.BallY) || f.BallY < 0 || f.BallY > fixture.PitchWidthMetres || f.Players.Any(p =>
                 !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > fixture.PitchLengthMetres ||
-                p.Y < 0 || p.Y > fixture.PitchWidthMetres)))
+                p.Y < 0 || p.Y > fixture.PitchWidthMetres)) || fixture.Frames.Any(f =>
+                f.Players.Select(p => p.PlayerId).Distinct(StringComparer.Ordinal).Count() != f.Players.Count))
             throw new ArgumentException("Tracking must use finite in-pitch coordinates.", nameof(fixture));
         if (!fixture.Frames.Any(frame => frame.ClockSeconds == 0))
             throw new ArgumentException("A tracking frame at kickoff (elapsed second zero) is required to initialize the active roster.", nameof(fixture));
@@ -85,7 +87,7 @@ public sealed class SyntheticMatchService
         if (fixtureSeed is not null && fixtureSeed != Fixture.Seed)
             throw new ArgumentException("Requested fixture seed is not available.", nameof(fixtureSeed));
         RequirePin("replayAlgorithmVersion", replayAlgorithmVersion, ReplayAlgorithmVersion);
-        RequirePin("detectorVersion", detectorVersion, PressingSequenceDetector.Version);
+        RequirePin("detectorVersion", detectorVersion, PressSequencePolicy.UnapprovedDemoV2.Version);
 
         var state = GetState(clockSeconds);
         var events = GetEvents(clockSeconds);
@@ -97,15 +99,15 @@ public sealed class SyntheticMatchService
         RequirePin("replayInputSha256", replayInputSha256, inputSha256);
 
         var outputSha256 = HashJson(new ReplayOutput(Fixture.MatchId, clockSeconds, Fixture.Version, Fixture.Seed,
-            ReplayAlgorithmVersion, PressingSequenceDetector.Version, inputSha256, state, events, insights));
+            ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, inputSha256, state, events, insights));
         return new MatchReplaySnapshot("offline-synthetic-fixture", Fixture.MatchId, clockSeconds, Fixture.Version,
-            Fixture.Seed, ReplayAlgorithmVersion, PressingSequenceDetector.Version, inputSha256, outputSha256,
+            Fixture.Seed, ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, inputSha256, outputSha256,
             CanonicalRevision: null, state, events, insights);
     }
     public IReadOnlyList<TacticalInsight> GetInsights(int clockSeconds)
     {
         ValidateTime(clockSeconds);
-        return PressingSequenceDetector.Detect(Fixture, clockSeconds);
+        return PressSequenceDetector.Detect(Fixture, clockSeconds);
     }
     public TacticalEvidence? GetEvidence(string insightId, int clockSeconds)
     {
@@ -114,8 +116,8 @@ public sealed class SyntheticMatchService
         return new(insight, Fixture.Events.Where(e => insight.EventIds.Contains(e.Event.EventId)).ToArray(),
             Fixture.Frames.Where(f => insight.FrameIds.Contains(f.Id)).ToArray(),
             Fixture.CoordinateConvention,
-            new[] { "Back-pass received by goalkeeper", "Opponent within 3 metres at press arrival", "Incomplete pressured pass within 10 seconds", "Same pressing team regains within 10 seconds", "Cutback then shot and goal within 15 seconds of regain" },
-            new[] { "Synthetic scenario; thresholds are uncalibrated demonstration rules.", "Sequence supports a pressing interpretation, not proof of player or manager intent.", "Routine frames sampled every 30 seconds; do not treat gaps as observed movement." });
+            insight.Conditions,
+            new[] { "Synthetic-only candidate; the detector policy is unapproved and publishable is false.", "The sequence does not establish causality or managerial intent.", "Routine frames are sparse; do not infer continuous movement or closing speed." });
     }
     public MatchExplanation? Explain(string insightId, int clockSeconds, string audience = "fan")
     {
@@ -126,8 +128,8 @@ public sealed class SyntheticMatchService
         var opponent = evidence.Events[0].TeamId == Fixture.Home.Id ? Fixture.Home.Name : Fixture.Away.Name;
         static string Time(int seconds) => $"{seconds / 60:D2}:{seconds % 60:D2}";
         var text = audience == "analyst"
-            ? $"At {Time(evidence.Events[0].Event.ClockSeconds)} {opponent} played back to the goalkeeper. {team}'s forward was within 3 metres at {Time(evidence.Events[1].Event.ClockSeconds)}. The subsequent pass was incomplete, {team} regained at {Time(evidence.Events[3].Event.ClockSeconds)}, cut back at {Time(evidence.Events[4].Event.ClockSeconds)} and scored at {Time(evidence.Events[6].Event.ClockSeconds)}. This observed sequence is consistent with a successful press; intent and causality beyond the sequence are unknown."
-            : $"{team} closed down {opponent}'s goalkeeper after a back-pass, won the next ball and turned a cutback into a goal. The linked events show the sequence; they do not tell us what the coach intended.";
+            ? $"In this synthetic fixture, {opponent} played back at {Time(evidence.Events[0].Event.ClockSeconds)}. A {team} pressure event followed, then an incomplete pass, regain, cutback, shot and goal. This is a simulated sequence candidate under an unapproved demonstration policy; it does not establish causality or intent."
+            : $"This synthetic fixture contains a {team} pressure event followed by an opponent pass, a regain and a shot sequence. It is a simulated candidate, not proof of tactical intent or causality.";
         return new(insightId, clockSeconds, audience, "deterministic-fallback", text, evidence.Insight.EventIds, evidence.Limitations);
     }
     private void ValidateTime(int clockSeconds)
@@ -160,51 +162,3 @@ public sealed record MatchReplaySnapshot(string ExecutionMode, string MatchId, i
     string FixtureVersion, int FixtureSeed, string ReplayAlgorithmVersion, string DetectorVersion,
     string ReplayInputSha256, string ReplayOutputSha256, long? CanonicalRevision, MatchSnapshot State,
     IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TacticalInsight> Insights);
-
-public static class PressingSequenceDetector
-{
-    public const string Version = "press-sequence-v1";
-    public static IReadOnlyList<TacticalInsight> Detect(SyntheticFixture fixture, int selectedClock)
-    {
-        ArgumentNullException.ThrowIfNull(fixture);
-        return Detect(new MatchReplayFixture(fixture.MatchId, fixture.Home.Id, fixture.Home.Name,
-            fixture.Away.Id, fixture.Away.Name, fixture.Events, fixture.Frames), selectedClock);
-    }
-
-    public static IReadOnlyList<TacticalInsight> Detect(MatchReplayFixture fixture, int selectedClock)
-    {
-        ArgumentNullException.ThrowIfNull(fixture);
-        var available = fixture.Events.Where(e => e.Event.ClockSeconds <= selectedClock).ToArray();
-        var results = new List<TacticalInsight>();
-        foreach (var trigger in available.Where(e => e.Action == "back-pass" && e.Outcome == "complete"))
-        {
-            var chain = available.Where(e => e.Event.ClockSeconds >= trigger.Event.ClockSeconds && e.Event.ClockSeconds <= trigger.Event.ClockSeconds + 25).ToArray();
-            SimulationEvent? Find(string action) => chain.FirstOrDefault(e => e.Action == action);
-            var press = Find("press-arrival"); var response = Find("pressured-pass"); var regain = Find("high-regain");
-            var cutback = Find("cutback"); var shot = Find("shot"); var goal = Find("goal");
-            if (press is null || response is null || regain is null || cutback is null || shot is null || goal is null) continue;
-            var ordered = new[] { trigger, press, response, regain, cutback, shot, goal };
-            if (ordered.Zip(ordered.Skip(1)).Any(pair => pair.First.Event.ClockSeconds >= pair.Second.Event.ClockSeconds)) continue;
-            if (ordered.Any(e => e.Event.Period != trigger.Event.Period)) continue;
-            if (press.TeamId == trigger.TeamId || response.TeamId != trigger.TeamId || response.Outcome != "incomplete" || regain.Outcome != "won") continue;
-            if (press.RelatedPlayerId != trigger.RelatedPlayerId || response.PlayerId != trigger.RelatedPlayerId) continue;
-            if (new[] { regain, cutback, shot, goal }.Any(e => e.TeamId != press.TeamId) || goal.Outcome != "scored") continue;
-            if (response.Event.ClockSeconds - press.Event.ClockSeconds > 10 || regain.Event.ClockSeconds - response.Event.ClockSeconds > 10 || goal.Event.ClockSeconds - regain.Event.ClockSeconds > 15) continue;
-            var frames = fixture.Frames.Where(f => ordered.Any(e => e.Event.ClockSeconds == f.ClockSeconds)).ToArray();
-            var arrivalFrames = frames.Where(f => f.ClockSeconds == press.Event.ClockSeconds).ToArray();
-            var arrival = arrivalFrames.Length == 1 ? arrivalFrames[0] : null;
-            var attacker = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.PlayerId);
-            var keeper = arrival?.Players.SingleOrDefault(p => p.PlayerId == press.RelatedPlayerId);
-            if (ordered.Any(item => frames.All(frame => frame.ClockSeconds != item.Event.ClockSeconds)) ||
-                arrivalFrames.Length != 1 || attacker is null || keeper is null) continue;
-            if (trigger.Event.Type != MatchEventType.Pass || press.Event.Type != MatchEventType.Pressure || response.Event.Type != MatchEventType.Pass
-                || regain.Event.Type != MatchEventType.Turnover || cutback.Event.Type != MatchEventType.Pass || shot.Event.Type != MatchEventType.Shot || goal.Event.Type != MatchEventType.Goal) continue;
-            var distance = Math.Sqrt(Math.Pow(attacker.X - keeper.X, 2) + Math.Pow(attacker.Y - keeper.Y, 2));
-            if (!double.IsFinite(distance) || distance > 3) continue;
-            results.Add(new($"press-{trigger.Event.EventId:D}", fixture.MatchId, goal.Event.ClockSeconds,
-                "Press followed by regain and goal", $"{(press.TeamId == fixture.HomeTeamId ? fixture.HomeTeamName : fixture.AwayTeamName)}'s press is followed by a high regain, cutback and goal.",
-                "evidence-supported-pattern", Version, Array.AsReadOnly(ordered.Select(e => e.Event.EventId).ToArray()), Array.AsReadOnly(frames.Select(f => f.Id).ToArray())));
-        }
-        return results.AsReadOnly();
-    }
-}

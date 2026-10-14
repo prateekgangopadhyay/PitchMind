@@ -31,7 +31,18 @@ public sealed record MatchSnapshot(string MatchId, int ClockSeconds, int Period,
     int HomeActivePlayers, int AwayActivePlayers, IReadOnlyList<MatchPlayerState> Players, string CoordinateConvention,
     string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null);
 public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds, string Title, string Summary,
-    string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds);
+    string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds)
+{
+    public string SourceVersion { get; init; } = "unknown";
+    public string SourceSha256 { get; init; } = "";
+    public string Provenance { get; init; } = "unknown";
+    public long? CanonicalRevision { get; init; }
+    public int SelectedTimeSeconds { get; init; }
+    public long ThroughSequence { get; init; } = -1;
+    public string PolicyStatus { get; init; } = "unknown";
+    public bool Publishable { get; init; }
+    public IReadOnlyList<string> Conditions { get; init; } = Array.Empty<string>();
+}
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,
     string CoordinateConvention, IReadOnlyList<string> Conditions, IReadOnlyList<string> Limitations);
 public sealed record MatchExplanation(string InsightId, int ClockSeconds, string Audience, string Source, string Text,

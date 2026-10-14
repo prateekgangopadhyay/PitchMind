@@ -24,6 +24,8 @@ The current v1 DTO property names and representative JSON types are pinned by `P
 
 EP04-S04 adds an internal `GetMatchAtQueryService` backed by `PostgresMatchProjectionReader`. It returns a point-in-time state and evidence-bounded replay result from PostgreSQL, pinned by selected clock, canonical admission revision and algorithm/detector version. The query is not registered in API composition and creates no public HTTP contract. All match routes above therefore remain unavailable; this addition does not enable a canonical public read path or frontend scrubbing. See the EP04-S04 work packet and PostgreSQL replay evidence for the internal contract and its test limits.
 
+The mapped insight DTO includes sourceVersion, sourceSha256, provenance, nullable 64-bit canonicalRevision, selectedTimeSeconds, throughSequence, policyStatus, publishable, and detector conditions. The offline `sourceSha256` is the SHA-256 fingerprint of the exact serialized synthetic fixture; the revision-pinned PostgreSQL replay uses the validated canonical projection source hash. Its route remains unavailable in the current API composition. The offline candidate returns classification simulated, policyStatus unapproved-demo, publishable false, provenance synthetic, and canonicalRevision null; this is not a canonical football fact, football approval, or an implementation of the candidate Manu–Liverpool feed. The detector only evaluates the selected-time prefix and reports the highest included event sequence. Do not relabel this response as evidence-supported, approved, or production-ready.
+
 ### Target API routes — do not advertise as executable before acceptance
 | Method | Route | Story owner | Request | Response / authorization |
 |---|---|---|---|---|

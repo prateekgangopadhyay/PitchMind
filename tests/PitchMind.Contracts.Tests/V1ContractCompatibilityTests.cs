@@ -91,7 +91,8 @@ public sealed class V1ContractCompatibilityTests
         var sourceEvent = new MatchEventResponse(Guid.Empty, "match", 0, "pass", 0, 1, DateTimeOffset.UnixEpoch);
         var simulationEvent = new SimulationEventResponse(sourceEvent, "team", "player", "action", "outcome", null);
         var frame = new TrackingFrameResponse("frame", 0, 0, 0, "offline synthetic fixture coordinate convention", new[] { new PitchPositionResponse("player", "team", 0, 0) });
-        var insight = new InsightResponse("insight", "match", 0, "title", "summary", "classification", "detector", new[] { Guid.Empty }, new[] { "frame" });
+        var insight = new InsightResponse("insight", "match", 0, "title", "summary", "classification", "detector", new[] { Guid.Empty }, new[] { "frame" },
+            "synthetic-v2", new string('a', 64), "synthetic", null, 0, -1, "unapproved-demo", false, Array.Empty<string>());
         var evidence = new EvidenceResponse(insight, new[] { simulationEvent }, new[] { frame }, "coordinate convention", Array.Empty<string>(), Array.Empty<string>());
         var explanation = new ExplanationResponse("insight", 0, "fan", "deterministic-fallback", "text", new[] { Guid.Empty }, Array.Empty<string>());
         var problem = new ApiProblemResponse("about:blank", "Bad request", 400, "INVALID_REQUEST", "correlation", Instance: "/api/v1/matches");
@@ -100,7 +101,8 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(simulationEvent, "event", "teamId", "playerId", "action", "outcome", "relatedPlayerId");
         AssertJsonProperties(frame, "id", "clockSeconds", "ballX", "ballY", "coordinateConvention", "players");
         AssertJsonProperties(frame.Players[0], "playerId", "teamId", "x", "y");
-        AssertJsonProperties(insight, "id", "matchId", "clockSeconds", "title", "summary", "classification", "detectorVersion", "eventIds", "frameIds");
+        AssertJsonProperties(insight, "id", "matchId", "clockSeconds", "title", "summary", "classification", "detectorVersion", "eventIds", "frameIds",
+            "sourceVersion", "sourceSha256", "provenance", "canonicalRevision", "selectedTimeSeconds", "throughSequence", "policyStatus", "publishable", "conditions");
         AssertJsonProperties(evidence, "insight", "events", "frames", "coordinateConvention", "conditions", "limitations");
         AssertJsonProperties(explanation, "insightId", "clockSeconds", "audience", "source", "text", "eventIds", "limitations");
         AssertJsonProperties(problem, "type", "title", "status", "code", "correlationId", "detail", "instance");
@@ -157,6 +159,18 @@ public sealed class V1ContractCompatibilityTests
 
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(replay, Json));
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("canonicalRevision").ValueKind);
+    }
+
+    [Fact]
+    public void Insight_mapping_carries_source_provenance_and_fingerprint()
+    {
+        var insight = new SyntheticMatchService(SyntheticFixtureGenerator.Generate())
+            .GetInsights(3309).Single().ToResponse();
+
+        Assert.Equal("synthetic", insight.Provenance);
+        Assert.Matches("^[0-9a-f]{64}$", insight.SourceSha256);
+        Assert.Equal("synthetic-v3", insight.SourceVersion);
+        Assert.False(insight.Publishable);
     }
 
     [Fact]

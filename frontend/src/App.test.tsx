@@ -105,7 +105,7 @@ it('keeps an unknown route visible and keyboard-recoverable instead of presentin
 it('retries the failed evidence or analyst action without reloading fixtures', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const fixture = {matchId: 'fixture', version: 'v1', seed: 42, durationSeconds: 5400, home: {id: 'h', name: 'Harbour FC', formation: '4-2-3-1', players: []}, away: {id: 'a', name: 'Ridge Athletic', formation: '4-2-3-1', players: []}};
-  const insight = {id: 'press', matchId: 'fixture', clockSeconds: 0, title: 'Supported sequence', summary: 'Observed actions', classification: 'derived', detectorVersion: '1', eventIds: [], frameIds: []};
+  const insight = {id: 'press', matchId: 'fixture', clockSeconds: 0, title: 'Supported sequence', summary: 'Observed actions', classification: 'derived', detectorVersion: '1', eventIds: [], frameIds: [], sourceVersion: 'synthetic-v1', sourceSha256: 'a'.repeat(64), provenance: 'synthetic', canonicalRevision: null, selectedTimeSeconds: 0, throughSequence: -1, policyStatus: 'unapproved-demo', publishable: false, conditions: []};
   let evidenceCalls = 0;
   let analystCalls = 0;
   let fixtureCalls = 0;
