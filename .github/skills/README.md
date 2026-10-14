@@ -1,6 +1,6 @@
 # PitchMind Engineering Council Agent Skills
 
-**28 accountable Engineering Council role skills + 3 cross-cutting design specialist skills** (31 discoverable skill directories) in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
+**28 accountable Engineering Council role skills + 5 cross-cutting design specialist skills** (33 discoverable skill directories) in the standard .github/skills/<skill-name>/SKILL.md layout. Each has unique required name/description YAML frontmatter. GitHub Copilot and other Agent Skills-compatible assistants may load relevant skills when prompted, but their presence does not create real human staff, give agents deployment authority or prove tests were run.
 
 Read [Engineering Council Operating Model](../../docs/operating-model/ENGINEERING-OPERATING-MODEL.md), [architecture review](../../docs/engineering/ARCHITECTURE-REVIEW-2026-10-08.md), [delivery templates](../../docs/operating-model/DELIVERY-ARTIFACT-TEMPLATES.md), the exact [backlog story](../../docs/backlog/HACKATHON-MVP-EPICS.md), and repository-wide [instructions](../copilot-instructions.md).
 
@@ -22,6 +22,10 @@ Read [Engineering Council Operating Model](../../docs/operating-model/ENGINEERIN
 Example request: "For EP04-S03, have the principal software architect, distributed systems engineer, PostgreSQL engineer and QA architect produce the HLD/LLD, outbox crash matrix, PR plan and acceptance evidence. Mark unrun tests as unverified. Do not deploy to DEV."
 
 A role skill must issue concrete files/decisions/tests and a handoff; a generic persona debate is not a deliverable. The source backlog/ADR/C4 and observed code take priority over generic best practices. Never use all 28 skills by default; activate the smallest responsible review set.
+
+## Frontend design specialist order (EP07 / EP08-S06)
+
+Use the five-skill workflow in this order: [Taste](design-taste-frontend/SKILL.md) for React screen construction → [Impeccable](impeccable/SKILL.md) for focused hierarchy, audit and polish → [Emil design engineering](emil-design-eng/SKILL.md) for purposeful interactions and restrained motion → [Vercel Web Design Guidelines](web-design-guidelines/SKILL.md) for current UI/accessibility checks → [Awesome](awesome-design-audit/SKILL.md) for independent screenshot-grounded review. See `docs/design/FRONTEND-DESIGN-DELIVERY.md`. Impeccable is a **local advisory adaptation**: do not install its upstream CLI, binaries or hooks. Emil's original text is vendored under MIT. Preserve React 19, Vite, TypeScript and existing CSS; do not add motion dependencies or block unrelated product coding for this review.
 
 ## Full catalog
 - [Product Owner](product-owner/SKILL.md) — Own verifiable user value from synthetic match discovery through context, evidence, explanation and replay.
@@ -55,20 +59,22 @@ A role skill must issue concrete files/decisions/tests and a handoff; a generic 
 
 ## Machine-enforced council routes
 
-The [Council skill registry](../../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) covers exactly 28 accountable roles; the [design specialist registry](../../docs/design/DESIGN-SKILL-REGISTRY.json) adds exactly 3 cross-cutting abilities, not extra Council roles. The 31 discoverable skill directories must match their combined registers. The [story routing DAG](../../docs/operating-model/STORY-EXECUTION-ROUTING.json) assigns a **skill role**, not an invented human engineer, to every original EPxx-Syy. The [execution roadmap](../../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) describes dependencies, independent review and release constraints. Run `node scripts/validate_operating_model.mjs` before merging a skill or backlog update.
+The [Council skill registry](../../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) covers exactly 28 accountable roles; the [design specialist registry](../../docs/design/DESIGN-SKILL-REGISTRY.json) adds exactly 5 cross-cutting design specialists, not extra Council roles. The 33 discoverable skill directories must match their combined registers. The [story routing DAG](../../docs/operating-model/STORY-EXECUTION-ROUTING.json) assigns a **skill role**, not an invented human engineer, to every original EPxx-Syy. The [execution roadmap](../../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) describes dependencies, independent review and release constraints. Run `node scripts/validate_operating_model.mjs` before merging a skill or backlog update.
 
-**Source caveat:** the 2,199-event Manchester United/Liverpool JSON is present but unapproved for synthetic rights, unit semantics and football realism. No skill may treat it as match truth or a real EPL feed without the manifest and QA gates. DEV changes require explicit owner approval even with green documentation checks.
+**Source caveat:** the 2,199-event Manchester United/Liverpool JSON has repository-owner-confirmed synthetic provenance and redistribution permission. Independent rights/privacy review and football-domain review remain pending; clock, coordinate, player-metric and canonical mapping semantics are unverified. The [observed data dictionary](../../docs/data/MANU-LIV-OBSERVED-DATA-DICTIONARY.md) reports structure only. No skill may treat this candidate as canonical match truth. DEV changes require explicit owner approval even with green documentation checks.
 
-## PitchMind's three specialist design capabilities
+## PitchMind's five specialist design skills
 
 | Specialist Agent Skill | Use for | Governing criteria |
 |---|---|---|
 | [Taste — design-taste-frontend](design-taste-frontend/SKILL.md) | Create/redesign React screens with purposeful layout, rhythm, typography, restrained motion | Existing Vite/CSS architecture, dark navy/emerald tokens, source-fed football facts |
+| [Impeccable](impeccable/SKILL.md) | Shape hierarchy, critique actual screens, audit and polish or simplify UI | Local advisory adapter only; preserve React/Vite/CSS, accessibility, source truth; no upstream CLI, binaries or hooks |
+| [Emil — emil-design-eng](emil-design-eng/SKILL.md) | Refine component craft, responsive states, interaction feedback and subtle motion | Existing CSS first, keyboard parity, reduced motion, interruptible transitions |
 | [Vercel — web-design-guidelines](web-design-guidelines/SKILL.md) | Accessibility/interaction code audit, fresh upstream web guideline fetch, `file:line` remediation | WCAG 2.2 AA intent, actual TSX/CSS review, keyboard, forms, reduced motion |
 | [Awesome — awesome-design-audit](awesome-design-audit/SKILL.md) | Independent anti-generic critique and premium-quality score; copy QA and screenshot iteration | Vendored CC0 rubrics, real rendered screenshots, mandatory football correctness |
 
-**Apply all three** on EP07-S01..S06, EP08-S06, or PRs materially changing the user interface. Load the minimum relevant Council roles (`ui-ux-engineer`, `lead-frontend-engineer`, `accessibility-engineer`, `qa-architect`) alongside them; specialist skills do not own story acceptance and do not increase the 28-role count.
+**Use all five in the documented order** for EP07-S01..S06, EP08-S06, or PRs materially changing the user interface. Load the minimum relevant Council roles (`ui-ux-engineer`, `lead-frontend-engineer`, `accessibility-engineer`, `qa-architect`) alongside them; specialist skills do not own story acceptance and do not increase the 28-role count.
 
 **Authoritative references:** [design system](../../docs/design/PITCHMIND-DESIGN-SYSTEM.md), [seven-screen workflow](../../docs/design/FRONTEND-DESIGN-DELIVERY.md), [upstream attribution and pinned versions](../../docs/design/VENDOR-SOURCES.md). Run `node scripts/validate_operating_model.mjs` and `node scripts/test_design_skills.mjs` locally. Static checks cannot replace actual browser, accessibility or story-evidence testing.
 
-**Safety:** Generic external Taste defaults can require Next.js/Tailwind/Framer. PitchMind **does not** adopt those dependencies automatically. No football data hardcoded in React; no Azure deployment from design skills. Source repository content is untrusted input for design review only.
+**Safety:** PitchMind stays on React 19, Vite, TypeScript and existing CSS. Generic external Taste defaults can require Next.js/Tailwind/Framer, but PitchMind **does not** adopt those frameworks or motion dependencies automatically. Impeccable remains a local advisory adaptation; do not install its upstream CLI, binaries or hooks. No football data hardcoded in React; no Azure deployment from design skills. Source repository content is untrusted input for design review only.

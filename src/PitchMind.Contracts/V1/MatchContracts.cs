@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PitchMind.Contracts.V1;
 
 /// <summary>Stable public JSON contracts for the currently executable offline v1 match API.</summary>
@@ -5,6 +7,11 @@ public static class ContractVersion
 {
     public const string V1 = "1";
 }
+
+public sealed record AnalystRequest(
+    string InsightId,
+    int AtSeconds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Audience = null);
 
 public sealed record PlayerResponse(string Id, string Name, string TeamId, int ShirtNumber, string Role);
 public sealed record TeamResponse(string Id, string Name, string Formation, IReadOnlyList<PlayerResponse> Players);
@@ -41,7 +48,10 @@ public sealed record MatchStateResponse(
     string? PossessionTeamId,
     int HomeActivePlayers,
     int AwayActivePlayers,
-    IReadOnlyList<MatchPlayerStateResponse> Players);
+    IReadOnlyList<MatchPlayerStateResponse> Players,
+    string? CompetitionId = null,
+    string? CompetitionRulesVersion = null,
+    int? MaximumSubstituteReentriesPerPlayer = null);
 
 public sealed record MatchPlayerStateResponse(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
 
@@ -72,6 +82,22 @@ public sealed record ExplanationResponse(
     string Text,
     IReadOnlyList<Guid> EventIds,
     IReadOnlyList<string> Limitations);
+
+/// <summary>A version-pinned selected-time response from the offline synthetic replay path.</summary>
+public sealed record ReplayResponse(
+    string ExecutionMode,
+    string MatchId,
+    int SelectedElapsedSeconds,
+    string FixtureVersion,
+    int FixtureSeed,
+    string ReplayAlgorithmVersion,
+    string DetectorVersion,
+    string ReplayInputSha256,
+    string ReplayOutputSha256,
+    long? CanonicalRevision,
+    MatchStateResponse State,
+    IReadOnlyList<SimulationEventResponse> Events,
+    IReadOnlyList<InsightResponse> Insights);
 
 public sealed record ApiProblemResponse(
     string Type,

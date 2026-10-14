@@ -119,6 +119,8 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         raise CandidateValidationError("Manifest expectedPeriods must be a non-empty list of unique positive integers")
     if not isinstance(match_policy.get("sourceClockUnit"), str) or not match_policy["sourceClockUnit"].strip():
         raise CandidateValidationError("Manifest sourceClockUnit must be a non-empty string")
+    if match_policy["sourceClockUnit"] != "unverified":
+        raise CandidateValidationError("Source clock unit must remain explicitly unverified")
     if (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64
             or any(char not in "0123456789abcdef" for char in source["sha256"])):
         raise CandidateValidationError("Manifest source sha256 must be a lowercase 64-character hexadecimal string")
@@ -142,7 +144,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     allowed_same_clock_period2_types = set(allowed_same_clock_period2_types)
     if (not isinstance(required_event_markers, dict)
             or any(not isinstance(event_type, str) or not isinstance(marker, dict)
-                   or not _is_integer(marker.get("clockSeconds"))
+                   or not _is_integer(marker.get("clockRawValue"))
                    or not _is_integer(marker.get("period")) or marker["period"] not in expected_periods
                    for event_type, marker in required_event_markers.items())):
         raise CandidateValidationError("Manifest requiredEventMarkers must map event names to integer clock and period")
@@ -280,7 +282,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         for name in ("pitchX", "pitchY", "ballX", "ballY", "endX", "endY"):
             record_coordinate(name, event.get(name))
 
-        position_names: set[tuple[str, int]] = set()
+        position_names: set[tuple[str, str, int]] = set()
         for position_index, position in enumerate(event["playerPositions"]):
             if not isinstance(position, dict) or any(key not in position for key in POSITION_REQUIRED):
                 raise CandidateValidationError(f"Malformed position record at event {index}, position {position_index}")
@@ -300,7 +302,11 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             jersey = position["jerseyNumber"]
             if isinstance(jersey, bool) or not isinstance(jersey, int):
                 raise CandidateValidationError(f"Invalid jersey attribute at event {index}, position {position_index}")
-            player_key = (position["playerName"], jersey)
+            # Position rows are structurally distinct by their source team as
+            # well as label and shirt number. Names and shirt numbers can
+            # legitimately collide across opposing teams; this is not a
+            # canonical roster identity check.
+            player_key = (position_team_id, position["playerName"], jersey)
             if player_key in position_names:
                 raise CandidateValidationError(f"Duplicate player row in frame at event {index}")
             position_names.add(player_key)
@@ -329,7 +335,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     marker_positions: dict[str, tuple[int, dict[str, Any]]] = {}
     for event_type, expected in required_event_markers.items():
         observed = [(index, event) for index, event in enumerate(events) if event["eventType"] == event_type]
-        if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockSeconds"]
+        if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockRawValue"]
                 or observed[0][1]["period"] != expected["period"]):
             raise CandidateValidationError(f"Required source marker clock or period differs from manifest: {event_type}")
         marker_positions[event_type] = observed[0]
@@ -377,8 +383,9 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "matchCount": len(match_ids),
         "teamCount": len(team_names_by_id),
         "sourceSequence": {"first": events[0]["sequence"], "last": events[-1]["sequence"], "preserved": True},
-        "sourceClock": {"unit": match_policy["sourceClockUnit"], "first": events[0]["clockSeconds"],
-                        "last": events[-1]["clockSeconds"], "preservedWithoutNormalization": True},
+        "sourceClock": {"sourceField": "clockSeconds", "unit": match_policy["sourceClockUnit"],
+                        "firstRawValue": events[0]["clockSeconds"], "lastRawValue": events[-1]["clockSeconds"],
+                        "preservedWithoutNormalization": True},
         "sourceEventIdLedgerSha256": sha256(bytes(source_ids_ledger)).hexdigest(),
         "orderedEventRecordsSha256": sha256(bytes(ordered_records_ledger)).hexdigest(),
         "eventCounts": dict(sorted(event_counts.items())),
@@ -419,6 +426,16 @@ def validate_file(source_path: Path, manifest_path: Path) -> dict[str, Any]:
     return result
 
 
+def _aliases_existing_file(left: Path, right: Path) -> bool:
+    """Detect path aliases, including distinct hardlinks to one existing file."""
+    try:
+        if left.resolve() == right.resolve():
+            return True
+        return left.exists() and right.exists() and left.samefile(right)
+    except OSError as exc:
+        raise CandidateValidationError("Cannot safely verify report output path") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate EP03-S01 candidate source structure without canonical import")
     parser.add_argument("source", type=Path, nargs="?", default=Path("data/simulations/manu-liv-match-dataset.json"))
@@ -429,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         report = validate_file(args.source, args.manifest)
         serialized = json.dumps(report, ensure_ascii=True, sort_keys=True, indent=2) + "\n"
         if args.output:
-            if args.output.resolve() in {args.source.resolve(), args.manifest.resolve()}:
+            if _aliases_existing_file(args.output, args.source) or _aliases_existing_file(args.output, args.manifest):
                 raise CandidateValidationError("Report output must not overwrite the source or manifest")
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(serialized, encoding="utf-8")

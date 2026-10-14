@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import tempfile
 from pathlib import Path
 import unittest
 
@@ -44,7 +45,7 @@ def test_manifest(events: list[dict], payload: bytes) -> dict:
             "independentRightsPrivacyReview": "pending",
         },
         "match": {
-            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "seconds",
+            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "unverified",
             "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
             "sourceClockEnd": events[-1]["clockSeconds"],
         },
@@ -68,7 +69,8 @@ class CandidateValidationTests(unittest.TestCase):
         first = validator.validate_source(self.payload, self.manifest)
         second = validator.validate_source(self.payload, self.manifest)
         self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2, "preserved": True})
-        self.assertEqual(first["sourceClock"]["last"], 12)
+        self.assertEqual(first["sourceClock"]["lastRawValue"], 12)
+        self.assertEqual(first["sourceClock"]["unit"], "unverified")
         self.assertTrue(first["sourceClock"]["preservedWithoutNormalization"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
         self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
@@ -92,6 +94,44 @@ class CandidateValidationTests(unittest.TestCase):
         payload = json.dumps(invalid).encode()
         with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate source event ID"):
             validator.validate_source(payload, test_manifest(invalid, payload))
+
+    def test_same_player_label_and_jersey_are_distinct_across_source_teams(self):
+        home_id = self.events[0]["teamId"]
+        away_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        away = event("33333333-3333-4333-8333-333333333333", 2, 12, "FullTime")
+        away["teamId"] = away_id
+        away["teamName"] = "Synthetic Away"
+        frame_with_both_teams = {
+            **self.events[0],
+            "playerPositions": [
+                position(home_id, "Synthetic Home", "Alex Smith", 7),
+                position(away_id, "Synthetic Away", "Alex Smith", 7),
+            ],
+        }
+        events = [frame_with_both_teams, away]
+        payload = json.dumps(events, separators=(",", ":")).encode()
+        manifest = test_manifest(events, payload)
+        manifest["match"]["expectedTeamCount"] = 2
+
+        report = validator.validate_source(payload, manifest)
+
+        self.assertEqual(report["teamCount"], 2)
+        self.assertEqual(report["attachedPositionCount"], 3)
+
+    def test_duplicate_player_label_and_jersey_within_same_team_is_rejected(self):
+        team_id = self.events[0]["teamId"]
+        duplicate = position(team_id, "Synthetic Home", "Alex Smith", 7)
+        events = [
+            {
+                **self.events[0],
+                "playerPositions": [duplicate, dict(duplicate)],
+            },
+            self.events[1],
+        ]
+        payload = json.dumps(events, separators=(",", ":")).encode()
+
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Duplicate player row in frame"):
+            validator.validate_source(payload, test_manifest(events, payload))
 
     def test_rejects_sequence_gaps_and_clock_regression(self):
         invalid_sequence = [self.events[0], {**self.events[1], "sequence": 3}]
@@ -149,8 +189,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 20, "period": 1},
-            "FullTime": {"clockSeconds": 20, "period": 2},
+            "HalfTime": {"clockRawValue": 20, "period": 1},
+            "FullTime": {"clockRawValue": 20, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
             validator.validate_source(payload, manifest)
@@ -170,8 +210,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "marker clock or period"):
             validator.validate_source(payload, manifest)
@@ -193,8 +233,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 10, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 10, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
             validator.validate_source(payload, manifest)
@@ -207,8 +247,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 10, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 10, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         manifest["match"]["allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker"] = ["Pass"]
         with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
@@ -224,14 +264,20 @@ class CandidateValidationTests(unittest.TestCase):
         assumed_units = {**self.manifest, "coordinates": {"status": "unverified", "unit": "metres"}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "Coordinate semantics must remain explicitly unverified"):
             validator.validate_source(self.payload, assumed_units)
+        assumed_clock_unit = {
+            **self.manifest,
+            "match": {**self.manifest["match"], "sourceClockUnit": "seconds"},
+        }
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Source clock unit must remain explicitly unverified"):
+            validator.validate_source(self.payload, assumed_clock_unit)
 
     def test_requires_clock_and_period_for_each_required_period_end_marker(self):
         manifest = test_manifest(self.events, self.payload)
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 1},
-            "FullTime": {"clockSeconds": 5761, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 1},
+            "FullTime": {"clockRawValue": 5761, "period": 2},
         }
         for missing_marker in ("HalfTime", "FullTime"):
             incomplete = json.loads(json.dumps(manifest))
@@ -244,8 +290,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 1},
-            "FullTime": {"clockSeconds": 5761, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 1},
+            "FullTime": {"clockRawValue": 5761, "period": 2},
         }
         del manifest["match"]["requiredEventCounts"]["HalfTime"]
         del manifest["match"]["requiredEventMarkers"]["HalfTime"]
@@ -273,7 +319,8 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["eventCount"], 2199)
         self.assertEqual(first["attachedPositionCount"], 48048)
         self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2199, "preserved": True})
-        self.assertEqual(first["sourceClock"]["last"], 5761)
+        self.assertEqual(first["sourceClock"]["lastRawValue"], 5761)
+        self.assertEqual(first["sourceClock"]["unit"], "unverified")
         self.assertEqual(first["eventCounts"], second["eventCounts"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
         self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
@@ -281,6 +328,43 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["eventCounts"]["Foul"], 254)
         self.assertTrue(first["footballReviewRequired"])
         self.assertEqual(first["independentRightsPrivacyReview"], "pending")
+        report_text = json.dumps(first, ensure_ascii=False)
+        source_events = json.loads(source.read_text(encoding="utf-8"))
+        sensitive_source_values = {
+            source_events[0]["eventId"],
+            source_events[0]["teamName"],
+            source_events[0]["playerName"],
+            source_events[0]["playerPositions"][0]["playerName"],
+        }
+        for value in sensitive_source_values:
+            self.assertNotIn(value, report_text)
+
+
+    def test_cli_rejects_hardlink_output_aliases_without_modifying_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            source = directory / "source.json"
+            manifest = directory / "manifest.json"
+            source_alias = directory / "source-output.json"
+            manifest_alias = directory / "manifest-output.json"
+            source.write_bytes(self.payload)
+            manifest_bytes = json.dumps(self.manifest).encode("utf-8")
+            manifest.write_bytes(manifest_bytes)
+            source_before = source.read_bytes()
+
+            source_alias.hardlink_to(source)
+            self.assertEqual(
+                validator.main([str(source), "--manifest", str(manifest), "--output", str(source_alias)]),
+                2,
+            )
+            self.assertEqual(source.read_bytes(), source_before)
+
+            manifest_alias.hardlink_to(manifest)
+            self.assertEqual(
+                validator.main([str(source), "--manifest", str(manifest), "--output", str(manifest_alias)]),
+                2,
+            )
+            self.assertEqual(manifest.read_bytes(), manifest_bytes)
 
 
 if __name__ == "__main__":

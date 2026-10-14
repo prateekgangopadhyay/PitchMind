@@ -4,12 +4,13 @@
   "title": "PitchMind canonical telemetry tracking frame v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "matchId", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
+  "required": ["schemaVersion", "matchId", "canonicalRevision", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "frameId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "sequence": { "type": "integer", "minimum": 0 },
+    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
+    "frameId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "sequence": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
     "matchTime": { "$ref": "event-envelope.schema.json#/$defs/matchTime" },
     "coordinateSystem": { "$ref": "#/$defs/coordinateSystem" },
     "ball": { "$ref": "#/$defs/point" },
@@ -21,15 +22,18 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["x", "y"],
-      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+      "properties": {
+        "x": { "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" },
+        "y": { "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }
+      }
     },
     "player": {
       "type": "object",
       "additionalProperties": false,
       "required": ["playerId", "teamId", "position"],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+        "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
         "position": { "$ref": "#/$defs/point" }
       }
     },
@@ -38,8 +42,8 @@
       "additionalProperties": false,
       "required": ["lengthMetres", "widthMetres", "unit", "axisOrigin", "teamDirections"],
       "properties": {
-        "lengthMetres": { "type": "number", "minimum": 90, "maximum": 120 },
-        "widthMetres": { "type": "number", "minimum": 45, "maximum": 90 },
+        "lengthMetres": { "allOf": [{ "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }, { "minimum": 90, "maximum": 120 }] },
+        "widthMetres": { "allOf": [{ "$ref": "event-envelope.schema.json#/$defs/dotnetDecimalNonNegative" }, { "minimum": 45, "maximum": 90 }] },
         "unit": { "enum": ["metres", "normalized_0_1", "percent_0_100"] },
         "axisOrigin": { "enum": ["bottom_left", "top_left"] },
         "teamDirections": {
@@ -51,7 +55,7 @@
             "additionalProperties": false,
             "required": ["teamId", "direction"],
             "properties": {
-              "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
               "direction": { "enum": ["left", "right"] }
             }
           }

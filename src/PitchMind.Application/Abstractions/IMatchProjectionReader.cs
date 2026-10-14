@@ -20,7 +20,7 @@ public sealed record MatchReplaySnapshot(SelectedMatchProjection Projection, IRe
     IReadOnlyList<MatchReplayFrame> Frames);
 
 public sealed record MatchReplaySourceIdentity(string FixtureVersion, string Provenance,
-    double PitchLengthMetres, double PitchWidthMetres);
+    double PitchLengthMetres, double PitchWidthMetres, MatchCompetitionRules CompetitionRules);
 
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader

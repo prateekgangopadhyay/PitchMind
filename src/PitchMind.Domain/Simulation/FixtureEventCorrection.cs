@@ -49,6 +49,7 @@ public static class FixtureCorrectionHistory
             if (string.IsNullOrWhiteSpace(correction.Provenance))
                 throw new InvalidOperationException("Correction provenance is required.");
             if (correction.Replacement is null) throw new InvalidOperationException("Corrected event is required.");
+            if (correction.Replacement.Event is null) throw new InvalidOperationException("Corrected event payload is required.");
             if (!sourceEvents.TryGetValue(correction.TargetEventId, out var original))
                 throw new InvalidOperationException("Correction target does not exist in the source fixture.");
             if (!correctedAtRevision.Add((correction.Revision, correction.TargetEventId)))

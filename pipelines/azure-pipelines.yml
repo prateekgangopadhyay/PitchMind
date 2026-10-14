@@ -1,5 +1,8 @@
 # Azure DevOps is the only CI/CD orchestrator. DEV delivery activates after service-connection configuration.
 parameters:
+- name: runGateFailureProbe
+  type: boolean
+  default: false
 - name: enableDevDelivery
   type: boolean
   default: false
@@ -23,6 +26,7 @@ pr:
   branches:
     include:
       - main
+      - codex/*
 
 pool:
   vmImage: ubuntu-latest
@@ -48,18 +52,55 @@ stages:
       displayName: Validate repository and Compose configuration
     - bash: |
         set -euo pipefail
-        python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
-        python3 -m unittest discover -s scripts -p 'test_validate_manu_liv_candidate.py' -v
-        python3 scripts/validate_manu_liv_candidate.py --output "$(Agent.TempDirectory)/manu-liv-candidate-validation.json"
+        python3 -m unittest discover -s scripts -p 'test_*.py' -v
         test -f docs/backlog/STORY-WORKPACK-INDEX.md
         test -f docs/architecture/06-target-azure-hld.md
         test -f docs/architecture/07-football-analytics-detailed-lld.md
       displayName: Verify source-feed preflight and planning artifacts
+    - bash: |
+        set -euo pipefail
+        python3 scripts/test_secret_scan.py -v
+        python3 scripts/test_generate_sbom.py -v
+      displayName: Test secret scanning and source SBOM tools
+    - bash: |
+        set -euo pipefail
+        bash scripts/secret-scan.sh
+      displayName: Fail on detected repository secrets
+    - bash: |
+        set -euo pipefail
+        mkdir -p "$(Build.ArtifactStagingDirectory)/security"
+        PITCHMIND_SBOM_VERSION="$(Build.SourceVersion)" \
+          bash scripts/generate-sbom.sh . "$(Build.ArtifactStagingDirectory)/security/pitchmind-source.spdx.json"
+      condition: succeededOrFailed()
+      displayName: Generate SPDX source SBOM
+    - task: PublishBuildArtifacts@1
+      condition: succeededOrFailed()
+      inputs:
+        PathtoPublish: $(Build.ArtifactStagingDirectory)/security
+        ArtifactName: security-evidence
+        publishLocation: Container
+      displayName: Publish SPDX source SBOM artifact
   - job: Backend
     displayName: .NET 10 build and tests
     steps:
     - checkout: self
     - template: templates/validate-dotnet.yml
+  - job: GateFailureProbe
+    displayName: Intentional quality-gate failure probe (manual opt-in)
+    condition: and(succeeded(), ${{ eq(parameters.runGateFailureProbe, true) }})
+    steps:
+    - checkout: self
+    - task: UseDotNet@2
+      inputs:
+        packageType: sdk
+        version: 10.0.x
+    - bash: |
+        set -euo pipefail
+        dotnet test tests/PitchMind.Architecture.Tests/PitchMind.Architecture.Tests.csproj \
+          -c Release --filter FullyQualifiedName~DeliberateGateFailureProbe
+      env:
+        PITCHMIND_GATE_FAILURE_PROBE: '1'
+      displayName: Run the deliberately failing test; its nonzero exit must fail Validate
   - job: Frontend
     displayName: React build, test and lint
     steps:
