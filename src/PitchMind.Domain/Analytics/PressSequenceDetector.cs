@@ -56,8 +56,7 @@ public static class PressSequenceDetector
     {
         ArgumentNullException.ThrowIfNull(fixture);
         var events = fixture.Events.Where(item => item.Event.ClockSeconds <= selectedTimeSeconds).ToArray();
-        var sourceJson = JsonSerializer.Serialize(fixture, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        var sourceSha256 = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sourceJson)));
+        var sourceSha256 = ComputeSourceSha256(fixture);
         var input = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null,
             selectedTimeSeconds, events.Length == 0 ? -1 : events[^1].Event.Sequence,
             fixture.Home.Id, fixture.Home.Name, fixture.Away.Id, fixture.Away.Name,
@@ -68,6 +67,13 @@ public static class PressSequenceDetector
             SelectedState = selectedState
         };
         return Detect(input);
+    }
+
+    public static string ComputeSourceSha256(SyntheticFixture fixture)
+    {
+        ArgumentNullException.ThrowIfNull(fixture);
+        var sourceJson = JsonSerializer.Serialize(fixture, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sourceJson)));
     }
 
     public static IReadOnlyList<TacticalInsight> Detect(PressSequenceInput input,

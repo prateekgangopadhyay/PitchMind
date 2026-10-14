@@ -67,6 +67,14 @@ public static class MatchContractMappings
             insight.Context.OpponentPhase, insight.Context.MatchPhase),
         insight.EvidenceGraph is null ? null : Map(insight.EvidenceGraph));
 
+    public static KeyMomentResponse ToResponse(this KeyMoment moment) => new(
+        moment.Id, moment.MatchId, moment.SourceVersion, moment.SourceSha256, moment.Provenance, moment.CanonicalRevision,
+        moment.SelectedTimeSeconds, moment.ThroughSequence, moment.ClockSeconds, moment.Sequence,
+        moment.Kind, moment.TruthClass, moment.Title, moment.Summary, moment.Relevance,
+        moment.PolicyVersion, moment.PolicyStatus, moment.Publishable,
+        Array.AsReadOnly(moment.EventIds.ToArray()), Array.AsReadOnly(moment.FrameIds.ToArray()),
+        Array.AsReadOnly(moment.EvidenceClaimNodeIds.ToArray()));
+
     private static EvidenceGraphResponse Map(TacticalEvidenceGraph graph) => new(
         graph.MatchId, graph.SourceVersion, graph.SourceSha256, graph.Provenance, graph.CanonicalRevision,
         graph.SelectedTimeSeconds, graph.ThroughSequence, graph.DetectorVersion,
