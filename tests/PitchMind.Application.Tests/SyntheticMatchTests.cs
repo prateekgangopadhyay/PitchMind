@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PitchMind.Application.Matches;
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using Xunit;
@@ -12,7 +13,17 @@ public sealed class SyntheticMatchTests
         Assert.Equal(0, service.GetState(3308).HomeScore); Assert.Empty(service.GetInsights(3308));
         Assert.Equal(1, service.GetState(3309).HomeScore); Assert.Single(service.GetInsights(3309));
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
-        var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
+        var insight = service.GetInsights(5400).Single();
+        Assert.Equal("simulated", insight.Classification);
+        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("unapproved-demo", insight.PolicyStatus);
+        Assert.False(insight.Publishable);
+        Assert.Null(insight.CanonicalRevision);
+        Assert.Equal(5400, insight.SelectedTimeSeconds);
+        Assert.Equal(service.GetEvents(5400)[^1].Event.Sequence, insight.ThroughSequence);
+        Assert.Equal(service.Fixture.Version, insight.SourceVersion);
+        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
     [Fact] public void CompleteSyntheticScenarioReplaysScoreTransitionsWithoutLookahead()
@@ -69,7 +80,7 @@ public sealed class SyntheticMatchTests
         foreach (var expected in golden.Snapshots)
         {
             var replay = service.ReplayAt(expected.SelectedElapsedSeconds, golden.FixtureVersion, golden.FixtureSeed,
-                SyntheticMatchService.ReplayAlgorithmVersion, PressingSequenceDetector.Version, golden.FixtureContentSha256);
+                SyntheticMatchService.ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, golden.FixtureContentSha256);
             Assert.Equal(expected.ReplayOutputSha256, replay.ReplayOutputSha256);
             Assert.Equal(expected.LastSequence, replay.State.LastSequence);
             Assert.Equal(expected.Period, replay.State.Period);
@@ -149,7 +160,14 @@ public sealed class SyntheticMatchTests
     [Fact] public void MissingTrackingSuppressesSpatialClaim()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = Array.Empty<TrackingFrame>() }, 5400));
+        // Keep the required kickoff sample for roster initialization, but remove all
+        // event-time tracking needed to support a spatial pressure sequence.
+        var service = new SyntheticMatchService(fixture with
+        {
+            Frames = fixture.Frames.Where(frame => frame.ClockSeconds == 0).ToArray()
+        });
+        Assert.Empty(service.GetInsights(5400));
+        Assert.Equal(0, service.GetState(5400).Frame.ClockSeconds);
     }
     [Fact] public void FixtureWithoutKickoffFrameIsRejectedAtConstruction()
     {
@@ -173,13 +191,13 @@ public sealed class SyntheticMatchTests
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var events = fixture.Events.Select(e => e.Action == "pressured-pass" ? e with { Outcome = "complete" } : e).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Events = events }).GetInsights(5400));
     }
     [Fact] public void UnrelatedRegainIsNotAttributedToPress()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = "ridge" } : e).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Events = events }).GetInsights(5400));
     }
     [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(clock));
     [Fact] public void ReplayUsesDurationHalfTimeAndPitchFromTheFixtureDefinition()
@@ -245,7 +263,18 @@ public sealed class SyntheticMatchTests
         var fixture = SyntheticFixtureGenerator.Generate();
         var frames = fixture.Frames.Select(f => f.ClockSeconds == 3293 ? f with
         { Players = f.Players.Select(p => p.PlayerId == "harbour-10" ? p with { X = 40 } : p).ToArray() } : f).ToArray();
-        Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = frames }, 5400));
+        Assert.Empty(new SyntheticMatchService(fixture with { Frames = frames }).GetInsights(5400));
+    }
+    [Fact] public void IdenticalSelectedTimeInputAndPolicyProduceIdenticalDetection()
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var first = service.GetInsights(5400).Single();
+        var second = service.GetInsights(5400).Single();
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(first.EventIds, second.EventIds);
+        Assert.Equal(first.FrameIds, second.FrameIds);
+        Assert.Equal(first.Conditions, second.Conditions);
+        Assert.Equal(first.Summary, second.Summary);
     }
     [Fact] public void NamedPressCounterexamplesDoNotProducePositiveGolden()
     {
@@ -260,7 +289,7 @@ public sealed class SyntheticMatchTests
         }, counterexamples.Select(example => example.Kind));
         Assert.Equal(counterexamples.Count, counterexamples.Select(example => example.Name).Distinct().Count());
         Assert.All(counterexamples, example =>
-            Assert.Empty(PressingSequenceDetector.Detect(example.Fixture, 5400)));
+            Assert.Empty(PressSequenceDetector.Detect(example.Fixture, 5400)));
     }
     [Fact] public void NonFiniteCoordinatesAreRejected()
     {
