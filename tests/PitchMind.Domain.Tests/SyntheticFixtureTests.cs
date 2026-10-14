@@ -12,7 +12,7 @@ public sealed class SyntheticFixtureTests
     [Fact] public void FixtureIsRepeatableAndComplete()
     {
         var first = SyntheticFixtureGenerator.Generate(); var second = SyntheticFixtureGenerator.Generate();
-        Assert.Equal("synthetic", first.Provenance); Assert.Equal("synthetic-v1", first.Version);
+        Assert.Equal("synthetic", first.Provenance); Assert.Equal("synthetic-v3", first.Version);
         Assert.Equal(first.Events, second.Events); Assert.Equal(5400, first.DurationSeconds);
         Assert.Equal(MatchEventType.KickOff, first.Events[0].Event.Type);
         Assert.Equal(MatchEventType.FullTime, first.Events[^1].Event.Type);
@@ -52,7 +52,7 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, payload.RootElement.GetProperty("formatVersion").GetString());
         Assert.Equal(first.Fixture.MatchId, payload.RootElement.GetProperty("fixture").GetProperty("matchId").GetString());
         Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
-        Assert.Equal("a10b2e7e1e7a57e82d94acd5d407a9535f1fbc62ac0938e96522059dda0f3cf4", first.ContentSha256);
+        Assert.Equal("0e343b38fba9e4dcbbfa48f20eaa79d0ec84399a1ca0ba6581f105b74ef0c774", first.ContentSha256);
     }
 
     [Fact] public void PressingGoldenRetainsOrderedSamePeriodEvidence()
