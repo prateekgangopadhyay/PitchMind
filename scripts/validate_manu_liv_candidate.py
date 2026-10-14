@@ -117,10 +117,10 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
             or any(not _is_integer(period) or period < 1 for period in expected_periods)
             or len(set(expected_periods)) != len(expected_periods)):
         raise CandidateValidationError("Manifest expectedPeriods must be a non-empty list of unique positive integers")
-    if ("sourceClockUnit" in match_policy
-            or match_policy.get("sourceClockField") != "clockSeconds"
-            or match_policy.get("sourceClockUnitStatus") != "unverified"):
-        raise CandidateValidationError("Candidate source clock field must be clockSeconds with an unverified unit")
+    if not isinstance(match_policy.get("sourceClockUnit"), str) or not match_policy["sourceClockUnit"].strip():
+        raise CandidateValidationError("Manifest sourceClockUnit must be a non-empty string")
+    if match_policy["sourceClockUnit"] != "unverified":
+        raise CandidateValidationError("Source clock unit must remain explicitly unverified")
     if (not isinstance(source.get("sha256"), str) or len(source["sha256"]) != 64
             or any(char not in "0123456789abcdef" for char in source["sha256"])):
         raise CandidateValidationError("Manifest source sha256 must be a lowercase 64-character hexadecimal string")
@@ -144,7 +144,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     allowed_same_clock_period2_types = set(allowed_same_clock_period2_types)
     if (not isinstance(required_event_markers, dict)
             or any(not isinstance(event_type, str) or not isinstance(marker, dict)
-                   or not _is_integer(marker.get("clockSeconds"))
+                   or not _is_integer(marker.get("clockRawValue"))
                    or not _is_integer(marker.get("period")) or marker["period"] not in expected_periods
                    for event_type, marker in required_event_markers.items())):
         raise CandidateValidationError("Manifest requiredEventMarkers must map event names to integer clock and period")
@@ -335,7 +335,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
     marker_positions: dict[str, tuple[int, dict[str, Any]]] = {}
     for event_type, expected in required_event_markers.items():
         observed = [(index, event) for index, event in enumerate(events) if event["eventType"] == event_type]
-        if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockSeconds"]
+        if (len(observed) != 1 or observed[0][1]["clockSeconds"] != expected["clockRawValue"]
                 or observed[0][1]["period"] != expected["period"]):
             raise CandidateValidationError(f"Required source marker clock or period differs from manifest: {event_type}")
         marker_positions[event_type] = observed[0]
@@ -383,9 +383,8 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "matchCount": len(match_ids),
         "teamCount": len(team_names_by_id),
         "sourceSequence": {"first": events[0]["sequence"], "last": events[-1]["sequence"], "preserved": True},
-        "sourceClock": {"field": match_policy["sourceClockField"], "unit": None,
-                        "unitStatus": match_policy["sourceClockUnitStatus"],
-                        "first": events[0]["clockSeconds"], "last": events[-1]["clockSeconds"],
+        "sourceClock": {"sourceField": "clockSeconds", "unit": match_policy["sourceClockUnit"],
+                        "firstRawValue": events[0]["clockSeconds"], "lastRawValue": events[-1]["clockSeconds"],
                         "preservedWithoutNormalization": True},
         "sourceEventIdLedgerSha256": sha256(bytes(source_ids_ledger)).hexdigest(),
         "orderedEventRecordsSha256": sha256(bytes(ordered_records_ledger)).hexdigest(),

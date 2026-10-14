@@ -8,13 +8,15 @@
 flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
   A --> H["Health endpoints"]
-  A --> R["Match routes: 503 MATCH_DATA_UNAVAILABLE"]
+  A --> MR["Match routes: 503 MATCH_DATA_UNAVAILABLE"]
   T["Deterministic test golden generator"] -. test assemblies only .-> Tests["Automated tests"]
   L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
-  J["Candidate synthetic JSON + manifest"] -. "not canonically imported" .-> P
+  J["Candidate synthetic JSON"] -. "bounded raw schema parsing" .-> R["ManuLivCandidateFeedReader"]
+  R -. "LOCAL paced raw replay; caller-managed resume cursor" .-> RP["LocalCandidateFeedReplayProducer"]
+  RP -. "no canonical admission or persistence" .-> X["Clock / units / identity semantics unresolved"]
 ```
 
-The current PostgreSQL adapter persists `MatchEvent` but does **not** provide match frames, projections, evidence or a transactional outbox. Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE`; the analyst endpoint may return `429` when rate-limited before its handler. Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable these routes. The former generated scenario now exists only in test assemblies. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
+The current PostgreSQL adapter persists `MatchEvent` but does **not** provide match frames, projections, evidence or a transactional outbox. Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE`; the analyst endpoint may return `429` when rate-limited before its handler. Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable these routes. The former generated scenario now exists only in test assemblies. `ManuLivCandidateFeedReader` parses raw candidate records and their source hash; `LocalCandidateFeedReplayProducer` emits those records in order at a bounded local rate and returns a source-bound resume cursor for the caller to persist after handling. Neither component maps or persists canonical football facts, and this local producer is not the target Event Hubs adapter. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
 
 ## TARGET — canonical Azure platform
 
@@ -24,13 +26,16 @@ flowchart LR
   Ingress --> BFF["ASP.NET Core API / BFF, Azure Container Apps"]
   Web <-. "live cursor" .-> Signal["Azure SignalR"]
   BFF --> Signal
-  BFF --> PG[("Azure PostgreSQL Flexible Server — canonical admission")]
-  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer / source mapper"]
-  Sim --> PG
-  PG --> Outbox["Transactional outbox: canonicalRevision assigned"]
-  Outbox --> Dispatcher["Background dispatcher"]
-  Dispatcher --> EH["Azure Event Hubs (canonical envelopes, matchId partition)"]
-  EH --> Worker["ACA EventWorker: projection consumers"]
+  BFF --> PG[("Azure PostgreSQL Flexible Server — canonical")]
+  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer"]
+  Sim --> Candidate["Bounded raw candidate replay; noncanonical"]
+  Candidate --> Mapper["Reviewed source mapper + football validation"]
+  Mapper --> Admission["Canonical admission transaction"]
+  Admission --> PG
+  PG --> Outbox["Transactional outbox intent + assigned revision"]
+  Outbox --> Dispatcher["Outbox dispatcher"]
+  Dispatcher --> EH["Azure Event Hubs (admitted canonical telemetry)"]
+  EH --> Worker["ACA EventWorker: projections / tactical"]
   Worker --> PG
   Dispatcher --> Signal
   Dispatcher --> Bus["Azure Service Bus commands / DLQ"]
@@ -47,9 +52,7 @@ flowchart LR
   BFF -. "OTel" .-> Monitor["Azure Monitor / Application Insights"]
 ```
 
-**Non-negotiable contract:** Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
-
-Only PostgreSQL-admitted records receive a positive per-match `canonicalRevision`; its transaction commits the canonical record and outbox intent together. The outbox publishes the canonical envelope with that revision. Raw source candidates have no canonical revision and do not use the canonical Event Hubs envelope.
+**Non-negotiable contract:** raw source candidates are never published directly to the canonical telemetry channel. PostgreSQL assigns each admitted per-match `canonicalRevision` atomically with the record and outbox intent. Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -65,11 +67,15 @@ public sealed class DependencyTests
         var productionFiles = EnumerateProductionSourceFiles(root);
         var fixtureDataMarkers = ReadFixtureDataMarkers(root);
         var numericFixtureMarkers = ReadFixtureNumericMarkers(root);
-        var violations = FindFixtureDataMarkers(productionFiles, fixtureDataMarkers, numericFixtureMarkers)
+        var violations = FindFixtureDataMarkers(
+                productionFiles,
+                fixtureDataMarkers,
+                numericFixtureMarkers,
+                ReadFixtureCoordinatePairMarkers(root))
             .Select(item => $"{Path.GetRelativePath(root, item.Path)}:{item.LineNumber}: {item.Line.Trim()}")
             .ToArray();
 
-        Xunit.Assert.Empty(violations);
+        Xunit.Assert.True(violations.Length == 0, string.Join(Environment.NewLine, violations));
     }
 
     [Xunit.Theory]
@@ -129,7 +135,7 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
-    public void ProductionFixtureGuard_RejectsCandidateClockAndSequenceLiterals()
+    public void ProductionFixtureGuard_RejectsCandidateFootballNumericLiterals()
     {
         var root = FindRepositoryRoot();
         var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
@@ -139,30 +145,148 @@ public sealed class DependencyTests
         var finalEvent = feed.RootElement[feed.RootElement.GetArrayLength() - 1];
         var firstSequence = firstEvent.GetProperty("sequence").GetInt32();
         var firstClockSeconds = firstEvent.GetProperty("clockSeconds").GetInt32();
+        var firstPitchX = firstEvent.GetProperty("pitchX").GetRawText();
+        var firstPitchValue = decimal.Parse(firstPitchX, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var firstPitchEquivalent = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture) + "e0";
+        var firstPitchInteger = firstPitchValue.ToString("G29", CultureInfo.InvariantCulture);
+        var firstPlayer = firstEvent.GetProperty("playerPositions")[0];
+        var firstPlayerX = firstPlayer.GetProperty("x").GetRawText();
+        var firstPlayerSpeed = firstPlayer.GetProperty("speed").GetRawText();
+        var firstPlayerHeartRate = firstPlayer.GetProperty("heartRate").GetRawText();
+        var firstPlayerHeartRateWithSeparator = firstPlayerHeartRate.Insert(firstPlayerHeartRate.Length / 2, "_");
         var finalSequence = finalEvent.GetProperty("sequence").GetInt32();
         var finalClockSeconds = finalEvent.GetProperty("clockSeconds").GetInt32();
+        var finalPlayer = finalEvent.GetProperty("playerPositions")[0];
+        var finalPlayerStamina = finalPlayer.GetProperty("stamina").GetRawText();
 
         var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-guard-");
         try
         {
             var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Fixture.cs");
             File.WriteAllText(source,
                 $"const firstSequence = {{ sequence: {firstSequence} }};\n" +
                 $"const firstClock = {{ clockSeconds: {firstClockSeconds} }};\n" +
+                $"const firstPitch = {{ pitchX: {firstPitchX} }};\n" +
+                $"const equivalentPitch = {{ pitchX: {firstPitchEquivalent} }};\n" +
+                $"const integerPitch = {{ pitchY: {firstPitchInteger} }};\n" +
+                $"const firstPlayerX = {{ playerPosition: {{ x: {firstPlayerX} }} }};\n" +
+                $"const firstPlayerSpeed = {{ speed: {firstPlayerSpeed} }};\n" +
+                $"const firstPlayerHeartRate = {{ heartRate: {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"const bigIntPlayerHeartRate = {{ heartRate: {firstPlayerHeartRate}n }};\n" +
+                $"const hexSequence = {{ sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
+                $"const binaryClock = {{ clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)} }};\n" +
+                $"const octalFinalSequence = {{ sequence: 0o{Convert.ToString(finalSequence, 8)} }};\n" +
+                $"const explicitPlusSequence = {{ sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 $"const finalSequence = {{ sequence: {finalSequence} }};\n" +
                 $"const finalClock = {{ clockSeconds: {finalClockSeconds} }};\n" +
+                $"const finalPlayer = {{ stamina: {finalPlayerStamina} }};\n" +
+                $"const unrelatedWidth = {{ width: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)} }};\n" +
                 "const unrelatedPageSize = 25;");
+            File.WriteAllText(csharpSource,
+                $"var coordinate = new {{ pitchX = {firstPitchX}m }};\n" +
+                $"var player = new {{ heartRate = {firstPlayerHeartRateWithSeparator} }};\n" +
+                $"var sourceSequence = new {{ sequence = 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}UL }};");
 
             var violations = FindFixtureDataMarkers(
-                [source],
+                [source, csharpSource],
                 new HashSet<string>(StringComparer.Ordinal),
                 ReadFixtureNumericMarkers(root));
 
-            Xunit.Assert.Equal(4, violations.Count);
+            Xunit.Assert.Equal(19, violations.Count);
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {firstSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {firstClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX: {firstPitchEquivalent}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchY: {firstPitchInteger}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"x: {firstPlayerX}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"speed: {firstPlayerSpeed}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate: {firstPlayerHeartRate}n", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: 0b{Convert.ToString(firstClockSeconds, 2)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: 0o{Convert.ToString(finalSequence, 8)}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: +0x{firstSequence.ToString("x", CultureInfo.InvariantCulture)}", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedWidth", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"pitchX = {firstPitchX}m", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"heartRate = {firstPlayerHeartRateWithSeparator}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"sequence: {finalSequence}", StringComparison.Ordinal));
             Xunit.Assert.Contains(violations, item => item.Line.Contains($"clockSeconds: {finalClockSeconds}", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"stamina: {finalPlayerStamina}", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsPositionalComputedAndSplitFeedValuesWithoutFlaggingGenericGeometry()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var eventId = feed.RootElement[0].GetProperty("eventId").GetString()!;
+        var teamName = feed.RootElement[0].GetProperty("teamName").GetString()!;
+        var eventIdPart = eventId[..12];
+        var remainingEventId = eventId[12..];
+        var shortEventIdPart = eventId[..5];
+        var remainingShortEventId = eventId[5..];
+        var playerPosition = feed.RootElement[0].GetProperty("playerPositions")[0];
+        var playerX = playerPosition.GetProperty("x").GetRawText();
+        var playerY = playerPosition.GetProperty("y").GetRawText();
+        var teamNameCharCodes = string.Join(", ", teamName.Select(character => (int)character));
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-context-guard-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "App.tsx");
+            File.WriteAllText(source,
+                "const frame = new TrackingFrame(50, 45);\n" +
+                "const frameWithoutNew = TrackingFrame(50, 45);\n" +
+                "const computedClock = { clockSeconds: 999999 - 999999 };\n" +
+                "const parenthesizedClock = { clockSeconds: (999999 - 999999) };\n" +
+                $"const playerCoordinates = [{playerX}, {playerY}];\n" +
+                $"const a = [{playerX}, {playerY}];\n" +
+                $"const coordinates = {{ values: [{playerX}, {playerY}] }};\n" +
+                $"const splitEventId = '{eventIdPart}' + '{remainingEventId}';\n" +
+                $"const shortSplitEventId = '{shortEventIdPart}' + '{remainingShortEventId}';\n" +
+                "const splitTeamName = 'Harbour ' + 'FC';\n" +
+                "const joinedTeamName = ['Harbour ', 'FC'].join('');\n" +
+                $"const generatedTeamName = String.fromCharCode({teamNameCharCodes});\n" +
+                "const unrelatedLayout = { x: 50, y: 45, width: 100 }; const semanticPlayer = { playerPosition: {} };\n" +
+                "const pageSizes = [100, 200];\n" +
+                "const unrelatedValues = [50, 45];\n" +
+                "const coordinateRange = [0, 1];\n" +
+                "const unrelatedPage = new MatchPage(2, 10);\n");
+            File.AppendAllText(source,
+                $"const multilinePlayerPosition = {{{Environment.NewLine}  x: {playerX},{Environment.NewLine}  y: {playerY}{Environment.NewLine}}};{Environment.NewLine}");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                ReadFixtureDataMarkers(root),
+                ReadFixtureNumericMarkers(root),
+                ReadFixtureCoordinatePairMarkers(root));
+
+            Xunit.Assert.True(violations.Count == 13, string.Join(Environment.NewLine, violations.Select(item => item.Line)));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("new TrackingFrame(50, 45)", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("TrackingFrame(50, 45)", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("clockSeconds: 999999 - 999999", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("clockSeconds: (999999 - 999999)", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"playerCoordinates = [{playerX}, {playerY}]", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"const a = [{playerX}, {playerY}]", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains($"coordinates = {{ values: [{playerX}, {playerY}]", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("splitEventId", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("shortSplitEventId", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("'Harbour ' + 'FC'", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("['Harbour ', 'FC'].join('')", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("String.fromCharCode", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Line.Contains("multilinePlayerPosition", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedLayout", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("pageSizes", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("unrelatedValues", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("coordinateRange", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Line.Contains("MatchPage", StringComparison.Ordinal));
         }
         finally
         {
@@ -237,7 +361,41 @@ public sealed class DependencyTests
                 if (!string.IsNullOrWhiteSpace(value))
                 {
                     markers.Add(value);
+                    AddGuidFragments(value, markers);
                 }
+            }
+        }
+    }
+
+    private static void AddGuidFragments(string value, ISet<string> markers)
+    {
+        if (!Guid.TryParse(value, out _))
+        {
+            return;
+        }
+
+        if (Guid.TryParse(value, out var identifier) && identifier == Guid.Empty)
+        {
+            return;
+        }
+
+        var compact = value.Replace("-", string.Empty, StringComparison.Ordinal);
+        const int fragmentLength = 10;
+        for (var offset = 0; offset + fragmentLength <= value.Length; offset++)
+        {
+            var fragment = value.Substring(offset, fragmentLength);
+            if (fragment.Any(character => character is not ('0' or '-')))
+            {
+                markers.Add(fragment);
+            }
+        }
+
+        for (var offset = 0; offset + fragmentLength <= compact.Length; offset++)
+        {
+            var fragment = compact.Substring(offset, fragmentLength);
+            if (fragment.Any(character => character != '0'))
+            {
+                markers.Add(fragment);
             }
         }
     }
@@ -260,8 +418,7 @@ public sealed class DependencyTests
 
         foreach (var sourceEvent in document.RootElement.EnumerateArray())
         {
-            AddNumberProperty(sourceEvent, "sequence", markers);
-            AddNumberProperty(sourceEvent, "clockSeconds", markers);
+            AddFootballNumericMarkers(sourceEvent, markers);
         }
 
         return markers.ToDictionary(
@@ -269,6 +426,67 @@ public sealed class DependencyTests
             pair => (IReadOnlySet<string>)pair.Value,
             StringComparer.OrdinalIgnoreCase);
     }
+
+    private static IReadOnlySet<string> ReadFixtureCoordinatePairMarkers(string root)
+    {
+        var pairs = new HashSet<string>(StringComparer.Ordinal);
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var stream = File.OpenRead(feedPath);
+        using var document = JsonDocument.Parse(stream);
+        foreach (var sourceEvent in document.RootElement.EnumerateArray())
+        {
+            AddCoordinatePair(sourceEvent, "pitchX", "pitchY", pairs);
+            AddCoordinatePair(sourceEvent, "endX", "endY", pairs);
+            if (sourceEvent.TryGetProperty("playerPositions", out var positions) && positions.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var position in positions.EnumerateArray())
+                {
+                    AddCoordinatePair(position, "x", "y", pairs);
+                }
+            }
+        }
+
+        return pairs;
+    }
+
+    private static void AddCoordinatePair(JsonElement element, string xName, string yName, ISet<string> pairs)
+    {
+        if (element.TryGetProperty(xName, out var x) && x.ValueKind == JsonValueKind.Number &&
+            element.TryGetProperty(yName, out var y) && y.ValueKind == JsonValueKind.Number)
+        {
+            pairs.Add($"{NormalizeNumericLiteral(x.GetRawText())}|{NormalizeNumericLiteral(y.GetRawText())}");
+        }
+    }
+
+    private static void AddFootballNumericMarkers(JsonElement element, IDictionary<string, HashSet<string>> markers)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (FootballNumericProperties.Contains(property.Name))
+                {
+                    AddNumberProperty(element, property.Name, markers);
+                }
+
+                AddFootballNumericMarkers(property.Value, markers);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                AddFootballNumericMarkers(item, markers);
+            }
+        }
+    }
+
+    private static readonly HashSet<string> FootballNumericProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sequence", "clockSeconds", "period", "pitchX", "pitchY", "ballX", "ballY", "endX", "endY",
+        "jerseyNumber", "x", "y", "speed", "distanceCovered", "heatIndex", "passAccuracy", "touches",
+        "stamina", "heartRate"
+    };
 
     private static void AddNumberProperty(JsonElement element, string name, IDictionary<string, HashSet<string>> markers)
     {
@@ -283,40 +501,277 @@ public sealed class DependencyTests
             markers.Add(name, values);
         }
 
-        values.Add(property.GetRawText());
+        values.Add(NormalizeNumericLiteral(property.GetRawText()));
     }
 
     private static IReadOnlyList<(string Path, string Line, int LineNumber)> FindFixtureDataMarkers(
         IEnumerable<string> files,
         IReadOnlySet<string> markers,
-        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers = null)
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers = null,
+        IReadOnlySet<string>? coordinatePairs = null)
     {
-        return files
-            .SelectMany(path => File.ReadLines(path).Select((line, index) => (Path: path, Line: line, LineNumber: index + 1)))
-            .Where(item => markers.Any(marker => item.Line.Contains(marker, StringComparison.Ordinal)) ||
-                ContainsNumericFixtureMarker(item.Line, numericMarkers))
-            .ToArray();
-    }
-
-    private static bool ContainsNumericFixtureMarker(
-        string line,
-        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers)
-    {
-        if (numericMarkers is null || numericMarkers.Count == 0)
+        var allFixtureValues = numericMarkers?.Values.SelectMany(values => values).ToHashSet(StringComparer.Ordinal);
+        var violations = new List<(string Path, string Line, int LineNumber)>();
+        foreach (var path in files)
         {
-            return false;
+            var source = File.ReadAllText(path);
+            var lines = source.Split('\n');
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index].TrimEnd('\r');
+                if (markers.Any(marker => line.Contains(marker, StringComparison.Ordinal)) ||
+                    ContainsReconstructedFixtureString(line, markers) ||
+                    ContainsNumericFixtureMarker(line, markers, numericMarkers, allFixtureValues, coordinatePairs))
+                {
+                    violations.Add((path, line, index + 1));
+                }
+            }
+
+            if (numericMarkers is not null)
+            {
+                violations.AddRange(FindMultilinePlayerCoordinateMarkers(path, source, numericMarkers));
+            }
         }
 
-        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>-?[0-9]+(?:\.[0-9]+)?)(?![0-9.])"))
+        return violations.DistinctBy(item => (item.Path, item.LineNumber)).ToArray();
+    }
+
+    private static IEnumerable<(string Path, string Line, int LineNumber)> FindMultilinePlayerCoordinateMarkers(
+        string path,
+        string source,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> numericMarkers)
+    {
+        const string positionObject = @"\b(?:[A-Za-z_]*playerPositions?|new\s+PlayerPosition)\s*(?::|=)?\s*\{(?<body>[^{}]*)\}";
+        foreach (Match position in Regex.Matches(source, positionObject, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
         {
-            if (numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) &&
-                values.Contains(match.Groups["value"].Value))
+            foreach (Match coordinate in Regex.Matches(position.Groups["body"].Value,
+                @"\b(?<name>x|y)\s*:\s*(?<value>[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)"))
+            {
+                if (!numericMarkers.TryGetValue(coordinate.Groups["name"].Value, out var values) ||
+                    !values.Contains(NormalizeNumericLiteral(coordinate.Groups["value"].Value)))
+                {
+                    continue;
+                }
+
+                var lineNumber = source.AsSpan(0, position.Index).Count('\n') + 1;
+                yield return (path, position.Value, lineNumber);
+                break;
+            }
+        }
+    }
+
+    private static bool ContainsReconstructedFixtureString(string line, IReadOnlySet<string> markers)
+    {
+        const string literal = "(?:\"(?<double>(?:\\\\.|[^\"\\\\])*)\"|'(?<single>(?:\\\\.|[^'\\\\])*)')";
+        foreach (Match expression in Regex.Matches(line, $@"{literal}(?:\s*\+\s*{literal})+"))
+        {
+            var reconstructed = string.Concat(ExtractStringLiterals(expression.Value).Select(DecodeSimpleStringLiteral));
+            if (markers.Contains(reconstructed))
+            {
+                return true;
+            }
+        }
+
+        foreach (Match expression in Regex.Matches(line,
+            @"\[(?<values>[^\]]*)\]\s*\.join\s*\(\s*(?<quote>['""])(?<separator>.*?)\k<quote>\s*\)"))
+        {
+            var values = ExtractStringLiterals(expression.Groups["values"].Value).Select(DecodeSimpleStringLiteral);
+            var separator = expression.Groups["separator"].Success
+                ? DecodeSimpleStringLiteral(expression.Groups["separator"].Value)
+                : string.Empty;
+            if (markers.Contains(string.Join(separator, values)))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static IEnumerable<string> ExtractStringLiterals(string source)
+    {
+        foreach (Match match in Regex.Matches(source, "\"(?<double>(?:\\\\.|[^\"\\\\])*)\"|'(?<single>(?:\\\\.|[^'\\\\])*)'"))
+        {
+            yield return match.Groups["double"].Success ? match.Groups["double"].Value : match.Groups["single"].Value;
+        }
+    }
+
+    private static string DecodeSimpleStringLiteral(string literal)
+    {
+        return literal
+            .Replace("\\\\", "\\", StringComparison.Ordinal)
+            .Replace("\\'", "'", StringComparison.Ordinal)
+            .Replace("\\\"", "\"", StringComparison.Ordinal)
+            .Replace("\\n", "\n", StringComparison.Ordinal)
+            .Replace("\\r", "\r", StringComparison.Ordinal)
+            .Replace("\\t", "\t", StringComparison.Ordinal);
+    }
+
+    private static bool ContainsNumericFixtureMarker(
+        string line,
+        IReadOnlySet<string> markers,
+        IReadOnlyDictionary<string, IReadOnlySet<string>>? numericMarkers,
+        IReadOnlySet<string>? allFixtureValues,
+        IReadOnlySet<string>? coordinatePairs)
+    {
+        if (numericMarkers is null || numericMarkers.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (Match match in Regex.Matches(line, @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?<suffix>(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?)(?![A-Za-z0-9_.])"))
+        {
+            var name = match.Groups["name"].Value;
+            if ((name is not ("x" or "y") || HasSemanticPlayerCoordinateContext(line, name)) &&
+                numericMarkers.TryGetValue(name, out var values) &&
+                values.Contains(NormalizeNumericLiteral(match.Groups["value"].Value)))
+            {
+                return true;
+            }
+        }
+
+        foreach (Match match in Regex.Matches(line,
+            @"(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*\(?\s*(?<left>[0-9]+(?:\.[0-9]+)?)\s*(?<operator>[+*/-])\s*(?<right>[0-9]+(?:\.[0-9]+)?)\s*\)?"))
+        {
+            if (!numericMarkers.TryGetValue(match.Groups["name"].Value, out var values) ||
+                !TryEvaluateSimpleNumericExpression(match, out var result) ||
+                !values.Contains(NormalizeNumericLiteral(result.ToString(CultureInfo.InvariantCulture))) ||
+                (match.Groups["name"].Value is "x" or "y" &&
+                 !HasSemanticPlayerCoordinateContext(line, match.Groups["name"].Value)))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        foreach (Match match in Regex.Matches(line,
+            @"\b(?:new\s+)?(?<type>(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:TrackingFrame|MatchEvent|PitchPosition|PlayerPosition|MatchSnapshot|SimulationEvent|TacticalEvidence))\s*\((?<arguments>[^)]*)\)"))
+        {
+            foreach (Match number in Regex.Matches(match.Groups["arguments"].Value,
+                @"(?<![A-Za-z0-9_.])(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?(?![A-Za-z0-9_.])"))
+            {
+                if (allFixtureValues?.Contains(NormalizeNumericLiteral(number.Groups["value"].Value)) == true)
+                {
+                    return true;
+                }
+            }
+        }
+
+        foreach (Match match in Regex.Matches(line, @"\[(?<values>[^\]]*)\]"))
+        {
+            var numbers = Regex.Matches(match.Groups["values"].Value,
+                @"(?<![A-Za-z0-9_.])(?<value>[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?)(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?(?![A-Za-z0-9_.])")
+                .Select(item => NormalizeNumericLiteral(item.Groups["value"].Value))
+                .ToArray();
+            var containsObservedCoordinatePair = numbers.Zip(numbers.Skip(1), (x, y) => $"{x}|{y}")
+                .Any(pair => coordinatePairs?.Contains(pair) == true);
+            if (numbers.Length >= 2 && numbers.All(number => allFixtureValues?.Contains(number) == true) &&
+                containsObservedCoordinatePair)
+            {
+                return true;
+            }
+        }
+
+        foreach (Match match in Regex.Matches(line,
+            @"\b(?:String|Char)\.fromCharCode\s*\((?<values>[^)]*)\)"))
+        {
+            var codePoints = Regex.Matches(match.Groups["values"].Value, @"\b[0-9]+\b")
+                .Select(item => int.TryParse(item.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var codePoint)
+                    ? (int?)codePoint
+                    : null)
+                .ToArray();
+            if (codePoints.Length > 0 && codePoints.All(item => item is >= 0 and <= char.MaxValue))
+            {
+                var reconstructed = new string(codePoints.Select(item => (char)item!.Value).ToArray());
+                if (markers.Any(marker => reconstructed.Contains(marker, StringComparison.Ordinal)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasSemanticPlayerCoordinateContext(string line, string coordinateName)
+    {
+        return Regex.IsMatch(line,
+                   $@"\bplayerPositions?\s*:\s*\{{[^\}}]*\b{coordinateName}\s*:",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
+               Regex.IsMatch(line,
+                   $@"\bPlayerPosition\s*\([^)]*\b{coordinateName}\s*:",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static bool TryEvaluateSimpleNumericExpression(Match match, out decimal result)
+    {
+        result = 0;
+        if (!decimal.TryParse(match.Groups["left"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var left) ||
+            !decimal.TryParse(match.Groups["right"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var right))
+        {
+            return false;
+        }
+
+        try
+        {
+            result = match.Groups["operator"].Value switch
+            {
+                "+" => left + right,
+                "-" => left - right,
+                "*" => left * right,
+                "/" when right != 0 => left / right,
+                _ => throw new InvalidOperationException()
+            };
+            return true;
+        }
+        catch (Exception exception) when (exception is OverflowException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static string NormalizeNumericLiteral(string value)
+    {
+        var normalized = value.Replace("_", string.Empty, StringComparison.Ordinal);
+        var isNegative = normalized.StartsWith("-", StringComparison.Ordinal);
+        var unsigned = normalized.StartsWith("+", StringComparison.Ordinal) || isNegative ? normalized[1..] : normalized;
+        var radix = unsigned.Length > 2 && unsigned[0] == '0'
+            ? char.ToLowerInvariant(unsigned[1]) switch
+            {
+                'x' => 16,
+                'b' => 2,
+                'o' => 8,
+                _ => 10
+            }
+            : 10;
+
+        if (radix != 10)
+        {
+            BigInteger number = BigInteger.Zero;
+            foreach (var digit in unsigned.AsSpan(2))
+            {
+                var digitValue = digit switch
+                {
+                    >= '0' and <= '9' => digit - '0',
+                    >= 'a' and <= 'f' => digit - 'a' + 10,
+                    >= 'A' and <= 'F' => digit - 'A' + 10,
+                    _ => radix
+                };
+                if (digitValue >= radix)
+                {
+                    return value;
+                }
+
+                number = number * radix + digitValue;
+            }
+
+            return (isNegative ? -number : number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return decimal.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalNumber)
+            ? decimalNumber.ToString("G29", CultureInfo.InvariantCulture)
+            : value;
     }
 
     [Xunit.Fact]

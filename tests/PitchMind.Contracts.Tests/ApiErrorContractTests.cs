@@ -38,6 +38,10 @@ public sealed class ApiErrorContractTests : IAsyncLifetime
                  })
             start.ArgumentList.Add(argument);
 
+        start.Environment["DOTNET_ENVIRONMENT"] = "Development";
+        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["Runtime__Profile"] = "local";
+
         _api = Process.Start(start) ?? throw new InvalidOperationException("Could not start the local API process.");
         _api.OutputDataReceived += (_, eventArgs) => AppendOutput(eventArgs.Data);
         _api.ErrorDataReceived += (_, eventArgs) => AppendOutput(eventArgs.Data);

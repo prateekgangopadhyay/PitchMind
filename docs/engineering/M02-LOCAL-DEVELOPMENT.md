@@ -1,6 +1,6 @@
 # M02 — Reproducible local developer workstation
 
-**Environment:** LOCAL only. PostgreSQL 17 and Redis 7.4 run in Docker Compose; the offline ASP.NET API and Vite frontend run as local processes. No Azure account, Azure CLI login, or Azure credentials are required. DEV, STAGE, and PRODUCTION continue to use Azure services only.
+**Environment:** LOCAL only. PostgreSQL 17 (the default) and Redis 7.4 run in Docker Compose; the offline ASP.NET API and Vite frontend run as local processes. No Azure account, Azure CLI login, or Azure credentials are required. DEV, STAGE, and PRODUCTION continue to use Azure services only.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ From the repository root:
 ```bash
 ./scripts/dev-up.sh
 ./scripts/dev-health.sh
-dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
 
 In another terminal, verify all three local processes/services:
@@ -27,6 +27,8 @@ In another terminal, verify all three local processes/services:
 ```
 
 The optional API URL must use `http://127.0.0.1` or `http://localhost`; the script checks the API `/health` readiness endpoint. Run `./scripts/dev-api-health.sh` to check the API independently. Start the frontend separately with `cd frontend && npm ci && npm run dev` when needed.
+
+The default database image is `postgres:17-alpine`. If an existing local data volume was created by another supported PostgreSQL major version, select the matching image explicitly, for example `POSTGRES_IMAGE=postgres:16-alpine ./scripts/dev-up.sh`. The selector accepts only `postgres:<major>-alpine` tags and can also be set in the private `docker/.env` file. For an existing volume, make sure the selected image is already present locally: the startup guard inspects `PG_VERSION` with `--pull=never`, then Compose starts only if the major versions match. A mismatch stops startup without changing the volume. Back up and perform a PostgreSQL major-version migration before changing an existing volume's version.
 
 ## Stop, preserve, and reset
 
@@ -40,6 +42,8 @@ This stops the Compose services and preserves the named data volumes. To delete 
 
 - Compose publishes PostgreSQL and Redis only on `127.0.0.1`; containers have health checks and named persistent volumes.
 - The first start generates separate OpenSSL random passwords in gitignored `docker/.env`, mode `0600`. Existing credential files are also restricted to the current user. Never commit or share this file, and never reuse these passwords in Azure.
+- `POSTGRES_IMAGE` is local infrastructure configuration, not a secret. Keep it to the supported versioned Alpine tags; the default remains PostgreSQL 17.
+- The local API requires `Development` and `Runtime:Profile=local`. Azure-hosted profiles use `Runtime:Profile=azure`; local profile selection is rejected outside Development.
 - The API command above binds to loopback. Do not bind local development endpoints to `0.0.0.0`.
 - LOCAL containers and adapters must not be used by deployed Azure environments. Local success is not evidence of Azure integration, deployment readiness, or story acceptance.
 

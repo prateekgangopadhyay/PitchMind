@@ -4,7 +4,7 @@
   "councilRoleCount": 28,
   "sourceOfBrand": "docs/design/PITCHMIND-DESIGN-SYSTEM.md",
   "sourceOfWorkflow": "docs/design/FRONTEND-DESIGN-DELIVERY.md",
-  "skillCount": 3,
+  "skillCount": 5,
   "skills": [
     {
       "name": "design-taste-frontend",
@@ -20,6 +20,36 @@
       "dependencies": []
     },
     {
+      "name": "impeccable",
+      "path": ".github/skills/impeccable/SKILL.md",
+      "source": {
+        "repo": "pbakaus/impeccable",
+        "commit": "c63b8dd7dd5a5f3c32eaabe1af76d0694f863ed2",
+        "path": ".agent/skills/impeccable/SKILL.md",
+        "license": "Apache-2.0; locally authored adapter; upstream CLI/hooks not vendored"
+      },
+      "purpose": "Design hierarchy, high-quality critique, polish, distill and grounded UI audit without changing the frontend stack",
+      "stage": "visual-refinement",
+      "dependencies": [
+        "design-taste-frontend"
+      ]
+    },
+    {
+      "name": "emil-design-eng",
+      "path": ".github/skills/emil-design-eng/SKILL.md",
+      "source": {
+        "repo": "emilkowalski/skills",
+        "commit": "2d228630ba1446365f614a108cb8252f1feda202",
+        "path": "skills/emil-design-eng/SKILL.md",
+        "license": "MIT; upstream text and license retained"
+      },
+      "purpose": "Use deliberate component craft, responsive interactive states, subtle CSS motion and animation accessibility",
+      "stage": "interaction-and-motion-polish",
+      "dependencies": [
+        "impeccable"
+      ]
+    },
+    {
       "name": "web-design-guidelines",
       "path": ".github/skills/web-design-guidelines/SKILL.md",
       "source": {
@@ -31,7 +61,9 @@
       "purpose": "Audit frontend TSX/CSS/HTML against current published Web Interface Guidelines and local WCAG baseline",
       "stage": "accessibility-and-usability-audit",
       "dependencies": [
-        "design-taste-frontend"
+        "design-taste-frontend",
+        "impeccable",
+        "emil-design-eng"
       ]
     },
     {
@@ -47,6 +79,8 @@
       "stage": "independent-visual-quality-audit",
       "dependencies": [
         "design-taste-frontend",
+        "impeccable",
+        "emil-design-eng",
         "web-design-guidelines"
       ],
       "rubrics": [
@@ -73,6 +107,6 @@
     "qa-architect",
     "product-owner"
   ],
-  "qualityGate": "Visual and accessibility findings must be resolved or explicitly waived by accountable reviewer; no agent self-certification",
+  "qualityGate": "Visual and accessibility findings must be resolved or explicitly waived by accountable reviewer; no agent self-certification; Impeccable and Emil are design-time advisory, optional runtime installer never executes automatically",
   "deploymentRestriction": "No Azure DEV or other deployment without exact owner approval; design skills are design-time only"
 }

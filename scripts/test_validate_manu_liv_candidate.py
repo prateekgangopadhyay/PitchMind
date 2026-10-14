@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
 import unittest
 
 SCRIPT = Path(__file__).with_name("validate_manu_liv_candidate.py")
@@ -45,8 +45,7 @@ def test_manifest(events: list[dict], payload: bytes) -> dict:
             "independentRightsPrivacyReview": "pending",
         },
         "match": {
-            "expectedMatchCount": 1, "expectedTeamCount": 1,
-            "sourceClockField": "clockSeconds", "sourceClockUnitStatus": "unverified",
+            "expectedMatchCount": 1, "expectedTeamCount": 1, "sourceClockUnit": "unverified",
             "expectedPeriods": [1], "sourceClockStart": events[0]["clockSeconds"],
             "sourceClockEnd": events[-1]["clockSeconds"],
         },
@@ -70,10 +69,8 @@ class CandidateValidationTests(unittest.TestCase):
         first = validator.validate_source(self.payload, self.manifest)
         second = validator.validate_source(self.payload, self.manifest)
         self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2, "preserved": True})
-        self.assertEqual(first["sourceClock"]["last"], 12)
-        self.assertEqual(first["sourceClock"]["field"], "clockSeconds")
-        self.assertIsNone(first["sourceClock"]["unit"])
-        self.assertEqual(first["sourceClock"]["unitStatus"], "unverified")
+        self.assertEqual(first["sourceClock"]["lastRawValue"], 12)
+        self.assertEqual(first["sourceClock"]["unit"], "unverified")
         self.assertTrue(first["sourceClock"]["preservedWithoutNormalization"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
         self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
@@ -81,11 +78,6 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertFalse(first["canonicalMappingsApproved"])
         self.assertFalse(first["coordinateUnitsVerified"])
         self.assertFalse(first["playerMetricsValidated"])
-
-    def test_rejects_any_source_clock_unit_claim_without_verified_source_semantics(self):
-        unsupported = {**self.manifest, "match": {**self.manifest["match"], "sourceClockUnit": "seconds"}}
-        with self.assertRaisesRegex(validator.CandidateValidationError, "source clock field"):
-            validator.validate_source(self.payload, unsupported)
 
     def test_ordered_record_digest_covers_fields_beyond_identity_and_time(self):
         baseline = validator.validate_source(self.payload, self.manifest)
@@ -197,8 +189,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 20, "period": 1},
-            "FullTime": {"clockSeconds": 20, "period": 2},
+            "HalfTime": {"clockRawValue": 20, "period": 1},
+            "FullTime": {"clockRawValue": 20, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "period regressed"):
             validator.validate_source(payload, manifest)
@@ -218,8 +210,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "marker clock or period"):
             validator.validate_source(payload, manifest)
@@ -241,8 +233,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 10, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 10, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
             validator.validate_source(payload, manifest)
@@ -255,8 +247,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 10, "period": 2},
-            "FullTime": {"clockSeconds": 12, "period": 2},
+            "HalfTime": {"clockRawValue": 10, "period": 2},
+            "FullTime": {"clockRawValue": 12, "period": 2},
         }
         manifest["match"]["allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker"] = ["Pass"]
         with self.assertRaisesRegex(validator.CandidateValidationError, "periods cross the half-time marker"):
@@ -272,14 +264,20 @@ class CandidateValidationTests(unittest.TestCase):
         assumed_units = {**self.manifest, "coordinates": {"status": "unverified", "unit": "metres"}}
         with self.assertRaisesRegex(validator.CandidateValidationError, "Coordinate semantics must remain explicitly unverified"):
             validator.validate_source(self.payload, assumed_units)
+        assumed_clock_unit = {
+            **self.manifest,
+            "match": {**self.manifest["match"], "sourceClockUnit": "seconds"},
+        }
+        with self.assertRaisesRegex(validator.CandidateValidationError, "Source clock unit must remain explicitly unverified"):
+            validator.validate_source(self.payload, assumed_clock_unit)
 
     def test_requires_clock_and_period_for_each_required_period_end_marker(self):
         manifest = test_manifest(self.events, self.payload)
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 1},
-            "FullTime": {"clockSeconds": 5761, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 1},
+            "FullTime": {"clockRawValue": 5761, "period": 2},
         }
         for missing_marker in ("HalfTime", "FullTime"):
             incomplete = json.loads(json.dumps(manifest))
@@ -292,8 +290,8 @@ class CandidateValidationTests(unittest.TestCase):
         manifest["match"]["expectedPeriods"] = [1, 2]
         manifest["match"]["requiredEventCounts"] = {"HalfTime": 1, "FullTime": 1}
         manifest["match"]["requiredEventMarkers"] = {
-            "HalfTime": {"clockSeconds": 2700, "period": 1},
-            "FullTime": {"clockSeconds": 5761, "period": 2},
+            "HalfTime": {"clockRawValue": 2700, "period": 1},
+            "FullTime": {"clockRawValue": 5761, "period": 2},
         }
         del manifest["match"]["requiredEventCounts"]["HalfTime"]
         del manifest["match"]["requiredEventMarkers"]["HalfTime"]
@@ -321,7 +319,8 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["eventCount"], 2199)
         self.assertEqual(first["attachedPositionCount"], 48048)
         self.assertEqual(first["sourceSequence"], {"first": 1, "last": 2199, "preserved": True})
-        self.assertEqual(first["sourceClock"]["last"], 5761)
+        self.assertEqual(first["sourceClock"]["lastRawValue"], 5761)
+        self.assertEqual(first["sourceClock"]["unit"], "unverified")
         self.assertEqual(first["eventCounts"], second["eventCounts"])
         self.assertEqual(first["sourceEventIdLedgerSha256"], second["sourceEventIdLedgerSha256"])
         self.assertEqual(first["orderedEventRecordsSha256"], second["orderedEventRecordsSha256"])
@@ -329,6 +328,17 @@ class CandidateValidationTests(unittest.TestCase):
         self.assertEqual(first["eventCounts"]["Foul"], 254)
         self.assertTrue(first["footballReviewRequired"])
         self.assertEqual(first["independentRightsPrivacyReview"], "pending")
+        report_text = json.dumps(first, ensure_ascii=False)
+        source_events = json.loads(source.read_text(encoding="utf-8"))
+        sensitive_source_values = {
+            source_events[0]["eventId"],
+            source_events[0]["teamName"],
+            source_events[0]["playerName"],
+            source_events[0]["playerPositions"][0]["playerName"],
+        }
+        for value in sensitive_source_values:
+            self.assertNotIn(value, report_text)
+
 
     def test_cli_rejects_hardlink_output_aliases_without_modifying_inputs(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

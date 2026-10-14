@@ -7,7 +7,7 @@ Hexagonal/Clean Architecture (Domain zero external dependencies); DDD match/fixt
 ## Target architecture
 ```mermaid
 flowchart LR
- U[Browser React] --> FD[Front Door WAF optional]
+ U[Browser React] --> FD[Public edge; required when ACA is internal/private]
  FD --> API[ASP.NET Core BFF on ACA]
  U -. PKCE .-> AUTH[Entra External ID]
  U <-. cursor .-> SR[Azure SignalR]
@@ -38,6 +38,8 @@ RULES --> PG
  EW -. OTEL .-> MON
  AW -. OTEL .-> MON
  ```
+
+For the current `canonical-dev-topology.bicep` candidate, ACA is internal with public network access disabled, so direct public browser ingress does not apply. Front Door Premium with a Private Link origin is one possible public path, but no edge module or configuration is included; the public path remains blocked pending architecture review. The separate offline demo's public ingress is not evidence for this canonical topology.
 
 ## Platform service and local-equivalent matrix
 | Boundary | LOCAL | DEV/STAGE/PROD | Verification |

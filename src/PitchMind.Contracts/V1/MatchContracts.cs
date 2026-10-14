@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PitchMind.Contracts.V1;
 
 /// <summary>Stable public JSON contracts for the currently executable offline v1 match API.</summary>
@@ -5,6 +7,11 @@ public static class ContractVersion
 {
     public const string V1 = "1";
 }
+
+public sealed record AnalystRequest(
+    string InsightId,
+    int AtSeconds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Audience = null);
 
 public sealed record PlayerResponse(string Id, string Name, string TeamId, int ShirtNumber, string Role);
 public sealed record TeamResponse(string Id, string Name, string Formation, IReadOnlyList<PlayerResponse> Players);

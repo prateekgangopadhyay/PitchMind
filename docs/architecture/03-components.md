@@ -8,17 +8,19 @@
 
 ```mermaid
 flowchart TB
-  API["PitchMind.Api Program.cs / HTTP routes"] --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
+  API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
+  API --> Guard["Ordinary match request → 503; malformed requests → typed 4xx; body capped at 4 KiB including chunked input"]
   API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
-  Candidate["manu-liv candidate JSON"] -. "offline, report-only validation" .-> Validator["Python candidate validator"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
   Migrator["PostgresSchemaMigrator"] --> DB
+  Candidate["Candidate JSON"] -. "raw schema only" .-> RawReader["ManuLivCandidateFeedReader"]
+  RawReader -. "not connected to canonical admission" .-> Boundary["Mapping blocked: source semantics unverified"]
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The event store is a separately exercised adapter; current API paths do **not** consume it. Ordinary match reads fail closed with `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint can return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable the routes. `SyntheticFixtureGenerator` lives in the test-only `PitchMind.TestFixtures` project; it is not reachable from production projects. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` has an offline manifest-pinned structural validator that emits an aggregate report only; it is not a runtime source adapter and the source is not canonically ingested or served.
+The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. The in-memory event store is registered only for the local profile; Azure startup does not fall back to it. This does not configure Azure authentication, managed identity, or canonical service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `ManuLivCandidateFeedReader` computes the exact source SHA-256 and parses source identity/order/time labels while retaining each original JSON record. It does not map event types, convert coordinates or clocks, persist data, or enable API reads; it is not wired into runtime composition. The candidate therefore still does not drive canonical match service behavior.
 
 ## Target Ports and Adapters
 
@@ -32,8 +34,6 @@ flowchart TB
   end
   subgraph App["PitchMind.Application — use cases and ports"]
     Validate["Normalize / Admit / Quarantine"]
-    ValidateCanonical["Validate canonical revision / order"]
-    Admit["Canonical admission / revision"]
     Project["Project match / score / active roster"]
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
@@ -50,18 +50,20 @@ flowchart TB
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
-  EventWorker2["EventWorker host"] --> ValidateCanonical
+  EventWorker2["EventWorker host"] --> Validate
   AgentWorker2["AgentWorker host"] --> Explain
-  Feed --> Validate --> Admit
-  Admit --> Facts
+  Feed -. "raw candidate only; never canonical publication" .-> MapSource["Reviewed source mapper"]
+  MapSource --> Validate
+  Validate --> Admission["PostgreSQL canonical admission + revision + outbox in one transaction"]
+  Admission --> EventHubs
+  EventHubs --> ValidateProjection["Consume admitted telemetry for projections"]
+  ValidateProjection --> Facts
   Facts --> Project --> MatchId
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
   Explain --> Ports
   Pg -. "implements" .-> Ports
-  Pg --> EventHubs
-  EventHubs --> EventWorker2 --> ValidateCanonical --> Project
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports
@@ -70,9 +72,8 @@ flowchart TB
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
-- `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
+- Raw candidates carry source hash, original bytes/IDs/order and raw clock labels; they have no `canonicalRevision` and are not canonical envelopes. Only PostgreSQL assigns a positive per-match `canonicalRevision` atomically with an admitted record and its outbox intent. `EventEnvelope` and `TrackingFrame` then carry the source/fixture hash, original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, and observed-vs-interpolated coverage.
 - PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.
-- PostgreSQL canonical admission assigns the positive per-match `canonicalRevision`; only its outbox publishes `EventEnvelopeV1`/`TrackingFrameV1`. Raw source candidates have no canonical revision and cannot validate as these canonical DTOs.
 - `MatchTimeContext` fixes match, selected timestamp, revision and period across API, pitch, scoreboard, events, claims and AI.
 - Foundry receives read-only evidence scoped to selected time; separate deterministic validator checks every published claim; malformed model output falls back.
 - React gets data via BFF; no clubs, players, scores, tactical observations or event-specific narrative hardcoded in `*.cs` or `*.tsx` after feed integration.

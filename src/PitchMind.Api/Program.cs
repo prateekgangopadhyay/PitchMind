@@ -1,23 +1,26 @@
-using PitchMind.Application.Abstractions;
 using PitchMind.Api;
 using PitchMind.Contracts.Health;
-using PitchMind.Infrastructure.Storage;
 using PitchMind.Contracts.V1;
 using Microsoft.AspNetCore.Http.Features;
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
+var runtimeProfile = builder.Configuration["Runtime:Profile"];
+RuntimeProfileGuard.Validate(builder.Environment.EnvironmentName, runtimeProfile);
+RuntimeProfileGuard.ConfigureLocalServices(builder.Services, runtimeProfile);
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.OnRejected = async (rejected, _) =>
+    options.OnRejected = async (context, cancellationToken) =>
     {
-        var context = rejected.HttpContext;
-        await ApiProblem(context, StatusCodes.Status429TooManyRequests, "RATE_LIMITED", "Too many requests").ExecuteAsync(context);
+        var httpContext = context.HttpContext;
+        await ApiProblem(httpContext, StatusCodes.Status429TooManyRequests, "RATE_LIMITED",
+            "Too many requests", "Retry after the current rate limit window").ExecuteAsync(httpContext);
     };
     options.AddPolicy("analyst", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -65,14 +68,19 @@ app.Use(async (context, next) =>
             await next(context);
         }
     }
-    catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
-    {
-        await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
-    }
     catch (ArgumentException exception)
     {
         var problem = ApiArgumentErrorResponse.Create(context, exception);
         await Results.Json(problem, statusCode: problem.Status, contentType: "application/problem+json").ExecuteAsync(context);
+    }
+    catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
+    {
+        await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE",
+            "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+    }
+    catch (BadHttpRequestException)
+    {
+        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request").ExecuteAsync(context);
     }
     catch (KeyNotFoundException)
     {
@@ -100,29 +108,7 @@ match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/events", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/insights", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context));
-match.MapPost("/analyst", async (HttpContext context) =>
-{
-    if (!context.Request.HasJsonContentType())
-        return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Analyst requests must use application/json");
-
-    JsonDocument request;
-    try
-    {
-        request = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
-    }
-    catch (JsonException)
-    {
-        return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be valid JSON");
-    }
-    using (request)
-    if (request.RootElement.ValueKind != JsonValueKind.Object ||
-        !request.RootElement.TryGetProperty("insightId", out var insightId) ||
-        insightId.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(insightId.GetString()))
-        return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires an insightId");
-
-    return MatchDataUnavailable(context);
-})
-    .RequireRateLimiting("analyst");
+match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync).RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();
@@ -134,5 +120,56 @@ static IResult ApiProblem(HttpContext context, int status, string code, string t
 static IResult MatchDataUnavailable(HttpContext context) =>
     ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "MATCH_DATA_UNAVAILABLE",
         "No validated canonical match feed is configured");
+
+static async Task<IResult> ReadAnalystRequestAsync(HttpContext context)
+{
+    if (!context.Request.HasJsonContentType())
+        return ApiProblem(context, StatusCodes.Status415UnsupportedMediaType,
+            "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json");
+
+    JsonDocument request;
+    try
+    {
+        request = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+    }
+    catch (JsonException)
+    {
+        throw new ArgumentException("Malformed JSON request");
+    }
+
+    using (request)
+    {
+        var body = request.RootElement;
+        if (body.ValueKind != JsonValueKind.Object)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be a JSON object");
+
+        if (!body.TryGetProperty("insightId", out var insightId) || insightId.ValueKind != JsonValueKind.String)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires a non-empty insightId");
+
+        if (!body.TryGetProperty("atSeconds", out var atSeconds) ||
+            atSeconds.ValueKind != JsonValueKind.Number ||
+            !BigInteger.TryParse(atSeconds.GetRawText(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var selectedElapsedSeconds))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires integer atSeconds");
+
+        if (selectedElapsedSeconds < BigInteger.Zero || selectedElapsedSeconds > 5400)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_TIME", "atSeconds must be between 0 and 5400");
+
+        string? audience = null;
+        if (body.TryGetProperty("audience", out var audienceValue))
+        {
+            if (audienceValue.ValueKind != JsonValueKind.String)
+                return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "audience must be fan or analyst");
+            audience = audienceValue.GetString();
+        }
+
+        var analystRequest = new AnalystRequest(insightId.GetString()!, (int)selectedElapsedSeconds, audience);
+        if (string.IsNullOrWhiteSpace(analystRequest.InsightId))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires a non-empty insightId");
+        if (analystRequest.Audience is not null and not ("fan" or "analyst"))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "audience must be fan or analyst");
+    }
+
+    return MatchDataUnavailable(context);
+}
 
 public partial class Program { }

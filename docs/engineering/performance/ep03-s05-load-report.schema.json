@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pitchmind.local/schemas/ep03-s05-load-report.schema.json",
+  "title": "EP03-S05 load run report",
+  "type": "object",
+  "required": ["reportSchemaVersion", "storyId", "runId", "status", "measurementScope", "profile", "source", "generatorMeasurements", "ingestionMeasurements", "unsupported"],
+  "properties": {
+    "reportSchemaVersion": { "const": "1.0" },
+    "storyId": { "const": "EP03-S05" },
+    "runId": { "type": "string", "format": "uuid" },
+    "startedAtUtc": { "type": "string", "format": "date-time" },
+    "status": { "const": "generator_only_not_ingestion_evidence" },
+    "measurementScope": { "const": "local_rate_scheduler_and_in_memory_discard_sink" },
+    "profile": { "type": "object" },
+    "source": { "type": "object" },
+    "generatorMeasurements": {
+      "type": "object",
+      "required": ["plannedRecords", "scheduledRecords", "localSinkReceivedRecords", "scheduleWindowSeconds", "fullRunSeconds", "maxInMemoryQueueDepth", "queueCapacityRecords", "replayedEventIdSequenceSha256", "replayedPayloadSha256", "complete"],
+      "properties": {
+        "plannedRecords": { "type": "integer", "minimum": 0 },
+        "scheduledRecords": { "type": "integer", "minimum": 0 },
+        "localSinkReceivedRecords": { "type": "integer", "minimum": 0 },
+        "scheduleWindowSeconds": { "type": "number", "minimum": 0 },
+        "fullRunSeconds": { "type": "number", "minimum": 0 },
+        "scheduledRatePerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "localSinkRatePerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "maxInMemoryQueueDepth": { "type": "integer", "minimum": 0 },
+        "queueCapacityRecords": { "type": "integer", "minimum": 1 },
+        "replayedEventIdSequenceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "replayedPayloadSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "ingestionMeasurements": {
+      "type": "object",
+      "required": ["status", "acceptedRecords", "duplicateRecords", "quarantinedRecords", "consumerLag", "databaseLatencyPercentilesMs", "backpressureRecoverySeconds"],
+      "properties": {
+        "status": { "const": "not_measured" },
+        "acceptedRecords": { "type": "null" },
+        "duplicateRecords": { "type": "null" },
+        "quarantinedRecords": { "type": "null" },
+        "consumerLag": { "type": "null" },
+        "databaseLatencyPercentilesMs": { "type": "null" },
+        "backpressureRecoverySeconds": { "type": "null" }
+      }
+    },
+    "unsupported": { "type": "array", "items": { "type": "string" } }
+  }
+}
