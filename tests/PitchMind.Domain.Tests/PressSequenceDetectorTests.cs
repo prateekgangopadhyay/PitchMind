@@ -119,6 +119,14 @@ public sealed class PressSequenceDetectorTests
     }
 
     [Fact]
+    public void CirculationOnlyPrefixDoesNotProducePressInsight()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+
+        Assert.Empty(PressSequenceDetector.Detect(CreateInput(fixture, 3289)));
+    }
+
+    [Fact]
     public void GoalAfterSelectedTimeIsExcludedFromReplayPrefix()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
