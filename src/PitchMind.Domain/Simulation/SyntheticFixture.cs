@@ -1,3 +1,4 @@
+using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 
@@ -42,7 +43,11 @@ public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds
     public string PolicyStatus { get; init; } = "unknown";
     public bool Publishable { get; init; }
     public IReadOnlyList<string> Conditions { get; init; } = Array.Empty<string>();
+    public string ClaimTruthClass { get; init; } = "pattern";
+    public string Uncertainty { get; init; } = "Uncalibrated demonstration policy; confidence is not calibrated.";
+    public IReadOnlyList<TacticalEvidenceCondition> EvidenceConditions { get; init; } = Array.Empty<TacticalEvidenceCondition>();
     public TacticalContext? Context { get; init; }
+    public TacticalEvidenceGraph? EvidenceGraph { get; init; }
 }
 public sealed record TacticalContext(string SchemaVersion, string Scoreline, string TeamRole, int NumericalAdvantage,
     string OpponentPhase, string MatchPhase)

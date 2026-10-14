@@ -25,6 +25,38 @@ public sealed class SyntheticMatchTests
         Assert.Equal(service.GetEvents(5400)[^1].Event.Sequence, insight.ThroughSequence);
         Assert.Equal(service.Fixture.Version, insight.SourceVersion);
         Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        var graph = insight.EvidenceGraph!;
+        Assert.Equal(insight.MatchId, graph.MatchId);
+        Assert.Equal(insight.SourceVersion, graph.SourceVersion);
+        Assert.Equal(insight.SourceSha256, graph.SourceSha256);
+        Assert.Null(graph.CanonicalRevision);
+        Assert.False(graph.Publishable);
+        Assert.Equal("synthetic", graph.Provenance);
+        Assert.All(graph.Nodes, node => Assert.Equal(insight.SourceSha256, node.SourceSha256));
+        Assert.All(graph.Conditions.SelectMany(condition => condition.SourceNodeIds), sourceNodeId =>
+            Assert.Contains(graph.Nodes, node => node.Id == sourceNodeId));
+        Assert.False(graph.Conditions.Single(condition => condition.Id == "publication-policy").Passed);
+        Assert.NotEmpty(graph.Uncertainty);
+        Assert.Equal("pattern", graph.Nodes.Single(node => node.Id == graph.ClaimNodeId).TruthClass);
+        Assert.All(insight.EventIds, eventId => Assert.Contains(graph.Nodes, node => node.EventId == eventId));
+        Assert.Equal(insight.FrameIds.Order(), graph.Nodes.Where(node => node.FrameId is not null).Select(node => node.FrameId!).Order());
+        var contextNode = Assert.Single(graph.Nodes, node => node.Id == $"metric:{insight.Id}:selected-context");
+        var activeRosterNode = Assert.Single(graph.Nodes, node => node.Id == $"metric:{insight.Id}:active-roster");
+        Assert.Equal("fact", activeRosterNode.TruthClass);
+        Assert.Contains(graph.Edges, edge => edge.FromNodeId == contextNode.Id && edge.ToNodeId == activeRosterNode.Id && edge.Relation == "derived_from");
+        Assert.Equal("derivation", contextNode.TruthClass);
+        Assert.Equal(0m, contextNode.NumericValue);
+        Assert.Equal("active-players", contextNode.Unit);
+        Assert.Contains(graph.Edges, edge => edge.FromNodeId == graph.ClaimNodeId && edge.ToNodeId == contextNode.Id && edge.Relation == "derived_from");
+        var selectedContextCondition = Assert.Single(graph.Conditions, condition => condition.Id == "selected-context");
+        Assert.Contains(activeRosterNode.Id, selectedContextCondition.SourceNodeIds);
+        Assert.All(graph.Edges.Where(edge => edge.FromNodeId == contextNode.Id && edge.ToNodeId.StartsWith("event:", StringComparison.Ordinal)),
+            edge => Assert.Contains(edge.ToNodeId, selectedContextCondition.SourceNodeIds));
+        Assert.All(graph.Edges, edge => Assert.Contains(edge.FromNodeId, graph.Nodes.Select(node => node.Id)));
+        Assert.All(graph.Edges, edge => Assert.Contains(edge.ToNodeId, graph.Nodes.Select(node => node.Id)));
+        Assert.Equal(graph.Nodes.Count(node => node.Kind == "event") - 1, graph.Edges.Count(edge => edge.Relation == "precedes"));
+        Assert.Equal(insight.EventIds.Count + insight.FrameIds.Count + 1 + graph.Edges.Count(edge => edge.FromNodeId == contextNode.Id),
+            graph.Edges.Count(edge => edge.Relation == "derived_from"));
         Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
