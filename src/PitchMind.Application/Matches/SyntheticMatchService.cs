@@ -58,7 +58,8 @@ public sealed class SyntheticMatchService
         var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
         return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
             Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
-            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention);
+            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
+            state.CompetitionId);
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {

@@ -20,7 +20,8 @@ public sealed record SyntheticFixture(string MatchId, string Version, int Seed, 
 }
 public sealed record MatchSnapshot(string MatchId, int ClockSeconds, int Period, string Status, int HomeScore, int AwayScore,
     string Provenance, TrackingFrame Frame, long LastSequence, MatchPhase Phase, string? PossessionTeamId,
-    int HomeActivePlayers, int AwayActivePlayers, IReadOnlyList<MatchPlayerState> Players, string CoordinateConvention);
+    int HomeActivePlayers, int AwayActivePlayers, IReadOnlyList<MatchPlayerState> Players, string CoordinateConvention,
+    string? CompetitionId = null);
 public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds, string Title, string Summary,
     string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds);
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,

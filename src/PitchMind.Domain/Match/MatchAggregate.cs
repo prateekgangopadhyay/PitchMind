@@ -19,19 +19,44 @@ public sealed record MatchState(
     int AwayActivePlayers,
     IReadOnlyList<MatchPlayerState> Players,
     long LastSequence,
-    string Provenance);
+    string Provenance,
+    string? CompetitionId = null,
+    string? CompetitionRulesVersion = null,
+    int? MaximumSubstituteReentriesPerPlayer = null);
+
+/// <summary>Rules explicitly supplied for a competition. Unknown rules fail closed for substitute re-entry.</summary>
+public sealed record MatchCompetitionRules(string? CompetitionId, string? Version, int? MaximumSubstituteReentriesPerPlayer)
+{
+    public void Validate()
+    {
+        if (CompetitionId is not null && string.IsNullOrWhiteSpace(CompetitionId))
+            throw new ArgumentException("Competition ID must be non-empty when supplied.", nameof(CompetitionId));
+        if (MaximumSubstituteReentriesPerPlayer.HasValue && MaximumSubstituteReentriesPerPlayer < 0)
+            throw new ArgumentOutOfRangeException(nameof(MaximumSubstituteReentriesPerPlayer));
+        if (MaximumSubstituteReentriesPerPlayer.HasValue && string.IsNullOrWhiteSpace(Version))
+            throw new ArgumentException("A version is required when substitute re-entry limits are supplied.", nameof(Version));
+        if (Version is not null && string.IsNullOrWhiteSpace(Version))
+            throw new ArgumentException("Rules version must be non-empty when supplied.", nameof(Version));
+    }
+}
 
 /// <summary>Deterministic in-memory projection of ordered match facts. Persistence and correction storage are adapters.</summary>
 public sealed class MatchAggregate
 {
+    private readonly SemaphoreSlim _mutationGate = new(1, 1);
     private readonly string _homeTeamId;
     private readonly string _awayTeamId;
     private readonly string _provenance;
+    private readonly MatchCompetitionRules _competitionRules;
     private readonly Dictionary<string, string> _playerTeams;
     private readonly HashSet<string> _activePlayers;
     private readonly Dictionary<string, int> _yellowCards = new(StringComparer.Ordinal);
     private readonly HashSet<string> _dismissedPlayers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _substitutedOffPlayers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _substituteReentryCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, SimulationEvent> _appliedEvents = [];
+    private Guid? _lastAppliedEventId;
+    private MatchState? _stateBeforeLastAppliedEvent;
     private long _lastSequence = -1;
     private int _clockSeconds;
     private int _period = 1;
@@ -44,7 +69,7 @@ public sealed class MatchAggregate
 
     public MatchAggregate(MatchId id, string homeTeamId, string awayTeamId,
         IEnumerable<(string PlayerId, string TeamId)> players, IEnumerable<string> activePlayerIds,
-        string provenance)
+        string provenance, MatchCompetitionRules? competitionRules = null)
     {
         if (id.Value == Guid.Empty) throw new ArgumentException("Match ID required.", nameof(id));
         if (string.IsNullOrWhiteSpace(homeTeamId) || string.IsNullOrWhiteSpace(awayTeamId) || homeTeamId == awayTeamId)
@@ -55,6 +80,8 @@ public sealed class MatchAggregate
         _homeTeamId = homeTeamId;
         _awayTeamId = awayTeamId;
         _provenance = provenance;
+        _competitionRules = competitionRules ?? new(null, null, null);
+        _competitionRules.Validate();
         _playerTeams = players.ToDictionary(p => p.PlayerId, p => p.TeamId, StringComparer.Ordinal);
         if (_playerTeams.Count == 0 || _playerTeams.Any(p => string.IsNullOrWhiteSpace(p.Key) ||
                 (p.Value != homeTeamId && p.Value != awayTeamId)))
@@ -66,10 +93,82 @@ public sealed class MatchAggregate
             throw new ArgumentException("The initial active roster must have 11 known players for each team.", nameof(activePlayerIds));
     }
 
+    private MatchAggregate(MatchAggregate source)
+    {
+        Id = source.Id;
+        _homeTeamId = source._homeTeamId;
+        _awayTeamId = source._awayTeamId;
+        _provenance = source._provenance;
+        _competitionRules = source._competitionRules;
+        _playerTeams = new(source._playerTeams, StringComparer.Ordinal);
+        _activePlayers = new(source._activePlayers, StringComparer.Ordinal);
+        foreach (var (playerId, cautions) in source._yellowCards) _yellowCards.Add(playerId, cautions);
+        _dismissedPlayers.UnionWith(source._dismissedPlayers);
+        _substitutedOffPlayers.UnionWith(source._substitutedOffPlayers);
+        foreach (var (playerId, count) in source._substituteReentryCounts) _substituteReentryCounts.Add(playerId, count);
+        _appliedEvents = new(source._appliedEvents);
+        _lastAppliedEventId = source._lastAppliedEventId;
+        _stateBeforeLastAppliedEvent = source._stateBeforeLastAppliedEvent;
+        _lastSequence = source._lastSequence;
+        _clockSeconds = source._clockSeconds;
+        _period = source._period;
+        _homeScore = source._homeScore;
+        _awayScore = source._awayScore;
+        _possessionTeamId = source._possessionTeamId;
+        _phase = source._phase;
+    }
+
+    /// <summary>
+    /// Acquires exclusive mutation ownership for a multi-step application operation.
+    /// Ordinary Apply calls wait until this lease is released.
+    /// </summary>
+    public async ValueTask<MutationLease> AcquireMutationLeaseAsync(CancellationToken cancellationToken = default)
+    {
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return new MutationLease(this);
+    }
+
+    /// <summary>Returns a fork with the supplied event applied, leaving this aggregate unchanged.</summary>
+    public MatchAggregate Preview(SimulationEvent item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _mutationGate.Wait();
+        try
+        {
+            return PreviewCore(item);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
     public void Apply(SimulationEvent item)
+    {
+        _mutationGate.Wait();
+        try
+        {
+            ApplyCore(item);
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private MatchAggregate PreviewCore(SimulationEvent item)
+    {
+        var preview = new MatchAggregate(this);
+        preview.ApplyCore(item);
+        return preview;
+    }
+
+    private void ApplyCore(SimulationEvent item)
     {
         ArgumentNullException.ThrowIfNull(item);
         var evt = item.Event;
+        if (evt.EventId == Guid.Empty) throw new InvalidOperationException("Event ID is required.");
+        if (!Enum.IsDefined(evt.Type)) throw new InvalidOperationException("Event type is not defined.");
         if (evt.MatchId != Id) throw new InvalidOperationException("Event belongs to a different match.");
         if (_appliedEvents.TryGetValue(evt.EventId, out var prior))
         {
@@ -81,13 +180,64 @@ public sealed class MatchAggregate
         if (_phase == MatchPhase.FullTime) throw new InvalidOperationException("No event may follow full time.");
 
         ValidateTransition(item);
+        var stateBeforeEvent = SnapshotCore();
         ApplyTransition(item);
         _appliedEvents.Add(evt.EventId, item);
+        _lastAppliedEventId = evt.EventId;
+        _stateBeforeLastAppliedEvent = stateBeforeEvent;
         _lastSequence = evt.Sequence;
         _clockSeconds = evt.ClockSeconds;
     }
 
+    public MatchState SnapshotBefore(MatchEvent expectedEvent)
+    {
+        ArgumentNullException.ThrowIfNull(expectedEvent);
+        _mutationGate.Wait();
+        try
+        {
+            if (_lastAppliedEventId != expectedEvent.EventId ||
+                !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent ||
+                _stateBeforeLastAppliedEvent is null)
+                throw new InvalidOperationException("A canonical projection predecessor must come from this aggregate immediately before its exact latest event.");
+            return _stateBeforeLastAppliedEvent;
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    public MatchState SnapshotAfter(MatchEvent expectedEvent)
+    {
+        ArgumentNullException.ThrowIfNull(expectedEvent);
+        _mutationGate.Wait();
+        try
+        {
+            if (_lastAppliedEventId != expectedEvent.EventId ||
+                !_appliedEvents.TryGetValue(expectedEvent.EventId, out var applied) || applied.Event != expectedEvent)
+                throw new InvalidOperationException("A canonical projection must come from this aggregate after applying the exact event.");
+            return SnapshotCore();
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
     public MatchState Snapshot()
+    {
+        _mutationGate.Wait();
+        try
+        {
+            return SnapshotCore();
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    private MatchState SnapshotCore()
     {
         return new(Id.ToString(), _clockSeconds, _period, _phase, _homeScore, _awayScore, _possessionTeamId,
             _activePlayers.Count(p => _playerTeams[p] == _homeTeamId),
@@ -95,7 +245,29 @@ public sealed class MatchAggregate
             Array.AsReadOnly(_playerTeams.OrderBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => new MatchPlayerState(p.Key, p.Value, _activePlayers.Contains(p.Key),
                     _dismissedPlayers.Contains(p.Key), _yellowCards.GetValueOrDefault(p.Key))).ToArray()),
-            _lastSequence, _provenance);
+            _lastSequence, _provenance, _competitionRules.CompetitionId, _competitionRules.Version,
+            _competitionRules.MaximumSubstituteReentriesPerPlayer);
+    }
+
+    /// <summary>Exclusive access to preview and apply an event across a persistence await.</summary>
+    public sealed class MutationLease : IDisposable
+    {
+        private MatchAggregate? _aggregate;
+
+        internal MutationLease(MatchAggregate aggregate) => _aggregate = aggregate;
+
+        public MatchAggregate Preview(SimulationEvent item) => GetAggregate().PreviewCore(item);
+
+        public void Apply(SimulationEvent item) => GetAggregate().ApplyCore(item);
+
+        public void Dispose()
+        {
+            var aggregate = Interlocked.Exchange(ref _aggregate, null);
+            aggregate?._mutationGate.Release();
+        }
+
+        private MatchAggregate GetAggregate() =>
+            _aggregate ?? throw new ObjectDisposedException(nameof(MutationLease));
     }
 
     private void ValidateTransition(SimulationEvent item)
@@ -137,8 +309,11 @@ public sealed class MatchAggregate
 
         if (evt.Type == MatchEventType.Substitution)
         {
+            var isReentry = item.RelatedPlayerId is not null && _substitutedOffPlayers.Contains(item.RelatedPlayerId);
             if (item.RelatedPlayerId is null || !_playerTeams.TryGetValue(item.RelatedPlayerId, out var incomingTeam) ||
-                incomingTeam != item.TeamId || _activePlayers.Contains(item.RelatedPlayerId) || _dismissedPlayers.Contains(item.RelatedPlayerId))
+                incomingTeam != item.TeamId || _activePlayers.Contains(item.RelatedPlayerId) || _dismissedPlayers.Contains(item.RelatedPlayerId) ||
+                isReentry && (!_competitionRules.MaximumSubstituteReentriesPerPlayer.HasValue ||
+                    _substituteReentryCounts.GetValueOrDefault(item.RelatedPlayerId!) >= _competitionRules.MaximumSubstituteReentriesPerPlayer.Value))
                 throw new InvalidOperationException("Substitution requires a non-dismissed inactive player from the same team.");
         }
     }
@@ -185,6 +360,9 @@ public sealed class MatchAggregate
                 break;
             case MatchEventType.Substitution:
                 _activePlayers.Remove(item.PlayerId);
+                _substitutedOffPlayers.Add(item.PlayerId);
+                if (_substitutedOffPlayers.Contains(item.RelatedPlayerId!))
+                    _substituteReentryCounts[item.RelatedPlayerId!] = _substituteReentryCounts.GetValueOrDefault(item.RelatedPlayerId!) + 1;
                 _activePlayers.Add(item.RelatedPlayerId!);
                 break;
             case MatchEventType.Turnover:

@@ -61,7 +61,7 @@ public sealed class V1ContractCompatibilityTests
         var state = new PitchMind.Application.Matches.SyntheticMatchService().GetState(3600).ToResponse();
         AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
             "provenance", "frame", "lastSequence", "possessionTeamId",
-            "homeActivePlayers", "awayActivePlayers", "players");
+            "homeActivePlayers", "awayActivePlayers", "players", "competitionId");
         Assert.Equal("replay", state.Status);
         Assert.Equal("secondhalf", state.Phase);
         Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);

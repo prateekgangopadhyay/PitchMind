@@ -10,17 +10,21 @@
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
   Match --> Aggregate["MatchAggregate deterministic ordered-event reducer"]
-  Aggregate --> State["score, phase, possession, active roster, cautions"]
+  Aggregate --> State["score, phase, possession, active roster, cautions, competition rules"]
   Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]
   Match --> Press["PressingSequenceDetector"]
   Match --> Replay["Selected-time projection/evidence/fallback"]
-  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL canonical ledger")]
+  ProjectionRead["PostgresMatchProjectionStore: metadata + projection/provenance read"] --> DB
+  CanonicalWrite["PostgresCanonicalUpdateStore (event + projection + outbox transaction)"] --> DB
+  Dispatcher["PostgresOutboxDispatcher (leased at-least-once delivery)"] --> Publisher["IOutboxPublisher port (transport adapter not registered)"]
+  Inbox["PostgresConsumerInbox (same-database idempotent effects)"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` now folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. Two cautions or an explicit red-card event dismisses the player in this in-memory projection. This is an offline deterministic projection only: the event store is a separately exercised adapter; current API paths do **not** consume it, persist projections, or retain correction revisions. The current PostgreSQL type constraint also does not admit the new red-card enum value. Competition linkage and durable revision/correction semantics remain unimplemented. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
+The fixture generator reads the fictional `data/simulations/synthetic-fixture-v2.json` definition as an embedded versioned resource; team/player/scenario facts are not literals in production C#. `SyntheticMatchService` folds the selected-time event prefix through the pure `MatchAggregate`, which enforces ordered sequence, 11-per-team initial roster, participant, period, score, card, substitution and terminal-state rules. Competition rule context is optional and versioned; an unknown substitute re-entry limit fails closed, while known limits are enforced per player. The PostgreSQL v4 migration adds the projection-to-source provenance foreign key while preserving v3 canonical admission revisions. The v5 migration adds outbox lease/retry/dead-letter state and a consumer inbox. Migration v6 persists optional competition identity and rules. `PostgresMatchProjectionStore` records immutable source metadata, reads exact or selected-time projections bounded by canonical revision, and reads insight provenance while checking hashes, competition context and selected-sequence bounds. `PostgresCanonicalUpdateStore` verifies aggregate predecessor state hash/clock/sequence and immutable source identity against persisted history, then commits event, canonical/projection revisioned state and outbox intent atomically; `PostgresOutboxDispatcher` provides leased at-least-once publication with bounded retries; `PostgresConsumerInbox` couples same-database effects to dedupe receipts. These infrastructure primitives are not registered in the API/EventWorker runtime; there is no Azure broker publisher, metrics exporter/alert, or projection API read path. Candidate-feed competition mapping, source import and persisted correction workflows remain unimplemented. The candidate `data/simulations/manu-liv-match-dataset.json` still does not drive the C# service.
 
 ## Target Ports and Adapters
 
@@ -38,7 +42,8 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
-    Ports["IEventLedger / IFrameStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    CanonicalPorts["ICanonicalUpdateStore / IOutboxPublisher / consumer inbox"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -61,6 +66,10 @@ flowchart TB
   Query --> Ports
   Explain --> Ports
   Pg -. "implements" .-> Ports
+  Pg -. "implements canonical update ports" .-> CanonicalPorts
+  Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
+  OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
+  Pg -. "implements consumer inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports
