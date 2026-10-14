@@ -2,7 +2,7 @@
 
 ## Change
 
-Code head `7b52d6ff949fd41b53e1f8c564cad65a1b71fdd8` extends the test-only `SyntheticFixtureGenerator` scenario introduced at `e4cf50424bb94d593c7f4d58dbb2c87ea4d72d83`.
+The current stacked PR head `6f369fd` includes the test-only `SyntheticFixtureGenerator` scenario introduced at `7904b3f` and its review-gap fixes at `4a891de`. After rebasing the child onto PR #234, the focused suites and harness were rerun at `6f369fd`; only evidence wording changed after those runs.
 
 The possession annotation spanning 3240–3290 seconds now takes its team from the seeded circulation event at 3270 seconds. This avoids a mismatch for odd seeds. Four named negative fixture variants cover missing tracking, a completed opponent pass, a regain assigned to the wrong team, and a distant press arrival. Application coverage asserts none produces the positive pressing insight. A scenario replay test asserts score values immediately before and after both goals, including full time, to make the selected-time/no-lookahead requirement explicit.
 
