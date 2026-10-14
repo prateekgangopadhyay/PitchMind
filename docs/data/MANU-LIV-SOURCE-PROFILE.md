@@ -1,4 +1,5 @@
 # Manchester United–Liverpool source JSON: inspected structural profile
+Field-level inventory: [candidate feed data dictionary](MANU-LIV-DATA-DICTIONARY.md). It records observed JSON structure and explicitly unresolved meanings; it does not authorize canonicalization.
 **Source:** `data/simulations/manu-liv-match-dataset.json` on updated PitchMind `main` commit `b97825416af5eb2e323b577942ae99addfe8727e`; Git blob SHA `9f53613d10dcf2e117e708c1b3e9706a49e1eb7c`. **Inspection date:** 2026-10-08.  
 **Status:** structural profile from parsed source JSON; **not** canonical ingest, a football-approved simulation, an independent rights assessment, a verified Azure feed, or a passing replay integration test. The repository owner confirmed synthetic provenance and redistribution permission in the Engineering Council execution instruction on 2026-10-08. This owner declaration does not validate football realism, coordinate units, player metrics, or source-to-canonical mappings.
 
