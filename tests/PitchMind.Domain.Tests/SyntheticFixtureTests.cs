@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
@@ -9,13 +12,96 @@ public sealed class SyntheticFixtureTests
     [Fact] public void FixtureIsRepeatableAndComplete()
     {
         var first = SyntheticFixtureGenerator.Generate(); var second = SyntheticFixtureGenerator.Generate();
+        Assert.Equal("synthetic", first.Provenance); Assert.Equal("synthetic-v3", first.Version);
         Assert.Equal(first.Events, second.Events); Assert.Equal(5400, first.DurationSeconds);
         Assert.Equal(MatchEventType.KickOff, first.Events[0].Event.Type);
         Assert.Equal(MatchEventType.FullTime, first.Events[^1].Event.Type);
         Assert.Equal(Enumerable.Range(0, first.Events.Count).Select(i => (long)i), first.Events.Select(e => e.Event.Sequence));
         Assert.Equal(first.Events.Count, first.Events.Select(e => e.Event.EventId).Distinct().Count());
-        Assert.All(first.Frames, frame => { Assert.Equal(22, frame.Players.Count); Assert.All(frame.Players, p => { Assert.InRange(p.X, 0, 105); Assert.InRange(p.Y, 0, 68); }); });
+        Assert.All(first.Events, item =>
+        {
+            Assert.Equal(first.MatchId, item.Event.MatchId.ToString());
+            Assert.InRange(item.Event.ClockSeconds, 0, first.DurationSeconds);
+            Assert.Equal(item.Event.ClockSeconds < 2700 ? 1 : 2, item.Event.Period);
+        });
+        Assert.All(first.Frames, frame =>
+        {
+            Assert.InRange(frame.ClockSeconds, 0, first.DurationSeconds);
+            Assert.Equal(22, frame.Players.Count);
+            Assert.Equal(22, frame.Players.Select(player => player.PlayerId).Distinct().Count());
+            Assert.All(frame.Players, player =>
+            {
+                Assert.InRange(player.X, 0, 105);
+                Assert.InRange(player.Y, 0, 68);
+            });
+        });
     }
+
+    [Fact] public void ArtifactHashIsStableForTheSameSeedAndChangesWithTheSeed()
+    {
+        var first = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 42));
+        var repeat = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 42));
+        var otherSeed = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 43));
+
+        Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, first.FormatVersion);
+        Assert.Equal(first.Json, repeat.Json);
+        Assert.Equal(first.ContentSha256, repeat.ContentSha256);
+        Assert.NotEqual(first.ContentSha256, otherSeed.ContentSha256);
+        Assert.NotEqual(first.Scenario.Fixture.MatchId, otherSeed.Scenario.Fixture.MatchId);
+        using var payload = JsonDocument.Parse(first.Json);
+        Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, payload.RootElement.GetProperty("formatVersion").GetString());
+        Assert.Equal(first.Scenario.Fixture.MatchId, payload.RootElement.GetProperty("scenario").GetProperty("fixture").GetProperty("matchId").GetString());
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
+        Assert.Equal("01c6e9d69b002d6301c3b53a1d850e49ef5ceb31fbf00a80c2567dc235f9935d", first.ContentSha256);
+    }
+
+    [Fact] public void PressingGoldenRetainsOrderedSamePeriodEvidence()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var actions = fixture.Events
+            .Where(item => item.Event.ClockSeconds is >= 3290 and <= 3309)
+            .ToArray();
+
+        Assert.Equal(new[] { 3290, 3293, 3296, 3299, 3304, 3308, 3309 }, actions.Select(item => item.Event.ClockSeconds));
+        Assert.All(actions, item => Assert.Equal(2, item.Event.Period));
+        Assert.Equal(actions.OrderBy(item => item.Event.Sequence).Select(item => item.Event.Sequence), actions.Select(item => item.Event.Sequence));
+        Assert.Equal(MatchEventType.Goal, actions[^1].Event.Type);
+    }
+
+    [Fact] public void PressingGoldenCapturesSpatialTriggerRegainAndSeparatedCounterexample()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        static PitchPosition Player(TrackingFrame frame, string id) => frame.Players.Single(player => player.PlayerId == id);
+        static double Distance(PitchPosition left, PitchPosition right)
+        {
+            var dx = left.X - right.X;
+            var dy = left.Y - right.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        var pressFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3293);
+        var pressEvent = fixture.Events.Single(item => item.Event.ClockSeconds == pressFrame.ClockSeconds);
+        var keeper = Player(pressFrame, "ridge-1");
+        var pressingForward = Player(pressFrame, "harbour-10");
+        Assert.Equal(MatchEventType.Pressure, pressEvent.Event.Type);
+        Assert.Equal(pressingForward.PlayerId, pressEvent.PlayerId);
+        Assert.InRange(Distance(keeper, pressingForward), 0, 3);
+        Assert.InRange(Math.Sqrt(Math.Pow(keeper.X - pressFrame.BallX, 2) + Math.Pow(keeper.Y - pressFrame.BallY, 2)), 0, 1);
+
+        var regainFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3299);
+        var regainEvent = fixture.Events.Single(item => item.Event.ClockSeconds == regainFrame.ClockSeconds);
+        var ballWinner = Player(regainFrame, "harbour-11");
+        var pressedDefender = Player(regainFrame, "ridge-2");
+        Assert.Equal(MatchEventType.Turnover, regainEvent.Event.Type);
+        Assert.Equal(ballWinner.PlayerId, regainEvent.PlayerId);
+        Assert.InRange(Distance(ballWinner, pressedDefender), 0, 2);
+        Assert.InRange(Math.Sqrt(Math.Pow(ballWinner.X - regainFrame.BallX, 2) + Math.Pow(ballWinner.Y - regainFrame.BallY, 2)), 0, 1);
+
+        var separatedFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3000);
+        var separatedForward = Player(separatedFrame, "harbour-10");
+        Assert.True(Math.Sqrt(Math.Pow(separatedForward.X - separatedFrame.BallX, 2) + Math.Pow(separatedForward.Y - separatedFrame.BallY, 2)) > 10);
+    }
+
     [Fact] public void AttackDirectionChangesAtHalfTime()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
