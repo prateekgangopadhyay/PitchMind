@@ -55,4 +55,119 @@ public sealed class SyntheticFixtureTests
             CultureInfo.CurrentCulture = originalCulture;
         }
     }
+
+    [Fact] public void GovernedScenarioCoversFullMatchDisciplineSubstitutionsAndPossessionPhases()
+    {
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed: 42);
+        var fixture = scenario.Fixture;
+
+        Assert.Equal("synthetic", fixture.Provenance);
+        Assert.Equal("synthetic-v3", fixture.Version);
+        Assert.Equal("c9f91d42ec85e50887a3855be6ff749f030b234a58768de6fd492553e9d4067b", scenario.ContentSha256);
+        Assert.Equal(5400, fixture.DurationSeconds);
+        Assert.Contains(fixture.Events, e => e.Event.ClockSeconds == 0 && e.Event.Period == 1 && e.Event.Type == MatchEventType.KickOff);
+        Assert.Contains(fixture.Events, e => e.Event.ClockSeconds == 5400 && e.Event.Period == 2 && e.Event.Type == MatchEventType.FullTime);
+        Assert.Contains(fixture.Events, e => e.Event.Period == 1 && e.Event.ClockSeconds < 2700);
+        Assert.Contains(fixture.Events, e => e.Event.Period == 2 && e.Event.ClockSeconds >= 2700);
+        Assert.Equal(Enumerable.Range(0, fixture.Events.Count).Select(i => (long)i), fixture.Events.Select(e => e.Event.Sequence));
+        Assert.Equal(fixture.Events.Count, fixture.Events.Select(e => e.Event.EventId).Distinct().Count());
+        Assert.Equal(fixture.Events.Count + 4, scenario.Events.Count);
+        Assert.Equal(Enumerable.Range(0, scenario.Events.Count).Select(i => (long)i), scenario.Events.Select(e => e.Sequence));
+        Assert.All(scenario.Events, entry =>
+        {
+            Assert.InRange(entry.ClockSeconds, 0, 5400);
+            Assert.Equal(entry.ClockSeconds < 2700 ? 1 : 2, entry.Period);
+            if (entry.PlayerId.Length > 0)
+                Assert.Equal(entry.TeamId, scenario.Squad.Single(player => player.Id == entry.PlayerId).TeamId);
+        });
+
+        Assert.Contains(scenario.Events, e => e.Type == SyntheticScenarioEventKind.YellowCard && e.Period == 1);
+        Assert.Contains(scenario.Events, e => e.Type == SyntheticScenarioEventKind.RedCard && e.Period == 2);
+        Assert.Equal(2, scenario.Events.Count(e => e.Type == SyntheticScenarioEventKind.Substitution));
+        Assert.Equal(Enumerable.Range(0, scenario.Events.Count).Select(i => (long)i), scenario.Events.Select(e => e.Sequence));
+        Assert.Equal(scenario.Events.Count, scenario.Events.Select(e => e.EventId).Distinct().Count());
+        Assert.All(fixture.Events, source => Assert.Contains(scenario.Events,
+            e => e.EventId == source.Event.EventId && e.SourceSequence == source.Event.Sequence));
+        Assert.All(scenario.Events, action => Assert.Contains(scenario.Squad, player => player.Id == action.PlayerId || action.PlayerId == ""));
+        Assert.All(scenario.Events.Where(e => e.Type == SyntheticScenarioEventKind.Substitution), action =>
+        {
+            Assert.Contains(scenario.Squad, player => player.Id == action.RelatedPlayerId);
+            Assert.Equal(action.TeamId, scenario.Squad.Single(player => player.Id == action.RelatedPlayerId).TeamId);
+        });
+
+        Assert.Equal(0, scenario.PossessionPhases[0].StartClockSeconds);
+        Assert.Equal(5400, scenario.PossessionPhases[^1].EndClockSecondsExclusive);
+        Assert.All(scenario.PossessionPhases, phase => Assert.True(phase.EndClockSecondsExclusive > phase.StartClockSeconds));
+        Assert.All(scenario.PossessionPhases, phase => Assert.Equal(phase.StartClockSeconds < 2700 ? 1 : 2, phase.Period));
+        Assert.All(scenario.PossessionPhases.Zip(scenario.PossessionPhases.Skip(1)), pair =>
+            Assert.Equal(pair.First.EndClockSecondsExclusive, pair.Second.StartClockSeconds));
+        Assert.Contains(scenario.PossessionPhases, phase => phase.Phase == "high-regain-transition" && phase.TeamId == fixture.Home.Id);
+        Assert.Contains(scenario.PossessionPhases, phase => phase.Period == 1 && phase.TeamId == fixture.Home.Id);
+        Assert.Contains(scenario.PossessionPhases, phase => phase.Period == 2 && phase.TeamId == fixture.Away.Id);
+        Assert.Equal(fixture.Away.Id, scenario.PossessionPhases.Single(phase => phase.StartClockSeconds <= 3293 && phase.EndClockSecondsExclusive > 3293).TeamId);
+        Assert.Equal(fixture.Home.Id, scenario.PossessionPhases.Single(phase => phase.StartClockSeconds <= 3299 && phase.EndClockSecondsExclusive > 3299).TeamId);
+        Assert.Equal(fixture.Home.Id, scenario.PossessionPhases.Single(phase => phase.StartClockSeconds <= 3309 && phase.EndClockSecondsExclusive > 3309).TeamId);
+
+        var beforeHomeChange = scenario.Frames.Single(frame => frame.ClockSeconds == 3570);
+        var afterHomeChange = scenario.Frames.Single(frame => frame.ClockSeconds == 3600);
+        Assert.Contains(beforeHomeChange.Players, player => player.PlayerId == "harbour-9");
+        Assert.DoesNotContain(beforeHomeChange.Players, player => player.PlayerId == "harbour-12");
+        Assert.DoesNotContain(afterHomeChange.Players, player => player.PlayerId == "harbour-9");
+        Assert.Contains(afterHomeChange.Players, player => player.PlayerId == "harbour-12");
+
+        var beforeDismissal = scenario.Frames.Single(frame => frame.ClockSeconds == 4170);
+        var afterDismissal = scenario.Frames.Single(frame => frame.ClockSeconds == 4200);
+        Assert.Equal(22, beforeDismissal.Players.Count);
+        Assert.Equal(21, afterDismissal.Players.Count);
+        Assert.DoesNotContain(afterDismissal.Players, player => player.PlayerId == "ridge-6");
+        Assert.All(scenario.Frames, frame =>
+        {
+            Assert.Equal(frame.ClockSeconds >= 4200 ? 21 : 22, frame.Players.Count);
+            Assert.Equal(frame.Players.Count, frame.Players.Select(player => player.PlayerId).Distinct().Count());
+            Assert.All(frame.Players, player =>
+            {
+                Assert.InRange(player.X, 0, 105);
+                Assert.InRange(player.Y, 0, 68);
+            });
+        });
+    }
+
+    [Fact] public void GovernedScenarioAnnotationsAreDeterministicAcrossSeedsAndRegeneration()
+    {
+        var first = SyntheticFixtureGenerator.GenerateScenario(seed: -19);
+        var repeated = SyntheticFixtureGenerator.GenerateScenario(seed: -19);
+        var other = SyntheticFixtureGenerator.GenerateScenario(seed: -20);
+
+        Assert.Equal(first.Fixture.MatchId, repeated.Fixture.MatchId);
+        Assert.Equal(64, first.ContentSha256.Length);
+        Assert.Equal(first.ContentSha256, repeated.ContentSha256);
+        Assert.Equal(first.Events, repeated.Events);
+        Assert.Equal(first.PossessionPhases, repeated.PossessionPhases);
+        Assert.Equal(first.Frames.Select(frame => (frame.Id, frame.ClockSeconds, frame.BallX, frame.BallY,
+                Players: string.Join(",", frame.Players.Select(player => player.PlayerId)))),
+            repeated.Frames.Select(frame => (frame.Id, frame.ClockSeconds, frame.BallX, frame.BallY,
+                Players: string.Join(",", frame.Players.Select(player => player.PlayerId)))));
+        Assert.NotEqual(first.Fixture.MatchId, other.Fixture.MatchId);
+        Assert.NotEqual(first.ContentSha256, other.ContentSha256);
+        Assert.NotEqual(first.Events.Single(e => e.Type == SyntheticScenarioEventKind.YellowCard).EventId,
+            other.Events.Single(e => e.Type == SyntheticScenarioEventKind.YellowCard).EventId);
+    }
+
+    [Theory]
+    [InlineData(41)]
+    [InlineData(42)]
+    [InlineData(43)]
+    [InlineData(-19)]
+    public void PossessionAnnotationsAgreeWithSeededCirculationEvents(int seed)
+    {
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed);
+
+        foreach (var source in scenario.Fixture.Events.Where(entry => entry.Action == "circulation"))
+        {
+            var phase = scenario.PossessionPhases.Single(candidate =>
+                candidate.StartClockSeconds <= source.Event.ClockSeconds &&
+                candidate.EndClockSecondsExclusive > source.Event.ClockSeconds);
+            Assert.Equal(source.TeamId, phase.TeamId);
+        }
+    }
 }
