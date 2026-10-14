@@ -2,7 +2,7 @@
 
 ## Change
 
-On code commit `68e5bf2f8ac1d8a8dd4f84312623a1bce999f1f6`, the test-only `SyntheticFixtureGenerator` uses fixture version `synthetic-v2` and derives `matchId` from fixture version and seed. Repeated generation with one seed retains one match identity; distinct seeds receive distinct identities, and every generated event retains the fixture's match ID. Event and match IDs format seed values with invariant culture. The version bump ensures the new mapping does not silently change the output contract of `synthetic-v1`.
+On code commit `69d173ea6eb472f6fbf1662efd8a45ea17c94876`, the test-only `SyntheticFixtureGenerator` uses fixture version `synthetic-v2` and derives `matchId` from fixture version and seed. Repeated generation with one seed retains one match identity; distinct seeds receive distinct identities, and every generated event retains the fixture's match ID. Event and match IDs format seed values with invariant culture. Seed coordinate variation is normalized into the pitch bounds for negative seeds. The version bump ensures the new mapping does not silently change the output contract of `synthetic-v1`.
 
 The source candidate `data/simulations/manu-liv-match-dataset.json` was not consumed or transformed. Its clock, coordinate, metric, event-mapping and football semantics remain unverified as documented by the [candidate profile](../../data/MANU-LIV-SOURCE-PROFILE.md). No canonical admission or production match data change is claimed.
 
@@ -17,7 +17,7 @@ Executed on the code commit above in the isolated local clone:
 | `dotnet test tests/PitchMind.Contracts.Tests/PitchMind.Contracts.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false --logger 'console;verbosity=minimal'` | 16 passed, 0 failed, 0 skipped |
 | `git diff --check` | passed |
 
-An independent read-only review found and the follow-up fixed the missing fixture version bump and culture-sensitive seed formatting; the review did not run tests. The first sandboxed VSTest attempts could not bind their local communication socket. The same commands were rerun with local execution permission and passed. NuGet audit was disabled. No PostgreSQL integration, hosted CI, Azure operation, independent football review, or Product Owner acceptance was run or is claimed.
+Independent read-only review found and follow-up changes fixed three issues: the fixture version bump, invariant seed formatting, and negative-seed coordinate bounds. The reviewers did not run tests. The first sandboxed VSTest attempts could not bind their local communication socket. The same commands were rerun with local execution permission and passed. NuGet audit was disabled. No PostgreSQL integration, hosted CI, Azure operation, independent football review, or Product Owner acceptance was run or is claimed.
 
 ## Status
 
