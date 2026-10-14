@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using PitchMind.Domain.Simulation;
 
 namespace PitchMind.TestFixtures;
 
@@ -13,17 +12,17 @@ public sealed class SyntheticFixtureArtifact
 {
     public const string CurrentFormatVersion = "pitchmind-synthetic-fixture-json-v1";
 
-    private sealed record ArtifactPayload(string FormatVersion, SyntheticFixture Fixture);
+    private sealed record ArtifactPayload(string FormatVersion, GovernedSyntheticScenario Scenario);
 
-    private SyntheticFixtureArtifact(SyntheticFixture fixture, string formatVersion, string contentSha256, string json)
+    private SyntheticFixtureArtifact(GovernedSyntheticScenario scenario, string formatVersion, string contentSha256, string json)
     {
-        Fixture = fixture;
+        Scenario = scenario;
         FormatVersion = formatVersion;
         ContentSha256 = contentSha256;
         Json = json;
     }
 
-    public SyntheticFixture Fixture { get; }
+    public GovernedSyntheticScenario Scenario { get; }
     public string FormatVersion { get; }
     public string ContentSha256 { get; }
     public string Json { get; }
@@ -34,11 +33,11 @@ public sealed class SyntheticFixtureArtifact
         WriteIndented = false
     };
 
-    public static SyntheticFixtureArtifact Create(SyntheticFixture fixture)
+    public static SyntheticFixtureArtifact Create(GovernedSyntheticScenario scenario)
     {
-        ArgumentNullException.ThrowIfNull(fixture);
-        var json = JsonSerializer.Serialize(new ArtifactPayload(CurrentFormatVersion, fixture), SerializerOptions);
+        ArgumentNullException.ThrowIfNull(scenario);
+        var json = JsonSerializer.Serialize(new ArtifactPayload(CurrentFormatVersion, scenario), SerializerOptions);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
-        return new(fixture, CurrentFormatVersion, hash, json);
+        return new(scenario, CurrentFormatVersion, hash, json);
     }
 }

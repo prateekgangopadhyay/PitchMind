@@ -39,20 +39,20 @@ public sealed class SyntheticFixtureTests
 
     [Fact] public void ArtifactHashIsStableForTheSameSeedAndChangesWithTheSeed()
     {
-        var first = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 42));
-        var repeat = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 42));
-        var otherSeed = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 43));
+        var first = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 42));
+        var repeat = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 42));
+        var otherSeed = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 43));
 
         Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, first.FormatVersion);
         Assert.Equal(first.Json, repeat.Json);
         Assert.Equal(first.ContentSha256, repeat.ContentSha256);
         Assert.NotEqual(first.ContentSha256, otherSeed.ContentSha256);
-        Assert.NotEqual(first.Fixture.MatchId, otherSeed.Fixture.MatchId);
+        Assert.NotEqual(first.Scenario.Fixture.MatchId, otherSeed.Scenario.Fixture.MatchId);
         using var payload = JsonDocument.Parse(first.Json);
         Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, payload.RootElement.GetProperty("formatVersion").GetString());
-        Assert.Equal(first.Fixture.MatchId, payload.RootElement.GetProperty("fixture").GetProperty("matchId").GetString());
+        Assert.Equal(first.Scenario.Fixture.MatchId, payload.RootElement.GetProperty("scenario").GetProperty("fixture").GetProperty("matchId").GetString());
         Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
-        Assert.Equal("0e343b38fba9e4dcbbfa48f20eaa79d0ec84399a1ca0ba6581f105b74ef0c774", first.ContentSha256);
+        Assert.Equal("01c6e9d69b002d6301c3b53a1d850e49ef5ceb31fbf00a80c2567dc235f9935d", first.ContentSha256);
     }
 
     [Fact] public void PressingGoldenRetainsOrderedSamePeriodEvidence()
