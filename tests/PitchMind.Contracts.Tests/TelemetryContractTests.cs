@@ -75,6 +75,7 @@ public sealed class TelemetryContractTests
     [InlineData("1.2300")]
     [InlineData("79.228162514264337593543950335")]
     [InlineData("79228162514264337593543950335")]
+    [InlineData("79228162514264337593543950335.0")]
     [InlineData("0e999999999999999999999")]
     public void Decimal_contract_preserves_exact_values_at_supported_scale_and_coefficient(string rawValue)
     {
