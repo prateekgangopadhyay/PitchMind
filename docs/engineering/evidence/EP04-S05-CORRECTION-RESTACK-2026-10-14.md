@@ -2,6 +2,7 @@
 
 **Story:** EP04-S05, Match integrity golden tests (P0). **Status:** Partial implementation; not accepted.
 **Base:** `main` at `5e92e657572b45ea4e4c8c551e405adcb91fdf1e`.
+**Merged main commit:** `673ed64d2032484ff3568c2b1571a457b7547f5b` (PR #210, squash merge).
 **Initial code commit:** `f799dffd54b4132e55d8b61e3ce78090f21140dc`.
 **Initial code tree:** `0c43bffcec5bd1eb0904e1394940cd8913fbcc4e`.
 **Current code commit:** `412fb55e20b2ff35a72962aca4449aea2e5f90fe`.
@@ -24,4 +25,4 @@ The change is fixture-only. It does not persist corrections, perform canonical a
 
 ## Review and remaining gates
 
-Independent exact-head re-review after the payload guard is pending. Canonical correction admission/persistence, PostgreSQL correction integration, approved football golden snapshots, candidate-feed semantic certification, hosted CI and Product Owner pass/fail remain outstanding. No story acceptance, deployment or Azure resource change is claimed.
+Independent exact-head re-review of commit `dc7a86b070378aeb32c01fce4cc0bacdebf49d64` (same tree as the merged restack head) found no actionable P0–P2 issue; the reviewer did not run tests. PR #210 was marked ready and squash-merged after the review. Canonical correction admission/persistence, PostgreSQL correction integration, approved football golden snapshots, candidate-feed semantic certification, hosted CI and Product Owner pass/fail remain outstanding. EP04-S05 is partial and unaccepted; no deployment or Azure resource change is claimed.
