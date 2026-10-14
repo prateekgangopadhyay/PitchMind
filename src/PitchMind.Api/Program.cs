@@ -1,6 +1,8 @@
 using PitchMind.Api;
 using PitchMind.Contracts.Health;
 using PitchMind.Contracts.V1;
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 
@@ -103,22 +105,34 @@ static async Task<IResult> ReadAnalystRequestAsync(HttpContext context)
 
     using (request)
     {
-        var root = request.RootElement;
-        if (root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("insightId", out var insightIdElement) ||
-            insightIdElement.ValueKind != JsonValueKind.String ||
-            string.IsNullOrWhiteSpace(insightIdElement.GetString()) ||
-            !root.TryGetProperty("atSeconds", out var atSecondsElement) ||
-            atSecondsElement.ValueKind != JsonValueKind.Number ||
-            !atSecondsElement.TryGetInt32(out var atSeconds) || atSeconds is < 0 or > 5400 ||
-            !root.TryGetProperty("audience", out var audienceElement) ||
-            audienceElement.ValueKind != JsonValueKind.String ||
-            audienceElement.GetString() is not ("fan" or "analyst"))
+        var body = request.RootElement;
+        if (body.ValueKind != JsonValueKind.Object)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request body must be a JSON object");
+
+        if (!body.TryGetProperty("insightId", out var insightId) || insightId.ValueKind != JsonValueKind.String)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires a non-empty insightId");
+
+        if (!body.TryGetProperty("atSeconds", out var atSeconds) ||
+            atSeconds.ValueKind != JsonValueKind.Number ||
+            !BigInteger.TryParse(atSeconds.GetRawText(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var selectedElapsedSeconds))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires integer atSeconds");
+
+        if (selectedElapsedSeconds < BigInteger.Zero || selectedElapsedSeconds > 5400)
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_TIME", "atSeconds must be between 0 and 5400");
+
+        string? audience = null;
+        if (body.TryGetProperty("audience", out var audienceValue))
         {
-            throw new ArgumentException("Analyst request fields are invalid");
+            if (audienceValue.ValueKind != JsonValueKind.String)
+                return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "audience must be fan or analyst");
+            audience = audienceValue.GetString();
         }
 
-        _ = new AnalystRequest(insightIdElement.GetString()!, atSeconds, audienceElement.GetString()!);
+        var analystRequest = new AnalystRequest(insightId.GetString()!, (int)selectedElapsedSeconds, audience);
+        if (string.IsNullOrWhiteSpace(analystRequest.InsightId))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Analyst request requires a non-empty insightId");
+        if (analystRequest.Audience is not null and not ("fan" or "analyst"))
+            return ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "audience must be fan or analyst");
     }
 
     return MatchDataUnavailable(context);

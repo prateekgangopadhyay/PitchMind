@@ -49,22 +49,22 @@ def request(body, expected, code, content_type="application/json"):
 
 request(b"{", 400, "INVALID_REQUEST")
 invalid_requests = [
-    b"[]",
-    b'{"insightId":"","atSeconds":0,"audience":"fan"}',
-    b'{"insightId":"   ","atSeconds":0,"audience":"fan"}',
-    b'{"insightId":7,"atSeconds":0,"audience":"fan"}',
-    b'{"insightId":"i","audience":"fan"}',
-    b'{"insightId":"i","atSeconds":"0","audience":"fan"}',
-    b'{"insightId":"i","atSeconds":1.5,"audience":"fan"}',
-    b'{"insightId":"i","atSeconds":-1,"audience":"fan"}',
-    b'{"insightId":"i","atSeconds":5401,"audience":"fan"}',
-    b'{"insightId":"i","atSeconds":0}',
-    b'{"atSeconds":0,"audience":"fan"}',
-    b'{"insightId":"i","atSeconds":0,"audience":"Fan"}',
-    b'{"insightId":"i","atSeconds":0,"audience":1}',
+    (b"[]", "INVALID_REQUEST"),
+    (b'{"insightId":"","atSeconds":0,"audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"   ","atSeconds":0,"audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":7,"atSeconds":0,"audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"i","audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"i","atSeconds":"0","audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"i","atSeconds":1.5,"audience":"fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"i","atSeconds":-1,"audience":"fan"}', "INVALID_TIME"),
+    (b'{"insightId":"i","atSeconds":5401,"audience":"fan"}', "INVALID_TIME"),
+    (b'{"insightId":"i","atSeconds":2147483648,"audience":"fan"}', "INVALID_TIME"),
+    (b'{"insightId":"i","atSeconds":9999999999999999999999999999999999999999,"audience":"fan"}', "INVALID_TIME"),
+    (b'{"insightId":"i","atSeconds":0,"audience":"Fan"}', "INVALID_REQUEST"),
+    (b'{"insightId":"i","atSeconds":0,"audience":1}', "INVALID_REQUEST"),
 ]
-for body in invalid_requests:
-    request(body, 400, "INVALID_REQUEST")
+for body, code in invalid_requests:
+    request(body, 400, code)
 request(b'{"insightId":"i","atSeconds":0,"audience":"fan"}', 415,
         "UNSUPPORTED_MEDIA_TYPE", "text/plain")
 request(b'{"insightId":"i","atSeconds":0,"audience":"fan"}', 415,
@@ -99,4 +99,5 @@ connection.close()
 
 request(b'{"insightId":"i","atSeconds":5400,"audience":"analyst"}',
         503, "MATCH_DATA_UNAVAILABLE")
+request(b'{"insightId":"i","atSeconds":0}', 503, "MATCH_DATA_UNAVAILABLE")
 print("PASS: malformed/invalid Analyst matrix=400, unsupported media=415, exact 4096-byte request=503, oversized content-length/chunked=413, valid boundary request fails closed=503")
