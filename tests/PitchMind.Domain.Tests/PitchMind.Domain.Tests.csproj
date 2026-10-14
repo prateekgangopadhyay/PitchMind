@@ -6,5 +6,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <ProjectReference Include="../../src/PitchMind.Domain/PitchMind.Domain.csproj" />
     <ProjectReference Include="../PitchMind.TestFixtures/PitchMind.TestFixtures.csproj" />
+    <None Include="../../data/domain/football-concept-dictionary-v1.proposal.json"
+          Link="data/domain/football-concept-dictionary-v1.proposal.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
