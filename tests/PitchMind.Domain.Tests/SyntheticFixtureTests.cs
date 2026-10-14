@@ -52,6 +52,7 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, payload.RootElement.GetProperty("formatVersion").GetString());
         Assert.Equal(first.Fixture.MatchId, payload.RootElement.GetProperty("fixture").GetProperty("matchId").GetString());
         Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
+        Assert.Equal("a10b2e7e1e7a57e82d94acd5d407a9535f1fbc62ac0938e96522059dda0f3cf4", first.ContentSha256);
     }
 
     [Fact] public void PressingGoldenRetainsOrderedSamePeriodEvidence()
