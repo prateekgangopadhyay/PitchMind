@@ -14,3 +14,7 @@ TestResults/
 *.local.json
 *.publishsettings
 *.tsbuildinfo
+
+# Local CodeGraph semantic graph/index outputs (not review or source evidence)
+/.codegraph/
+/codegraph-out/

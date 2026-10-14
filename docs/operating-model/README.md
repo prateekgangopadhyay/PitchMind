@@ -26,4 +26,24 @@ Run `node scripts/validate_operating_model.mjs` at repository root (or `node scr
 **Verification status:** [Current static skills, 59-story routing and deployment-control audit](STATIC-VERIFICATION-2026-10-08.md). This does not certify CI, the full feed, or DEV runtime.
 
 ## Cross-cutting UI specialists
-The original 28 accountable role skills remain unchanged in number. Three optional-on-non-UI, **mandatory-on-UI** design skills are now available under `.github/skills/`: Taste, Vercel Web Design Guidelines and Awesome Design audit. [Design registry](../design/DESIGN-SKILL-REGISTRY.json) · [Premium brand system](../design/PITCHMIND-DESIGN-SYSTEM.md) · [Frontend review protocol](../design/FRONTEND-DESIGN-DELIVERY.md) · [Vendor/license notes](../design/VENDOR-SOURCES.md). This does not mean any visual story or UX audit has already passed.
+The 28 accountable Council role skills remain unchanged in number. Five cross-cutting design specialists (33 discoverable skill directories total) are available under `.github/`: Taste, Impeccable, Emil design engineering, Vercel Web Design Guidelines and Awesome Design audit. For materially changed UI, use them in that order as documented in the [frontend review protocol](../design/FRONTEND-DESIGN-DELIVERY.md). These are design-time review resources; the Product Owner remains the story acceptance owner, and their presence does not mean any visual story or UX audit has passed. See the [design registry](../design/DESIGN-SKILL-REGISTRY.json), [premium brand system](../design/PITCHMIND-DESIGN-SYSTEM.md) and [vendor/license notes](../design/VENDOR-SOURCES.md).
+
+## Direct design-skill and audit URLs
+
+Use these links to open each specialist's **PitchMind design instructions** and upstream source directly, instead of relying on the registry alone. All five skills are design-time review resources, not story acceptance owners or proof that a particular UI has passed an audit. Follow Taste → Impeccable → Emil → Vercel → Awesome for UI work; Impeccable remains a local advisory adaptation, with no upstream CLI, binaries or hooks installed.
+
+| Specialist | PitchMind audit instructions | Upstream audit/source URL |
+| --- | --- | --- |
+| **Taste** | [Taste frontend skill](../../.github/skills/design-taste-frontend/SKILL.md) | [Pinned Taste Skill source](https://github.com/girishlade111/taste-skill/blob/8399cf57f6faad8c943700cce0dd9873ff2ae296/skills/taste-skill/SKILL.md) |
+| **Impeccable** | [Impeccable local advisory skill](../../.github/skills/impeccable/SKILL.md) | [Impeccable project](https://github.com/pbakaus/impeccable) (upstream CLI/binaries/hooks not installed) |
+| **Emil design engineering** | [Emil design engineering skill](../../.github/skills/emil-design-eng/SKILL.md) | [Pinned Emil skill source](https://github.com/emilkowalski/skills/blob/2d228630ba1446365f614a108cb8252f1feda202/skills/emil-design-eng/SKILL.md) |
+| **Vercel Web Design Guidelines** | [Web Design Guidelines audit skill](../../.github/skills/web-design-guidelines/SKILL.md) | [Current Web Interface Guidelines (audit rules)](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md) · [Pinned Vercel skill source](https://github.com/vercel-labs/agent-skills/blob/063bee94c3f4df8453406c830b0a7df0f2860278/skills/web-design-guidelines/SKILL.md) |
+| **Awesome Design audit** | [Awesome Design audit skill](../../.github/skills/awesome-design-audit/SKILL.md) | [Pinned Awesome Design rubric collection](https://github.com/frankxai/awesome-design-agent-skills/tree/9a6b8fe9f0ccf8b851863485b76143c54f33df7e/rubrics) |
+
+The **Awesome Design audit rubrics** are also available directly in this repository: [anti-slop rubric](../design/vendor/awesome-anti-slop-rubric.md), [AI UI quality rubric](../design/vendor/awesome-ai-ui-quality-rubric.md), and [premium generation gate](../design/vendor/awesome-premium-generation-gate.md).
+
+For audit records and execution, use the [source-only baseline UI audit](../design/BASELINE-UI-AUDIT.md) and [per-screen frontend audit workflow](../design/FRONTEND-DESIGN-DELIVERY.md). The baseline audit is explicitly partial; final visual/accessibility acceptance requires rendered-screen evidence, relevant tests and independent review. [Source attribution and licenses](../design/VENDOR-SOURCES.md) document the pinned versions.
+
+## Accelerated delivery and CodeGraph
+
+The active [AI execution directive](AI-EXECUTION-DIRECTIVE.md) preserves all 59 existing story routes while prioritizing parallel P0 development **and** dependency-safe incremental integration into `main`. The [CodeGraph setup and usage guide](../engineering/CODEGRAPH-INTEGRATION.md) describes optional read-only graph context, cross-agent blast-radius handoffs and real stacked-PR base comparisons. It does not add a Council role, substitute for independent acceptance, create a GitHub Actions pipeline or waive Azure approvals.

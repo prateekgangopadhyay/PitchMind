@@ -7,7 +7,7 @@ flowchart LR
   Fan["Fan / supporter"] --> PM["PitchMind football intelligence"]
   Analyst["Tactical analyst / broadcaster"] --> PM
   Operator["Authorized operator"] --> PM
-  JSON["Approved synthetic EPL-context feed (JSON)"] --> PM
+  JSON["Owner-confirmed synthetic JSON; data quality gates open"] -. "not yet admitted" .-> PM
   PM -. "TARGET authentication" .-> Entra["Microsoft Entra External ID"]
   PM -. "TARGET grounded explanations" .-> Foundry["Microsoft Foundry"]
   PM -. "TARGET observability" .-> Azure["Azure Monitor"]
@@ -17,7 +17,7 @@ flowchart LR
 Discover simulated fixture → time-consistent score, match state and pitch → evidence-supported tactical key moment → **Show me why** → replay cited events/observed frames → grounded fan/analyst explanation with deterministic fallback.
 
 ## Trust and provenance boundaries
-- The 28.6 MB `data/simulations/manu-liv-match-dataset.json` has been structurally profiled but **not yet rights-certified or canonically imported**. It includes real EPL club/player names and unverified performance/biometric-like attributes; labeling synthetic is mandatory once the owner confirms origin and permission.
+- The 28.6 MB `data/simulations/manu-liv-match-dataset.json` has owner-confirmed synthetic provenance and redistribution permission, but **has not passed semantic or football-quality validation and is not canonically imported**. It includes real club/player names and unverified performance/biometric-like attributes; label it synthetic and do not present those metrics as fact.
 - Football truth comes only from validated input and deterministic, versioned derivation; the frontend and model cannot manufacture it.
-- The current public read-only offline fixture is distinct from future authenticated multi-user and administrative features. No claim Entra or Foundry is currently active.
+- Current match API routes fail closed with `503 MATCH_DATA_UNAVAILABLE` until API route composition is replaced with a canonical, revisioned PostgreSQL-backed read port. No claim Entra or Foundry is currently active.
 - Separate service roles for simulation import, event worker, BFF reads and evidence-only Foundry tools, with least privilege. A PR/diagram does not authorize DEV deployment.

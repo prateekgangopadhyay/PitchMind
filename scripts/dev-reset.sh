@@ -13,5 +13,7 @@ else
 fi
 
 [[ -f docker/.env && ! -L docker/.env ]] || { echo "Run ./scripts/dev-up.sh first; no regular docker/.env found." >&2; exit 1; }
+source scripts/lib/local-docker-target.sh
+require_local_docker_target
 docker compose --env-file docker/.env -f docker/compose.yml down --volumes --remove-orphans
 echo "Local PostgreSQL and Redis data volumes removed. The local credentials file was retained."
