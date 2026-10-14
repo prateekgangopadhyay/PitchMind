@@ -303,6 +303,18 @@ public sealed class GetMatchAtQueryServiceTests
         public GetMatchAtQuery? LastQuery { get; private set; }
         public List<MatchEvent> EventsRead { get; } = [];
 
+        public Task<IReadOnlyList<PersistedMatchProjection>> ListLatestAsync(MatchId? afterMatchId, int limit,
+            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PersistedMatchProjection>>([]);
+
+        public Task<SelectedMatchProjection?> GetForApiAtAsync(MatchId matchId, int selectedSeconds,
+            long? maximumCanonicalRevision, int? maximumProjectionRevision, CancellationToken cancellationToken) =>
+            Task.FromResult(projection is not null && projection.CanonicalRevision <= (maximumCanonicalRevision ?? long.MaxValue) &&
+                projection.ProjectionRevision <= (maximumProjectionRevision ?? int.MaxValue) ? projection : null);
+
+        public Task<PersistedMatchEventPage> ReadEventsPageAtAsync(SelectedMatchProjection selectedProjection,
+            int selectedSeconds, long afterSequence, int limit, CancellationToken cancellationToken) =>
+            Task.FromResult(new PersistedMatchEventPage(Array.Empty<MatchEvent>(), null, false));
+
         public Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
             long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
         {

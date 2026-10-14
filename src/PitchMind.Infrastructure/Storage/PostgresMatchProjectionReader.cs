@@ -16,6 +16,7 @@ namespace PitchMind.Infrastructure.Storage;
 public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) : IMatchProjectionReader
 {
     private const int MaximumMatchSeconds = 5400;
+    private const int MaximumPageSize = 100;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>One SQL statement gives the replay a single PostgreSQL MVCC snapshot across all source inputs.</summary>
@@ -134,6 +135,143 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
     private sealed record IndexedReplayEvent(JsonElement Source, JsonElement Payload, long Sequence, int ClockSeconds, int Period);
     private sealed record IndexedFrame(JsonElement Frame, string FrameId, long Sequence, int Period, int ClockSeconds,
         string CoordinateVersion, string SourceSha256);
+
+    public async Task<IReadOnlyList<PersistedMatchProjection>> ListLatestAsync(MatchId? afterMatchId, int limit,
+        CancellationToken cancellationToken)
+    {
+        if (limit is < 1 or > MaximumPageSize + 1) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (afterMatchId is { Value: var cursor } && cursor == Guid.Empty)
+            throw new ArgumentException("A match cursor cannot be empty.", nameof(afterMatchId));
+
+        await using var command = dataSource.CreateCommand("""
+            WITH latest AS (
+                SELECT DISTINCT ON (p.match_id) p.match_id, p.canonical_revision, p.revision, p.as_of_sequence,
+                       p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_sha256, p.state_json::text AS state_json
+                FROM pitchmind.match_projections p
+                JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+                WHERE p.canonical_revision IS NOT NULL
+                ORDER BY p.match_id, p.canonical_revision DESC, p.as_of_clock_seconds DESC, p.as_of_sequence DESC, p.revision DESC
+            )
+            SELECT match_id, canonical_revision, revision, as_of_sequence, as_of_clock_seconds,
+                   algorithm_version, source_sha256, state_sha256, state_json
+            FROM latest
+            WHERE ($1::uuid IS NULL OR match_id > $1)
+            ORDER BY match_id
+            LIMIT $2
+            """);
+        command.Parameters.AddWithValue((object?)afterMatchId?.Value ?? DBNull.Value);
+        command.Parameters.AddWithValue(limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var results = new List<PersistedMatchProjection>(limit);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var matchId = new MatchId(reader.GetGuid(0));
+            var canonicalRevision = reader.GetInt64(1);
+            var revision = reader.GetInt32(2);
+            var sequence = reader.GetInt64(3);
+            var clock = reader.GetInt32(4);
+            var algorithm = reader.GetString(5);
+            var sourceHash = reader.GetString(6).Trim();
+            var stateHash = reader.GetString(7).Trim();
+            var state = JsonSerializer.Deserialize<MatchState>(reader.GetString(8), JsonOptions)
+                ?? throw new InvalidDataException("Persisted match projection is empty.");
+            var projection = new PersistedMatchProjection(matchId.Value, canonicalRevision, revision, sequence,
+                clock, algorithm, sourceHash, state);
+            ValidateProjection(matchId, new SelectedMatchProjection(state, canonicalRevision, revision, sequence,
+                clock, algorithm, sourceHash, stateHash));
+            results.Add(projection);
+        }
+        return results;
+    }
+
+    public async Task<SelectedMatchProjection?> GetForApiAtAsync(MatchId matchId, int selectedSeconds,
+        long? maximumCanonicalRevision, int? maximumProjectionRevision, CancellationToken cancellationToken)
+    {
+        if (matchId.Value == Guid.Empty) throw new ArgumentException("Match ID is required.", nameof(matchId));
+        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (maximumCanonicalRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumCanonicalRevision));
+        if (maximumProjectionRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumProjectionRevision));
+        await using var command = dataSource.CreateCommand("""
+            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version,
+                   source_sha256, state_sha256, state_json::text
+            FROM pitchmind.match_projections p
+            JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+            WHERE p.match_id = $1 AND p.canonical_revision IS NOT NULL AND p.as_of_clock_seconds <= $2
+              AND ($3::bigint IS NULL OR p.canonical_revision <= $3)
+              AND ($4::integer IS NULL OR p.revision <= $4)
+            ORDER BY p.as_of_clock_seconds DESC, p.as_of_sequence DESC, p.canonical_revision DESC, p.revision DESC
+            LIMIT 1
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue((object?)maximumCanonicalRevision ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)maximumProjectionRevision ?? DBNull.Value);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        var canonicalRevision = reader.GetInt64(0);
+        var revision = reader.GetInt32(1);
+        var sequence = reader.GetInt64(2);
+        var clock = reader.GetInt32(3);
+        var algorithm = reader.GetString(4);
+        var sourceHash = reader.GetString(5).Trim();
+        var stateHash = reader.GetString(6).Trim();
+        var state = JsonSerializer.Deserialize<MatchState>(reader.GetString(7), JsonOptions)
+            ?? throw new InvalidDataException("Persisted match projection is empty.");
+        var projection = new SelectedMatchProjection(state, canonicalRevision, revision, sequence, clock,
+            algorithm, sourceHash, stateHash);
+        ValidateProjection(matchId, projection);
+        return projection;
+    }
+
+    public async Task<PersistedMatchEventPage> ReadEventsPageAtAsync(SelectedMatchProjection projection,
+        int selectedSeconds, long afterSequence, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        if (selectedSeconds is < 0 or > MaximumMatchSeconds) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (afterSequence < -1 || afterSequence > projection.AsOfSequence) throw new ArgumentOutOfRangeException(nameof(afterSequence));
+        if (limit is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(limit));
+        if (projection.AsOfClockSeconds > selectedSeconds) throw new ArgumentOutOfRangeException(nameof(projection));
+        if (!Guid.TryParse(projection.State.MatchId, out var parsedMatchId) || parsedMatchId == Guid.Empty)
+            throw new InvalidDataException("Persisted projection has an invalid match ID.");
+        var matchId = new MatchId(parsedMatchId);
+        var persistedSequence = await VerifyPersistedProjectionAsync(matchId, projection, cancellationToken);
+        await using var command = dataSource.CreateCommand("""
+            SELECT payload::text, sequence, clock_seconds, period
+            FROM pitchmind.match_events
+            WHERE match_id = $1 AND canonical_revision <= $2 AND sequence > $3 AND sequence <= $4
+              AND clock_seconds <= $5
+            ORDER BY sequence
+            LIMIT $6
+            """);
+        command.Parameters.AddWithValue(matchId.Value);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
+        command.Parameters.AddWithValue(afterSequence);
+        command.Parameters.AddWithValue(persistedSequence);
+        command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(limit + 1);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var events = new List<MatchEvent>(limit + 1);
+        long? expectedSequence = afterSequence < 0 ? 0 : afterSequence + 1;
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var matchEvent = JsonSerializer.Deserialize<MatchEvent>(reader.GetString(0), JsonOptions)
+                ?? throw new InvalidDataException("Canonical ledger event is empty.");
+            MatchEventValidator.Validate(matchEvent);
+            if (matchEvent.MatchId != matchId || matchEvent.Sequence != expectedSequence ||
+                reader.GetInt64(1) != matchEvent.Sequence || matchEvent.ClockSeconds != reader.GetInt32(2) ||
+                matchEvent.Period != reader.GetInt32(3) || matchEvent.ClockSeconds > selectedSeconds)
+                throw new InvalidDataException("Canonical event page is not contiguous at the selected time and revision.");
+            expectedSequence = matchEvent.Sequence + 1;
+            events.Add(matchEvent);
+        }
+        var hasMore = events.Count > limit;
+        if (hasMore) events.RemoveAt(events.Count - 1);
+        if (!hasMore && events.Count > 0 && events[^1].Sequence != persistedSequence)
+            throw new InvalidDataException("Canonical event page did not reach the selected projection sequence.");
+        if (!hasMore && events.Count == 0 && afterSequence != persistedSequence)
+            throw new InvalidDataException("Canonical event page is unexpectedly empty before the selected projection sequence.");
+        return new PersistedMatchEventPage(events, hasMore ? events[^1].Sequence : null, hasMore);
+    }
 
     public async Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
@@ -335,8 +473,9 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         await using var command = dataSource.CreateCommand("""
             SELECT as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_sha256,
                    state_json::text
-            FROM pitchmind.match_projections
-            WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3
+            FROM pitchmind.match_projections p
+            JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+            WHERE p.match_id = $1 AND p.canonical_revision = $2 AND p.revision = $3
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(projection.CanonicalRevision);

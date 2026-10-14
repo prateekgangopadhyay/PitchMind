@@ -573,7 +573,8 @@
       ],
       "dependsOn": [
         "EP04-S04",
-        "EP05-S04"
+        "EP05-S04",
+        "EP05-S05"
       ],
       "status": "unverified",
       "assignedHuman": null,

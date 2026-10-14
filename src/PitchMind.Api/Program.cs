@@ -6,11 +6,29 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using PitchMind.Application.Abstractions;
+using PitchMind.Infrastructure.Storage;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 var runtimeProfile = builder.Configuration["Runtime:Profile"];
 RuntimeProfileGuard.Validate(builder.Environment.EnvironmentName, runtimeProfile);
 RuntimeProfileGuard.ConfigureLocalServices(builder.Services, runtimeProfile);
+if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
+{
+    var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
+    if (!string.IsNullOrWhiteSpace(postgresConnectionString))
+    {
+        builder.Services.AddSingleton(NpgsqlDataSource.Create(postgresConnectionString));
+        builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
+        builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
+        builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+    }
+}
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
@@ -86,6 +104,20 @@ app.Use(async (context, next) =>
     {
         await ApiProblem(context, StatusCodes.Status404NotFound, "EVIDENCE_MISSING", "Evidence unavailable at selected time").ExecuteAsync(context);
     }
+    catch (CanonicalReadUnavailableException)
+    {
+        await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
+            "Canonical match data is not configured").ExecuteAsync(context);
+    }
+    catch (NpgsqlException exception)
+    {
+        app.Logger.LogError(exception, "Canonical read dependency failed for {Path}", context.Request.Path);
+        if (!context.Response.HasStarted)
+            await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
+                "Canonical match data is temporarily unavailable").ExecuteAsync(context);
+        else
+            throw;
+    }
     catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
     {
         // The caller disconnected; do not turn cancellation into a server error response.
@@ -102,6 +134,9 @@ app.Use(async (context, next) =>
 app.UseRateLimiter();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
 app.MapHealthChecks("/health");
+// Canonical reads are local-only until EP06-S04 provides authenticated cloud access.
+if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
+    app.MapCanonicalMatchEndpoints();
 app.MapGet("/api/v1/matches", (HttpContext context) => MatchDataUnavailable(context));
 var match = app.MapGroup("/api/v1/matches/{matchId:guid}");
 match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
