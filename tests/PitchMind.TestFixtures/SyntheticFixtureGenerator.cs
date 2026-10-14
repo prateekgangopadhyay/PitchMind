@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Globalization;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
@@ -10,7 +11,7 @@ namespace PitchMind.TestFixtures;
 /// <summary>Builds deterministic, fictional golden data for automated tests only.</summary>
 public static class SyntheticFixtureGenerator
 {
-    public const string Version = "synthetic-v2";
+    public const string Version = "synthetic-v3";
     public static MatchId FixtureId => MatchIdForSeed(42);
 
     public static SyntheticFixture Generate(int seed = 42)
@@ -35,7 +36,10 @@ public static class SyntheticFixtureGenerator
         for (var clock = 30; clock < 5400; clock += 30)
         {
             if (clock is >= 3290 and <= 3330) continue;
-            var isHome = (clock / 30 + seed) % 2 == 0;
+            // Keep a side in possession for two consecutive circulation events rather than
+            // manufacturing a turnover on every pass. The authored scenario phase annotations
+            // use the same 60-second blocks except where the pressing sequence changes control.
+            var isHome = (clock / 60 + seed) % 2 == 0;
             var team = isHome ? home.Id : away.Id;
             Add(clock, MatchEventType.Pass, team, $"{team}-6", "circulation", "complete", $"{team}-7");
         }
@@ -57,6 +61,104 @@ public static class SyntheticFixtureGenerator
         var frames = times.Select(clock => Frame(clock, home, away, seed)).ToArray();
         return new(matchId.ToString(), Version, seed, "synthetic", 5400, home, away,
             Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
+    }
+
+    /// <summary>
+    /// Adds test-only disciplinary, substitution, phase and lineup annotations around the
+    /// deterministic football fixture. These annotations are not canonical telemetry contracts.
+    /// </summary>
+    public static GovernedSyntheticScenario GenerateScenario(int seed = 42)
+    {
+        var fixture = Generate(seed);
+        var substitutes = new[]
+        {
+            new SyntheticPlayer("harbour-12", "Harbour Player 12", fixture.Home.Id, 12, "CM"),
+            new SyntheticPlayer("ridge-12", "Ridge Player 12", fixture.Away.Id, 12, "CM")
+        };
+        var squad = fixture.Home.Players.Concat(fixture.Away.Players).Concat(substitutes).ToArray();
+        var actions = new[]
+        {
+            Action(seed, 1280, SyntheticScenarioEventKind.YellowCard, fixture.Away.Id, "ridge-8", outcome: "cautioned"),
+            Action(seed, 3600, SyntheticScenarioEventKind.Substitution, fixture.Home.Id, "harbour-9", "harbour-12", "completed"),
+            Action(seed, 3900, SyntheticScenarioEventKind.Substitution, fixture.Away.Id, "ridge-11", "ridge-12", "completed"),
+            Action(seed, 4200, SyntheticScenarioEventKind.RedCard, fixture.Away.Id, "ridge-6", outcome: "dismissed")
+        };
+        var fixtureEvents = fixture.Events.Select(entry => new SyntheticScenarioEvent(
+            entry.Event.EventId, 0, entry.Event.Sequence, entry.Event.ClockSeconds, entry.Event.Period,
+            Enum.Parse<SyntheticScenarioEventKind>(entry.Event.Type.ToString()), entry.TeamId, entry.PlayerId,
+            entry.RelatedPlayerId, entry.Outcome));
+        var events = fixtureEvents.Concat(actions)
+            .OrderBy(entry => entry.ClockSeconds)
+            .ThenBy(entry => entry.SourceSequence.HasValue ? 0 : 1)
+            .ThenBy(entry => entry.SourceSequence ?? long.MaxValue)
+            .ThenBy(entry => entry.EventId)
+            .Select((entry, sequence) => entry with { Sequence = sequence })
+            .ToArray();
+        var possessionPhases = BuildPossessionPhases(seed, fixture.Home.Id, fixture.Away.Id);
+        var frames = fixture.Frames.Select(frame => ApplyActiveRoster(frame, events)).ToArray();
+        var frozenSquad = Array.AsReadOnly(squad);
+        var frozenEvents = Array.AsReadOnly(events);
+        var frozenPhases = Array.AsReadOnly(possessionPhases);
+        var frozenFrames = Array.AsReadOnly(frames);
+        var canonicalBytes = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            fixture,
+            squad = frozenSquad,
+            events = frozenEvents,
+            possessionPhases = frozenPhases,
+            frames = frozenFrames
+        });
+        var digest = Convert.ToHexString(SHA256.HashData(canonicalBytes)).ToLowerInvariant();
+        return new(fixture, frozenSquad, frozenEvents, frozenPhases, frozenFrames, digest);
+    }
+
+    private static SyntheticScenarioEvent Action(int seed, int clock, SyntheticScenarioEventKind kind, string team,
+        string player, string? related = null, string? outcome = null)
+    {
+        var sequenceKey = related is null ? player : $"{player}:{related}";
+        var kindName = kind.ToString();
+        var id = StableId($"{Version}:{seed.ToString(CultureInfo.InvariantCulture)}:{clock}:{kindName}:{team}:{sequenceKey}");
+        return new(id, 0, null, clock, clock < 2700 ? 1 : 2, kind, team, player, related, outcome);
+    }
+
+    private static SyntheticPossessionPhase[] BuildPossessionPhases(int seed, string homeId, string awayId)
+    {
+        var phases = new List<SyntheticPossessionPhase>();
+        for (var start = 0; start < 5400; start += 60)
+        {
+            var end = Math.Min(start + 60, 5400);
+            var team = ((start / 60 + seed) % 2 == 0) ? homeId : awayId;
+            var phase = team == homeId ? "build-up" : "settled-possession";
+            phases.Add(new(start, end, start < 2700 ? 1 : 2, team, phase));
+        }
+
+        // The counterpress sequence is explicitly represented as an authored possession change.
+        var index = phases.FindIndex(p => p.StartClockSeconds == 3240);
+        phases.RemoveAll(p => p.StartClockSeconds is >= 3240 and < 3360);
+        phases.InsertRange(index, new[]
+        {
+            new SyntheticPossessionPhase(3240, 3290, 2, homeId, "settled-possession"),
+            new SyntheticPossessionPhase(3290, 3299, 2, awayId, "opponent-build-up"),
+            new SyntheticPossessionPhase(3299, 3304, 2, homeId, "high-regain-transition"),
+            new SyntheticPossessionPhase(3304, 3360, 2, homeId, "attacking-exploitation")
+        });
+        return phases.ToArray();
+    }
+
+    private static TrackingFrame ApplyActiveRoster(TrackingFrame frame, IReadOnlyList<SyntheticScenarioEvent> events)
+    {
+        var active = frame.Players.ToList();
+        foreach (var action in events.Where(a => a.Type == SyntheticScenarioEventKind.Substitution && a.ClockSeconds <= frame.ClockSeconds))
+        {
+            var outgoing = active.Single(p => p.PlayerId == action.PlayerId);
+            active.Remove(outgoing);
+            active.Add(outgoing with { PlayerId = action.RelatedPlayerId! });
+        }
+
+        foreach (var dismissal in events.Where(a => a.Type == SyntheticScenarioEventKind.RedCard && a.ClockSeconds <= frame.ClockSeconds))
+            active.RemoveAll(p => p.PlayerId == dismissal.PlayerId);
+
+        return frame with { Players = Array.AsReadOnly(active.ToArray()) };
     }
 
     private static MatchId MatchIdForSeed(int seed) => new(StableId($"{Version}:{seed.ToString(CultureInfo.InvariantCulture)}:match"));
