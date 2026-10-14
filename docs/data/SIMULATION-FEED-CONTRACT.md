@@ -6,25 +6,27 @@ The candidate source is `data/simulations/manu-liv-match-dataset.json`; its owne
 
 The candidate source's final raw clock value is 5761 (96:01 only if interpreted as seconds), but its unit and period/stoppage semantics are unverified. This source is not the EP03-S01 acceptance fixture: that story separately requires a fictional, seeded, deterministically regenerated 90-minute scenario. Do not treat profiling this 96:01 candidate as proof of the seeded-fixture acceptance.
 
-## Proposed canonical envelope (adapter output, not guessed source)
-`EventEnvelope`: `schemaVersion`, `matchId`, `eventId` stable, `sequence` contiguous per match, `sourceId/version/hash/recordPointer`, `provenance=synthetic`, `period`, `elapsedMatchMilliseconds`, optional source UTC, `eventType`, `teamId/playerId/relatedPlayerId`, `outcome`, `qualifiers`, `possessionId`, optional start/end pitch coordinates **in metres**, `payloadHash`, `supersedesEventId` for corrections.
-`TrackingFrame`: `frameId, matchId, elapsedMatchMilliseconds, ball, players [{playerId,x,y,observed,quality}], pitchDimensions, orientationVersion, sourceRecordPointer/hash`. Null/missing positions remain null; interpolated samples are tagged and **never presented as observed**.
+## Proposed canonical envelope (post-admission output, not guessed source)
+Raw candidate records have no `canonicalRevision` and must not be represented as canonical event/frame envelopes or published directly to the canonical telemetry channel. After reviewed mapping and successful PostgreSQL admission, the store assigns a positive, monotonically increasing per-match `canonicalRevision` atomically with the admitted record and its transactional outbox intent. `schemaVersion` is the wire-schema version and never supplies a canonical revision.
+`EventEnvelope`: `schemaVersion`, positive store-assigned `canonicalRevision`, `matchId`, `eventId` stable, `sequence` contiguous per match, `sourceId/version/hash/recordPointer`, `provenance=synthetic`, `period`, `elapsedMatchMilliseconds`, optional source UTC, `eventType`, `teamId/playerId/relatedPlayerId`, `outcome`, `qualifiers`, `possessionId`, optional start/end pitch coordinates **in metres**, `payloadHash`, `supersedesEventId` for corrections.
+`TrackingFrame`: positive store-assigned `canonicalRevision`, `frameId, matchId, elapsedMatchMilliseconds, ball, players [{playerId,x,y,observed,quality}], pitchDimensions, orientationVersion, sourceRecordPointer/hash`. Null/missing positions remain null; interpolated samples are tagged and **never presented as observed**.
 `FixtureManifest`: `fixtureId, schemaVersion, sourceFilename, sha256, dataRights, syntheticFlag, competitionContext, teamRoster, periods, matchClockPolicy, pitchMetres, sourceCoordinateSpec, scenarioNames, generatorVersion`.
 
 ## Flow and anti-corruption layer
 ```mermaid
 flowchart LR
- J[Approved JSON] --> H[Hash + JSON profiler]
- H --> V{Schema + football validation}
+ J[Candidate JSON] --> H[Hash + bounded raw parser]
+ H --> RR[LOCAL candidate replay; source bytes preserved]
+ RR -. no canonical facts .-> G[Semantic and football review]
+ G --> V{Reviewed mapper + validation}
  V -->|Invalid| Q[Quarantine source pointer, reason, payload hash]
- V -->|Valid| A[Source adapter converts time, IDs, pitch coordinates]
- A --> E[Canonical event/frame + provenance]
- E --> L[LOCAL deterministic replay]
- E --> EH[Azure Event Hubs producer]
- L --> PG[PostgreSQL] 
- EH --> W[EventWorker] --> PG
+ V -->|Valid| PG[PostgreSQL canonical admission]
+ PG --> O[Transactional outbox intent + assigned revision]
+ O --> D[Outbox dispatcher]
+ D --> EH[Azure Event Hubs canonical telemetry]
+ EH --> W[EventWorker projections]
  ```
-Ports: `ISimulationFeedReader`, `ISourceFeedMapper`, `IEnvelopeValidator`, `ITrackingFrameMapper`, `IQuarantineSink`, `ISimulationClock`; adapters only in Infrastructure. File path configured (no source file name hardcoded in C#); size/depth bounded and path traversal rejected. Browser reads API not source JSON.
+Ports: `ISimulationFeedReader`, `ISourceFeedMapper`, `IEnvelopeValidator`, `ITrackingFrameMapper`, `IQuarantineSink`, `ISimulationClock`; adapters only in Infrastructure. PostgreSQL admission and the outbox intent share one transaction; only the dispatcher publishes admitted canonical events. File path configured (no source file name hardcoded in C#); size/depth bounded and path traversal rejected. Browser reads API not source JSON.
 
 ## Football validation
 Clock seconds/ms per period vs elapsed (added time explicit), stable sequence for tied timestamps, active roster after substitutions, cards/goal transitions, 11v11 unless send-off, half-time direction change, pitch metre ranges and coordinate transform per team/period. Preserve raw stadium coordinates; team-relative analyses attack positive x with explicit version. Possession requires controlled action/provider evidence, not nearest player. Missing 10 Hz tracking cannot support closing speed or sustained shape from 30-second sparse frames. Never label a one-off turnover 'pressing trap' without trigger/opponent response/geometric evidence. Score is canonical goal projection, not decorative fixture metadata.

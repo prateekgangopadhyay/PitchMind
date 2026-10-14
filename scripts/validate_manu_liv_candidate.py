@@ -282,7 +282,7 @@ def validate_source(data: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         for name in ("pitchX", "pitchY", "ballX", "ballY", "endX", "endY"):
             record_coordinate(name, event.get(name))
 
-        position_names: set[tuple[str, int]] = set()
+        position_names: set[tuple[str, str, int]] = set()
         for position_index, position in enumerate(event["playerPositions"]):
             if not isinstance(position, dict) or any(key not in position for key in POSITION_REQUIRED):
                 raise CandidateValidationError(f"Malformed position record at event {index}, position {position_index}")
@@ -426,6 +426,16 @@ def validate_file(source_path: Path, manifest_path: Path) -> dict[str, Any]:
     return result
 
 
+def _aliases_existing_file(left: Path, right: Path) -> bool:
+    """Detect path aliases, including distinct hardlinks to one existing file."""
+    try:
+        if left.resolve() == right.resolve():
+            return True
+        return left.exists() and right.exists() and left.samefile(right)
+    except OSError as exc:
+        raise CandidateValidationError("Cannot safely verify report output path") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate EP03-S01 candidate source structure without canonical import")
     parser.add_argument("source", type=Path, nargs="?", default=Path("data/simulations/manu-liv-match-dataset.json"))
@@ -436,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         report = validate_file(args.source, args.manifest)
         serialized = json.dumps(report, ensure_ascii=True, sort_keys=True, indent=2) + "\n"
         if args.output:
-            if args.output.resolve() in {args.source.resolve(), args.manifest.resolve()}:
+            if _aliases_existing_file(args.output, args.source) or _aliases_existing_file(args.output, args.manifest):
                 raise CandidateValidationError("Report output must not overwrite the source or manifest")
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(serialized, encoding="utf-8")

@@ -1,7 +1,7 @@
 # EP01-S02 local Docker target guard evidence
 
-**Base:** `c836011cf0c846dd6eddfa1aa1ebb47afca3d44b` (current `main` at implementation start)  
-**Verification:** 2026-10-12, local isolated clone  
+**Base:** `c836011cf0c846dd6eddfa1aa1ebb47afca3d44b` (current `main` at implementation start)
+**Verification:** 2026-10-12, local isolated clone
 **Code revision:** published as the head of the linked pull request
 
 ## Change

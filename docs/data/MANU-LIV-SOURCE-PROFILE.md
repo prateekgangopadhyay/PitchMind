@@ -1,6 +1,6 @@
 # Manchester United–Liverpool candidate source profile
 
-**Source:** `data/simulations/manu-liv-match-dataset.json`, pinned by [candidate manifest](../../data/simulations/manu-liv-candidate-manifest.json) v1.0.0. **Inspection:** 2026-10-12.  
+**Source:** `data/simulations/manu-liv-match-dataset.json`, pinned by [candidate manifest](../../data/simulations/manu-liv-candidate-manifest.json) v1.0.0. **Inspection:** 2026-10-12.
 **Status:** structural inspection of a candidate synthetic JSON feed. The repository owner confirmed synthetic provenance and redistribution permission on 2026-10-10. Independent rights/privacy review is pending. This is not canonical football data, a football-approved simulation, or a verified Azure feed.
 
 ## Observed structure

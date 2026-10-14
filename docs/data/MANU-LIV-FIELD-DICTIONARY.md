@@ -2,8 +2,8 @@
 
 **Scope:** observed JSON structure for the owner-confirmed synthetic candidate feed. This dictionary records field names, JSON shapes and observed ranges. It does not certify football meaning, canonical mappings, measurement units, identity resolution, or source quality. Field names such as `clockSeconds` are source labels; their meaning is not assumed.
 
-**Pinned input:** `data/simulations/manu-liv-match-dataset.json`  
-**SHA-256:** `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`  
+**Pinned input:** `data/simulations/manu-liv-match-dataset.json`
+**SHA-256:** `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`
 **Manifest:** `data/simulations/manu-liv-candidate-manifest.json`, version `1.0.0`, status `candidate_not_canonical`.
 
 ## Event record

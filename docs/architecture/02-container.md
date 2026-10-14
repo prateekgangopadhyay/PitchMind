@@ -28,11 +28,15 @@ flowchart LR
   BFF --> Signal
   BFF --> PG[("Azure PostgreSQL Flexible Server — canonical")]
   JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer"]
-  Sim --> EH["Azure Event Hubs (matchId partition)"]
-  EH --> Worker["ACA EventWorker: validation / projections / tactical"]
+  Sim --> Candidate["Bounded raw candidate replay; noncanonical"]
+  Candidate --> Mapper["Reviewed source mapper + football validation"]
+  Mapper --> Admission["Canonical admission transaction"]
+  Admission --> PG
+  PG --> Outbox["Transactional outbox intent + assigned revision"]
+  Outbox --> Dispatcher["Outbox dispatcher"]
+  Dispatcher --> EH["Azure Event Hubs (admitted canonical telemetry)"]
+  EH --> Worker["ACA EventWorker: projections / tactical"]
   Worker --> PG
-  PG --> Outbox["Transactional outbox / inbox"]
-  Outbox --> Dispatcher["Background dispatcher"]
   Dispatcher --> Signal
   Dispatcher --> Bus["Azure Service Bus commands / DLQ"]
   Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
@@ -48,7 +52,7 @@ flowchart LR
   BFF -. "OTel" .-> Monitor["Azure Monitor / Application Insights"]
 ```
 
-**Non-negotiable contract:** Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
+**Non-negotiable contract:** raw source candidates are never published directly to the canonical telemetry channel. PostgreSQL assigns each admitted per-match `canonicalRevision` atomically with the record and outbox intent. Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 

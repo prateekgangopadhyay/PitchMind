@@ -1,6 +1,7 @@
 using PitchMind.Api;
 using PitchMind.Contracts.Health;
 using PitchMind.Contracts.V1;
+using Microsoft.AspNetCore.Http.Features;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -33,16 +34,49 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     if (context.Request.Path.StartsWithSegments("/api/v1"))
         context.Response.Headers["X-Contract-Version"] = ContractVersion.V1;
-    try { await next(context); }
-    catch (ArgumentException)
+    try
     {
-        app.Logger.LogInformation("Invalid request for {Path}", context.Request.Path);
-        await ApiProblem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid match request").ExecuteAsync(context);
+        if (context.Request.ContentLength is > 4096)
+        {
+            await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+            return;
+        }
+
+        if (context.Features.Get<IHttpRequestBodyDetectionFeature>()?.CanHaveBody == true)
+        {
+            var originalBody = context.Request.Body;
+            using var bufferedBody = new MemoryStream(capacity: 4096);
+            var chunk = new byte[1024];
+            int bytesRead;
+            while ((bytesRead = await originalBody.ReadAsync(chunk.AsMemory(), context.RequestAborted)) > 0)
+            {
+                if (bufferedBody.Length + bytesRead > 4096)
+                {
+                    await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE", "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
+                    return;
+                }
+                await bufferedBody.WriteAsync(chunk.AsMemory(0, bytesRead), context.RequestAborted);
+            }
+
+            bufferedBody.Position = 0;
+            context.Request.Body = bufferedBody;
+            try { await next(context); }
+            finally { context.Request.Body = originalBody; }
+        }
+        else
+        {
+            await next(context);
+        }
+    }
+    catch (ArgumentException exception)
+    {
+        var problem = ApiArgumentErrorResponse.Create(context, exception);
+        await Results.Json(problem, statusCode: problem.Status, contentType: "application/problem+json").ExecuteAsync(context);
     }
     catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
     {
         await ApiProblem(context, StatusCodes.Status413PayloadTooLarge, "REQUEST_TOO_LARGE",
-            "Request body is too large").ExecuteAsync(context);
+            "Request body exceeds the 4 KiB limit").ExecuteAsync(context);
     }
     catch (BadHttpRequestException)
     {

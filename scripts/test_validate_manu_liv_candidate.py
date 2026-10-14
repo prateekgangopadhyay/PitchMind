@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import tempfile
 from pathlib import Path
 import unittest
 
@@ -337,6 +338,33 @@ class CandidateValidationTests(unittest.TestCase):
         }
         for value in sensitive_source_values:
             self.assertNotIn(value, report_text)
+
+
+    def test_cli_rejects_hardlink_output_aliases_without_modifying_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            source = directory / "source.json"
+            manifest = directory / "manifest.json"
+            source_alias = directory / "source-output.json"
+            manifest_alias = directory / "manifest-output.json"
+            source.write_bytes(self.payload)
+            manifest_bytes = json.dumps(self.manifest).encode("utf-8")
+            manifest.write_bytes(manifest_bytes)
+            source_before = source.read_bytes()
+
+            source_alias.hardlink_to(source)
+            self.assertEqual(
+                validator.main([str(source), "--manifest", str(manifest), "--output", str(source_alias)]),
+                2,
+            )
+            self.assertEqual(source.read_bytes(), source_before)
+
+            manifest_alias.hardlink_to(manifest)
+            self.assertEqual(
+                validator.main([str(source), "--manifest", str(manifest), "--output", str(manifest_alias)]),
+                2,
+            )
+            self.assertEqual(manifest.read_bytes(), manifest_bytes)
 
 
 if __name__ == "__main__":

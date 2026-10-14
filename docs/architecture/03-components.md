@@ -9,7 +9,7 @@
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
-  API --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
+  API --> Guard["Ordinary match request → 503; malformed requests → typed 4xx; body capped at 4 KiB including chunked input"]
   API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
@@ -52,9 +52,12 @@ flowchart TB
   BFF["Thin API / role + selected-time guards"] --> Query
   EventWorker2["EventWorker host"] --> Validate
   AgentWorker2["AgentWorker host"] --> Explain
-  Feed --> Validate
-  EventHubs --> Validate
-  Validate --> Facts
+  Feed -. "raw candidate only; never canonical publication" .-> MapSource["Reviewed source mapper"]
+  MapSource --> Validate
+  Validate --> Admission["PostgreSQL canonical admission + revision + outbox in one transaction"]
+  Admission --> EventHubs
+  EventHubs --> ValidateProjection["Consume admitted telemetry for projections"]
+  ValidateProjection --> Facts
   Facts --> Project --> MatchId
   Project --> Detect --> Rules
   Detect --> Evidence
@@ -69,7 +72,7 @@ flowchart TB
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
-- `EventEnvelope` and `TrackingFrame` carry source/fixture hash, 1-based original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, observed-vs-interpolated coverage.
+- Raw candidates carry source hash, original bytes/IDs/order and raw clock labels; they have no `canonicalRevision` and are not canonical envelopes. Only PostgreSQL assigns a positive per-match `canonicalRevision` atomically with an admitted record and its outbox intent. `EventEnvelope` and `TrackingFrame` then carry the source/fixture hash, original sequence and explicit canonical index, period/elapsed time, pitch units/orientation, and observed-vs-interpolated coverage.
 - PostgreSQL commits validated event, tracking reference, projection, evidence and outbox atomically; checkpoint follows durable commit; repeated delivery is safe.
 - `MatchTimeContext` fixes match, selected timestamp, revision and period across API, pitch, scoreboard, events, claims and AI.
 - Foundry receives read-only evidence scoped to selected time; separate deterministic validator checks every published claim; malformed model output falls back.
