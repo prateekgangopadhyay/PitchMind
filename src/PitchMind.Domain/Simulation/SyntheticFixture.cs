@@ -10,7 +10,8 @@ public sealed record TrackingFrame(string Id, int ClockSeconds, double BallX, do
 public sealed record SimulationEvent(MatchEvent Event, string TeamId, string PlayerId, string Action, string Outcome, string? RelatedPlayerId = null);
 public sealed record SyntheticFixture(string MatchId, string Version, int Seed, string Provenance, int DurationSeconds,
     int HalfTimeSeconds, double PitchLengthMetres, double PitchWidthMetres,
-    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames)
+    SyntheticTeam Home, SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,
+    string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null)
 {
     public string CoordinateConvention =>
         $"Offline synthetic fixture; metre coordinates, x=0..{PitchLengthMetres:R}, y=0..{PitchWidthMetres:R}; fixed stadium axes; attacking direction changes at {HalfTimeSeconds} seconds.";
@@ -18,7 +19,7 @@ public sealed record SyntheticFixture(string MatchId, string Version, int Seed, 
 public sealed record MatchSnapshot(string MatchId, int ClockSeconds, int Period, string Status, int HomeScore, int AwayScore,
     string Provenance, TrackingFrame Frame, long LastSequence, MatchPhase Phase, string? PossessionTeamId,
     int HomeActivePlayers, int AwayActivePlayers, IReadOnlyList<MatchPlayerState> Players, string CoordinateConvention,
-    string? CompetitionId = null);
+    string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null);
 public sealed record TacticalInsight(string Id, string MatchId, int ClockSeconds, string Title, string Summary,
     string Classification, string DetectorVersion, IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds);
 public sealed record TacticalEvidence(TacticalInsight Insight, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames,

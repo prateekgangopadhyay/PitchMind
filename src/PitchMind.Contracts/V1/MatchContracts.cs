@@ -49,7 +49,9 @@ public sealed record MatchStateResponse(
     int HomeActivePlayers,
     int AwayActivePlayers,
     IReadOnlyList<MatchPlayerStateResponse> Players,
-    string? CompetitionId = null);
+    string? CompetitionId = null,
+    string? CompetitionRulesVersion = null,
+    int? MaximumSubstituteReentriesPerPlayer = null);
 
 public sealed record MatchPlayerStateResponse(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
 

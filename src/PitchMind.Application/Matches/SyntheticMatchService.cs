@@ -51,14 +51,15 @@ public sealed class SyntheticMatchService
             .Select(player => (player.Id, player.TeamId)).ToArray();
         var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
         var aggregate = new MatchAggregate(new(Guid.Parse(Fixture.MatchId)), Fixture.Home.Id, Fixture.Away.Id,
-            initialPlayers, activeAtKickoff, Fixture.Provenance);
+            initialPlayers, activeAtKickoff, Fixture.Provenance,
+            new(Fixture.CompetitionId, Fixture.CompetitionRulesVersion, Fixture.MaximumSubstituteReentriesPerPlayer));
         foreach (var item in events) aggregate.Apply(item);
         var state = aggregate.Snapshot();
         var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
         return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
             Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
             state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
-            state.CompetitionId);
+            state.CompetitionId, state.CompetitionRulesVersion, state.MaximumSubstituteReentriesPerPlayer);
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {

@@ -120,12 +120,22 @@ public sealed class V1ContractCompatibilityTests
     public void State_response_exposes_selected_time_projection_fields()
     {
         var fixture = SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture;
+        fixture = fixture with
+        {
+            CompetitionId = "synthetic-competition",
+            CompetitionRulesVersion = "rules-v1",
+            MaximumSubstituteReentriesPerPlayer = 0
+        };
         var state = new SyntheticMatchService(fixture).GetState(3600).ToResponse();
         AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
             "provenance", "frame", "lastSequence", "possessionTeamId",
-            "homeActivePlayers", "awayActivePlayers", "players", "competitionId");
+            "homeActivePlayers", "awayActivePlayers", "players", "competitionId", "competitionRulesVersion",
+            "maximumSubstituteReentriesPerPlayer");
         Assert.Equal("replay", state.Status);
         Assert.Equal("secondhalf", state.Phase);
+        Assert.Equal("synthetic-competition", state.CompetitionId);
+        Assert.Equal("rules-v1", state.CompetitionRulesVersion);
+        Assert.Equal(0, state.MaximumSubstituteReentriesPerPlayer);
         Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
         Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
     }
