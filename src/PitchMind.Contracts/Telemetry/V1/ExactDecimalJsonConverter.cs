@@ -54,7 +54,7 @@ public sealed class ExactDecimalJsonConverter : JsonConverter<decimal>
             coefficient *= BigInteger.Pow(10, (int)-scale);
             scale = 0;
         }
-        while (scale > 28 && coefficient % 10 == 0)
+        while (scale > 0 && (scale > 28 || coefficient > MaximumCoefficient) && coefficient % 10 == 0)
         {
             coefficient /= 10;
             scale--;
