@@ -133,7 +133,11 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             context.FixtureVersion != sourceIdentity.FixtureVersion || context.Provenance != sourceIdentity.Provenance ||
             context.PitchLengthMetres != sourceIdentity.PitchLengthMetres ||
             context.PitchWidthMetres != sourceIdentity.PitchWidthMetres ||
-            seed.Provenance != sourceIdentity.Provenance || projection.State.Provenance != sourceIdentity.Provenance)
+            seed.Provenance != sourceIdentity.Provenance || projection.State.Provenance != sourceIdentity.Provenance ||
+            seed.SchemaVersion == "match-replay-seed-v2" && seed.CompetitionRules != sourceIdentity.CompetitionRules ||
+            projection.State.CompetitionId != sourceIdentity.CompetitionRules.CompetitionId ||
+            projection.State.CompetitionRulesVersion != sourceIdentity.CompetitionRules.Version ||
+            projection.State.MaximumSubstituteReentriesPerPlayer != sourceIdentity.CompetitionRules.MaximumSubstituteReentriesPerPlayer)
             throw new InvalidDataException("Immutable replay context is incomplete, unsupported, or inconsistent with the match source.");
     }
 

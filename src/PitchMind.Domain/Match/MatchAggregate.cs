@@ -8,7 +8,8 @@ public enum MatchPhase { NotStarted, FirstHalf, HalfTime, SecondHalf, FullTime }
 public sealed record MatchPlayerState(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
 public sealed record MatchReplayPlayer(string PlayerId, string TeamId);
 public sealed record MatchReplaySeed(string HomeTeamId, string AwayTeamId, IReadOnlyList<MatchReplayPlayer> Players,
-    IReadOnlyList<string> ActivePlayerIds, string Provenance, string SchemaVersion = "match-replay-seed-v1");
+    IReadOnlyList<string> ActivePlayerIds, string Provenance, MatchCompetitionRules? CompetitionRules = null,
+    string SchemaVersion = "match-replay-seed-v2");
 
 public sealed record MatchState(
     string MatchId,
@@ -98,7 +99,7 @@ public sealed class MatchAggregate
         _replaySeed = new MatchReplaySeed(homeTeamId, awayTeamId,
             Array.AsReadOnly(_playerTeams.OrderBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => new MatchReplayPlayer(p.Key, p.Value)).ToArray()),
-            Array.AsReadOnly(_activePlayers.Order(StringComparer.Ordinal).ToArray()), provenance);
+            Array.AsReadOnly(_activePlayers.Order(StringComparer.Ordinal).ToArray()), provenance, _competitionRules);
     }
 
     public MatchReplaySeed ReplaySeed => _replaySeed;
@@ -106,10 +107,12 @@ public sealed class MatchAggregate
     public static MatchAggregate FromReplaySeed(MatchId id, MatchReplaySeed seed)
     {
         ArgumentNullException.ThrowIfNull(seed);
-        if (seed.SchemaVersion != "match-replay-seed-v1" || seed.Players is null || seed.ActivePlayerIds is null)
+        if (seed.SchemaVersion is not ("match-replay-seed-v1" or "match-replay-seed-v2") ||
+            seed.Players is null || seed.ActivePlayerIds is null)
             throw new InvalidDataException("Replay seed version or roster is unsupported.");
         return new MatchAggregate(id, seed.HomeTeamId, seed.AwayTeamId,
-            seed.Players.Select(player => (player.PlayerId, player.TeamId)), seed.ActivePlayerIds, seed.Provenance);
+            seed.Players.Select(player => (player.PlayerId, player.TeamId)), seed.ActivePlayerIds, seed.Provenance,
+            seed.SchemaVersion == "match-replay-seed-v1" ? null : seed.CompetitionRules);
     }
 
     public SimulationEvent AppliedSourceEvent(MatchEvent expectedEvent)

@@ -60,7 +60,8 @@ public sealed class GetMatchAtQueryServiceTests
         var matchId = new MatchId(Guid.Parse(fixture.MatchId));
         var replaySeed = new MatchAggregate(matchId, fixture.Home.Id, fixture.Away.Id,
             fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId)),
-            fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId), fixture.Provenance).ReplaySeed;
+            fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId), fixture.Provenance,
+            new MatchCompetitionRules("synthetic-test-competition", "rules-v1", 0)).ReplaySeed;
         var context = new MatchReplayContext(fixture.Version, fixture.Home.Name, fixture.Away.Name, fixture.DurationSeconds,
             fixture.HalfTimeSeconds, fixture.PitchLengthMetres, fixture.PitchWidthMetres, "metres-v1",
             fixture.CoordinateConvention, fixture.Provenance);
@@ -104,6 +105,9 @@ public sealed class GetMatchAtQueryServiceTests
         Assert.Equal(atGoal.DerivedOutputSha256, repeated.DerivedOutputSha256);
         Assert.Equal(atGoal.ReplayInputSha256, repeated.ReplayInputSha256);
         Assert.Equal(JsonSerializer.Serialize(atGoal.DerivedInsights), JsonSerializer.Serialize(repeated.DerivedInsights));
+        Assert.Equal("synthetic-test-competition", atGoal.ReplayedState.CompetitionId);
+        Assert.Equal("rules-v1", atGoal.ReplayedState.CompetitionRulesVersion);
+        Assert.Equal(0, atGoal.ReplayedState.MaximumSubstituteReentriesPerPlayer);
         Assert.DoesNotContain(insight.EventIds, id => !atGoal.Events.Any(item => item.EventId == id));
         Assert.DoesNotContain(insight.FrameIds, id => fixture.Frames.Single(frame => frame.Id == id).ClockSeconds > atGoal.SelectedSeconds);
     }
@@ -303,9 +307,10 @@ public sealed class GetMatchAtQueryServiceTests
             await foreach (var item in ReadReplayEventsAtAsync(selected, selectedSeconds, cancellationToken)) selectedReplayEvents.Add(item);
             var selectedFrames = new List<MatchReplayFrame>();
             await foreach (var item in ReadReplayFramesAtAsync(selected, selectedSeconds, cancellationToken)) selectedFrames.Add(item);
-            var sourceIdentity = replayContext is null ? new MatchReplaySourceIdentity("", "", 0, 0) :
+            var sourceIdentity = replayContext is null ? new MatchReplaySourceIdentity("", "", 0, 0, new(null, null, null)) :
                 new MatchReplaySourceIdentity(replayContext.FixtureVersion, replayContext.Provenance,
-                    replayContext.PitchLengthMetres, replayContext.PitchWidthMetres);
+                    replayContext.PitchLengthMetres, replayContext.PitchWidthMetres,
+                    replaySeed?.CompetitionRules ?? new(null, null, null));
             return new(selected, selectedEvents, replaySeed, replayContext, sourceIdentity, selectedReplayEvents, selectedFrames);
         }
 

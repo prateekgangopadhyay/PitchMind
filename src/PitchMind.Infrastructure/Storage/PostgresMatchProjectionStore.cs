@@ -213,6 +213,13 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         {
             if (value.ReplaySeed.Provenance != value.Provenance)
                 throw new ArgumentException("Replay seed provenance must match the immutable match source.", nameof(value));
+            var sourceRules = new MatchCompetitionRules(value.CompetitionId, value.CompetitionRulesVersion,
+                value.MaximumSubstituteReentriesPerPlayer);
+            var replayRules = value.ReplaySeed.SchemaVersion == "match-replay-seed-v1"
+                ? new MatchCompetitionRules(null, null, null)
+                : value.ReplaySeed.CompetitionRules;
+            if (replayRules != sourceRules)
+                throw new ArgumentException("Replay seed competition rules must match the immutable match source.", nameof(value));
             try { _ = MatchAggregate.FromReplaySeed(new(value.MatchId), value.ReplaySeed); }
             catch (Exception exception) when (exception is ArgumentException or InvalidDataException or NullReferenceException)
             {
