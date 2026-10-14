@@ -108,6 +108,7 @@ match.MapGet("/state", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/events", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/insights", (HttpContext context) => MatchDataUnavailable(context));
 match.MapGet("/evidence/{insightId}", (HttpContext context) => MatchDataUnavailable(context));
+match.MapGet("/evidence/{insightId}/replay", (HttpContext context) => MatchDataUnavailable(context));
 match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync).RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();

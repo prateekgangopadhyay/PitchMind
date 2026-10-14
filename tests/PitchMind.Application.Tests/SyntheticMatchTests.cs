@@ -1,3 +1,4 @@
+using PitchMind.Domain.Match;
 using System.Text.Json;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Analytics;
@@ -407,6 +408,196 @@ public sealed class SyntheticMatchTests
 
         Assert.Throws<ArgumentException>(() => KeyMomentGenerator.Generate(matchId.ToString(), "fixture-v1", new string('a', 64), "synthetic", null,
             20, 2, "home", "Home", "away", "Away", events, Array.Empty<TacticalInsight>()));
+    }
+
+    [Fact] public void GoldenReplayCatalogHasVersionedPositiveAndNegativeDetectionOutcomes()
+    {
+        using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "press-sequence-goldens-v1.json")));
+        var root = catalog.RootElement;
+        Assert.Equal("press-sequence-goldens-v1", root.GetProperty("catalogVersion").GetString());
+        Assert.Equal(SyntheticFixtureGenerator.Version, root.GetProperty("sourceFixtureVersion").GetString());
+        Assert.Equal(PressSequencePolicy.UnapprovedDemoV2.Version, root.GetProperty("detectorVersion").GetString());
+        Assert.Equal("synthetic", root.GetProperty("provenance").GetString());
+
+        var snapshot = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(5400);
+        var selectedState = new MatchState(snapshot.MatchId, snapshot.ClockSeconds, snapshot.Period,
+            snapshot.Phase, snapshot.HomeScore, snapshot.AwayScore, snapshot.PossessionTeamId,
+            snapshot.HomeActivePlayers, snapshot.AwayActivePlayers, snapshot.Players, snapshot.LastSequence, snapshot.Provenance);
+        foreach (var golden in root.GetProperty("cases").EnumerateArray())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(golden.GetProperty("rationale").GetString()));
+            var fixture = SyntheticFixtureGenerator.Generate();
+            var mutation = golden.GetProperty("mutation").GetString();
+            if (mutation == "complete-response")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "pressured-pass" ? item with { Outcome = "complete" } : item).ToArray() };
+            else if (mutation == "wrong-regain-team")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "high-regain" ? item with { TeamId = fixture.Away.Id } : item).ToArray() };
+            else if (mutation == "missing-pressure-frame")
+                fixture = fixture with { Frames = fixture.Frames.Where(frame => frame.ClockSeconds != 3293).ToArray() };
+            else if (mutation == "missing-pressure-presser")
+                fixture = fixture with { Frames = fixture.Frames.Select(frame => frame.ClockSeconds == 3293
+                    ? frame with { Players = frame.Players.Where(player => player.PlayerId != "harbour-10").ToArray() }
+                    : frame).ToArray() };
+            else if (mutation == "response-gap-exceeds-policy")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action switch
+                {
+                    "pressured-pass" => item with { Event = item.Event with { ClockSeconds = 3304, OccurredAt = item.Event.OccurredAt.AddSeconds(8) } },
+                    "high-regain" => item with { Event = item.Event with { ClockSeconds = 3305, OccurredAt = item.Event.OccurredAt.AddSeconds(6) } },
+                    "cutback" => item with { Event = item.Event with { ClockSeconds = 3308, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    "shot" => item with { Event = item.Event with { ClockSeconds = 3312, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    "goal" when item.Event.ClockSeconds == 3309 => item with { Event = item.Event with { ClockSeconds = 3313, OccurredAt = item.Event.OccurredAt.AddSeconds(4) } },
+                    _ => item
+                }).ToArray() };
+            else if (mutation == "duplicate-source-event-id")
+            {
+                var originalIndex = fixture.Events.ToList().FindIndex(item => item.Action == "press-arrival");
+                var items = fixture.Events.ToList();
+                items.Insert(originalIndex + 1, items[originalIndex] with
+                {
+                    Event = items[originalIndex].Event with { Sequence = items[originalIndex].Event.Sequence + 1 }
+                });
+                fixture = fixture with { Events = items.Select((item, index) => item with
+                    { Event = item.Event with { Sequence = index } }).ToArray() };
+            }
+            else if (mutation == "pressure-period-boundary")
+                fixture = fixture with { Events = fixture.Events.Select(item => item.Action == "press-arrival" ? item with { Event = item.Event with { Period = 1 } } : item).ToArray() };
+            else Assert.Equal("none", mutation);
+
+            var input = new PressSequenceInput(fixture.MatchId, fixture.Version, fixture.Provenance, null, 5400,
+                fixture.Events[^1].Event.Sequence, fixture.Home.Id, fixture.Home.Name, fixture.Away.Id, fixture.Away.Name,
+                "stadium-metres", fixture.PitchLengthMetres, fixture.PitchWidthMetres, fixture.Events, fixture.Frames,
+                PressSequenceDetector.ComputeSourceSha256(fixture))
+            {
+                SelectedState = selectedState
+            };
+            if (golden.TryGetProperty("expectedFailure", out var expectedFailure))
+            {
+                Assert.Equal("duplicate-source-event-id", expectedFailure.GetString());
+                Assert.Throws<InvalidDataException>(() => PressSequenceDetector.Detect(input));
+                continue;
+            }
+
+            var insights = PressSequenceDetector.Detect(input);
+            Assert.Equal(golden.GetProperty("expectedInsightCount").GetInt32(), insights.Count);
+            Assert.All(insights, insight =>
+            {
+                Assert.Equal("simulated", insight.Classification);
+                Assert.Equal("synthetic", insight.EvidenceGraph!.Provenance);
+                Assert.Equal("unapproved-demo", insight.PolicyStatus);
+                Assert.False(insight.Publishable);
+                Assert.False(insight.EvidenceGraph.Publishable);
+            });
+        }
+    }
+
+    [Fact] public void MechanismReplayPreservesSourceTimeAndPeriodSemantics()
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var insight = service.GetInsights(5400).Single();
+        var replay = service.GetMechanismReplay(insight.Id, 5400)!;
+
+        Assert.Equal("synthetic", replay.Provenance);
+        Assert.Null(replay.CanonicalRevision);
+        Assert.False(replay.Publishable);
+        Assert.Matches("^[0-9a-f]{64}$", replay.SourceSha256);
+        Assert.All(replay.Events, item =>
+        {
+            var source = service.Fixture.Events.Single(candidate => candidate.Event.EventId == item.Event.EventId);
+            Assert.Equal(source.Event.Sequence, item.Event.Sequence);
+            Assert.Equal(source.Event.ClockSeconds, item.Event.ClockSeconds);
+            Assert.Equal(source.Event.Period, item.Event.Period);
+            Assert.Equal(source.Event.OccurredAt, item.Event.OccurredAt);
+        });
+        Assert.All(replay.Frames, item => Assert.Equal(service.Fixture.Frames.Single(frame => frame.Id == item.Id), item));
+    }
+
+    [Fact] public void MirroringPitchCoordinatesPreservesTheSameMechanismAndEvidenceIdentity()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var expected = new SyntheticMatchService(fixture).GetInsights(5400).Single();
+        var mirrored = fixture with
+        {
+            Frames = fixture.Frames.Select(frame => frame with
+            {
+                BallX = fixture.PitchLengthMetres - frame.BallX,
+                Players = frame.Players.Select(player => player with { X = fixture.PitchLengthMetres - player.X }).ToArray()
+            }).ToArray()
+        };
+        var actual = new SyntheticMatchService(mirrored).GetInsights(5400).Single();
+
+        Assert.Equal(expected.Id, actual.Id);
+        Assert.Equal(expected.EventIds, actual.EventIds);
+        Assert.Equal(expected.FrameIds, actual.FrameIds);
+        Assert.Equal(expected.Conditions, actual.Conditions);
+    }
+
+    [Fact] public void MechanismReplayExportsOnlySelectedEvidenceAndStableParticipantPositions()
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var insight = service.GetInsights(3309).Single();
+        var first = service.GetMechanismReplay(insight.Id, 3309)!;
+        var second = service.GetMechanismReplay(insight.Id, 3309)!;
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(insight.EventIds, first.MechanismEventIds);
+        Assert.Equal(first.EvidenceGraph.Nodes.Where(node => node.Kind == "event").Select(node => node.EventId).Order(), first.EventIds.Order().Select(id => (Guid?)id));
+        Assert.Equal(insight.FrameIds, first.FrameIds);
+        Assert.Equal(insight.EvidenceGraph!.ClaimNodeId, first.EvidenceGraph.ClaimNodeId);
+        Assert.Equal(insight.EvidenceGraph.Nodes.Select(node => node.Id), first.EvidenceGraph.Nodes.Select(node => node.Id));
+        Assert.Equal(insight.EvidenceGraph.Edges, first.EvidenceGraph.Edges);
+        Assert.Equal(3309, first.SelectedTimeSeconds);
+        Assert.All(first.Events, item => Assert.True(item.Event.ClockSeconds <= first.SelectedTimeSeconds));
+        Assert.All(first.Frames, frame => Assert.True(frame.ClockSeconds <= first.SelectedTimeSeconds));
+        Assert.Contains(first.Events.Select(item => item.PlayerId).Where(id => !string.IsNullOrWhiteSpace(id)), id => first.ParticipantIds.Contains(id));
+        Assert.Contains(first.Frames.SelectMany(frame => frame.Players), position => first.ParticipantIds.Contains(position.PlayerId));
+        Assert.False(first.Publishable);
+    }
+
+    [Fact] public void ReplayIsUnavailableBeforeTheCompleteEvidenceExists()
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var insightId = service.GetInsights(3309).Single().Id;
+        Assert.Null(service.GetMechanismReplay(insightId, 3308));
+        Assert.Null(service.GetMechanismReplay("unknown", 5400));
+    }
+
+    [Fact] public void MechanismReplayRejectsEventPayloadThatDisagreesWithGraphClock()
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var insight = service.GetInsights(3309).Single();
+        var evidence = service.GetEvidence(insight.Id, 3309)!;
+        var first = evidence.Events[0];
+        var tampered = evidence with
+        {
+            Events = evidence.Events.Select((item, index) => index == 0
+                ? item with { Event = item.Event with { ClockSeconds = item.Event.ClockSeconds + 1 } }
+                : item).ToArray()
+        };
+
+        Assert.NotEqual(first.Event.ClockSeconds, tampered.Events[0].Event.ClockSeconds);
+        Assert.Throws<InvalidDataException>(() => MechanismReplayBuilder.Build(tampered, insight.ThroughSequence));
+    }
+
+    [Theory]
+    [InlineData("event")]
+    [InlineData("frame")]
+    public void MechanismReplayRejectsDuplicateGraphSourceReferences(string kind)
+    {
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
+        var insight = service.GetInsights(3309).Single();
+        var evidence = service.GetEvidence(insight.Id, 3309)!;
+        var graph = evidence.Insight.EvidenceGraph!;
+        var sourceNode = graph.Nodes.First(node => node.Kind == kind);
+        var duplicateNode = sourceNode with { Id = sourceNode.Id + ":duplicate" };
+        var tampered = evidence with
+        {
+            Insight = evidence.Insight with
+            {
+                EvidenceGraph = graph with { Nodes = graph.Nodes.Append(duplicateNode).ToArray() }
+            }
+        };
+
+        Assert.Throws<InvalidDataException>(() => MechanismReplayBuilder.Build(tampered, insight.ThroughSequence));
     }
 
     [Fact] public void SuccessfulCirculationDoesNotBecomePressingTrap()

@@ -1,0 +1,16 @@
+{
+  "catalogVersion": "press-sequence-goldens-v1",
+  "sourceFixtureVersion": "synthetic-v3",
+  "detectorVersion": "press-sequence-v2",
+  "provenance": "synthetic",
+  "cases": [
+    { "id": "baseline-positive", "mutation": "none", "expectedInsightCount": 1, "rationale": "Demo policy emits a candidate only when the ordered pressure, forced response and regain events resolve in one period with enough sampled frame coverage." },
+    { "id": "completed-response-negative", "mutation": "complete-response", "expectedInsightCount": 0, "rationale": "A completed pressured pass does not satisfy the configured forced-error response condition." },
+    { "id": "opponent-does-not-win-regain", "mutation": "wrong-regain-team", "expectedInsightCount": 0, "rationale": "The pressing side must win the regain; an opponent-team regain is not evidence for this mechanism." },
+    { "id": "insufficient-pressure-coverage", "mutation": "missing-pressure-frame", "expectedInsightCount": 0, "rationale": "The sampled frame window must meet the demo policy coverage threshold around the pressure event." },
+    { "id": "pressure-frame-missing-presser", "mutation": "missing-pressure-presser", "expectedInsightCount": 0, "rationale": "A pressure label without an observed presser position cannot support the configured distance check." },
+    { "id": "response-gap-exceeds-policy", "mutation": "response-gap-exceeds-policy", "expectedInsightCount": 0, "rationale": "The pressured response must follow the pressure arrival within the versioned ten-second demo window." },
+    { "id": "pressure-sequence-crosses-period", "mutation": "pressure-period-boundary", "expectedInsightCount": 0, "rationale": "The ordered mechanism must remain within a single match period." },
+    { "id": "duplicate-source-event-id", "mutation": "duplicate-source-event-id", "expectedInsightCount": 0, "expectedFailure": "duplicate-source-event-id", "rationale": "A repeated source event ID is malformed ordered input and must be rejected before detection." }
+  ]
+}

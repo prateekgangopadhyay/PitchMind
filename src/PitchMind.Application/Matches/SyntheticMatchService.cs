@@ -136,6 +136,25 @@ public sealed class SyntheticMatchService
             insight.Conditions,
             new[] { "Synthetic-only candidate; the detector policy is unapproved and publishable is false.", "The sequence does not establish causality or managerial intent.", "Routine frames are sparse; do not infer continuous movement or closing speed." });
     }
+    public MechanismReplay? GetMechanismReplay(string insightId, int clockSeconds)
+    {
+        ValidateTime(clockSeconds);
+        var evidence = GetEvidence(insightId, clockSeconds);
+        if (evidence is null) return null;
+        var events = GetEvents(clockSeconds);
+        var throughSequence = events.Count == 0 ? -1 : events[^1].Event.Sequence;
+        var graph = evidence.Insight.EvidenceGraph!;
+        var eventIds = graph.Nodes.Where(node => node.Kind == "event" && node.EventId.HasValue)
+            .Select(node => node.EventId!.Value).ToHashSet();
+        var frameIds = graph.Nodes.Where(node => node.Kind == "frame" && node.FrameId is not null)
+            .Select(node => node.FrameId!).ToHashSet(StringComparer.Ordinal);
+        evidence = evidence with
+        {
+            Events = Array.AsReadOnly(Fixture.Events.Where(item => eventIds.Contains(item.Event.EventId)).ToArray()),
+            Frames = Array.AsReadOnly(Fixture.Frames.Where(frame => frameIds.Contains(frame.Id)).ToArray())
+        };
+        return MechanismReplayBuilder.Build(evidence, throughSequence);
+    }
     public MatchExplanation? Explain(string insightId, int clockSeconds, string audience = "fan")
     {
         if (audience is not ("fan" or "analyst")) throw new ArgumentException("Audience must be fan or analyst.", nameof(audience));

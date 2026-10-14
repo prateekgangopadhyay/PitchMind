@@ -38,10 +38,11 @@ match_routes = [
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/events", None),
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/insights", None),
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight/replay", None),
     ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
 ]
 for route, payload in match_routes:
     problem = request(route, 503, payload)
     assert problem["code"] == "MATCH_DATA_UNAVAILABLE", (route, problem)
     assert problem["status"] == 503, (route, problem)
-print("PASS: health is available and match reads return 503 until canonical route composition is implemented")
+print("PASS: health is available and match reads/replay return 503 until canonical route composition is implemented")
