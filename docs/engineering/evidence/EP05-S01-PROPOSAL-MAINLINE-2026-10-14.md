@@ -16,8 +16,12 @@ This slice adds no detector behavior, public API contract, candidate-event mappi
 - `dotnet test tests/PitchMind.Domain.Tests/PitchMind.Domain.Tests.csproj -c Release -m:1 --disable-build-servers -p:NuGetAudit=false`: **47 passed, 0 failed, 0 skipped** on code commit `4facc812994f8c24f4e68f25a60e3f9fd0e0b03a`.
 - Tests validate complete taxonomy, required evidence fields, malformed proposals, no self-approval, retained candidate source digest and manifest/feed byte match. Digest equality proves file identity only, not meaning or realism.
 - `git diff --check` passed after the documentation update.
-- NuGet vulnerability audit was disabled. Independent exact-head review and hosted CI have not run for this restack.
+- NuGet vulnerability audit was disabled. Independent read-only review of exact code tree `20d2dfc4018d870d0b338459038a81458ac91ead` (PR head `bbdef79b195f3ea92e404641f6a8eb3e9e6055e3`) against base `673ed64d2032484ff3568c2b1571a457b7547f5b` found no actionable P0–P2 issue. Reviewer did not run tests. Hosted CI remains unobserved.
 
 ## Open gates
 
 Product Owner and football-analyst review of definitions/examples, accepted fixtures, source coordinate/clock/player-metric semantics, canonical mappings, football realism and end-to-end concept-to-signal trace remain outstanding. The current proposal has no trusted approval verifier and cannot be promoted to `approved` by editing JSON alone. EP05-S01 remains partial and unaccepted. No Azure resource or deployment change was made.
+
+## Review outcome
+
+The independent reviewer confirmed the proposal definitions align with the existing LLD evidence limits, the validator blocks self-approval and unsupported source-certification states, and the slice changes no API or migration boundary. Product Owner/football approval and story acceptance remain pending.
