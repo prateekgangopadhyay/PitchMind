@@ -67,6 +67,40 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(MatchEventType.Goal, actions[^1].Event.Type);
     }
 
+    [Fact] public void PressingGoldenCapturesSpatialTriggerRegainAndSeparatedCounterexample()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        static PitchPosition Player(TrackingFrame frame, string id) => frame.Players.Single(player => player.PlayerId == id);
+        static double Distance(PitchPosition left, PitchPosition right)
+        {
+            var dx = left.X - right.X;
+            var dy = left.Y - right.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        var pressFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3293);
+        var pressEvent = fixture.Events.Single(item => item.Event.ClockSeconds == pressFrame.ClockSeconds);
+        var keeper = Player(pressFrame, "ridge-1");
+        var pressingForward = Player(pressFrame, "harbour-10");
+        Assert.Equal(MatchEventType.Pressure, pressEvent.Event.Type);
+        Assert.Equal(pressingForward.PlayerId, pressEvent.PlayerId);
+        Assert.InRange(Distance(keeper, pressingForward), 0, 3);
+        Assert.InRange(Math.Sqrt(Math.Pow(keeper.X - pressFrame.BallX, 2) + Math.Pow(keeper.Y - pressFrame.BallY, 2)), 0, 1);
+
+        var regainFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3299);
+        var regainEvent = fixture.Events.Single(item => item.Event.ClockSeconds == regainFrame.ClockSeconds);
+        var ballWinner = Player(regainFrame, "harbour-11");
+        var pressedDefender = Player(regainFrame, "ridge-2");
+        Assert.Equal(MatchEventType.Turnover, regainEvent.Event.Type);
+        Assert.Equal(ballWinner.PlayerId, regainEvent.PlayerId);
+        Assert.InRange(Distance(ballWinner, pressedDefender), 0, 2);
+        Assert.InRange(Math.Sqrt(Math.Pow(ballWinner.X - regainFrame.BallX, 2) + Math.Pow(ballWinner.Y - regainFrame.BallY, 2)), 0, 1);
+
+        var separatedFrame = fixture.Frames.Single(frame => frame.ClockSeconds == 3000);
+        var separatedForward = Player(separatedFrame, "harbour-10");
+        Assert.True(Math.Sqrt(Math.Pow(separatedForward.X - separatedFrame.BallX, 2) + Math.Pow(separatedForward.Y - separatedFrame.BallY, 2)) > 10);
+    }
+
     [Fact] public void AttackDirectionChangesAtHalfTime()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
