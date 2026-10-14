@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Npgsql;
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
@@ -46,7 +47,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -159,7 +160,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(5, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(6, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -427,7 +428,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -484,6 +485,50 @@ public sealed class PostgresLedgerTests
             CancellationToken.None));
         Assert.Equal(OutboxDispatchResult.Published, await new PostgresOutboxDispatcher(source, new CountingPublisher())
             .DispatchOneAsync(CancellationToken.None));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ProjectionAtTimeReturnsLatestCanonicalStateAtOrBeforeRequestedClock()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await IsolateOutboxAsync(source);
+        var matchId = MatchId.New();
+        var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
+        var competitionRules = new MatchCompetitionRules("synthetic-test-competition", "rules-v1", 1);
+        var aggregate = new MatchAggregate(matchId, "home", "away", players, players.Select(p => p.Item1),
+            "approved-synthetic-test", competitionRules);
+        var sourceHash = new string('a', 64);
+        var metadata = new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", sourceHash,
+            "approved-synthetic-test", 105m, 68m, competitionRules.CompetitionId, competitionRules.Version,
+            competitionRules.MaximumSubstituteReentriesPerPlayer);
+        await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(metadata, CancellationToken.None);
+        var writer = new CanonicalMatchEventWriter(new PostgresCanonicalUpdateStore(source));
+
+        async Task Append(long sequence, MatchEventType type, int clock, int revision)
+        {
+            var evt = MatchEvent.Create(Guid.NewGuid(), matchId, sequence, type, clock, 1, DateTimeOffset.UtcNow);
+            await writer.AppendAsync(aggregate, new SimulationEvent(evt, "home", "home-1", type.ToString(), "complete"),
+                revision, "aggregate-v1", sourceHash, CancellationToken.None);
+        }
+
+        await Append(0, MatchEventType.KickOff, 0, 1);
+        await Append(1, MatchEventType.Pass, 10, 2);
+        await Append(2, MatchEventType.Pass, 10, 3);
+        var readStore = new PostgresMatchProjectionStore(source);
+
+        var beforeFirstPass = await readStore.ReadProjectionAtTimeAsync(matchId.Value, 3, 9, CancellationToken.None);
+        var atSameClock = await readStore.ReadProjectionAtTimeAsync(matchId.Value, 3, 10, CancellationToken.None);
+        var betweenEvents = await readStore.ReadProjectionAtTimeAsync(matchId.Value, 3, 20, CancellationToken.None);
+        var earlierAdmission = await readStore.ReadProjectionAtTimeAsync(matchId.Value, 2, 10, CancellationToken.None);
+
+        Assert.Equal(0, beforeFirstPass?.AsOfSequence);
+        Assert.Equal(2, atSameClock?.AsOfSequence);
+        Assert.Equal(2, betweenEvents?.AsOfSequence);
+        Assert.Equal(1, earlierAdmission?.AsOfSequence);
+        Assert.Equal("synthetic-test-competition", atSameClock?.State.CompetitionId);
+        Assert.Equal("rules-v1", atSameClock?.State.CompetitionRulesVersion);
+        Assert.Equal(1, atSameClock?.State.MaximumSubstituteReentriesPerPlayer);
     }
 
     [PostgresIntegrationFact]

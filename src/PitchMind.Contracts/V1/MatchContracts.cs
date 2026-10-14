@@ -41,7 +41,8 @@ public sealed record MatchStateResponse(
     string? PossessionTeamId,
     int HomeActivePlayers,
     int AwayActivePlayers,
-    IReadOnlyList<MatchPlayerStateResponse> Players);
+    IReadOnlyList<MatchPlayerStateResponse> Players,
+    string? CompetitionId = null);
 
 public sealed record MatchPlayerStateResponse(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
 

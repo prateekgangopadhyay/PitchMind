@@ -19,8 +19,9 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await using (var command = new NpgsqlCommand("""
-            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (match_id) DO NOTHING
+            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance, pitch_length_metres, pitch_width_metres,
+                competition_id, competition_rules_version, max_substitute_reentries_per_player)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (match_id) DO NOTHING
             """, connection, transaction))
         {
             AddMetadata(command, metadata);
@@ -28,7 +29,8 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         }
         await using (var command = new NpgsqlCommand("""
             SELECT fixture_version = $2 AND source_version = $3 AND source_sha256 = $4 AND provenance = $5
-                AND pitch_length_metres = $6 AND pitch_width_metres = $7
+                AND pitch_length_metres = $6 AND pitch_width_metres = $7 AND competition_id IS NOT DISTINCT FROM $8
+                AND competition_rules_version IS NOT DISTINCT FROM $9 AND max_substitute_reentries_per_player IS NOT DISTINCT FROM $10
             FROM pitchmind.matches WHERE match_id = $1
             """, connection, transaction))
         {
@@ -46,7 +48,8 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             throw new ArgumentOutOfRangeException(projectionRevision < 1 ? nameof(projectionRevision) : nameof(canonicalRevision));
         await using var command = dataSource.CreateCommand("""
             SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
-                p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256
+                p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256,
+                m.competition_id, m.competition_rules_version, m.max_substitute_reentries_per_player
             FROM pitchmind.match_projections p
             JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
             WHERE p.match_id = $1 AND p.canonical_revision = $2 AND p.revision = $3
@@ -59,6 +62,36 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         if (reader.IsDBNull(0)) throw new InvalidDataException("Projection has no canonical admission revision.");
         var projection = ReadProjection(matchId, reader.GetInt64(0), reader.GetInt32(1), reader.GetInt64(2), reader.GetInt32(3),
             reader.GetString(4), reader.GetString(5).Trim(), reader.GetString(6), reader.GetString(7).Trim());
+        ValidateCompetitionContext(projection.State, reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9), reader.IsDBNull(10) ? null : reader.GetInt32(10));
+        return projection;
+    }
+
+    public async Task<PersistedMatchProjection?> ReadProjectionAtTimeAsync(Guid matchId, long canonicalRevision,
+        int atClockSeconds, CancellationToken cancellationToken)
+    {
+        if (matchId == Guid.Empty || canonicalRevision < 1 || atClockSeconds < 0)
+            throw new ArgumentOutOfRangeException(atClockSeconds < 0 ? nameof(atClockSeconds) : nameof(canonicalRevision));
+        await using var command = dataSource.CreateCommand("""
+            SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds,
+                p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256,
+                m.competition_id, m.competition_rules_version, m.max_substitute_reentries_per_player
+            FROM pitchmind.match_projections p
+            JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
+            WHERE p.match_id = $1 AND p.canonical_revision <= $2 AND p.as_of_clock_seconds <= $3
+            ORDER BY p.as_of_clock_seconds DESC, p.as_of_sequence DESC, p.canonical_revision DESC, p.revision DESC
+            LIMIT 1
+            """);
+        command.Parameters.AddWithValue(matchId);
+        command.Parameters.AddWithValue(canonicalRevision);
+        command.Parameters.AddWithValue(atClockSeconds);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        if (reader.IsDBNull(0)) throw new InvalidDataException("Projection has no canonical admission revision.");
+        var projection = ReadProjection(matchId, reader.GetInt64(0), reader.GetInt32(1), reader.GetInt64(2), reader.GetInt32(3),
+            reader.GetString(4), reader.GetString(5).Trim(), reader.GetString(6), reader.GetString(7).Trim());
+        ValidateCompetitionContext(projection.State, reader.IsDBNull(8) ? null : reader.GetString(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9), reader.IsDBNull(10) ? null : reader.GetInt32(10));
         return projection;
     }
 
@@ -79,6 +112,7 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         await using (var command = new NpgsqlCommand("""
             SELECT i.match_id, i.revision, i.as_of_sequence, i.detector_version, i.truth_class, i.summary, i.conditions_json::text,
                 m.fixture_version, m.source_version, m.source_sha256, m.provenance, m.pitch_length_metres, m.pitch_width_metres,
+                m.competition_id, m.competition_rules_version, m.max_substitute_reentries_per_player,
                 p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_json::text, p.state_sha256,
                 i.canonical_revision
             FROM pitchmind.insights i
@@ -99,15 +133,19 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             summary = reader.GetString(5);
             conditionsJson = reader.GetString(6);
             source = new(matchId, reader.GetString(7), reader.GetString(8), reader.GetString(9).Trim(),
-                reader.GetString(10), reader.GetDecimal(11), reader.GetDecimal(12));
+                reader.GetString(10), reader.GetDecimal(11), reader.GetDecimal(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13), reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetInt32(15));
             Validate(source);
-            var projectionSourceSha = reader.GetString(16).Trim();
+            var projectionSourceSha = reader.GetString(19).Trim();
             if (!string.Equals(projectionSourceSha, source.SourceSha256, StringComparison.Ordinal))
                 throw new InvalidDataException("Projection source hash does not match the registered match source.");
-            if (reader.IsDBNull(19)) throw new InvalidDataException("Insight has no canonical admission revision.");
-            var canonicalRevision = reader.GetInt64(19);
-            projection = ReadProjection(matchId, canonicalRevision, revision, reader.GetInt64(13), reader.GetInt32(14),
-                reader.GetString(15), projectionSourceSha, reader.GetString(17), reader.GetString(18).Trim());
+            if (reader.IsDBNull(22)) throw new InvalidDataException("Insight has no canonical admission revision.");
+            var canonicalRevision = reader.GetInt64(22);
+            projection = ReadProjection(matchId, canonicalRevision, revision, reader.GetInt64(16), reader.GetInt32(17),
+                reader.GetString(18), projectionSourceSha, reader.GetString(20), reader.GetString(21).Trim());
+            ValidateCompetitionContext(projection.State, source.CompetitionId, source.CompetitionRulesVersion,
+                source.MaximumSubstituteReentriesPerPlayer);
             stateSha256 = Hash(SerializeState(projection.State));
             if (projection.AsOfSequence < insightSequence)
                 throw new InvalidDataException("Insight references evidence later than its canonical projection.");
@@ -159,7 +197,11 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
     {
         if (value.MatchId == Guid.Empty || string.IsNullOrWhiteSpace(value.FixtureVersion) || string.IsNullOrWhiteSpace(value.SourceVersion) ||
             !IsSha256(value.SourceSha256) || string.IsNullOrWhiteSpace(value.Provenance) ||
-            !FootballPitchDimensions.AreValid((double)value.PitchLengthMetres, (double)value.PitchWidthMetres))
+            !FootballPitchDimensions.AreValid((double)value.PitchLengthMetres, (double)value.PitchWidthMetres) ||
+            value.CompetitionId is not null && string.IsNullOrWhiteSpace(value.CompetitionId) ||
+            value.CompetitionRulesVersion is not null && string.IsNullOrWhiteSpace(value.CompetitionRulesVersion) ||
+            value.MaximumSubstituteReentriesPerPlayer is < 0 ||
+            value.MaximumSubstituteReentriesPerPlayer.HasValue && string.IsNullOrWhiteSpace(value.CompetitionRulesVersion))
             throw new ArgumentException("Match source metadata is incomplete or invalid.", nameof(value));
     }
 
@@ -170,6 +212,13 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
             value.State.MatchId != value.MatchId.ToString("D") || value.State.LastSequence != value.AsOfSequence ||
             value.State.ClockSeconds > value.AsOfClockSeconds)
             throw new InvalidDataException("Persisted projection metadata and state are inconsistent.");
+    }
+
+    private static void ValidateCompetitionContext(MatchState state, string? competitionId, string? rulesVersion, int? maximumReentries)
+    {
+        if (state.CompetitionId != competitionId || state.CompetitionRulesVersion != rulesVersion ||
+            state.MaximumSubstituteReentriesPerPlayer != maximumReentries)
+            throw new InvalidDataException("Projection competition context does not match the registered match source.");
     }
 
     private static bool IsSha256(string value) => value.Length == 64 && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
@@ -185,5 +234,8 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
         command.Parameters.AddWithValue(value.Provenance);
         command.Parameters.AddWithValue(value.PitchLengthMetres);
         command.Parameters.AddWithValue(value.PitchWidthMetres);
+        command.Parameters.AddWithValue((object?)value.CompetitionId ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)value.CompetitionRulesVersion ?? DBNull.Value);
+        command.Parameters.AddWithValue((object?)value.MaximumSubstituteReentriesPerPlayer ?? DBNull.Value);
     }
 }
