@@ -48,6 +48,7 @@ public sealed class SyntheticFixtureTests
 
             Assert.Equal(invariant.MatchId, localized.MatchId);
             Assert.Equal(invariant.Events.Select(e => e.Event.EventId), localized.Events.Select(e => e.Event.EventId));
+            Assert.All(localized.Frames.SelectMany(frame => frame.Players), player => Assert.InRange(player.Y, 0, 68));
         }
         finally
         {

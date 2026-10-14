@@ -63,13 +63,14 @@ public static class SyntheticFixtureGenerator
 
     private static TrackingFrame Frame(int clock, SyntheticTeam home, SyntheticTeam away, int seed)
     {
+        var seedOffset = (int)(((long)seed % 52 + 52) % 52);
         var positions = new List<PitchPosition>();
         foreach (var team in new[] { home, away })
         foreach (var player in team.Players)
         {
             var attacksRight = (team.Id == home.Id) == (clock < 2700);
             var x = player.ShirtNumber == 1 ? 5 : 20 + (player.ShirtNumber / 3) * 16;
-            var y = 8 + ((player.ShirtNumber * 13 + seed) % 52);
+            var y = 8 + ((player.ShirtNumber * 13 + seedOffset) % 52);
             positions.Add(new(player.Id, team.Id, attacksRight ? x : 105 - x, y));
         }
 
