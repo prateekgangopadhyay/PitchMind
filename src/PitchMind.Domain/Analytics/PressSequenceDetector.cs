@@ -157,8 +157,45 @@ public static class PressSequenceDetector
             if (context is not null)
                 conditions.Add($"context: {context.Scoreline}; pressing team role {context.TeamRole}; active-player difference {context.NumericalAdvantage}; match phase {context.MatchPhase}; opponent possession changes from in-possession at the trigger to defending after the observed regain");
             conditions.Add($"policy: {policy.Version} ({policy.ReviewStatus}); publication approval is absent");
+            string EventNode(SimulationEvent item) => $"event:{item.Event.EventId:D}";
+            string FrameNode(TrackingFrame frame) => $"frame:{frame.Id}";
+            var evidenceConditions = Array.AsReadOnly(new[]
+            {
+                new TacticalEvidenceCondition("trigger", true,
+                    $"Completed back-pass at {trigger.Event.ClockSeconds}s, sequence {trigger.Event.Sequence}.", null,
+                    new[] { EventNode(trigger) }, null),
+                new TacticalEvidenceCondition("pressure", true,
+                    $"Observed separation {distance:F2}m at {pressure.Event.ClockSeconds}s.",
+                    $"<= {policy.MaximumPressureDistanceMetres:F0}m (unapproved demonstration threshold)",
+                    new[] { EventNode(pressure), FrameNode(pressureFrame) }, null),
+                new TacticalEvidenceCondition("response", true,
+                    $"Incomplete opponent pass {response.Event.ClockSeconds - pressure.Event.ClockSeconds}s after pressure.",
+                    $"<= {policy.MaximumPressToResponseSeconds}s (unapproved demonstration threshold)",
+                    new[] { EventNode(pressure), EventNode(response) }, null),
+                new TacticalEvidenceCondition("regain", true,
+                    $"Same pressing team regained possession {regain.Event.ClockSeconds - response.Event.ClockSeconds}s after response.",
+                    $"<= {policy.MaximumResponseToRegainSeconds}s (unapproved demonstration threshold)",
+                    new[] { EventNode(response), EventNode(regain) }, null),
+                new TacticalEvidenceCondition("exploitation", true,
+                    $"Completed cutback followed by a shot; cutback-to-shot interval {shot.Event.ClockSeconds - cutback.Event.ClockSeconds}s.",
+                    $"<= {policy.MaximumRegainToOutcomeSeconds}s per action (unapproved demonstration threshold)",
+                    new[] { EventNode(regain), EventNode(cutback), EventNode(shot) }, null),
+                new TacticalEvidenceCondition("outcome", true,
+                    $"Goal at {goal.Event.ClockSeconds}s, {goal.Event.ClockSeconds - trigger.Event.ClockSeconds}s after trigger.",
+                    $"<= {policy.MaximumTriggerToOutcomeSeconds}s from trigger (unapproved demonstration threshold)",
+                    new[] { EventNode(trigger), EventNode(goal) }, null),
+                new TacticalEvidenceCondition("tracking-coverage", true,
+                    $"{requiredFrameClocks.Length} event-time frames include the required pressure participants.", null,
+                    requiredFrameClocks.SelectMany(clock => framesByClock[clock].Select(FrameNode)).ToArray(), null),
+                new TacticalEvidenceCondition("selected-time", true,
+                    $"All linked evidence is at or before {input.SelectedTimeSeconds}s and through sequence {input.ThroughSequence}.", null,
+                    events.Select(EventNode).Concat(frameIds.Select(id => $"frame:{id}")).ToArray(), null),
+                new TacticalEvidenceCondition("publication-policy", false,
+                    $"Policy {policy.Version} status is {policy.ReviewStatus}.", "approved canonical policy",
+                    Array.Empty<string>(), "The demonstration policy has not received football/Product Owner approval.")
+            });
 
-            detections.Add(new TacticalInsight(
+            var insight = new TacticalInsight(
                 $"press-{trigger.Event.EventId:D}", input.MatchId, goal.Event.ClockSeconds,
                 "Synthetic pressure sequence candidate",
                 summary,
@@ -175,8 +212,15 @@ public static class PressSequenceDetector
                 PolicyStatus = policy.ReviewStatus,
                 Publishable = policy.Publishable,
                 Conditions = Array.AsReadOnly(conditions.ToArray()),
+                ClaimTruthClass = "pattern",
+                Uncertainty = "The demonstration policy is uncalibrated; no confidence score is available.",
+                EvidenceConditions = evidenceConditions,
                 Context = context
-            });
+            };
+            var graph = TacticalEvidenceGraphBuilder.Build(insight, input.Events, input.Frames, input.SelectedState);
+            if (insight.Publishable != graph.Publishable)
+                throw new InvalidDataException("The detector claim cannot publish without validated canonical evidence.");
+            detections.Add(insight with { EvidenceGraph = graph });
         }
         return detections.AsReadOnly();
     }

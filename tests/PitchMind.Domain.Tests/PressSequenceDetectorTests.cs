@@ -1,4 +1,6 @@
 using PitchMind.Domain.Analytics;
+using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using Xunit;
@@ -248,6 +250,73 @@ public sealed class PressSequenceDetectorTests
             new string('a', 64));
 
         Assert.Throws<ArgumentException>(() => PressSequenceDetector.Detect(input));
+    }
+
+    [Fact]
+    public void RejectsPublishingGraphWithoutApprovedRevisionedCanonicalEvidence()
+    {
+        var sourceHash = new string('a', 64);
+        var claim = new TacticalEvidenceNode("claim:one", "claim", "pattern", "claim", null, null,
+            10, 1, "synthetic-v2", sourceHash, null, null, null);
+        var source = new TacticalEvidenceNode("event:one", "event", "fact", "source", Guid.NewGuid(), null,
+            9, 1, "synthetic-v2", sourceHash, null, null, null);
+        var graph = new TacticalEvidenceGraph("match", "synthetic-v2", sourceHash, "synthetic", null, 10, 1,
+            "press-sequence-v2", "unapproved-demo", true, claim.Id,
+            new[] { claim, source }, new[] { new TacticalEvidenceEdge(claim.Id, source.Id, "derived_from") },
+            "uncalibrated", new[] { new TacticalEvidenceCondition("source", true, "observed", null, new[] { source.Id }, null) });
+
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(graph));
+    }
+
+    [Fact]
+    public void SelectedContextMetricLinksDetectorEventsAndActiveRosterEvidence()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var initialPlayers = fixture.Home.Players.Concat(fixture.Away.Players)
+            .Select(player => (player.Id, player.TeamId));
+        var activeAtKickoff = fixture.Frames.Single(frame => frame.ClockSeconds == 0)
+            .Players.Select(player => player.PlayerId);
+        var aggregate = new MatchAggregate(new MatchId(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id,
+            initialPlayers, activeAtKickoff, fixture.Provenance,
+            new MatchCompetitionRules(fixture.CompetitionId, fixture.CompetitionRulesVersion,
+                fixture.MaximumSubstituteReentriesPerPlayer));
+        foreach (var item in fixture.Events.Where(item => item.Event.ClockSeconds <= 5400)) aggregate.Apply(item);
+        var selectedState = aggregate.Snapshot() with { ClockSeconds = 5400 };
+        var insight = Assert.Single(PressSequenceDetector.Detect(fixture, 5400, selectedState));
+        var graph = Assert.IsType<TacticalEvidenceGraph>(insight.EvidenceGraph);
+        var contextMetricId = $"metric:{insight.Id}:selected-context";
+        var contextSourceIds = graph.Edges.Where(edge => edge.FromNodeId == contextMetricId && edge.Relation == "derived_from")
+            .Select(edge => edge.ToNodeId).ToHashSet(StringComparer.Ordinal);
+        var roster = Assert.Single(graph.Nodes, node => node.Id == $"metric:{insight.Id}:active-roster");
+        var expectedRosterIds = selectedState.Players.Where(player => player.Active)
+            .Select(player => $"{player.TeamId}/{player.PlayerId}");
+        Assert.Contains(expectedRosterIds.First(), roster.Description, StringComparison.Ordinal);
+        Assert.Contains(roster.Id, contextSourceIds);
+
+        var contextEventIds = fixture.Events.Where(item => item.Event.ClockSeconds <= 5400 &&
+            (insight.EventIds.Contains(item.Event.EventId) || item.Event.Type is MatchEventType.Goal or
+                MatchEventType.Substitution or MatchEventType.RedCard or MatchEventType.YellowCard or
+                MatchEventType.KickOff or MatchEventType.HalfTime or MatchEventType.FullTime))
+            .Select(item => $"event:{item.Event.EventId:D}").Distinct(StringComparer.Ordinal);
+        Assert.All(contextEventIds, eventId => Assert.Contains(eventId, contextSourceIds));
+        var contextCondition = Assert.Single(graph.Conditions, condition => condition.Id == "selected-context");
+        Assert.Contains(roster.Id, contextCondition.SourceNodeIds);
+        Assert.All(contextEventIds, eventId => Assert.Contains(eventId, contextCondition.SourceNodeIds));
+    }
+
+    [Fact]
+    public void GraphMustContainExactlyOneClaimNode()
+    {
+        var sourceHash = new string('a', 64);
+        var claim = new TacticalEvidenceNode("claim:one", "claim", "pattern", "claim", null, null,
+            10, 1, "synthetic-v2", sourceHash, null, null, null);
+        var extraClaim = claim with { Id = "claim:two" };
+        var graph = new TacticalEvidenceGraph("match", "synthetic-v2", sourceHash, "synthetic", null,
+            10, 1, "press-sequence-v2", "unapproved-demo", false, claim.Id,
+            new[] { claim, extraClaim }, Array.Empty<TacticalEvidenceEdge>(), "Uncalibrated.",
+            new[] { new TacticalEvidenceCondition("test", true, "observed", null, Array.Empty<string>(), null) });
+
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(graph));
     }
 
     private static PressSequenceInput CreateInput(SyntheticFixture fixture, int selectedTimeSeconds,
