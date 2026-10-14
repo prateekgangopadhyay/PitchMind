@@ -4,19 +4,20 @@
   "title": "PitchMind canonical telemetry event envelope v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "matchId", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
+  "required": ["schemaVersion", "matchId", "canonicalRevision", "eventId", "sequence", "matchTime", "eventType", "sourceEventType", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
     "eventId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
-    "sequence": { "type": "integer", "minimum": 0 },
+    "sequence": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
     "matchTime": { "$ref": "#/$defs/matchTime" },
     "eventType": { "enum": ["KickOff", "Pass", "Shot", "Goal", "Foul", "Turnover", "FullTime", "Pressure", "HalfTime", "BallRecovery", "Carry", "Clearance", "Interception", "PressureApplied", "PossessionLost", "ProgressivePass", "ProgressiveCarry", "LineBreakingPass", "Tackle", "Substitution", "YellowCard", "RedCard"] },
-    "sourceEventType": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "playerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
-    "outcome": { "type": ["string", "null"], "minLength": 1, "pattern": ".*\\S.*" },
+    "sourceEventType": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+    "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "relatedPlayerId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "outcome": { "type": ["string", "null"], "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
     "coordinateSystem": { "anyOf": [{ "$ref": "#/$defs/coordinateSystem" }, { "type": "null" }] },
     "location": { "anyOf": [{ "$ref": "#/$defs/eventLocation" }, { "type": "null" }] },
     "source": { "$ref": "#/$defs/source" }
@@ -25,6 +26,7 @@
     {
       "if": { "properties": { "eventType": { "const": "Substitution" } } },
       "then": {
+        "description": "relatedPlayerId must identify a participant different from playerId; the runtime validator enforces this cross-field constraint.",
         "required": ["relatedPlayerId"],
         "properties": { "relatedPlayerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" } }
       }
@@ -43,14 +45,48 @@
     }
   ],
   "$defs": {
+    "dotnetDecimalNonNegative": {
+      "minimum": 0,
+      "anyOf": [
+      { "type": "number", "multipleOf": 1, "maximum": 79228162514264337593543950335 },
+      { "type": "number", "multipleOf": 0.1, "maximum": 7922816251426433759354395033.5 },
+      { "type": "number", "multipleOf": 0.01, "maximum": 792281625142643375935439503.35 },
+      { "type": "number", "multipleOf": 0.001, "maximum": 79228162514264337593543950.335 },
+      { "type": "number", "multipleOf": 0.0001, "maximum": 7922816251426433759354395.0335 },
+      { "type": "number", "multipleOf": 0.00001, "maximum": 792281625142643375935439.50335 },
+      { "type": "number", "multipleOf": 0.000001, "maximum": 79228162514264337593543.950335 },
+      { "type": "number", "multipleOf": 0.0000001, "maximum": 7922816251426433759354.3950335 },
+      { "type": "number", "multipleOf": 0.00000001, "maximum": 792281625142643375935.43950335 },
+      { "type": "number", "multipleOf": 0.000000001, "maximum": 79228162514264337593.543950335 },
+      { "type": "number", "multipleOf": 0.0000000001, "maximum": 7922816251426433759.3543950335 },
+      { "type": "number", "multipleOf": 0.00000000001, "maximum": 792281625142643375.93543950335 },
+      { "type": "number", "multipleOf": 0.000000000001, "maximum": 79228162514264337.593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000001, "maximum": 7922816251426433.7593543950335 },
+      { "type": "number", "multipleOf": 0.00000000000001, "maximum": 792281625142643.37593543950335 },
+      { "type": "number", "multipleOf": 0.000000000000001, "maximum": 79228162514264.337593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000000001, "maximum": 7922816251426.4337593543950335 },
+      { "type": "number", "multipleOf": 0.00000000000000001, "maximum": 792281625142.64337593543950335 },
+      { "type": "number", "multipleOf": 0.000000000000000001, "maximum": 79228162514.264337593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000000000001, "maximum": 7922816251.4264337593543950335 },
+      { "type": "number", "multipleOf": 0.00000000000000000001, "maximum": 792281625.14264337593543950335 },
+      { "type": "number", "multipleOf": 0.000000000000000000001, "maximum": 79228162.514264337593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000000000000001, "maximum": 7922816.2514264337593543950335 },
+      { "type": "number", "multipleOf": 0.00000000000000000000001, "maximum": 792281.62514264337593543950335 },
+      { "type": "number", "multipleOf": 0.000000000000000000000001, "maximum": 79228.162514264337593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000000000000000001, "maximum": 7922.8162514264337593543950335 },
+      { "type": "number", "multipleOf": 0.00000000000000000000000001, "maximum": 792.28162514264337593543950335 },
+      { "type": "number", "multipleOf": 0.000000000000000000000000001, "maximum": 79.228162514264337593543950335 },
+      { "type": "number", "multipleOf": 0.0000000000000000000000000001, "maximum": 7.9228162514264337593543950335 }
+      ]
+    },
     "matchTime": {
       "type": "object",
       "additionalProperties": false,
       "required": ["period", "elapsedSeconds", "sourceClockValue", "sourceClockUnit", "sourceClockBasis"],
       "properties": {
         "period": { "type": "integer", "minimum": 1, "maximum": 5 },
-        "elapsedSeconds": { "type": "integer", "minimum": 0 },
-        "sourceClockValue": { "type": "number", "minimum": 0 },
+        "elapsedSeconds": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
+        "sourceClockValue": { "$ref": "#/$defs/dotnetDecimalNonNegative" },
         "sourceClockUnit": { "enum": ["seconds", "milliseconds", "provider_defined"] },
         "sourceClockBasis": { "enum": ["match_elapsed", "period_elapsed", "provider_defined"] }
       }
@@ -59,7 +95,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["x", "y"],
-      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+      "properties": {
+        "x": { "$ref": "#/$defs/dotnetDecimalNonNegative" },
+        "y": { "$ref": "#/$defs/dotnetDecimalNonNegative" }
+      }
     },
     "eventLocation": {
       "type": "object",
@@ -78,8 +117,8 @@
       "additionalProperties": false,
       "required": ["lengthMetres", "widthMetres", "unit", "axisOrigin", "teamDirections"],
       "properties": {
-        "lengthMetres": { "type": "number", "minimum": 90, "maximum": 120 },
-        "widthMetres": { "type": "number", "minimum": 45, "maximum": 90 },
+        "lengthMetres": { "allOf": [{ "$ref": "#/$defs/dotnetDecimalNonNegative" }, { "minimum": 90, "maximum": 120 }] },
+        "widthMetres": { "allOf": [{ "$ref": "#/$defs/dotnetDecimalNonNegative" }, { "minimum": 45, "maximum": 90 }] },
         "unit": { "enum": ["metres", "normalized_0_1", "percent_0_100"] },
         "axisOrigin": { "enum": ["bottom_left", "top_left"] },
         "teamDirections": {
@@ -91,7 +130,7 @@
             "additionalProperties": false,
             "required": ["teamId", "direction"],
             "properties": {
-              "teamId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
+              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
               "direction": { "enum": ["left", "right"] }
             }
           }
@@ -103,15 +142,15 @@
       "additionalProperties": false,
       "required": ["providerId", "sourceMatchId", "sourceRecordId", "sourceSequence", "sourceSchemaVersion", "sourceSha256", "provenanceStatus", "rightsReviewStatus"],
       "properties": {
-        "providerId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceMatchId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceRecordId": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceSequence": { "type": "integer", "minimum": 0 },
-        "sourceSchemaVersion": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "sourceTimestampUtc": { "type": ["string", "null"], "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
-        "provenanceStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" },
-        "rightsReviewStatus": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
+        "providerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "sourceMatchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "sourceRecordId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "sourceSequence": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
+        "sourceSchemaVersion": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+        "sourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+        "sourceTimestampUtc": { "type": ["string", "null"], "maxLength": 64, "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
+        "provenanceStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" },
+        "rightsReviewStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": ".*\\S.*" }
       }
     }
   }

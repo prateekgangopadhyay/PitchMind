@@ -17,6 +17,7 @@ classDiagram
  }
  class MatchEvent {
   +EventId id
+  +CanonicalRevision admittedRevision
   +long sequence
   +EventType type
   +TeamId? team
@@ -29,6 +30,7 @@ classDiagram
  }
  class TrackingFrame {
   +FrameId id
+  +CanonicalRevision admittedRevision
   +MatchTime time
   +PitchPoint? ball
   +ObservedPosition[] players
@@ -57,11 +59,15 @@ classDiagram
 
 **Aggregate boundaries:** `MatchLedger` append-only input event+frame history; `MatchProjection` versioned materialized state, active roster, substitutions, cards, score, possession, match phases; `TacticalInsight` immutable derived candidate referencing exact canonical revision and evidence; `Explanation` separately validated narrative with source provenance. Never store LLM output as observed match fact.
 
+Competition context is explicit and optional: `competitionId`, `rulesVersion`, and `maximumSubstituteReentriesPerPlayer`. A missing limit means unknown and re-entry fails closed; when supplied, the aggregate tracks re-entry count per player and rejects returns above the versioned limit. Never derive a competition or rule from team names or fixture data.
+
 ## B. Clock/period/point-in-time model
+- PostgreSQL canonical admission allocates a positive, monotonically increasing per-match `canonicalRevision` in the same transaction as the immutable event/frame and outbox intent. `schemaVersion` versions the transport shape; provider/source schema revisions stay in provenance. A source candidate before admission has no canonical revision and cannot be serialized as `EventEnvelopeV1` or `TrackingFrameV1`. A correction appends under a new revision and leaves the previously admitted row unchanged. Each row's revision is its admission revision; a query/snapshot response separately carries the selected canonical revision used for the whole returned view.
 - Source includes event period and source clock interpretation; adapter maps into monotonic elapsed milliseconds, but retains periodClock, raw provider clock, UTC if supplied, sequence.
 - Clock policy handles first/second half, stoppage, extra time/penalty stages when supported; do not globally assume 90:00 is the only possible outcome outside the existing demo.
 - For same-timestamp input, strict stable sequence determines order. Reject event `sequence != expected`; explicit quarantine and gap recovery.
 - UI context = `(matchId, mode: LiveHead|SelectedTime, atSeconds, canonicalRevision, clientContextRevision, selectedEvidenceId?)`. Every scoreboard/pitch/events/insight/AI response MUST resolve against same snapshot/time+revision.
+- The current PostgreSQL read port selects the latest projection with `as_of_clock_seconds <= atSeconds` and `canonical_revision <= requestedRevision`, ordered by elapsed clock, source sequence, admission revision, then projection revision. Same-clock events therefore resolve in their preserved sequence, and future projections are excluded.
 - Late correction: append new source revision/supersession event, invalidate projected descendants and provide correction marker. Never patch raw event row; replay by version gives reproducibility.
 
 ## C. Pitch coordinates and tracking

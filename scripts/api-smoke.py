@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real HTTP selected-time and negative-contract checks; requires a running API."""
+"""Verify health and fail-closed match routes; requires a running API."""
 import json
 import sys
 import urllib.error
@@ -17,29 +17,31 @@ def request(path, expected=200, payload=None):
         response = error
     assert response.status == expected, (path, response.status, expected)
     assert response.headers.get("X-Correlation-ID"), path
-    return json.load(response)
+    if path.startswith("/api/v1/"):
+        assert response.headers.get("X-Contract-Version") == "1", path
+    body = json.load(response)
+    if expected >= 400:
+        assert response.headers.get("Content-Type", "").startswith("application/problem+json"), (path, response.headers)
+        assert isinstance(body["type"], str) and body["type"], (path, body)
+        assert isinstance(body["title"], str) and body["title"], (path, body)
+        assert body["status"] == expected, (path, body)
+        assert body["code"] == "MATCH_DATA_UNAVAILABLE", (path, body)
+        assert body["correlationId"] == response.headers["X-Correlation-ID"], (path, body)
+        assert body["instance"] == path, (path, body)
+    return body
 
 
-fixture = request("/api/v1/matches")[0]
-assert fixture["provenance"] == "synthetic"
-match = "/api/v1/matches/" + fixture["matchId"]
-before = request(match + "/state?atSeconds=3308")
-after = request(match + "/state?atSeconds=3309")
-assert (before["homeScore"], after["homeScore"]) == (0, 1)
-assert request(match + "/insights?atSeconds=3308") == []
-insight = request(match + "/insights?atSeconds=3309")[0]
-evidence_path = match + "/evidence/" + insight["id"]
-request(evidence_path + "?atSeconds=3308", 404)
-evidence = request(evidence_path + "?atSeconds=3309")
-assert len(evidence["events"]) == 7
-assert all(e["event"]["clockSeconds"] <= 3309 for e in evidence["events"])
-answer = request(match + "/analyst", payload={"insightId": insight["id"], "atSeconds": 3309, "audience": "fan"})
-assert answer["source"] == "deterministic-fallback"
-assert answer["eventIds"] == insight["eventIds"]
-request(match + "/analyst", 400, {"insightId": insight["id"], "atSeconds": 3309, "audience": "invalid"})
-request(match + "/state?atSeconds=-1", 400)
-request(match + "/state?atSeconds=5401", 400)
-request("/api/v1/matches/00000000-0000-0000-0000-000000000000/state", 404)
-final = request(match + "/state?atSeconds=5400")
-assert (final["homeScore"], final["awayScore"], final["status"]) == (1, 1, "full-time")
-print("PASS: real HTTP replay, score boundary, evidence, fallback, invalid audience/time and unknown match")
+request("/api/health")
+match_routes = [
+    ("/api/v1/matches", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/state", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/events", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/insights", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight", None),
+    ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
+]
+for route, payload in match_routes:
+    problem = request(route, 503, payload)
+    assert problem["code"] == "MATCH_DATA_UNAVAILABLE", (route, problem)
+    assert problem["status"] == 503, (route, problem)
+print("PASS: health is available and match reads return 503 until canonical route composition is implemented")

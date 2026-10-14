@@ -37,3 +37,87 @@ button, select { min-height: 44px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+.app-header { padding-bottom: 16px; }
+.brand { color: var(--pm-text); text-decoration: none; }
+.primary-nav {
+  display: flex;
+  gap: 6px;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 10px 4%;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--pm-border);
+  scrollbar-width: thin;
+}
+.primary-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: var(--pm-text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.primary-nav a:hover { color: var(--pm-text); background: var(--pm-surface); }
+.primary-nav a[aria-current="page"] {
+  color: var(--pm-text);
+  background: var(--pm-surface-raised);
+  box-shadow: inset 0 -2px var(--pm-accent);
+}
+.route-state {
+  max-width: 760px;
+  margin: clamp(32px, 8vh, 88px) auto;
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid var(--pm-border);
+  border-radius: 12px;
+  background: var(--pm-surface);
+}
+.route-mark, .status-mark {
+  display: block;
+  width: 36px;
+  height: 3px;
+  margin-bottom: 24px;
+  background: var(--pm-accent);
+}
+.route-state h2, .availability-state h2 { margin: 0 0 8px; font-size: clamp(20px, 3vw, 26px); line-height: 1.25; text-wrap: balance; }
+.route-state > p:not(.eyebrow), .availability-state p:not(.eyebrow) { max-width: 56ch; }
+.primary-action {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 0 16px;
+  border-radius: 22px;
+  background: var(--pm-accent);
+  color: var(--pm-bg);
+  font-weight: 700;
+  text-decoration: none;
+}
+.primary-action:hover { background: #79f4c2; }
+.availability-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  max-width: 900px;
+  margin: 28px auto;
+  padding: 24px;
+  border: 1px solid var(--pm-border);
+  border-radius: 10px;
+  background: var(--pm-surface);
+}
+.availability-state .status-mark { width: 10px; height: 10px; flex: 0 0 auto; margin: 6px 0 0; border-radius: 50%; }
+.availability-state.unavailable { border-color: #52616a; }
+.availability-state.unavailable .status-mark { background: #c4a978; }
+.availability-state button { margin-top: 12px; }
+@media (max-width: 700px) {
+  .app-header { padding: 16px 18px; }
+  .primary-nav { padding: 8px 18px; }
+  .primary-nav a { padding: 0 12px; }
+  .availability-state { gap: 14px; padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primary-nav a { transition: none; }
+}

@@ -1,14 +1,60 @@
 using System.Text.Json;
-using PitchMind.Application.Matches;
+using Microsoft.Extensions.DependencyInjection;
 using PitchMind.Api;
+using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Simulation;
+using PitchMind.Infrastructure.Storage;
+using PitchMind.TestFixtures;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
 
 public sealed class V1ContractCompatibilityTests
 {
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("development")]
+    public void Local_runtime_profile_is_allowed_only_in_Development(string environmentName)
+    {
+        RuntimeProfileGuard.Validate(environmentName, "local");
+    }
+
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Staging")]
+    [InlineData("Production")]
+    public void Azure_runtime_profile_is_allowed_in_supported_host_environments(string environmentName)
+    {
+        RuntimeProfileGuard.Validate(environmentName, "azure");
+    }
+
+    [Theory]
+    [InlineData("Development", null)]
+    [InlineData("Development", "unknown")]
+    [InlineData("Local", "local")]
+    [InlineData("Staging", "local")]
+    [InlineData("Production", "local")]
+    [InlineData("Test", "azure")]
+    public void Runtime_profile_guard_rejects_missing_or_incompatible_profiles(string environmentName, string? runtimeProfile)
+    {
+        Assert.Throws<InvalidOperationException>(() => RuntimeProfileGuard.Validate(environmentName, runtimeProfile));
+    }
+
+    [Fact]
+    public void Local_in_memory_store_is_registered_only_for_the_local_profile()
+    {
+        var localServices = new ServiceCollection();
+        RuntimeProfileGuard.ConfigureLocalServices(localServices, "local");
+        Assert.Contains(localServices, descriptor => descriptor.ServiceType == typeof(IMatchEventStore) &&
+            descriptor.ImplementationType == typeof(InMemoryMatchEventStore));
+
+        var azureServices = new ServiceCollection();
+        RuntimeProfileGuard.ConfigureLocalServices(azureServices, "azure");
+        Assert.DoesNotContain(azureServices, descriptor => descriptor.ServiceType == typeof(IMatchEventStore));
+    }
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -22,6 +68,21 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(fixture, "matchId", "version", "seed", "provenance", "durationSeconds", "halfTimeSeconds", "pitchLengthMetres", "pitchWidthMetres", "home", "away", "events", "frames");
         Assert.Equal("source-v1", fixture.Version);
         Assert.Equal("1", ContractVersion.V1);
+    }
+
+    [Fact]
+    public void Analyst_request_serialization_pins_the_v1_request_shape()
+    {
+        var request = new AnalystRequest("insight", 5400, "analyst");
+        var requestWithoutAudience = new AnalystRequest("insight", 0);
+
+        AssertJsonProperties(request, "insightId", "atSeconds", "audience");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(request, Json));
+        Assert.Equal("insight", json.RootElement.GetProperty("insightId").GetString());
+        Assert.Equal(5400, json.RootElement.GetProperty("atSeconds").GetInt32());
+        Assert.Equal("analyst", json.RootElement.GetProperty("audience").GetString());
+        using var withoutAudienceJson = JsonDocument.Parse(JsonSerializer.Serialize(requestWithoutAudience, Json));
+        Assert.DoesNotContain("audience", withoutAudienceJson.RootElement.EnumerateObject().Select(property => property.Name));
     }
 
     [Fact]
@@ -58,12 +119,23 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void State_response_exposes_selected_time_projection_fields()
     {
-        var state = new PitchMind.Application.Matches.SyntheticMatchService().GetState(3600).ToResponse();
+        var fixture = SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture;
+        fixture = fixture with
+        {
+            CompetitionId = "synthetic-competition",
+            CompetitionRulesVersion = "rules-v1",
+            MaximumSubstituteReentriesPerPlayer = 0
+        };
+        var state = new SyntheticMatchService(fixture).GetState(3600).ToResponse();
         AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
             "provenance", "frame", "lastSequence", "possessionTeamId",
-            "homeActivePlayers", "awayActivePlayers", "players");
+            "homeActivePlayers", "awayActivePlayers", "players", "competitionId", "competitionRulesVersion",
+            "maximumSubstituteReentriesPerPlayer");
         Assert.Equal("replay", state.Status);
         Assert.Equal("secondhalf", state.Phase);
+        Assert.Equal("synthetic-competition", state.CompetitionId);
+        Assert.Equal("rules-v1", state.CompetitionRulesVersion);
+        Assert.Equal(0, state.MaximumSubstituteReentriesPerPlayer);
         Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
         Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
     }
@@ -71,7 +143,7 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void Replay_contract_pins_versions_and_keeps_canonical_revision_explicitly_unavailable_offline()
     {
-        var replay = new SyntheticMatchService().ReplayAt(3308).ToResponse();
+        var replay = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).ReplayAt(3308).ToResponse();
 
         AssertJsonProperties(replay, "executionMode", "matchId", "selectedElapsedSeconds", "fixtureVersion", "fixtureSeed",
             "replayAlgorithmVersion", "detectorVersion", "replayInputSha256", "replayOutputSha256", "canonicalRevision",
@@ -90,7 +162,11 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
-        var source = SyntheticFixtureGenerator.Generate();
+        var source = SyntheticFixtureGenerator.Generate() with
+        {
+            PitchLengthMetres = 110,
+            PitchWidthMetres = 75
+        };
         var mapped = source.ToResponse();
 
         Assert.Equal(source.Version, mapped.Version);
@@ -99,7 +175,7 @@ public sealed class V1ContractCompatibilityTests
         Assert.Equal(source.HalfTimeSeconds, mapped.HalfTimeSeconds);
         Assert.Equal(source.PitchLengthMetres, mapped.PitchLengthMetres);
         Assert.Equal(source.PitchWidthMetres, mapped.PitchWidthMetres);
-        Assert.Contains("x=0..105", mapped.Frames[0].CoordinateConvention);
+        Assert.Equal(source.CoordinateConvention, mapped.Frames[0].CoordinateConvention);
         var state = new SyntheticMatchService(source).GetState(source.DurationSeconds).ToResponse();
         Assert.Equal(mapped.Frames[0].CoordinateConvention, state.Frame.CoordinateConvention);
         Assert.Equal(source.Events.Count, mapped.Events.Count);

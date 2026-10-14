@@ -1,12 +1,12 @@
 {
-  "fixtureVersion": "synthetic-v2",
+  "fixtureVersion": "synthetic-v3",
   "fixtureSeed": 42,
-  "fixtureContentSha256": "ce5a5a99a056053626758f7e3d92e47fad89215a6509c65475b60936153e793b",
+  "fixtureContentSha256": "265066db93de017dde7a4df428a62bc5a5f00e5dc1101c79730161c75b20c118",
   "approval": "candidate-regression-goldens-pending-product-owner-review",
   "snapshots": [
     {
       "selectedElapsedSeconds": 0,
-      "replayOutputSha256": "4433fec588fdcda5d161d6d02e4f2bfa2bafa976ff37868bbc8ed0c393080e06",
+      "replayOutputSha256": "915c9ed6948a0a50551f93790b0b6eef9e7bf25a833d951336056fbe697d4d12",
       "lastSequence": 0,
       "period": 1,
       "phase": "firsthalf",
@@ -19,7 +19,7 @@
     },
     {
       "selectedElapsedSeconds": 2700,
-      "replayOutputSha256": "4481f9e3671a4f3af7bfbae29292ef81a765c57560e19e417793d82f25a7c5f1",
+      "replayOutputSha256": "0b79b7b7e67db37196dab3dcaceba8dbf1ec6b9c7ee60c4c04049cb95b7fce20",
       "lastSequence": 92,
       "period": 2,
       "phase": "secondhalf",
@@ -32,7 +32,7 @@
     },
     {
       "selectedElapsedSeconds": 3308,
-      "replayOutputSha256": "2b98dd6acfb4128f56b76d85fd0ab3f25ea4e40be5399ac67f70a697c3f3ddad",
+      "replayOutputSha256": "e7a0109d5c045859e4cccd1f992a6c8f09da24f89a8ae9c837dfa4c9ed8ae843",
       "lastSequence": 117,
       "period": 2,
       "phase": "secondhalf",
@@ -45,7 +45,7 @@
     },
     {
       "selectedElapsedSeconds": 3309,
-      "replayOutputSha256": "3dab0eaddc254b208739407438be670f2495cc9e9289f88c8cd65454a8084628",
+      "replayOutputSha256": "1b72f00756667a69aa2c5f8616a86bd6befbced5ee34c1d28c3ce9d64c5a6f2e",
       "lastSequence": 118,
       "period": 2,
       "phase": "secondhalf",
@@ -58,7 +58,7 @@
     },
     {
       "selectedElapsedSeconds": 3600,
-      "replayOutputSha256": "011430ac7e01513da74a83d6fa8b10e427c8dd8b403aceb0b993200f4d03b6e4",
+      "replayOutputSha256": "438999bb86a5bceed9ff5ea63b52826fa8710770b0968567c6e2b5915045717f",
       "lastSequence": 128,
       "period": 2,
       "phase": "secondhalf",
@@ -71,15 +71,15 @@
     },
     {
       "selectedElapsedSeconds": 5400,
-      "replayOutputSha256": "55d582d93ac0d5f5bdfbd3f033f6b9086976ab290ca77a3e4c8956b6c5823abe",
-      "lastSequence": 190,
+      "replayOutputSha256": "c6855cf371b89a237ee5a4fe06b2439485f4a83df2d034eb7b948063b173ab32",
+      "lastSequence": 191,
       "period": 2,
       "phase": "fulltime",
       "homeScore": 1,
       "awayScore": 1,
       "yellowCards": 1,
       "homeActivePlayers": 11,
-      "awayActivePlayers": 11,
+      "awayActivePlayers": 10,
       "insightCount": 1
     }
   ]

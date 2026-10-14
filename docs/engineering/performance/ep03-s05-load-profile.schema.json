@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pitchmind.local/schemas/ep03-s05-load-profile.schema.json",
+  "title": "EP03-S05 generator-only load profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profileSchemaVersion", "storyId", "profileId", "source", "workload", "agreement"],
+  "properties": {
+    "profileSchemaVersion": { "const": "1.0" },
+    "storyId": { "const": "EP03-S05" },
+    "profileId": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format", "sourceVersion", "fixtureVersion", "expectedSha256", "eventIdKey", "sequenceKey", "matchIdKey", "provenanceLabel", "maxBytes", "maxRecords"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "format": { "const": "json-array" },
+        "sourceVersion": { "type": ["string", "null"] },
+        "fixtureVersion": { "type": ["string", "null"] },
+        "expectedSha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "eventIdKey": { "type": "string", "minLength": 1 },
+        "sequenceKey": { "type": "string", "minLength": 1 },
+        "matchIdKey": { "type": "string", "minLength": 1 },
+        "provenanceLabel": { "const": "owner-confirmed-synthetic" },
+        "maxBytes": { "type": "integer", "minimum": 1, "maximum": 50000000 },
+        "maxRecords": { "type": "integer", "minimum": 1, "maximum": 100000 }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "targetEventsPerSecond", "durationSeconds", "payloadMode", "payloadMixApproval", "partitionMode", "partitionMixApproval", "queueCapacityRecords"],
+      "properties": {
+        "mode": { "const": "generator-only-local-in-memory" },
+        "targetEventsPerSecond": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "durationSeconds": { "oneOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 3600 }, { "type": "null" }] },
+        "payloadMode": { "const": "opaque-source-record-order" },
+        "payloadMixApproval": { "type": ["string", "null"] },
+        "partitionMode": { "const": "single-source-match" },
+        "partitionMixApproval": { "type": ["string", "null"] },
+        "queueCapacityRecords": { "type": "integer", "minimum": 1, "maximum": 100000 }
+      }
+    },
+    "agreement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "approvedBy", "approvedAtUtc", "acceptanceBudgets"],
+      "properties": {
+        "status": { "enum": ["pending", "approved"] },
+        "approvedBy": { "type": ["string", "null"] },
+        "approvedAtUtc": { "type": ["string", "null"], "format": "date-time" },
+        "acceptanceBudgets": {
+          "type": "object",
+          "additionalProperties": { "type": ["number", "string", "null"] }
+        }
+      }
+    }
+  }
+}

@@ -1,28 +1,37 @@
+using System.Text.Json;
 using PitchMind.Application.Matches;
 using PitchMind.Domain.Simulation;
-using System.Text.Json;
+using PitchMind.TestFixtures;
 using Xunit;
 namespace PitchMind.Application.Tests;
 public sealed class SyntheticMatchTests
 {
     [Fact] public void ReplayExcludesFutureGoalsAndEvidence()
     {
-        var service = new SyntheticMatchService();
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
         Assert.Equal(0, service.GetState(3308).HomeScore); Assert.Empty(service.GetInsights(3308));
         Assert.Equal(1, service.GetState(3309).HomeScore); Assert.Single(service.GetInsights(3309));
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
-        Assert.Equal("harbour", service.GetState(3308).PossessionTeamId);
-        Assert.Null(service.GetState(3309).PossessionTeamId);
-        Assert.Equal("harbour", service.GetState(4680).PossessionTeamId);
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
+    [Fact] public void CompleteSyntheticScenarioReplaysScoreTransitionsWithoutLookahead()
+    {
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed: 42);
+        var service = new SyntheticMatchService(scenario.Fixture);
+
+        Assert.Equal((0, 0), (service.GetState(3308).HomeScore, service.GetState(3308).AwayScore));
+        Assert.Equal((1, 0), (service.GetState(3309).HomeScore, service.GetState(3309).AwayScore));
+        Assert.Equal((1, 0), (service.GetState(4679).HomeScore, service.GetState(4679).AwayScore));
+        Assert.Equal((1, 1), (service.GetState(4680).HomeScore, service.GetState(4680).AwayScore));
+        Assert.Equal((1, 1), (service.GetState(5400).HomeScore, service.GetState(5400).AwayScore));
+    }
     [Fact] public void VersionPinnedReplayIsDeterministicAndContainsOnlySelectedTimeOutputs()
     {
-        var first = new SyntheticMatchService().ReplayAt(3308);
-        var repeated = new SyntheticMatchService().ReplayAt(3308, first.FixtureVersion, first.FixtureSeed,
+        var first = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).ReplayAt(3308);
+        var repeated = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).ReplayAt(3308, first.FixtureVersion, first.FixtureSeed,
             first.ReplayAlgorithmVersion, first.DetectorVersion, first.ReplayInputSha256);
-        var afterGoal = new SyntheticMatchService().ReplayAt(3309, first.FixtureVersion, first.FixtureSeed,
+        var afterGoal = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).ReplayAt(3309, first.FixtureVersion, first.FixtureSeed,
             first.ReplayAlgorithmVersion, first.DetectorVersion, first.ReplayInputSha256);
 
         Assert.Equal("offline-synthetic-fixture", first.ExecutionMode);
@@ -41,7 +50,7 @@ public sealed class SyntheticMatchTests
     }
     [Fact] public void VersionPinnedReplayRejectsUnavailableInputsAndAlgorithms()
     {
-        var service = new SyntheticMatchService();
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate());
 
         Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, fixtureVersion: "unknown"));
         Assert.Throws<ArgumentException>(() => service.ReplayAt(3308, fixtureSeed: 41));
@@ -51,11 +60,11 @@ public sealed class SyntheticMatchTests
     }
     [Fact] public void CandidateReplayGoldenSnapshotsPinSelectedTimeFootballState()
     {
-        var goldenPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "ep04-s05-synthetic-v2-replay-goldens.json");
+        var goldenPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "ep04-s05-synthetic-v3-replay-goldens.json");
         var golden = JsonSerializer.Deserialize<ReplayGoldenDocument>(File.ReadAllText(goldenPath),
             new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         Assert.Equal("candidate-regression-goldens-pending-product-owner-review", golden.Approval);
-        var service = new SyntheticMatchService();
+        var service = new SyntheticMatchService(GenerateReplayGoldenFixture());
 
         foreach (var expected in golden.Snapshots)
         {
@@ -105,7 +114,7 @@ public sealed class SyntheticMatchTests
     }
     [Fact] public void SelectedTimeProjectsCanonicalCardsRosterPossessionAndPhase()
     {
-        var service = new SyntheticMatchService();
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture);
         var beforeSubstitution = service.GetState(3599);
         var afterSubstitution = service.GetState(3600);
         var firstHalf = service.GetState(2699);
@@ -157,7 +166,7 @@ public sealed class SyntheticMatchTests
         var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = "ridge" } : e).ToArray();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Events = events }, 5400));
     }
-    [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService().GetState(clock));
+    [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(clock));
     [Fact] public void ReplayUsesDurationHalfTimeAndPitchFromTheFixtureDefinition()
     {
         var source = SyntheticFixtureGenerator.Generate();
@@ -212,7 +221,7 @@ public sealed class SyntheticMatchTests
     }
     [Fact] public void AudienceChangesCopyWithoutChangingEvidence()
     {
-        var service = new SyntheticMatchService(); var id = service.GetInsights(5400).Single().Id;
+        var service = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()); var id = service.GetInsights(5400).Single().Id;
         var fan = service.Explain(id, 3309, "fan")!; var analyst = service.Explain(id, 3309, "analyst")!;
         Assert.Equal(fan.EventIds, analyst.EventIds); Assert.NotEqual(fan.Text, analyst.Text);
     }
@@ -263,9 +272,21 @@ public sealed class SyntheticMatchTests
         Assert.DoesNotContain("Harbour", service.Explain(insight.Id, 3309)!.Text);
     }
 
+    private static SyntheticFixture GenerateReplayGoldenFixture()
+    {
+        var source = SyntheticFixtureGenerator.Generate();
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed: source.Seed);
+        var sourceById = source.Events.ToDictionary(item => item.Event.EventId);
+        var events = scenario.Fixture.Events.Select(item => sourceById.TryGetValue(item.Event.EventId, out var original)
+            ? original with { Event = original.Event with { Sequence = item.Event.Sequence } }
+            : item).ToArray();
+        return scenario.Fixture with { Events = Array.AsReadOnly(events) };
+    }
+
     private sealed record ReplayGoldenDocument(string FixtureVersion, int FixtureSeed, string FixtureContentSha256,
         string Approval, IReadOnlyList<ReplayGoldenSnapshot> Snapshots);
     private sealed record ReplayGoldenSnapshot(int SelectedElapsedSeconds, string ReplayOutputSha256, long LastSequence,
         int Period, string Phase, int HomeScore, int AwayScore, int YellowCards, int HomeActivePlayers,
         int AwayActivePlayers, int InsightCount);
+
 }

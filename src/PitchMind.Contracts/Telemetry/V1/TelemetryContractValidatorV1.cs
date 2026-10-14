@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace PitchMind.Contracts.Telemetry.V1;
 
 /// <summary>Pure v1 validation and coordinate normalization; provider mapping stays outside this contract.</summary>
@@ -5,6 +7,8 @@ public static class TelemetryContractValidatorV1
 {
     public const int CurrentSchemaVersion = 1;
     public const int MaximumPlayersPerFrame = 64;
+    public const int MaximumIdentifierLength = 128;
+    public const int MaximumTextLength = 256;
     public const decimal MinimumPitchLengthMetres = 90m;
     public const decimal MaximumPitchLengthMetres = 120m;
     public const decimal MinimumPitchWidthMetres = 45m;
@@ -30,28 +34,46 @@ public static class TelemetryContractValidatorV1
         var errors = new List<TelemetryValidationError>();
         Version(value.SchemaVersion, errors);
         Required(value.MatchId, "matchId", errors);
+        MaximumLength(value.MatchId, "matchId", MaximumIdentifierLength, errors);
+        CanonicalRevision(value.CanonicalRevision, errors);
         Required(value.EventId, "eventId", errors);
-        if (value.EventId?.Length > 128) Add(errors, "IDENTIFIER_TOO_LONG", "eventId", "Event ID must not exceed 128 characters.");
+        MaximumLength(value.EventId, "eventId", MaximumIdentifierLength, errors, "IDENTIFIER_TOO_LONG");
         if (value.Sequence < 0) Add(errors, "INVALID_SEQUENCE", "sequence", "Canonical sequence must be non-negative.");
         Time(value.MatchTime, errors);
         if (string.IsNullOrWhiteSpace(value.EventType) || !EventTypes.Contains(value.EventType))
             Add(errors, "UNKNOWN_EVENT_TYPE", "eventType", "Event type is not defined by telemetry v1.");
         Required(value.SourceEventType, "sourceEventType", errors);
+        MaximumLength(value.SourceEventType, "sourceEventType", MaximumTextLength, errors);
         var playerEvent = value.EventType is not null && PlayerEventTypes.Contains(value.EventType);
         if (!playerEvent)
         {
             Optional(value.TeamId, "teamId", errors);
+            MaximumLength(value.TeamId, "teamId", MaximumIdentifierLength, errors);
             Optional(value.PlayerId, "playerId", errors);
+            MaximumLength(value.PlayerId, "playerId", MaximumIdentifierLength, errors);
         }
-        if (value.EventType != "Substitution") Optional(value.RelatedPlayerId, "relatedPlayerId", errors);
+        if (value.EventType != "Substitution")
+        {
+            Optional(value.RelatedPlayerId, "relatedPlayerId", errors);
+            MaximumLength(value.RelatedPlayerId, "relatedPlayerId", MaximumIdentifierLength, errors);
+        }
         Optional(value.Outcome, "outcome", errors);
+        MaximumLength(value.Outcome, "outcome", MaximumTextLength, errors);
         if (playerEvent)
         {
             Required(value.TeamId, "teamId", errors);
+            MaximumLength(value.TeamId, "teamId", MaximumIdentifierLength, errors);
             Required(value.PlayerId, "playerId", errors);
+            MaximumLength(value.PlayerId, "playerId", MaximumIdentifierLength, errors);
         }
         if (value.EventType == "Substitution")
+        {
             Required(value.RelatedPlayerId, "relatedPlayerId", errors);
+            MaximumLength(value.RelatedPlayerId, "relatedPlayerId", MaximumIdentifierLength, errors);
+            if (!string.IsNullOrWhiteSpace(value.PlayerId) &&
+                string.Equals(value.PlayerId, value.RelatedPlayerId, StringComparison.Ordinal))
+                Add(errors, "INVALID_SUBSTITUTION", "relatedPlayerId", "A substitution must identify two different participants.");
+        }
         if (value.Location is not null)
         {
             if (value.CoordinateSystem is null)
@@ -61,7 +83,10 @@ public static class TelemetryContractValidatorV1
             else
             {
                 CoordinateSystem(value.CoordinateSystem, errors);
-                TeamDirections(value.CoordinateSystem.TeamDirections, errors);
+                var requiredTeams = string.IsNullOrWhiteSpace(value.TeamId)
+                    ? Array.Empty<string>()
+                    : new[] { value.TeamId };
+                TeamDirections(value.CoordinateSystem.TeamDirections, errors, requiredTeams);
                 if (value.Location.Start is null && value.Location.End is null)
                     Add(errors, "EVENT_LOCATION_REQUIRED", "location", "At least one event location point is required.");
                 if (value.Location.Start is not null) Point(value.Location.Start, value.CoordinateSystem, "location.start", errors);
@@ -82,7 +107,10 @@ public static class TelemetryContractValidatorV1
         var errors = new List<TelemetryValidationError>();
         Version(value.SchemaVersion, errors);
         Required(value.MatchId, "matchId", errors);
+        MaximumLength(value.MatchId, "matchId", MaximumIdentifierLength, errors);
+        CanonicalRevision(value.CanonicalRevision, errors);
         Required(value.FrameId, "frameId", errors);
+        MaximumLength(value.FrameId, "frameId", MaximumIdentifierLength, errors);
         if (value.Sequence < 0) Add(errors, "INVALID_SEQUENCE", "sequence", "Canonical sequence must be non-negative.");
         Time(value.MatchTime, errors);
         Source(value.Source, errors);
@@ -116,7 +144,9 @@ public static class TelemetryContractValidatorV1
                 continue;
             }
             Required(player.PlayerId, $"{path}.playerId", errors);
+            MaximumLength(player.PlayerId, $"{path}.playerId", MaximumIdentifierLength, errors);
             Required(player.TeamId, $"{path}.teamId", errors);
+            MaximumLength(player.TeamId, $"{path}.teamId", MaximumIdentifierLength, errors);
             if (!string.IsNullOrWhiteSpace(player.PlayerId) && !seen.Add(player.PlayerId))
                 Add(errors, "DUPLICATE_PLAYER", $"{path}.playerId", "Player IDs must be unique within a frame.");
             if (!string.IsNullOrWhiteSpace(player.TeamId)) teams.Add(player.TeamId);
@@ -200,6 +230,7 @@ public static class TelemetryContractValidatorV1
                 continue;
             }
             Required(direction.TeamId, $"{path}.teamId", errors);
+            MaximumLength(direction.TeamId, $"{path}.teamId", MaximumIdentifierLength, errors);
             if (direction.Direction is not ("left" or "right"))
                 Add(errors, "UNKNOWN_ATTACK_DIRECTION", $"{path}.direction", "Attacking direction must be left or right.");
             if (!string.IsNullOrWhiteSpace(direction.TeamId) && !declaredTeams.Add(direction.TeamId))
@@ -209,7 +240,7 @@ public static class TelemetryContractValidatorV1
         if (requiredTeams is null) return;
         foreach (var team in requiredTeams)
             if (!declaredTeams.Contains(team))
-                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", $"No attacking direction is declared for team '{team}'.");
+                Add(errors, "ATTACKING_DIRECTION_MISSING", "coordinateSystem.teamDirections", "No attacking direction is declared for a team referenced by the record.");
     }
 
     private static void Point(PitchPointV1? point, PitchCoordinateSystemV1 system, string path, List<TelemetryValidationError> errors)
@@ -243,11 +274,17 @@ public static class TelemetryContractValidatorV1
     {
         if (source is null) { Add(errors, "SOURCE_PROVENANCE_REQUIRED", "source", "Source provenance is required."); return; }
         Required(source.ProviderId, "source.providerId", errors);
+        MaximumLength(source.ProviderId, "source.providerId", MaximumIdentifierLength, errors);
         Required(source.SourceMatchId, "source.sourceMatchId", errors);
+        MaximumLength(source.SourceMatchId, "source.sourceMatchId", MaximumIdentifierLength, errors);
         Required(source.SourceRecordId, "source.sourceRecordId", errors);
+        MaximumLength(source.SourceRecordId, "source.sourceRecordId", MaximumIdentifierLength, errors);
         Required(source.SourceSchemaVersion, "source.sourceSchemaVersion", errors);
+        MaximumLength(source.SourceSchemaVersion, "source.sourceSchemaVersion", MaximumTextLength, errors);
         Required(source.ProvenanceStatus, "source.provenanceStatus", errors);
+        MaximumLength(source.ProvenanceStatus, "source.provenanceStatus", MaximumTextLength, errors);
         Required(source.RightsReviewStatus, "source.rightsReviewStatus", errors);
+        MaximumLength(source.RightsReviewStatus, "source.rightsReviewStatus", MaximumTextLength, errors);
         if (source.SourceSequence < 0) Add(errors, "INVALID_SOURCE_SEQUENCE", "source.sourceSequence", "Original sequence must be non-negative.");
         if (source.SourceSha256 is null || source.SourceSha256.Length != 64 || source.SourceSha256.Any(c => !Uri.IsHexDigit(c)) || source.SourceSha256.Any(char.IsUpper))
             Add(errors, "INVALID_SOURCE_HASH", "source.sourceSha256", "Source hash must be lowercase SHA-256 hexadecimal.");
@@ -260,6 +297,12 @@ public static class TelemetryContractValidatorV1
         if (version != CurrentSchemaVersion) Add(errors, "UNSUPPORTED_SCHEMA_VERSION", "schemaVersion", $"Schema version {version} is unsupported; expected {CurrentSchemaVersion}.");
     }
 
+    private static void CanonicalRevision(long revision, List<TelemetryValidationError> errors)
+    {
+        if (revision < 1)
+            Add(errors, "INVALID_CANONICAL_REVISION", "canonicalRevision", "Canonical revision must be a positive store-assigned per-match revision.");
+    }
+
     private static void Required(string? value, string path, List<TelemetryValidationError> errors)
     {
         if (string.IsNullOrWhiteSpace(value)) Add(errors, "REQUIRED_VALUE_MISSING", path, "A non-empty value is required.");
@@ -269,6 +312,13 @@ public static class TelemetryContractValidatorV1
     {
         if (value is not null && string.IsNullOrWhiteSpace(value))
             Add(errors, "REQUIRED_VALUE_MISSING", path, "A supplied value must not be empty or whitespace.");
+    }
+
+    private static void MaximumLength(string? value, string path, int maximum, List<TelemetryValidationError> errors,
+        string errorCode = "VALUE_TOO_LONG")
+    {
+        if (value is not null && value.EnumerateRunes().Skip(maximum).Any())
+            Add(errors, errorCode, path, $"Value must not exceed {maximum} characters.");
     }
 
     private static TelemetryValidationResult Invalid(string code, string path, string message) => new(new[] { new TelemetryValidationError(code, path, message) });

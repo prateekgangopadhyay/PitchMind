@@ -4,7 +4,8 @@ namespace PitchMind.Application.Abstractions;
 
 /// <summary>Immutable source identity required before admitting a canonical match.</summary>
 public sealed record MatchSourceMetadata(Guid MatchId, string FixtureVersion, string SourceVersion,
-    string SourceSha256, string Provenance, decimal PitchLengthMetres, decimal PitchWidthMetres);
+    string SourceSha256, string Provenance, decimal PitchLengthMetres, decimal PitchWidthMetres,
+    string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null);
 
 /// <summary>A deterministic projection tied to its PostgreSQL admission revision and algorithm revision.</summary>
 public sealed record PersistedMatchProjection(Guid MatchId, long CanonicalRevision, int Revision, long AsOfSequence,
@@ -25,6 +26,8 @@ public interface IMatchProjectionStore
 {
     Task SaveMatchMetadataAsync(MatchSourceMetadata metadata, CancellationToken cancellationToken);
     Task<PersistedMatchProjection?> ReadProjectionAsync(Guid matchId, long canonicalRevision, int projectionRevision,
+        CancellationToken cancellationToken);
+    Task<PersistedMatchProjection?> ReadProjectionAtTimeAsync(Guid matchId, long canonicalRevision, int atClockSeconds,
         CancellationToken cancellationToken);
     Task<InsightProvenanceRecord?> ReadInsightProvenanceAsync(string insightId, CancellationToken cancellationToken);
 }

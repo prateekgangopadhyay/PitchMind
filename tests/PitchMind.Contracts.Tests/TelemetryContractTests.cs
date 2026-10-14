@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PitchMind.Contracts.Telemetry.V1;
 using Xunit;
 
@@ -14,6 +15,7 @@ public sealed class TelemetryContractTests
         var original = Event("Pass") with
         {
             EventId = "canonical-event-01",
+            CanonicalRevision = 7,
             Sequence = 0,
             CoordinateSystem = Frame().CoordinateSystem,
             Location = new EventLocationV1
@@ -37,6 +39,7 @@ public sealed class TelemetryContractTests
         var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(json, JsonOptions)!;
 
         Assert.Equal("canonical-event-01", restored.EventId);
+        Assert.Equal(7, restored.CanonicalRevision);
         Assert.Equal(0, restored.Sequence);
         Assert.Equal("original-event-01", restored.Source.SourceRecordId);
         Assert.Equal(1, restored.Source.SourceSequence);
@@ -46,6 +49,95 @@ public sealed class TelemetryContractTests
         Assert.Equal(5761, restored.MatchTime.ElapsedSeconds);
         Assert.Equal(5761, restored.MatchTime.SourceClockValue);
         Assert.True(TelemetryContractValidatorV1.Validate(restored).IsValid);
+    }
+
+    [Fact]
+    public void Decimal_contract_numbers_reject_values_not_exactly_representable_by_dotnet_decimal()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("1e-29");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+
+        var frameNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        frameNode["ball"]!["x"] = JsonNode.Parse("0.12345678901234567890123456789");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(frameNode.ToJsonString(), JsonOptions));
+
+        var boundaryNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        boundaryNode["coordinateSystem"]!["lengthMetres"] = JsonNode.Parse("90.000000000000000000000000001");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(boundaryNode.ToJsonString(), JsonOptions));
+
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("79228162514264337593543950336");
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+    }
+
+    [Theory]
+    [InlineData("0.0000000000000000000000000001")]
+    [InlineData("1.2300")]
+    [InlineData("79.228162514264337593543950335")]
+    [InlineData("79228162514264337593543950335")]
+    [InlineData("79228162514264337593543950335.0")]
+    [InlineData("0e999999999999999999999")]
+    public void Decimal_contract_preserves_exact_values_at_supported_scale_and_coefficient(string rawValue)
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse(rawValue);
+
+        var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions)!;
+
+        var expected = rawValue[0] == '0' && (rawValue.Contains('e') || rawValue.Contains('E'))
+            ? 0m
+            : decimal.Parse(rawValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(expected, restored.MatchTime.SourceClockValue);
+    }
+
+    [Fact]
+    public void Decimal_contract_rejects_extreme_exponents_with_a_json_error()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode["matchTime"]!["sourceClockValue"] = JsonNode.Parse("1e-2147483648");
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+    }
+
+    [Fact]
+    public void Canonical_revision_is_distinct_from_schema_version_on_event_and_frame_contracts()
+    {
+        var eventValue = Event("Pass") with { CanonicalRevision = 7 };
+        var frameValue = Frame() with { CanonicalRevision = 9 };
+
+        using var eventJson = JsonDocument.Parse(JsonSerializer.Serialize(eventValue, JsonOptions));
+        using var frameJson = JsonDocument.Parse(JsonSerializer.Serialize(frameValue, JsonOptions));
+
+        Assert.Equal(1, eventJson.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(7, eventJson.RootElement.GetProperty("canonicalRevision").GetInt64());
+        Assert.Equal(1, frameJson.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(9, frameJson.RootElement.GetProperty("canonicalRevision").GetInt64());
+        Assert.True(TelemetryContractValidatorV1.Validate(eventValue).IsValid);
+        Assert.True(TelemetryContractValidatorV1.Validate(frameValue).IsValid);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Precanonical_or_invalid_revision_cannot_validate_as_canonical_telemetry(long revision)
+    {
+        var eventErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with { CanonicalRevision = revision }).Errors;
+        var frameErrors = TelemetryContractValidatorV1.Validate(Frame() with { CanonicalRevision = revision }).Errors;
+
+        Assert.Contains(eventErrors, error => error.Code == "INVALID_CANONICAL_REVISION" && error.Path == "canonicalRevision");
+        Assert.Contains(frameErrors, error => error.Code == "INVALID_CANONICAL_REVISION" && error.Path == "canonicalRevision");
+    }
+
+    [Fact]
+    public void Canonical_contract_deserialization_rejects_pre_revision_source_records()
+    {
+        var eventNode = JsonNode.Parse(JsonSerializer.Serialize(Event("Pass"), JsonOptions))!.AsObject();
+        eventNode.Remove("canonicalRevision");
+        var frameNode = JsonNode.Parse(JsonSerializer.Serialize(Frame(), JsonOptions))!.AsObject();
+        frameNode.Remove("canonicalRevision");
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EventEnvelopeV1>(eventNode.ToJsonString(), JsonOptions));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TrackingFrameV1>(frameNode.ToJsonString(), JsonOptions));
     }
 
     [Theory]
@@ -92,6 +184,12 @@ public sealed class TelemetryContractTests
 
         var substitutionErrors = TelemetryContractValidatorV1.Validate(Event("Substitution") with { RelatedPlayerId = null }).Errors;
         Assert.Contains(substitutionErrors, error => error.Path == "relatedPlayerId");
+
+        var duplicateParticipantErrors = TelemetryContractValidatorV1.Validate(Event("Substitution") with
+        {
+            RelatedPlayerId = "player-home-1"
+        }).Errors;
+        Assert.Contains(duplicateParticipantErrors, error => error.Code == "INVALID_SUBSTITUTION" && error.Path == "relatedPlayerId");
     }
 
     [Fact]
@@ -102,17 +200,109 @@ public sealed class TelemetryContractTests
         using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
 
         Assert.Equal(".*\\S.*", eventSchema.RootElement.GetProperty("properties").GetProperty("eventId").GetProperty("pattern").GetString());
+        Assert.Contains(eventSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
+        Assert.Equal(1, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
         Assert.Equal("(?:Z|[+-]00:00)$", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceTimestampUtc").GetProperty("pattern").GetString());
         Assert.Equal(".*\\S.*", frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
-        Assert.Contains(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
-            rule.GetProperty("if").GetProperty("properties").GetProperty("eventType").GetProperty("const").GetString() == "Substitution" &&
-            rule.GetProperty("then").GetProperty("required").EnumerateArray().Any(field => field.GetString() == "relatedPlayerId") &&
-            rule.GetProperty("then").GetProperty("properties").GetProperty("relatedPlayerId").GetProperty("type").GetString() == "string");
-        Assert.Equal(90, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("minimum").GetInt32());
-        Assert.Equal(120, frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("maximum").GetInt32());
+        Assert.Contains(frameSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
+        Assert.Equal(1, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
+        Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
+        var substitutionRule = Assert.Single(eventSchema.RootElement.GetProperty("allOf").EnumerateArray(), rule =>
+        {
+            var condition = rule.GetProperty("if");
+            return condition.TryGetProperty("properties", out var properties) &&
+                   properties.TryGetProperty("eventType", out var eventType) &&
+                   eventType.TryGetProperty("const", out var constant) &&
+                   constant.GetString() == "Substitution";
+        });
+        Assert.Contains(substitutionRule.GetProperty("then").GetProperty("required").EnumerateArray(), field => field.GetString() == "relatedPlayerId");
+        Assert.Equal("string", substitutionRule.GetProperty("then").GetProperty("properties").GetProperty("relatedPlayerId").GetProperty("type").GetString());
+        Assert.Contains("runtime validator", substitutionRule.GetProperty("then").GetProperty("description").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("sequence").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("elapsedSeconds").GetProperty("maximum").GetInt64());
+        Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceSequence").GetProperty("maximum").GetInt64());
+        var eventDefinitions = eventSchema.RootElement.GetProperty("$defs");
+        Assert.True(eventDefinitions.TryGetProperty("dotnetDecimalNonNegative", out var decimalDefinition));
+        Assert.Equal(0, decimalDefinition.GetProperty("minimum").GetInt32());
+        Assert.False(eventSchema.RootElement.GetProperty("properties").TryGetProperty("dotnetDecimalNonNegative", out _));
+        var decimalBranches = decimalDefinition.GetProperty("anyOf").EnumerateArray().ToArray();
+        Assert.Equal(29, decimalBranches.Length);
+        var scaleFactor = 1m;
+        for (var scale = 0; scale < decimalBranches.Length; scale++)
+        {
+            Assert.Equal(1m / scaleFactor, decimalBranches[scale].GetProperty("multipleOf").GetDecimal());
+            Assert.Equal(decimal.MaxValue / scaleFactor, decimalBranches[scale].GetProperty("maximum").GetDecimal());
+            if (scale < decimalBranches.Length - 1) scaleFactor *= 10m;
+        }
+        Assert.Equal("#/$defs/dotnetDecimalNonNegative", eventSchema.RootElement.GetProperty("$defs").GetProperty("matchTime").GetProperty("properties").GetProperty("sourceClockValue").GetProperty("$ref").GetString());
+        Assert.Equal("event-envelope.schema.json#/$defs/dotnetDecimalNonNegative", frameSchema.RootElement.GetProperty("$defs").GetProperty("point").GetProperty("properties").GetProperty("x").GetProperty("$ref").GetString());
+        Assert.True(eventDefinitions.TryGetProperty("dotnetDecimalNonNegative", out _));
+        var lengthBounds = frameSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("lengthMetres").GetProperty("allOf")[1];
+        Assert.Equal(90, lengthBounds.GetProperty("minimum").GetInt32());
+        Assert.Equal(120, lengthBounds.GetProperty("maximum").GetInt32());
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
         Assert.Equal(64, eventSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("teamDirections").GetProperty("maxItems").GetInt32());
         Assert.Equal("null", eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").GetProperty("properties").GetProperty("end").GetProperty("anyOf")[1].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void Canonical_telemetry_rejects_overlong_identifiers_and_source_text_without_truncating()
+    {
+        var longId = new string('x', TelemetryContractValidatorV1.MaximumIdentifierLength + 1);
+        var longText = new string('x', TelemetryContractValidatorV1.MaximumTextLength + 1);
+
+        var eventErrors = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            EventId = longId,
+            Outcome = longText,
+            Source = Source() with { SourceRecordId = longId, ProvenanceStatus = longText }
+        }).Errors;
+        Assert.Contains(eventErrors, error => error.Code == "IDENTIFIER_TOO_LONG" && error.Path == "eventId");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "outcome");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "source.sourceRecordId");
+        Assert.Contains(eventErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "source.provenanceStatus");
+
+        var frameErrors = TelemetryContractValidatorV1.Validate(Frame() with
+        {
+            Players = new[] { Frame().Players[0] with { PlayerId = longId } }
+        }).Errors;
+        Assert.Contains(frameErrors, error => error.Code == "VALUE_TOO_LONG" && error.Path == "players[0].playerId");
+    }
+
+    [Fact]
+    public void Canonical_telemetry_string_bounds_count_unicode_characters_as_json_schema_does()
+    {
+        var exactlyBounded = string.Concat(Enumerable.Repeat("\U0001F600", TelemetryContractValidatorV1.MaximumIdentifierLength));
+        var overBound = string.Concat(Enumerable.Repeat("\U0001F600", TelemetryContractValidatorV1.MaximumIdentifierLength + 1));
+
+        Assert.True(TelemetryContractValidatorV1.Validate(Event("Pass") with { MatchId = exactlyBounded }).IsValid);
+        Assert.Contains(TelemetryContractValidatorV1.Validate(Event("Pass") with { MatchId = overBound }).Errors,
+            error => error.Code == "VALUE_TOO_LONG" && error.Path == "matchId");
+    }
+
+    [Fact]
+    public void Versioned_schemas_declare_the_runtime_string_bounds()
+    {
+        var root = FindRepositoryRoot();
+        using var eventSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "event-envelope.schema.json")));
+        using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
+        var eventProperties = eventSchema.RootElement.GetProperty("properties");
+        var sourceProperties = eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties");
+        var frameProperties = frameSchema.RootElement.GetProperty("properties");
+        var playerProperties = frameSchema.RootElement.GetProperty("$defs").GetProperty("player").GetProperty("properties");
+
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, eventProperties.GetProperty("matchId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, eventProperties.GetProperty("eventId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumTextLength, eventProperties.GetProperty("outcome").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, sourceProperties.GetProperty("sourceRecordId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumTextLength, sourceProperties.GetProperty("provenanceStatus").GetProperty("maxLength").GetInt32());
+        Assert.Equal(64, sourceProperties.GetProperty("sourceSha256").GetProperty("maxLength").GetInt32());
+        Assert.Equal(64, sourceProperties.GetProperty("sourceTimestampUtc").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, frameProperties.GetProperty("frameId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, playerProperties.GetProperty("playerId").GetProperty("maxLength").GetInt32());
+        Assert.Equal(TelemetryContractValidatorV1.MaximumIdentifierLength, playerProperties.GetProperty("teamId").GetProperty("maxLength").GetInt32());
     }
 
     [Fact]
@@ -130,6 +320,26 @@ public sealed class TelemetryContractTests
         var codes = TelemetryContractValidatorV1.Validate(frame).Errors.Select(error => error.Code).ToArray();
         Assert.Contains("INVALID_COORDINATE", codes);
         Assert.Contains("ATTACKING_DIRECTION_MISSING", codes);
+    }
+
+    [Fact]
+    public void Missing_team_direction_diagnostic_does_not_echo_overlong_team_id()
+    {
+        var longTeamId = new string('x', 100_000);
+        var frame = Frame() with
+        {
+            Players = new[] { Frame().Players[0] with { TeamId = longTeamId } },
+            CoordinateSystem = Frame().CoordinateSystem with
+            {
+                TeamDirections = new[] { new TeamAttackingDirectionV1 { TeamId = "home", Direction = "right" } }
+            }
+        };
+
+        var diagnostic = Assert.Single(TelemetryContractValidatorV1.Validate(frame).Errors,
+            error => error.Code == "ATTACKING_DIRECTION_MISSING");
+
+        Assert.DoesNotContain(longTeamId, diagnostic.Message);
+        Assert.True(diagnostic.Message.Length < 128);
     }
 
     [Fact]
@@ -169,6 +379,17 @@ public sealed class TelemetryContractTests
 
         var missingPoints = value with { Location = new EventLocationV1() };
         Assert.Contains(TelemetryContractValidatorV1.Validate(missingPoints).Errors, error => error.Code == "EVENT_LOCATION_REQUIRED");
+
+        var missingEventTeamDirection = value with
+        {
+            CoordinateSystem = coordinateSystem with
+            {
+                TeamDirections = new[] { new TeamAttackingDirectionV1 { TeamId = "away", Direction = "left" } }
+            }
+        };
+        var directionError = Assert.Single(TelemetryContractValidatorV1.Validate(missingEventTeamDirection).Errors,
+            error => error.Code == "ATTACKING_DIRECTION_MISSING");
+        Assert.Equal("coordinateSystem.teamDirections", directionError.Path);
 
         var oneSided = value with { Location = new EventLocationV1 { Start = new PitchPointV1 { X = .25m, Y = .5m } } };
         var restored = JsonSerializer.Deserialize<EventEnvelopeV1>(JsonSerializer.Serialize(oneSided, JsonOptions), JsonOptions)!;
@@ -311,6 +532,7 @@ public sealed class TelemetryContractTests
     {
         SchemaVersion = 1,
         MatchId = "match-test",
+        CanonicalRevision = 1,
         EventId = "event-test",
         Sequence = 0,
         MatchTime = new MatchTimeV1
@@ -333,6 +555,7 @@ public sealed class TelemetryContractTests
     {
         SchemaVersion = 1,
         MatchId = "match-test",
+        CanonicalRevision = 1,
         FrameId = "frame-test",
         Sequence = 0,
         MatchTime = Event("Pass").MatchTime,

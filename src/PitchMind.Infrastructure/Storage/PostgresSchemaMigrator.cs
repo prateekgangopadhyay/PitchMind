@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -33,6 +33,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version4Sql, cancellationToken);
         if (currentVersion < 5)
             await ExecuteAsync(connection, transaction, Version5Sql, cancellationToken);
+        if (currentVersion < 6)
+            await ExecuteAsync(connection, transaction, Version6Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -284,5 +286,24 @@ public static class PostgresSchemaMigrator
             PRIMARY KEY (consumer_id, message_id)
         );
         INSERT INTO pitchmind.schema_versions(version) VALUES (5) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Persists explicit competition and re-entry rule context without guessing legacy values.</summary>
+    public const string Version6Sql = """
+        ALTER TABLE pitchmind.matches ADD COLUMN IF NOT EXISTS competition_rules_version text;
+        ALTER TABLE pitchmind.matches ADD COLUMN IF NOT EXISTS max_substitute_reentries_per_player integer;
+        ALTER TABLE pitchmind.matches DROP CONSTRAINT IF EXISTS matches_competition_rules_version_nonempty;
+        ALTER TABLE pitchmind.matches ADD CONSTRAINT matches_competition_rules_version_nonempty
+            CHECK (competition_rules_version IS NULL OR length(competition_rules_version) BETWEEN 1 AND 128) NOT VALID;
+        ALTER TABLE pitchmind.matches VALIDATE CONSTRAINT matches_competition_rules_version_nonempty;
+        ALTER TABLE pitchmind.matches DROP CONSTRAINT IF EXISTS matches_substitute_reentry_limit_nonnegative;
+        ALTER TABLE pitchmind.matches ADD CONSTRAINT matches_substitute_reentry_limit_nonnegative
+            CHECK (max_substitute_reentries_per_player IS NULL OR max_substitute_reentries_per_player >= 0) NOT VALID;
+        ALTER TABLE pitchmind.matches VALIDATE CONSTRAINT matches_substitute_reentry_limit_nonnegative;
+        ALTER TABLE pitchmind.matches DROP CONSTRAINT IF EXISTS matches_reentry_limit_requires_version;
+        ALTER TABLE pitchmind.matches ADD CONSTRAINT matches_reentry_limit_requires_version
+            CHECK (max_substitute_reentries_per_player IS NULL OR competition_rules_version IS NOT NULL) NOT VALID;
+        ALTER TABLE pitchmind.matches VALIDATE CONSTRAINT matches_reentry_limit_requires_version;
+        INSERT INTO pitchmind.schema_versions(version) VALUES (6) ON CONFLICT DO NOTHING;
         """;
 }
