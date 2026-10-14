@@ -14,6 +14,17 @@ public sealed class SyntheticMatchTests
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
+    [Fact] public void CompleteSyntheticScenarioReplaysScoreTransitionsWithoutLookahead()
+    {
+        var scenario = SyntheticFixtureGenerator.GenerateScenario(seed: 42);
+        var service = new SyntheticMatchService(scenario.Fixture);
+
+        Assert.Equal((0, 0), (service.GetState(3308).HomeScore, service.GetState(3308).AwayScore));
+        Assert.Equal((1, 0), (service.GetState(3309).HomeScore, service.GetState(3309).AwayScore));
+        Assert.Equal((1, 0), (service.GetState(4679).HomeScore, service.GetState(4679).AwayScore));
+        Assert.Equal((1, 1), (service.GetState(4680).HomeScore, service.GetState(4680).AwayScore));
+        Assert.Equal((1, 1), (service.GetState(5400).HomeScore, service.GetState(5400).AwayScore));
+    }
     [Fact] public void MissingTrackingSuppressesSpatialClaim()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
@@ -44,6 +55,21 @@ public sealed class SyntheticMatchTests
         var frames = fixture.Frames.Select(f => f.ClockSeconds == 3293 ? f with
         { Players = f.Players.Select(p => p.PlayerId == "harbour-10" ? p with { X = 40 } : p).ToArray() } : f).ToArray();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = frames }, 5400));
+    }
+    [Fact] public void NamedPressCounterexamplesDoNotProducePositiveGolden()
+    {
+        var counterexamples = SyntheticFixtureGenerator.GeneratePressCounterexamples(seed: 42);
+
+        Assert.Equal(new[]
+        {
+            SyntheticPressCounterexampleKind.MissingTracking,
+            SyntheticPressCounterexampleKind.CompletedOpponentPass,
+            SyntheticPressCounterexampleKind.WrongTeamRegain,
+            SyntheticPressCounterexampleKind.DistantPressArrival
+        }, counterexamples.Select(example => example.Kind));
+        Assert.Equal(counterexamples.Count, counterexamples.Select(example => example.Name).Distinct().Count());
+        Assert.All(counterexamples, example =>
+            Assert.Empty(PressingSequenceDetector.Detect(example.Fixture, 5400)));
     }
     [Fact] public void NonFiniteCoordinatesAreRejected()
     {
