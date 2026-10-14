@@ -4,9 +4,10 @@
 ## Source onboarding required before implementation
 Owner has supplied `data/simulations/manu-liv-match-dataset.json` in current GitHub main and confirmed synthetic provenance and redistribution permission (2026-10-08). Source byte/profile discovery is complete; coordinate/clock policies, player metric quality, football review, canonical mapping and independent sign-off remain open. The source is **owner-declared synthetic and distributable**; do not describe it as independently rights-reviewed or as football-approved. The read-only profiler records size, SHA-256, JSON structure and field types without importing the source. Preserve source event IDs, original 1-based sequence, clock and provenance; never normalize by guessing. Publish field-by-field source→canonical mapping only after unresolved semantics are reviewed.
 
-## Proposed canonical envelope (adapter output, not guessed source)
-`EventEnvelope`: `schemaVersion`, `matchId`, `eventId` stable, `sequence` contiguous per match, `sourceId/version/hash/recordPointer`, `provenance=synthetic`, `period`, `elapsedMatchMilliseconds`, optional source UTC, `eventType`, `teamId/playerId/relatedPlayerId`, `outcome`, `qualifiers`, `possessionId`, optional start/end pitch coordinates **in metres**, `payloadHash`, `supersedesEventId` for corrections.
-`TrackingFrame`: `frameId, matchId, elapsedMatchMilliseconds, ball, players [{playerId,x,y,observed,quality}], pitchDimensions, orientationVersion, sourceRecordPointer/hash`. Null/missing positions remain null; interpolated samples are tagged and **never presented as observed**.
+## Proposed canonical envelope (post-admission output, not guessed source)
+Raw JSON records are source candidates and do not have a `canonicalRevision`; they must not be represented as `EventEnvelopeV1`/`TrackingFrameV1` or published to the canonical telemetry channel. After reviewed mapping and successful PostgreSQL canonical admission, the store assigns a positive, monotonically increasing per-match `canonicalRevision` atomically with the record and outbox intent. `schemaVersion` remains the wire-schema version and never supplies the canonical revision.
+`EventEnvelope`: `schemaVersion`, positive store-assigned `canonicalRevision`, `matchId`, stable `eventId`, contiguous canonical `sequence`, `sourceId/version/hash/recordPointer`, `provenance=synthetic`, `period`, `elapsedMatchMilliseconds`, optional source UTC, `eventType`, `teamId/playerId/relatedPlayerId`, `outcome`, `qualifiers`, `possessionId`, optional start/end pitch coordinates **in metres**, `payloadHash`, `supersedesEventId` for corrections.
+`TrackingFrame`: `canonicalRevision` (positive, store-assigned), `frameId, matchId, elapsedMatchMilliseconds, ball, players [{playerId,x,y,observed,quality}], pitchDimensions, orientationVersion, sourceRecordPointer/hash`. Null/missing positions remain null; interpolated samples are tagged and **never presented as observed**.
 `FixtureManifest`: `fixtureId, schemaVersion, sourceFilename, sha256, dataRights, syntheticFlag, competitionContext, teamRoster, periods, matchClockPolicy, pitchMetres, sourceCoordinateSpec, scenarioNames, generatorVersion`.
 
 ## Flow and anti-corruption layer
@@ -15,12 +16,12 @@ flowchart LR
  J[Approved JSON] --> H[Hash + JSON profiler]
  H --> V{Schema + football validation}
  V -->|Invalid| Q[Quarantine source pointer, reason, payload hash]
- V -->|Valid| A[Source adapter converts time, IDs, pitch coordinates]
- A --> E[Canonical event/frame + provenance]
- E --> L[LOCAL deterministic replay]
- E --> EH[Azure Event Hubs producer]
- L --> PG[PostgreSQL] 
- EH --> W[EventWorker] --> PG
+ V -->|Valid| A[Source adapter maps source candidate]
+ A --> PG[PostgreSQL canonical admission assigns revision]
+ PG --> O[Transactional outbox]
+ O --> EH[Event Hubs publishes canonical envelope]
+ EH --> W[Consumers validate revision and order]
+ PG --> L[LOCAL deterministic replay]
  ```
 Ports: `ISimulationFeedReader`, `ISourceFeedMapper`, `IEnvelopeValidator`, `ITrackingFrameMapper`, `IQuarantineSink`, `ISimulationClock`; adapters only in Infrastructure. File path configured (no source file name hardcoded in C#); size/depth bounded and path traversal rejected. Browser reads API not source JSON.
 
