@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
@@ -19,6 +20,7 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(first.Events.Count, first.Events.Select(e => e.Event.EventId).Distinct().Count());
         Assert.All(first.Events, item =>
         {
+            Assert.Equal(first.MatchId, item.Event.MatchId.ToString());
             Assert.InRange(item.Event.ClockSeconds, 0, first.DurationSeconds);
             Assert.Equal(item.Event.ClockSeconds < 2700 ? 1 : 2, item.Event.Period);
         });
@@ -45,6 +47,10 @@ public sealed class SyntheticFixtureTests
         Assert.Equal(first.Json, repeat.Json);
         Assert.Equal(first.ContentSha256, repeat.ContentSha256);
         Assert.NotEqual(first.ContentSha256, otherSeed.ContentSha256);
+        Assert.NotEqual(first.Fixture.MatchId, otherSeed.Fixture.MatchId);
+        using var payload = JsonDocument.Parse(first.Json);
+        Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, payload.RootElement.GetProperty("formatVersion").GetString());
+        Assert.Equal(first.Fixture.MatchId, payload.RootElement.GetProperty("fixture").GetProperty("matchId").GetString());
         Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
     }
 
