@@ -39,7 +39,7 @@ Current insights also carry a typed `evidenceGraph` with claim, event, frame, an
 | GET | `/api/v1/matches/{id}/frames` | EP07-S04 | `fromMs,toMs,limit,cursor?` | observed tracking samples and quality; never invented positions |
 | GET | `/api/v1/matches/{id}/events` | EP06-S01 | `fromMs?,toMs?,cursor?,limit?,revision?` | versioned pagination, ordered match events with provenance |
 | GET | `/api/v1/matches/{id}/insights` | EP05-S04 | `atSeconds,category?,truthClass?,cursor?,limit?` | evidence-classified supported tactical insights |
-| GET | `/api/v1/matches/{id}/key-moments` | EP05-S05 | `atSeconds?,limit?` | ranked validated moments with evidence IDs and score impact |
+| GET | `/api/v1/matches/{id}/key-moments` | EP05-S05 | `atSeconds?` | selected-time KeyMomentResponse with source hash and event/frame/claim references; proposed only, unavailable until canonical revisioned PostgreSQL read port exists |
 | GET | `/api/v1/matches/{id}/evidence/{insightId}` | EP07-S05 | `atSeconds,revision?,cursor?` | immutable event/frame/metric refs + conditions/missingness |
 | GET | `/api/v1/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,revision?,limit?` | canonical ordered catch-up, nextCursor/hasMore |
 | POST | `/api/v1/realtime/negotiate` | EP06-S02 | `{matchId,clientRevision?}` | authorized short-lived Azure SignalR connection details |
@@ -58,6 +58,10 @@ Current insights also carry a typed `evidenceGraph` with claim, event, frame, an
 | GET | `/api/v1/search/evidence` | EP12-S01 | filters,cursor | P2 indexed authorized evidence, canonical links |
 
 New required routes are **proposals pending exact JSON schema and actual implementation**. User interface cards must render unavailable states until underlying data and algorithms exist.
+
+`KeyMomentResponse` is a typed contract/mapping for the EP05-S05 domain result; it is not currently exposed by an HTTP route. The proposed route above stays unavailable until API composition reads a canonical, revisioned PostgreSQL projection. The offline fixture result is not served over the public API.
+
+Each Key Moment carries the lowercase SHA-256 of its exact source fixture and a 64-bit nullable canonical revision. Tactical candidates are emitted only when their insight and evidence graph match that same source hash; event-only candidates retain the same source identity.
 
 ## Envelope and DTO contracts — proposed additions
 `MatchTimeContext`: `{matchId,mode:'liveHead'|'selectedTime',selectedElapsedMs,period,contextRevision,canonicalRevision}`.
