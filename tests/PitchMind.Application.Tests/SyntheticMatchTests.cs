@@ -39,6 +39,39 @@ public sealed class SyntheticMatchTests
         Assert.Equal((1, 1), (service.GetState(4680).HomeScore, service.GetState(4680).AwayScore));
         Assert.Equal((1, 1), (service.GetState(5400).HomeScore, service.GetState(5400).AwayScore));
     }
+    [Fact] public void SameObservedSequenceGetsSelectedTimeContextWithoutTacticalJudgment()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var baseline = new SyntheticMatchService(fixture).GetInsights(3309).Single();
+        var later = new SyntheticMatchService(fixture).GetInsights(4680).Single();
+        var awayCirculation = fixture.Events.First(item => item.Action == "circulation" &&
+            item.TeamId == fixture.Away.Id && item.Event.ClockSeconds > 2700 && item.Event.ClockSeconds < 3309);
+        var contextChangedEvents = fixture.Events.Select(item => item.Event.EventId == awayCirculation.Event.EventId ? item with
+        {
+            Event = item.Event with { Type = PitchMind.Domain.Events.MatchEventType.Goal },
+            Action = "goal",
+            Outcome = "scored"
+        } : item).ToArray();
+        var contextChanged = new SyntheticMatchService(fixture with { Events = contextChangedEvents })
+            .GetInsights(3309).Single();
+
+        Assert.Equal(baseline.EventIds, contextChanged.EventIds);
+        Assert.Equal(baseline.FrameIds, contextChanged.FrameIds);
+        Assert.Equal(baseline.EventIds, later.EventIds);
+        Assert.Equal(baseline.FrameIds, later.FrameIds);
+        Assert.Equal("tactical-context-v1", baseline.Context!.SchemaVersion);
+        Assert.Equal("Harbour FC 1–0 Ridge Athletic", baseline.Context.Scoreline);
+        Assert.Equal("Harbour FC 1–1 Ridge Athletic", contextChanged.Context!.Scoreline);
+        Assert.Equal("Harbour FC 1–1 Ridge Athletic", later.Context!.Scoreline);
+        Assert.DoesNotContain("1–1", baseline.Context.Scoreline, StringComparison.Ordinal);
+        Assert.Equal("home", baseline.Context.TeamRole);
+        Assert.Equal(0, baseline.Context.NumericalAdvantage);
+        Assert.Equal("SecondHalf", baseline.Context.MatchPhase);
+        Assert.Equal("opponent in possession at trigger; defending after observed regain", baseline.Context.OpponentPhase);
+        Assert.Contains("scoreline is Harbour FC 1–0 Ridge Athletic", baseline.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("superior", baseline.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("low block", baseline.Summary, StringComparison.OrdinalIgnoreCase);
+    }
     [Fact] public void VersionPinnedReplayIsDeterministicAndContainsOnlySelectedTimeOutputs()
     {
         var first = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).ReplayAt(3308);
@@ -78,7 +111,6 @@ public sealed class SyntheticMatchTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         Assert.Equal("candidate-regression-goldens-pending-product-owner-review", golden.Approval);
         var service = new SyntheticMatchService(GenerateReplayGoldenFixture());
-
         foreach (var expected in golden.Snapshots)
         {
             var replay = service.ReplayAt(expected.SelectedElapsedSeconds, golden.FixtureVersion, golden.FixtureSeed,
@@ -198,7 +230,7 @@ public sealed class SyntheticMatchTests
     [Fact] public void UnrelatedRegainIsNotAttributedToPress()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
-        var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = "ridge" } : e).ToArray();
+        var events = fixture.Events.Select(e => e.Action == "high-regain" ? e with { TeamId = fixture.Away.Id, PlayerId = "ridge-11" } : e).ToArray();
         Assert.Empty(new SyntheticMatchService(fixture with { Events = events }).GetInsights(5400));
     }
     [Theory] [InlineData(-1)] [InlineData(5401)] public void InvalidClockIsRejected(int clock) => Assert.Throws<ArgumentOutOfRangeException>(() => new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(clock));
