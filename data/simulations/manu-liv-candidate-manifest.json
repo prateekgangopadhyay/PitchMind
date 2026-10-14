@@ -19,7 +19,8 @@
   "match": {
     "expectedMatchCount": 1,
     "expectedTeamCount": 2,
-    "sourceClockUnit": "seconds",
+    "sourceClockField": "clockSeconds",
+    "sourceClockUnitStatus": "unverified",
     "preserveSourceClockWithoutNormalization": true,
     "allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker": ["Pass"],
     "expectedPeriods": [1, 2],

@@ -10,7 +10,7 @@
 - Source size and SHA-256: 28,601,013 bytes; `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`.
 - Validator output status: `structurally_valid_candidate_blocked_for_canonicalization`.
 - Observed counts: 2,199 events, one match, two teams, and 48,048 event-attached position records.
-- Preserved source sequence: 1..2199. Source `clockSeconds`: 0..5761, retained without normalization. The report's source event-ID ledger digest is `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`; complete ordered-record digest is `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`.
+- Preserved source sequence: 1..2199. Source field `clockSeconds` has raw values 0..5761, retained without normalization; unit and clock interpretation are unverified. The report's source event-ID ledger digest is `abd6e8ebcd9f7812be5633dd7e600d1b350a3fb3b3ddad6f678372b2be0a4539`; complete ordered-record digest is `8c590d33ccaddc3809b74540fad78186c03e88ab5d3d9b2fbf62238de0e97cd3`.
 - Coordinates are reported as raw numeric ranges only. Coordinate units/orientation and pitch dimensions remain unverified; player metrics remain unvalidated; canonical mappings remain unapproved; football review remains required.
 
 ## Executed checks
