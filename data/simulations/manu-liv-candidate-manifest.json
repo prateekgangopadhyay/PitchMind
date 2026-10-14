@@ -1,0 +1,82 @@
+{
+  "manifestVersion": "1.0.0",
+  "fixtureId": "manu-liv-source-candidate",
+  "status": "candidate_not_canonical",
+  "source": {
+    "path": "data/simulations/manu-liv-match-dataset.json",
+    "format": "json-array",
+    "sha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "byteSize": 28601013,
+    "expectedEventCount": 2199,
+    "sequenceStart": 1,
+    "sequenceEnd": 2199,
+    "synthetic": true,
+    "provenance": "repository-owner-confirmed",
+    "provenanceConfirmedOn": "2026-10-08",
+    "redistributionPermission": "repository-owner-confirmed",
+    "independentRightsPrivacyReview": "pending"
+  },
+  "match": {
+    "expectedMatchCount": 1,
+    "expectedTeamCount": 2,
+    "sourceClockField": "clockSeconds",
+    "sourceClockUnitStatus": "unverified",
+    "preserveSourceClockWithoutNormalization": true,
+    "allowedSameClockPeriod2EventTypesBeforeHalfTimeMarker": ["Pass"],
+    "expectedPeriods": [1, 2],
+    "requiredEventCounts": {
+      "HalfTime": 1,
+      "FullTime": 1
+    },
+    "requiredEventMarkers": {
+      "HalfTime": { "clockSeconds": 2700, "period": 2 },
+      "FullTime": { "clockSeconds": 5761, "period": 2 }
+    },
+    "sourceClockStart": 0,
+    "sourceClockEnd": 5761
+  },
+  "coordinates": {
+    "unit": null,
+    "axisConvention": null,
+    "pitchDimensionsMetres": null,
+    "status": "unverified"
+  },
+  "playerMetrics": {
+    "unitsAndValidity": "unverified",
+    "status": "unvalidated",
+    "mayBePresentedAsObservedPerformance": false
+  },
+  "canonicalization": {
+    "mappingStatus": "not_approved",
+    "mayCreateCanonicalEvents": false,
+    "sourceEventTypes": [
+      "BallRecovery",
+      "Carry",
+      "Clearance",
+      "Foul",
+      "FullTime",
+      "Goal",
+      "HalfTime",
+      "Interception",
+      "KickOff",
+      "LineBreakingPass",
+      "Pass",
+      "PossessionLost",
+      "PressureApplied",
+      "ProgressiveCarry",
+      "ProgressivePass",
+      "RedCard",
+      "Shot",
+      "Substitution",
+      "Tackle"
+    ]
+  },
+  "footballReview": {
+    "status": "required",
+    "notes": [
+      "Event frequencies require football-domain review.",
+      "Sparse event-attached positions do not establish continuous tracking or pressure distance.",
+      "Goal events and score metadata are not independently certified as canonical score truth."
+    ]
+  }
+}

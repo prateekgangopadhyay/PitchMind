@@ -1,4 +1,5 @@
 # Manchester United–Liverpool source JSON: inspected structural profile
+Field-level inventory: [candidate feed data dictionary](MANU-LIV-DATA-DICTIONARY.md). It records observed JSON structure and explicitly unresolved meanings; it does not authorize canonicalization.
 **Source:** `data/simulations/manu-liv-match-dataset.json` on updated PitchMind `main` commit `b97825416af5eb2e323b577942ae99addfe8727e`; Git blob SHA `9f53613d10dcf2e117e708c1b3e9706a49e1eb7c`. **Inspection date:** 2026-10-08.  
 **Status:** structural profile from parsed source JSON; **not** canonical ingest, a football-approved simulation, an independent rights assessment, a verified Azure feed, or a passing replay integration test. The repository owner confirmed synthetic provenance and redistribution permission in the Engineering Council execution instruction on 2026-10-08. This owner declaration does not validate football realism, coordinate units, player metrics, or source-to-canonical mappings.
 
@@ -14,7 +15,7 @@
 | Event count | 2,199 |
 | Distinct matches | one, `matchId=b2c3d4e5-f6a7-8901-bcde-f12345678901` |
 | Source sequence | 1..2199, contiguous and ascending, no duplicated event IDs observed |
-| Match clock | 0..5761 seconds (96:01), nondecreasing |
+| `clockSeconds` values | 0..5761 integer field values, nondecreasing; unit, origin, and clock interpretation unverified |
 | Periods | 1: 1035 records, 2: 1164 records |
 | Teams | Manchester United: 1123 event records; Liverpool: 1076 |
 | Events titled Goal | 6: 3 United, 3 Liverpool; final score 3–3 |
@@ -61,7 +62,7 @@ This JSON contains **real club and player names**, location and synthetic-lookin
 3. PostgreSQL event, tracking, roster, score, projection, provenance and outbox transaction; replay at goal boundaries and red card; repeatable hashes.
 4. Football PO reviews exaggerated shot/foul frequencies and identifies acceptable demonstration subsamples/interpretations with audit of original source.
 5. Pressing/line-break claims are gated on relevant tracking and event completeness; generic `PressureApplied` alone never proves a trap, and `LineBreakingPass` alone does not prove actual breached defensive lines.
-6. API/UI serves *this* match only after canonical adapter verification; source names/scores not hardcoded in C# or React. Frontend matches 96:01, both team labels and score changes, missing footage is explicit.
+6. API/UI serves *this* match only after canonical adapter verification; source names/scores not hardcoded in C# or React. Frontend reproduces the verified canonical match clock, both team labels and score changes, and makes missing footage explicit.
 7. Demonstrated model grounding uses cited source-derived evidence, never real-match knowledge.
 
-**Implemented so far:** read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py) with standalone tests; source-specific canonical import is **not yet implemented**.
+**Implemented so far:** read-only [source-agnostic JSON profiler](../../scripts/profile_simulation_feed.py) and manifest-pinned [candidate structural validator](../../scripts/validate_manu_liv_candidate.py), each with standalone tests. The candidate validator emits an aggregate report and preserves source event IDs, sequence, clock, and record ordering in its checks/digests. It does **not** normalize, map, ingest, or make the feed available through match APIs. Source-specific canonical import is **not yet implemented**; ordinary match routes remain fail-closed until admitted canonical PostgreSQL data and a read port exist.

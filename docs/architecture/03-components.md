@@ -11,13 +11,14 @@ flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Guard["Ordinary match request → 503; pre-handler limits may differ"]
   API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
+  Candidate["manu-liv candidate JSON"] -. "offline, report-only validation" .-> Validator["Python candidate validator"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
   Migrator["PostgresSchemaMigrator"] --> DB
   EventWorker["EventWorker scaffold (idle)"]
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The event store is a separately exercised adapter; current API paths do **not** consume it. Ordinary match reads fail closed with `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint can return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable the routes. `SyntheticFixtureGenerator` lives in the test-only `PitchMind.TestFixtures` project; it is not reachable from production projects. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` exists but is not yet canonically ingested or served.
+The event store is a separately exercised adapter; current API paths do **not** consume it. Ordinary match reads fail closed with `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint can return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned read port backed by admitted PostgreSQL data. Registering `SyntheticMatchService` cannot enable the routes. `SyntheticFixtureGenerator` lives in the test-only `PitchMind.TestFixtures` project; it is not reachable from production projects. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `data/simulations/manu-liv-match-dataset.json` has an offline manifest-pinned structural validator that emits an aggregate report only; it is not a runtime source adapter and the source is not canonically ingested or served.
 
 ## Target Ports and Adapters
 
