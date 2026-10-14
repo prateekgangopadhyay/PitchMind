@@ -15,7 +15,7 @@ Accountable role: Developer Experience Engineer. QA Architect consulted for test
 - `node scripts/validate_operating_model.mjs --self-test` — passed.
 - `git diff --check` — passed at the tested revision before this evidence-only change.
 
-A focused Contracts test restore using the local NuGet cache did not complete in its first 30-second command window. A second locked/ignore-failed-sources attempt remained at “Determining projects to restore…” for more than three minutes; it was cancelled and exited 1. Neither attempt produced `project.assets.json`. No .NET build or test result is claimed for this revision.
+A focused Contracts test restore using the local NuGet cache did not complete in its first 30-second command window. A second attempt pinned the source to `/Users/prateekgangopadhyay/.nuget/packages`, used `--locked-mode --ignore-failed-sources`, and remained at “Determining projects to restore…” for more than three minutes; it was cancelled and exited 1. Neither attempt produced `project.assets.json`. No .NET build or test result is claimed for this revision.
 
 ## Limits and acceptance
 
