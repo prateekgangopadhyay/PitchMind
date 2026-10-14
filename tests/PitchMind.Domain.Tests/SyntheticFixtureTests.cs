@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
@@ -9,13 +11,56 @@ public sealed class SyntheticFixtureTests
     [Fact] public void FixtureIsRepeatableAndComplete()
     {
         var first = SyntheticFixtureGenerator.Generate(); var second = SyntheticFixtureGenerator.Generate();
+        Assert.Equal("synthetic", first.Provenance); Assert.Equal("synthetic-v1", first.Version);
         Assert.Equal(first.Events, second.Events); Assert.Equal(5400, first.DurationSeconds);
         Assert.Equal(MatchEventType.KickOff, first.Events[0].Event.Type);
         Assert.Equal(MatchEventType.FullTime, first.Events[^1].Event.Type);
         Assert.Equal(Enumerable.Range(0, first.Events.Count).Select(i => (long)i), first.Events.Select(e => e.Event.Sequence));
         Assert.Equal(first.Events.Count, first.Events.Select(e => e.Event.EventId).Distinct().Count());
-        Assert.All(first.Frames, frame => { Assert.Equal(22, frame.Players.Count); Assert.All(frame.Players, p => { Assert.InRange(p.X, 0, 105); Assert.InRange(p.Y, 0, 68); }); });
+        Assert.All(first.Events, item =>
+        {
+            Assert.InRange(item.Event.ClockSeconds, 0, first.DurationSeconds);
+            Assert.Equal(item.Event.ClockSeconds < 2700 ? 1 : 2, item.Event.Period);
+        });
+        Assert.All(first.Frames, frame =>
+        {
+            Assert.InRange(frame.ClockSeconds, 0, first.DurationSeconds);
+            Assert.Equal(22, frame.Players.Count);
+            Assert.Equal(22, frame.Players.Select(player => player.PlayerId).Distinct().Count());
+            Assert.All(frame.Players, player =>
+            {
+                Assert.InRange(player.X, 0, 105);
+                Assert.InRange(player.Y, 0, 68);
+            });
+        });
     }
+
+    [Fact] public void ArtifactHashIsStableForTheSameSeedAndChangesWithTheSeed()
+    {
+        var first = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 42));
+        var repeat = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 42));
+        var otherSeed = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.Generate(seed: 43));
+
+        Assert.Equal(SyntheticFixtureArtifact.CurrentFormatVersion, first.FormatVersion);
+        Assert.Equal(first.Json, repeat.Json);
+        Assert.Equal(first.ContentSha256, repeat.ContentSha256);
+        Assert.NotEqual(first.ContentSha256, otherSeed.ContentSha256);
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(first.Json))).ToLowerInvariant(), first.ContentSha256);
+    }
+
+    [Fact] public void PressingGoldenRetainsOrderedSamePeriodEvidence()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var actions = fixture.Events
+            .Where(item => item.Event.ClockSeconds is >= 3290 and <= 3309)
+            .ToArray();
+
+        Assert.Equal(new[] { 3290, 3293, 3296, 3299, 3304, 3308, 3309 }, actions.Select(item => item.Event.ClockSeconds));
+        Assert.All(actions, item => Assert.Equal(2, item.Event.Period));
+        Assert.Equal(actions.OrderBy(item => item.Event.Sequence).Select(item => item.Event.Sequence), actions.Select(item => item.Event.Sequence));
+        Assert.Equal(MatchEventType.Goal, actions[^1].Event.Type);
+    }
+
     [Fact] public void AttackDirectionChangesAtHalfTime()
     {
         var fixture = SyntheticFixtureGenerator.Generate();
