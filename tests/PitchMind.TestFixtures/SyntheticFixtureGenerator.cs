@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Globalization;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
@@ -9,7 +10,7 @@ namespace PitchMind.TestFixtures;
 /// <summary>Builds deterministic, fictional golden data for automated tests only.</summary>
 public static class SyntheticFixtureGenerator
 {
-    public const string Version = "synthetic-v1";
+    public const string Version = "synthetic-v2";
     public static MatchId FixtureId => MatchIdForSeed(42);
 
     public static SyntheticFixture Generate(int seed = 42)
@@ -24,7 +25,7 @@ public static class SyntheticFixtureGenerator
         void Add(int clock, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
         {
             var sequence = events.Count;
-            var id = StableId($"{Version}:{seed}:{clock}:{sequence}:{action}");
+            var id = StableId($"{Version}:{seed.ToString(CultureInfo.InvariantCulture)}:{clock}:{sequence}:{action}");
             var evt = MatchEvent.Create(id, matchId, sequence, type, clock, clock < 2700 ? 1 : 2,
                 new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(clock));
             events.Add(new(evt, team, player, action, outcome, related));
@@ -58,7 +59,7 @@ public static class SyntheticFixtureGenerator
             Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
     }
 
-    private static MatchId MatchIdForSeed(int seed) => new(StableId($"{Version}:{seed}:match"));
+    private static MatchId MatchIdForSeed(int seed) => new(StableId($"{Version}:{seed.ToString(CultureInfo.InvariantCulture)}:match"));
 
     private static TrackingFrame Frame(int clock, SyntheticTeam home, SyntheticTeam away, int seed)
     {

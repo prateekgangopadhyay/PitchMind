@@ -1,6 +1,7 @@
 using PitchMind.Domain.Simulation;
 using PitchMind.TestFixtures;
 using PitchMind.Domain.Events;
+using System.Globalization;
 using Xunit;
 namespace PitchMind.Domain.Tests;
 public sealed class SyntheticFixtureTests
@@ -33,5 +34,24 @@ public sealed class SyntheticFixtureTests
         Assert.All(first.Events, item => Assert.Equal(first.MatchId, item.Event.MatchId.ToString()));
         Assert.All(other.Events, item => Assert.Equal(other.MatchId, item.Event.MatchId.ToString()));
         Assert.NotEqual(first.Events[0].Event.EventId, other.Events[0].Event.EventId);
+    }
+
+    [Fact] public void SeededIdentityDoesNotDependOnCurrentCulture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ar-SA");
+            var localized = SyntheticFixtureGenerator.Generate(seed: -41);
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            var invariant = SyntheticFixtureGenerator.Generate(seed: -41);
+
+            Assert.Equal(invariant.MatchId, localized.MatchId);
+            Assert.Equal(invariant.Events.Select(e => e.Event.EventId), localized.Events.Select(e => e.Event.EventId));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 }
