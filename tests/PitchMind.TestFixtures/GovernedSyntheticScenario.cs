@@ -5,7 +5,7 @@ namespace PitchMind.TestFixtures;
 /// <summary>Test-only event kinds; EP03-S02 owns the future canonical telemetry mapping.</summary>
 public enum SyntheticScenarioEventKind
 {
-    KickOff, Pass, Shot, Goal, Foul, Turnover, Pressure, FullTime,
+    KickOff, HalfTime, Pass, Shot, Goal, Foul, Turnover, Pressure, FullTime,
     YellowCard, RedCard, Substitution
 }
 

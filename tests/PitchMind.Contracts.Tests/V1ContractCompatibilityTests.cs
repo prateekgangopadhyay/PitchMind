@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using PitchMind.Api;
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Simulation;
 using PitchMind.Infrastructure.Storage;
@@ -118,7 +119,8 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void State_response_exposes_selected_time_projection_fields()
     {
-        var state = new PitchMind.Application.Matches.SyntheticMatchService().GetState(3600).ToResponse();
+        var fixture = SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture;
+        var state = new SyntheticMatchService(fixture).GetState(3600).ToResponse();
         AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
             "provenance", "frame", "lastSequence", "possessionTeamId",
             "homeActivePlayers", "awayActivePlayers", "players", "competitionId");
@@ -140,7 +142,7 @@ public sealed class V1ContractCompatibilityTests
         Assert.Equal(source.HalfTimeSeconds, mapped.HalfTimeSeconds);
         Assert.Equal(source.PitchLengthMetres, mapped.PitchLengthMetres);
         Assert.Equal(source.PitchWidthMetres, mapped.PitchWidthMetres);
-        Assert.Contains("x=0..105", mapped.Frames[0].CoordinateConvention);
+        Assert.Contains("105 x 68 metre pitch", mapped.Frames[0].CoordinateConvention);
         var state = new SyntheticMatchService(source).GetState(source.DurationSeconds).ToResponse();
         Assert.Equal(mapped.Frames[0].CoordinateConvention, state.Frame.CoordinateConvention);
         Assert.Equal(source.Events.Count, mapped.Events.Count);

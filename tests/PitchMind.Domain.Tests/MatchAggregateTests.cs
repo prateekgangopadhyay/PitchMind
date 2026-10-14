@@ -1,6 +1,7 @@
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using PitchMind.Domain.Events;
+using PitchMind.TestFixtures;
 using Xunit;
 
 namespace PitchMind.Domain.Tests;
@@ -9,7 +10,7 @@ public sealed class MatchAggregateTests
 {
     private static (MatchAggregate Aggregate, SyntheticFixture Fixture) Create(MatchCompetitionRules? rules = null)
     {
-        var fixture = SyntheticFixtureGenerator.Generate();
+        var fixture = SyntheticFixtureGenerator.GenerateScenario().Fixture;
         var players = fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId));
         var active = fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId);
         return (new(new(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id, players, active, fixture.Provenance, rules), fixture);
@@ -72,7 +73,7 @@ public sealed class MatchAggregateTests
         Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
         Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
         Assert.Equal(11, state.HomeActivePlayers);
-        Assert.Equal(11, state.AwayActivePlayers);
+        Assert.Equal(10, state.AwayActivePlayers);
     }
 
     [Fact]

@@ -87,6 +87,12 @@ export function App() {
   const selectTime = (time: number) => {contextVersion.current++; setSeconds(time); setEvidence(null); setExplanation(null); setFailedAction(null); setError(currentError => currentError === 'action-unavailable' ? '' : currentError);};
   const current = data?.state.clockSeconds === seconds ? data : null;
   const insight = current?.insights.at(-1);
+  const pitchLength = fixture?.pitchLengthMetres ?? 0;
+  const pitchWidth = fixture?.pitchWidthMetres ?? 0;
+  const penaltyAreaDepth = 16.5;
+  const penaltyAreaWidth = 40.32;
+  const goalAreaDepth = 5.5;
+  const goalAreaWidth = 18.32;
   function retryFixtures() {
     setLoadingFixtures(true);
     setFixtures([]);

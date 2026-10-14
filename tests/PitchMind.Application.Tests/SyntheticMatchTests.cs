@@ -13,7 +13,7 @@ public sealed class SyntheticMatchTests
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
         Assert.Equal("harbour", service.GetState(3308).PossessionTeamId);
         Assert.Null(service.GetState(3309).PossessionTeamId);
-        Assert.Equal("harbour", service.GetState(4680).PossessionTeamId);
+        Assert.Null(service.GetState(4680).PossessionTeamId);
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }

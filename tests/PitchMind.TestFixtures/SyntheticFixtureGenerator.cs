@@ -23,11 +23,12 @@ public static class SyntheticFixtureGenerator
         var home = Team("harbour", "Harbour FC");
         var away = Team("ridge", "Ridge Athletic");
         var events = new List<SimulationEvent>();
-        void Add(int clock, MatchEventType type, string team, string player, string action, string outcome, string? related = null)
+        void Add(int clock, MatchEventType type, string team, string player, string action, string outcome,
+            string? related = null, int? period = null)
         {
             var sequence = events.Count;
             var id = StableId($"{Version}:{seed.ToString(CultureInfo.InvariantCulture)}:{clock}:{sequence}:{action}");
-            var evt = MatchEvent.Create(id, matchId, sequence, type, clock, clock < 2700 ? 1 : 2,
+            var evt = MatchEvent.Create(id, matchId, sequence, type, clock, period ?? (clock < 2700 ? 1 : 2),
                 new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(clock));
             events.Add(new(evt, team, player, action, outcome, related));
         }
@@ -35,7 +36,7 @@ public static class SyntheticFixtureGenerator
         Add(0, MatchEventType.KickOff, home.Id, "harbour-10", "kick-off", "complete");
         for (var clock = 30; clock < 5400; clock += 30)
         {
-            if (clock is >= 3290 and <= 3330) continue;
+            if (clock is 2700 or >= 3290 and <= 3330) continue;
             // Keep a side in possession for two consecutive circulation events rather than
             // manufacturing a turnover on every pass. The authored scenario phase annotations
             // use the same 60-second blocks except where the pressing sequence changes control.
@@ -44,6 +45,8 @@ public static class SyntheticFixtureGenerator
             Add(clock, MatchEventType.Pass, team, $"{team}-6", "circulation", "complete", $"{team}-7");
         }
 
+        Add(2700, MatchEventType.HalfTime, "", "", "half-time", "complete", period: 1);
+        Add(2700, MatchEventType.KickOff, away.Id, "ridge-10", "kick-off", "complete", period: 2);
         Add(3290, MatchEventType.Pass, away.Id, "ridge-3", "back-pass", "complete", "ridge-1");
         Add(3293, MatchEventType.Pressure, home.Id, "harbour-10", "press-arrival", "pressure", "ridge-1");
         Add(3296, MatchEventType.Pass, away.Id, "ridge-1", "pressured-pass", "incomplete", "ridge-2");
@@ -59,7 +62,7 @@ public static class SyntheticFixtureGenerator
         var times = Enumerable.Range(0, 181).Select(i => i * 30)
             .Concat(new[] { 3290, 3293, 3296, 3299, 3304, 3308, 3309 }).Distinct().Order().ToArray();
         var frames = times.Select(clock => Frame(clock, home, away, seed)).ToArray();
-        return new(matchId.ToString(), Version, seed, "synthetic", 5400, home, away,
+        return new(matchId.ToString(), Version, seed, "synthetic", 5400, 2700, 105, 68, home, away,
             Array.AsReadOnly(ordered), Array.AsReadOnly(frames));
     }
 
@@ -78,10 +81,10 @@ public static class SyntheticFixtureGenerator
         var squad = fixture.Home.Players.Concat(fixture.Away.Players).Concat(substitutes).ToArray();
         var actions = new[]
         {
-            Action(seed, 1280, SyntheticScenarioEventKind.YellowCard, fixture.Away.Id, "ridge-8", outcome: "cautioned"),
-            Action(seed, 3600, SyntheticScenarioEventKind.Substitution, fixture.Home.Id, "harbour-9", "harbour-12", "completed"),
+            Action(seed, 1280, SyntheticScenarioEventKind.YellowCard, fixture.Away.Id, "ridge-4", outcome: "cautioned"),
+            Action(seed, 3600, SyntheticScenarioEventKind.Substitution, fixture.Home.Id, "harbour-7", "harbour-12", "completed"),
             Action(seed, 3900, SyntheticScenarioEventKind.Substitution, fixture.Away.Id, "ridge-11", "ridge-12", "completed"),
-            Action(seed, 4200, SyntheticScenarioEventKind.RedCard, fixture.Away.Id, "ridge-6", outcome: "dismissed")
+            Action(seed, 4200, SyntheticScenarioEventKind.RedCard, fixture.Away.Id, "ridge-3", outcome: "dismissed")
         };
         var fixtureEvents = fixture.Events.Select(entry => new SyntheticScenarioEvent(
             entry.Event.EventId, 0, entry.Event.Sequence, entry.Event.ClockSeconds, entry.Event.Period,
@@ -100,16 +103,35 @@ public static class SyntheticFixtureGenerator
         var frozenEvents = Array.AsReadOnly(events);
         var frozenPhases = Array.AsReadOnly(possessionPhases);
         var frozenFrames = Array.AsReadOnly(frames);
+        var originalEventsById = fixture.Events.ToDictionary(entry => entry.Event.EventId);
+        var matchId = new MatchId(Guid.Parse(fixture.MatchId));
+        var scenarioFixtureEvents = events.Select(entry =>
+        {
+            var occurredAt = originalEventsById.TryGetValue(entry.EventId, out var source)
+                ? source.Event.OccurredAt
+                : new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero).AddSeconds(entry.ClockSeconds);
+            var domainEvent = MatchEvent.Create(entry.EventId, matchId, entry.Sequence,
+                Enum.Parse<MatchEventType>(entry.Type.ToString()), entry.ClockSeconds, entry.Period, occurredAt);
+            return new SimulationEvent(domainEvent, entry.TeamId, entry.PlayerId,
+                entry.Type.ToString(), entry.Outcome ?? string.Empty, entry.RelatedPlayerId);
+        }).ToArray();
+        var scenarioFixture = fixture with
+        {
+            Home = fixture.Home with { Players = Array.AsReadOnly(fixture.Home.Players.Append(substitutes[0]).ToArray()) },
+            Away = fixture.Away with { Players = Array.AsReadOnly(fixture.Away.Players.Append(substitutes[1]).ToArray()) },
+            Events = Array.AsReadOnly(scenarioFixtureEvents),
+            Frames = frozenFrames
+        };
         var canonicalBytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            fixture,
+            scenarioFixture,
             squad = frozenSquad,
             events = frozenEvents,
             possessionPhases = frozenPhases,
             frames = frozenFrames
         });
         var digest = Convert.ToHexString(SHA256.HashData(canonicalBytes)).ToLowerInvariant();
-        return new(fixture, frozenSquad, frozenEvents, frozenPhases, frozenFrames, digest);
+        return new(scenarioFixture, frozenSquad, frozenEvents, frozenPhases, frozenFrames, digest);
     }
 
     /// <summary>Creates named negative controls for the authored pressing golden.</summary>

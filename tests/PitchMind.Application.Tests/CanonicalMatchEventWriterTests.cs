@@ -3,6 +3,7 @@ using PitchMind.Application.Matches;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using PitchMind.TestFixtures;
 using Xunit;
 
 namespace PitchMind.Application.Tests;

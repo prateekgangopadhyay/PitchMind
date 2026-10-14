@@ -305,7 +305,8 @@ public sealed class MatchAggregate
         if (evt.Period != _period) throw new InvalidOperationException("Event period does not match the active period.");
         if (string.IsNullOrWhiteSpace(item.TeamId) || !_playerTeams.TryGetValue(item.PlayerId, out var actorTeam) ||
             actorTeam != item.TeamId || !_activePlayers.Contains(item.PlayerId))
-            throw new InvalidOperationException("Football action requires an active player from the stated team.");
+            throw new InvalidOperationException(
+                $"Football action {evt.Type} at sequence {evt.Sequence} requires active player '{item.PlayerId}' from team '{item.TeamId}'.");
 
         if (evt.Type == MatchEventType.Substitution)
         {
