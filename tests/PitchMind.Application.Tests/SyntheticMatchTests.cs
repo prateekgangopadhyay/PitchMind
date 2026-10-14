@@ -82,6 +82,21 @@ public sealed class SyntheticMatchTests
             Assert.Equal(expected.InsightCount, replay.Insights.Count);
         }
     }
+    [Fact] public void ReplayInputPinRejectsChangedCompetitionRuleContext()
+    {
+        var fixture = SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture with
+        {
+            CompetitionId = "synthetic-competition",
+            CompetitionRulesVersion = "rules-v1",
+            MaximumSubstituteReentriesPerPlayer = 0
+        };
+        var original = new SyntheticMatchService(fixture).ReplayAt(3600);
+        var correctedRules = fixture with { CompetitionRulesVersion = "rules-v2" };
+
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(correctedRules).ReplayAt(3600,
+            replayInputSha256: original.ReplayInputSha256));
+    }
+
     [Fact] public void CorrectedFixtureInputKeepsEventIdentityAndDoesNotMutatePriorReplayVersion()
     {
         var source = SyntheticFixtureGenerator.Generate();
@@ -96,7 +111,7 @@ public sealed class SyntheticMatchTests
             : item).ToArray();
         var correctedFixture = source with
         {
-            Version = "synthetic-v2-correction-1",
+            Version = "synthetic-v3-correction-1",
             Events = Array.AsReadOnly(correctedEvents)
         };
 
@@ -231,6 +246,21 @@ public sealed class SyntheticMatchTests
         var frames = fixture.Frames.Select(f => f.ClockSeconds == 3293 ? f with
         { Players = f.Players.Select(p => p.PlayerId == "harbour-10" ? p with { X = 40 } : p).ToArray() } : f).ToArray();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = frames }, 5400));
+    }
+    [Fact] public void NamedPressCounterexamplesDoNotProducePositiveGolden()
+    {
+        var counterexamples = SyntheticFixtureGenerator.GeneratePressCounterexamples(seed: 42);
+
+        Assert.Equal(new[]
+        {
+            SyntheticPressCounterexampleKind.MissingTracking,
+            SyntheticPressCounterexampleKind.CompletedOpponentPass,
+            SyntheticPressCounterexampleKind.WrongTeamRegain,
+            SyntheticPressCounterexampleKind.DistantPressArrival
+        }, counterexamples.Select(example => example.Kind));
+        Assert.Equal(counterexamples.Count, counterexamples.Select(example => example.Name).Distinct().Count());
+        Assert.All(counterexamples, example =>
+            Assert.Empty(PressingSequenceDetector.Detect(example.Fixture, 5400)));
     }
     [Fact] public void NonFiniteCoordinatesAreRejected()
     {

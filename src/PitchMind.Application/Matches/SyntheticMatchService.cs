@@ -92,7 +92,8 @@ public sealed class SyntheticMatchService
         var insights = GetInsights(clockSeconds);
         var inputSha256 = HashJson(new ReplayInput(Fixture.Version, Fixture.Seed, Fixture.Provenance,
             Fixture.DurationSeconds, Fixture.HalfTimeSeconds, Fixture.PitchLengthMetres, Fixture.PitchWidthMetres,
-            Fixture.Home, Fixture.Away, Fixture.Events, Fixture.Frames));
+            Fixture.Home, Fixture.Away, Fixture.CompetitionId, Fixture.CompetitionRulesVersion,
+            Fixture.MaximumSubstituteReentriesPerPlayer, Fixture.Events, Fixture.Frames));
         RequirePin("replayInputSha256", replayInputSha256, inputSha256);
 
         var outputSha256 = HashJson(new ReplayOutput(Fixture.MatchId, clockSeconds, Fixture.Version, Fixture.Seed,
@@ -146,7 +147,9 @@ public sealed class SyntheticMatchService
 
     private sealed record ReplayInput(string FixtureVersion, int Seed, string Provenance, int DurationSeconds,
         int HalfTimeSeconds, double PitchLengthMetres, double PitchWidthMetres, SyntheticTeam Home,
-        SyntheticTeam Away, IReadOnlyList<SimulationEvent> Events, IReadOnlyList<TrackingFrame> Frames);
+        SyntheticTeam Away, string? CompetitionId, string? CompetitionRulesVersion,
+        int? MaximumSubstituteReentriesPerPlayer, IReadOnlyList<SimulationEvent> Events,
+        IReadOnlyList<TrackingFrame> Frames);
 
     private sealed record ReplayOutput(string MatchId, int SelectedElapsedSeconds, string FixtureVersion, int Seed,
         string ReplayAlgorithmVersion, string DetectorVersion, string ReplayInputSha256, MatchSnapshot State,
