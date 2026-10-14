@@ -134,6 +134,30 @@ public sealed record KeyMomentResponse(
     string PolicyVersion, string PolicyStatus, bool Publishable,
     IReadOnlyList<Guid> EventIds, IReadOnlyList<string> FrameIds, IReadOnlyList<string> EvidenceClaimNodeIds);
 
+public sealed record MechanismReplayResponse(
+    string Id,
+    string MatchId,
+    string SourceVersion,
+    string SourceSha256,
+    string Provenance,
+    long? CanonicalRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    int StartSeconds,
+    int EndSeconds,
+    string DetectorVersion,
+    string PolicyStatus,
+    bool Publishable,
+    IReadOnlyList<Guid> EventIds,
+    IReadOnlyList<Guid> MechanismEventIds,
+    IReadOnlyList<string> FrameIds,
+    IReadOnlyList<string> ParticipantIds,
+    IReadOnlyList<SimulationEventResponse> Events,
+    IReadOnlyList<TrackingFrameResponse> Frames,
+    string CoordinateConvention,
+    EvidenceGraphResponse EvidenceGraph,
+    IReadOnlyList<string> Limitations);
+
 public sealed record EvidenceResponse(
     InsightResponse Insight,
     IReadOnlyList<SimulationEventResponse> Events,
