@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 8;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -35,6 +35,10 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version5Sql, cancellationToken);
         if (currentVersion < 6)
             await ExecuteAsync(connection, transaction, Version6Sql, cancellationToken);
+        if (currentVersion < 7)
+            await ExecuteAsync(connection, transaction, Version7Sql, cancellationToken);
+        if (currentVersion < 8)
+            await ExecuteAsync(connection, transaction, Version8Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -305,5 +309,17 @@ public static class PostgresSchemaMigrator
             CHECK (max_substitute_reentries_per_player IS NULL OR competition_rules_version IS NOT NULL) NOT VALID;
         ALTER TABLE pitchmind.matches VALIDATE CONSTRAINT matches_reentry_limit_requires_version;
         INSERT INTO pitchmind.schema_versions(version) VALUES (6) ON CONFLICT DO NOTHING;
+        """;
+    /// <summary>Stores replay inputs without backfilling legacy rows with invented source context.</summary>
+    public const string Version7Sql = """
+        ALTER TABLE pitchmind.matches ADD COLUMN IF NOT EXISTS replay_seed_json jsonb;
+        ALTER TABLE pitchmind.match_events ADD COLUMN IF NOT EXISTS source_event_json jsonb;
+        INSERT INTO pitchmind.schema_versions(version) VALUES (7) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Stores the immutable, versioned descriptor required to reconstruct detector inputs.</summary>
+    public const string Version8Sql = """
+        ALTER TABLE pitchmind.matches ADD COLUMN IF NOT EXISTS replay_context_json jsonb;
+        INSERT INTO pitchmind.schema_versions(version) VALUES (8) ON CONFLICT DO NOTHING;
         """;
 }
