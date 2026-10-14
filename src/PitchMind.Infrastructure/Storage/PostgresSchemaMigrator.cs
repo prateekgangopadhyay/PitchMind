@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -39,6 +39,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version7Sql, cancellationToken);
         if (currentVersion < 8)
             await ExecuteAsync(connection, transaction, Version8Sql, cancellationToken);
+        if (currentVersion < 9)
+            await ExecuteAsync(connection, transaction, Version9Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -321,5 +323,38 @@ public static class PostgresSchemaMigrator
     public const string Version8Sql = """
         ALTER TABLE pitchmind.matches ADD COLUMN IF NOT EXISTS replay_context_json jsonb;
         INSERT INTO pitchmind.schema_versions(version) VALUES (8) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Separates an insight's admission revision from the revisions of its evidence sources.</summary>
+    public const string Version9Sql = """
+        ALTER TABLE pitchmind.insight_evidence ADD COLUMN IF NOT EXISTS evidence_canonical_revision bigint;
+        UPDATE pitchmind.insight_evidence e SET evidence_canonical_revision = me.canonical_revision
+        FROM pitchmind.match_events me
+        WHERE e.evidence_kind = 'event' AND e.match_id = me.match_id AND e.event_id = me.event_id
+          AND e.canonical_revision = me.canonical_revision
+          AND e.evidence_canonical_revision IS NULL;
+        UPDATE pitchmind.insight_evidence e SET evidence_canonical_revision = tf.canonical_revision
+        FROM pitchmind.tracking_frames tf
+        WHERE e.evidence_kind = 'frame' AND e.match_id = tf.match_id AND e.frame_id = tf.frame_id
+          AND e.canonical_revision = tf.canonical_revision
+          AND e.evidence_canonical_revision IS NULL;
+
+        ALTER TABLE pitchmind.insight_evidence
+            DROP CONSTRAINT IF EXISTS insight_evidence_event_admission_revision_fk;
+        ALTER TABLE pitchmind.insight_evidence
+            DROP CONSTRAINT IF EXISTS insight_evidence_frame_admission_revision_fk;
+        ALTER TABLE pitchmind.insight_evidence
+            ADD CONSTRAINT insight_evidence_source_revision_check CHECK (
+                (evidence_kind IN ('event', 'frame') AND evidence_canonical_revision IS NOT NULL AND evidence_canonical_revision > 0)
+                OR (evidence_kind NOT IN ('event', 'frame') AND evidence_canonical_revision IS NULL));
+        ALTER TABLE pitchmind.insight_evidence
+            ADD CONSTRAINT insight_evidence_event_source_revision_fk
+            FOREIGN KEY (match_id, event_id, evidence_canonical_revision)
+            REFERENCES pitchmind.match_events(match_id, event_id, canonical_revision);
+        ALTER TABLE pitchmind.insight_evidence
+            ADD CONSTRAINT insight_evidence_frame_source_revision_fk
+            FOREIGN KEY (match_id, frame_id, evidence_canonical_revision)
+            REFERENCES pitchmind.tracking_frames(match_id, frame_id, canonical_revision);
+        INSERT INTO pitchmind.schema_versions(version) VALUES (9) ON CONFLICT DO NOTHING;
         """;
 }

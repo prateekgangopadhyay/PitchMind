@@ -159,10 +159,13 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
 
         var evidence = new List<InsightEvidenceReference>();
         await using (var command = new NpgsqlCommand("""
-            SELECT e.evidence_kind, e.evidence_id, e.relation, me.sequence, tf.sequence
+            SELECT e.evidence_kind, e.evidence_id, e.relation, me.sequence, tf.sequence,
+                   e.evidence_canonical_revision, me.clock_seconds, tf.clock_seconds
             FROM pitchmind.insight_evidence e
             LEFT JOIN pitchmind.match_events me ON me.match_id = e.match_id AND me.event_id = e.event_id
+                AND me.canonical_revision = e.evidence_canonical_revision
             LEFT JOIN pitchmind.tracking_frames tf ON tf.match_id = e.match_id AND tf.frame_id = e.frame_id
+                AND tf.canonical_revision = e.evidence_canonical_revision
             WHERE e.insight_id = $1 ORDER BY e.evidence_kind, e.evidence_id
             """, connection))
         {
@@ -177,7 +180,16 @@ public sealed class PostgresMatchProjectionStore(NpgsqlDataSource dataSource) : 
                     "frame" => reader.GetInt64(4),
                     _ => (long?)null
                 };
-                if (evidenceSequence > insightSequence)
+                if ((evidenceKind is "event" or "frame") &&
+                    (reader.IsDBNull(5) || reader.GetInt64(5) > projection.CanonicalRevision))
+                    throw new InvalidDataException("Insight evidence revision is missing or later than its insight revision.");
+                var evidenceClock = evidenceKind switch
+                {
+                    "event" => reader.GetInt32(6),
+                    "frame" => reader.GetInt32(7),
+                    _ => (int?)null
+                };
+                if (evidenceSequence > insightSequence || evidenceClock > projection.AsOfClockSeconds)
                     throw new InvalidDataException("Insight references event or tracking evidence later than its selected sequence.");
                 evidence.Add(new(evidenceKind, reader.GetString(1), reader.GetString(2)));
             }

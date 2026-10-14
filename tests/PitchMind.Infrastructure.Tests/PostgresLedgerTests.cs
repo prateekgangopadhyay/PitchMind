@@ -49,7 +49,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -62,6 +62,8 @@ public sealed class PostgresLedgerTests
             column.Parameters.AddWithValue(table);
             Assert.Equal("bigint", await column.ExecuteScalarAsync());
         }
+        await using (var sourceRevisionColumn = source.CreateCommand("SELECT data_type FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'insight_evidence' AND column_name = 'evidence_canonical_revision'"))
+            Assert.Equal("bigint", await sourceRevisionColumn.ExecuteScalarAsync());
 
         var insightId = $"insight-{Guid.NewGuid():N}";
         var insightMatchId = MatchId.New().Value;
@@ -85,7 +87,7 @@ public sealed class PostgresLedgerTests
             insight.Parameters.AddWithValue(insightMatchId);
             await insight.ExecuteNonQueryAsync();
         }
-        await using (var mismatchedEvidence = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, canonical_revision, revision, relation, event_id) VALUES ($1, 'event', $2, $3, 1, 1, 'supports', $4)"))
+        await using (var mismatchedEvidence = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, canonical_revision, evidence_canonical_revision, revision, relation, event_id) VALUES ($1, 'event', $2, $3, 1, 1, 1, 'supports', $4)"))
         {
             mismatchedEvidence.Parameters.AddWithValue(insightId);
             var eventId = Guid.NewGuid();
@@ -94,6 +96,16 @@ public sealed class PostgresLedgerTests
             mismatchedEvidence.Parameters.AddWithValue(eventId);
             var exception = await Assert.ThrowsAsync<PostgresException>(() => mismatchedEvidence.ExecuteNonQueryAsync());
             Assert.Equal("23503", exception.SqlState);
+        }
+        await using (var missingSourceRevision = source.CreateCommand("INSERT INTO pitchmind.insight_evidence (insight_id, evidence_kind, evidence_id, match_id, canonical_revision, revision, relation, event_id) VALUES ($1, 'event', $2, $3, 1, 1, 'supports', $4)"))
+        {
+            missingSourceRevision.Parameters.AddWithValue(insightId);
+            var eventId = Guid.NewGuid();
+            missingSourceRevision.Parameters.AddWithValue(eventId.ToString("D"));
+            missingSourceRevision.Parameters.AddWithValue(insightMatchId);
+            missingSourceRevision.Parameters.AddWithValue(eventId);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => missingSourceRevision.ExecuteNonQueryAsync());
+            Assert.Equal("23514", exception.SqlState);
         }
 
         var matchId = MatchId.New();
@@ -172,7 +184,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(8, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(9, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -293,8 +305,8 @@ public sealed class PostgresLedgerTests
             }
             await using (var evidence = source.CreateCommand("""
                 INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
-                    canonical_revision, revision, relation, event_id)
-                VALUES ($1, 'event', $2, $3, 1, 7, 'supports', $4)
+                    canonical_revision, evidence_canonical_revision, revision, relation, event_id)
+                VALUES ($1, 'event', $2, $3, 1, 1, 7, 'supports', $4)
                 """))
             {
                 evidence.Parameters.AddWithValue(insightId);
@@ -305,8 +317,8 @@ public sealed class PostgresLedgerTests
             }
             await using (var evidence = source.CreateCommand("""
                 INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
-                    canonical_revision, revision, relation, frame_id)
-                VALUES ($1, 'frame', 'frame-kickoff', $2, 1, 7, 'supports', 'frame-kickoff')
+                    canonical_revision, evidence_canonical_revision, revision, relation, frame_id)
+                VALUES ($1, 'frame', 'frame-kickoff', $2, 1, 1, 7, 'supports', 'frame-kickoff')
                 """))
             {
                 evidence.Parameters.AddWithValue(insightId);
@@ -345,23 +357,22 @@ public sealed class PostgresLedgerTests
                 insight.Parameters.AddWithValue(matchId);
                 await insight.ExecuteNonQueryAsync();
             }
-            await using (var mismatchedRevision = source.CreateCommand("""
+            await using (var earlierRevisionEvidence = source.CreateCommand("""
                 INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
-                    canonical_revision, revision, relation, event_id)
-                VALUES ($1, 'event', $2, $3, 2, 8, 'supports', $4)
+                    canonical_revision, evidence_canonical_revision, revision, relation, event_id)
+                VALUES ($1, 'event', $2, $3, 2, 1, 8, 'supports', $4)
                 """))
             {
-                mismatchedRevision.Parameters.AddWithValue(futureInsightId);
-                mismatchedRevision.Parameters.AddWithValue(eventId.ToString("D"));
-                mismatchedRevision.Parameters.AddWithValue(matchId);
-                mismatchedRevision.Parameters.AddWithValue(eventId);
-                var exception = await Assert.ThrowsAsync<PostgresException>(() => mismatchedRevision.ExecuteNonQueryAsync());
-                Assert.Equal("23503", exception.SqlState);
+                earlierRevisionEvidence.Parameters.AddWithValue(futureInsightId);
+                earlierRevisionEvidence.Parameters.AddWithValue(eventId.ToString("D"));
+                earlierRevisionEvidence.Parameters.AddWithValue(matchId);
+                earlierRevisionEvidence.Parameters.AddWithValue(eventId);
+                Assert.Equal(1, await earlierRevisionEvidence.ExecuteNonQueryAsync());
             }
             await using (var evidence = source.CreateCommand("""
                 INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
-                    canonical_revision, revision, relation, event_id)
-                VALUES ($1, 'event', $2, $3, 2, 8, 'supports', $4)
+                    canonical_revision, evidence_canonical_revision, revision, relation, event_id)
+                VALUES ($1, 'event', $2, $3, 2, 2, 8, 'supports', $4)
                 """))
             {
                 evidence.Parameters.AddWithValue(futureInsightId);
@@ -392,8 +403,8 @@ public sealed class PostgresLedgerTests
             }
             await using (var evidence = source.CreateCommand("""
                 INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
-                    canonical_revision, revision, relation, frame_id)
-                VALUES ($1, 'frame', 'frame-future', $2, 1, 7, 'supports', 'frame-future')
+                    canonical_revision, evidence_canonical_revision, revision, relation, frame_id)
+                VALUES ($1, 'frame', 'frame-future', $2, 1, 1, 7, 'supports', 'frame-future')
                 """))
             {
                 evidence.Parameters.AddWithValue(futureFrameInsightId);
@@ -445,7 +456,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -924,6 +935,14 @@ public sealed class PostgresLedgerTests
         var beforeEvents = await ReadSelected(reader, beforeGoal, 3308);
         Assert.Equal(new long[] { 0, 1 }, beforeEvents.Select(e => e.Sequence));
         Assert.DoesNotContain(beforeEvents, e => e.Type == MatchEventType.Goal);
+        var firstPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, -1, 1, CancellationToken.None);
+        Assert.True(firstPage.HasMore);
+        Assert.Equal(0, Assert.Single(firstPage.Events).Sequence);
+        Assert.Equal(0, firstPage.NextAfterSequence);
+        var secondPage = await reader.ReadEventsPageAtAsync(beforeGoal, 3308, firstPage.NextAfterSequence!.Value, 1, CancellationToken.None);
+        Assert.False(secondPage.HasMore);
+        Assert.Equal(1, Assert.Single(secondPage.Events).Sequence);
+        Assert.DoesNotContain(secondPage.Events, e => e.Type == MatchEventType.Goal);
 
         var applicationResult = await new GetMatchAtQueryService(reader).ExecuteAsync(
             new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None);
@@ -1081,6 +1100,155 @@ public sealed class PostgresLedgerTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.GetAtAsync(MatchId.New(), 5400, 0, "aggregate-v1", CancellationToken.None));
     }
 
+    [PostgresIntegrationFact]
+    public async Task InsightReadsRequireResolvableEvidenceVisibleAtTheSelectedTime()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var matchId = MatchId.New();
+        await using var outboxCleanup = new OutboxMatchCleanup(source, matchId);
+        var (update, aggregate) = BuildUpdate(matchId);
+        await RegisterSourceAsync(source, update);
+        var updateStore = new PostgresCanonicalUpdateStore(source);
+        await updateStore.CommitAsync(update, CancellationToken.None);
+        var futureEvent = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 10, 1, DateTimeOffset.UtcNow);
+        aggregate.Apply(new SimulationEvent(futureEvent, "home", "home-2", "pass", "complete"));
+        var futureUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, futureEvent, 2, "aggregate-v1", update.SourceSha256);
+        await updateStore.CommitAsync(futureUpdate, CancellationToken.None);
+
+        async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId,
+            long insightCanonicalRevision, int projectionRevision, long insightSequence, long? sourceCanonicalRevision)
+        {
+            await using (var command = source.CreateCommand("""
+                INSERT INTO pitchmind.insights(insight_id, match_id, revision, as_of_sequence, detector_version,
+                    truth_class, summary, conditions_json, canonical_revision)
+                VALUES ($1, $2, $3, $4, 'test-v1', $5, $6, '{}'::jsonb, $7)
+                """))
+            {
+                command.Parameters.AddWithValue(insightId);
+                command.Parameters.AddWithValue(matchId.Value);
+                command.Parameters.AddWithValue(projectionRevision);
+                command.Parameters.AddWithValue(insightSequence);
+                command.Parameters.AddWithValue(truthClass);
+                command.Parameters.AddWithValue(insightId);
+                command.Parameters.AddWithValue(insightCanonicalRevision);
+                await command.ExecuteNonQueryAsync();
+            }
+            await using (var evidence = source.CreateCommand("""
+                INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                    revision, relation, event_id, frame_id, canonical_revision, evidence_canonical_revision)
+                VALUES ($1, $2, $3, $4, $5, 'supports', $6, $7, $8, $9)
+                """))
+            {
+                evidence.Parameters.AddWithValue(insightId);
+                evidence.Parameters.AddWithValue(evidenceKind);
+                evidence.Parameters.AddWithValue(evidenceId);
+                evidence.Parameters.AddWithValue(matchId.Value);
+                evidence.Parameters.AddWithValue(projectionRevision);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "event" ? Guid.Parse(evidenceId) : null) ?? DBNull.Value);
+                evidence.Parameters.AddWithValue((object?)(evidenceKind == "frame" ? evidenceId : null) ?? DBNull.Value);
+                evidence.Parameters.AddWithValue(insightCanonicalRevision);
+                evidence.Parameters.AddWithValue((object?)sourceCanonicalRevision ?? DBNull.Value);
+                await evidence.ExecuteNonQueryAsync();
+            }
+        }
+
+        var validInsightId = $"valid-{Guid.NewGuid():N}";
+        var validFrameInsightId = $"valid-frame-{Guid.NewGuid():N}";
+        var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
+        var metricInsightId = $"metric-{Guid.NewGuid():N}";
+        var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
+        var earlierEventInsightId = $"earlier-event-{Guid.NewGuid():N}";
+        var earlierFrameInsightId = $"earlier-frame-{Guid.NewGuid():N}";
+        var validFrameId = $"frame-{Guid.NewGuid():N}";
+        var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
+        foreach (var (frameId, sequence) in new[] { (validFrameId, 0L), (futureFrameId, 1L) })
+        {
+            await using var frame = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload, canonical_revision)
+                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4, '{}'::jsonb, 1)
+                """);
+            frame.Parameters.AddWithValue(matchId.Value);
+            frame.Parameters.AddWithValue(frameId);
+            frame.Parameters.AddWithValue(sequence);
+            frame.Parameters.AddWithValue(update.SourceSha256);
+            await frame.ExecuteNonQueryAsync();
+        }
+        await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString(), 1, 1, 0, 1);
+        await AddInsight(validFrameInsightId, "derived", "frame", validFrameId, 1, 1, 0, 1);
+        await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString(), 1, 1, 0, 2);
+        await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric", 1, 1, 0, null);
+        await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId, 1, 1, 0, 1);
+        await AddInsight(earlierEventInsightId, "derived", "event", update.Event.EventId.ToString(), 2, 2, 0, 1);
+        await AddInsight(earlierFrameInsightId, "derived", "frame", validFrameId, 2, 2, 0, 1);
+
+        var projectionReader = new PostgresMatchProjectionReader(source);
+        var projection = await projectionReader.GetForApiAtAsync(matchId, 0, 1, null, CancellationToken.None);
+        Assert.NotNull(projection);
+        var insightReader = new PostgresMatchInsightReader(source);
+        var page = await insightReader.ReadAtAsync(matchId, projection.CanonicalRevision, projection.ProjectionRevision,
+            0, projection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        Assert.Equal(new[] { validFrameInsightId, validInsightId }.OrderBy(i => i).ToArray(),
+            page.Insights.Select(i => i.InsightId).OrderBy(i => i).ToArray());
+        var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
+        Assert.Equal("source-v1", visible.SourceVersion);
+        Assert.Equal("synthetic-test", visible.Provenance);
+        Assert.Equal(update.SourceSha256, visible.SourceSha256);
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, metricInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+        var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
+            projection.CanonicalRevision, projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None);
+        var framePayload = Assert.Single(validFrameEvidence!);
+        Assert.Equal(validFrameId, framePayload.Id);
+        Assert.Equal(0, framePayload.Sequence);
+        Assert.Equal(0, framePayload.ClockSeconds);
+        Assert.Equal(1, framePayload.Period);
+        Assert.Equal("{}", framePayload.PayloadJson);
+        var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
+            projection.CanonicalRevision, projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None);
+        Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.CanonicalRevision,
+            projection.ProjectionRevision, 0,
+            projection.AsOfSequence, CancellationToken.None));
+
+        // Evidence visible to the later projection still cannot support an insight persisted earlier.
+        var laterProjection = await projectionReader.GetForApiAtAsync(matchId, 10, null, null, CancellationToken.None);
+        Assert.NotNull(laterProjection);
+        Assert.Equal(1, laterProjection.AsOfSequence);
+        foreach (var futureInsightId in new[] { futureEventInsightId, futureFrameInsightId })
+        {
+            Assert.Null(await insightReader.GetAtAsync(matchId, futureInsightId, laterProjection.CanonicalRevision,
+                laterProjection.ProjectionRevision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+            Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureInsightId, laterProjection.CanonicalRevision,
+                laterProjection.ProjectionRevision, 10,
+                laterProjection.AsOfSequence, CancellationToken.None));
+        }
+        var laterPage = await insightReader.ReadAtAsync(matchId, laterProjection.CanonicalRevision, laterProjection.ProjectionRevision,
+            10, laterProjection.AsOfSequence,
+            null, null, 10, CancellationToken.None);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureEventInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureFrameInsightId);
+        Assert.Contains(laterPage.Insights, insight => insight.InsightId == earlierEventInsightId);
+        Assert.Contains(laterPage.Insights, insight => insight.InsightId == earlierFrameInsightId);
+        var earlierEvent = Assert.Single((await insightReader.ReadEvidenceAtAsync(matchId, earlierEventInsightId,
+            laterProjection.CanonicalRevision, laterProjection.ProjectionRevision, 10,
+            laterProjection.AsOfSequence, CancellationToken.None))!);
+        Assert.Equal(1, earlierEvent.SourceCanonicalRevision);
+        Assert.Equal(update.Event.EventId.ToString(), earlierEvent.Id);
+        var earlierFrame = Assert.Single((await insightReader.ReadEvidenceAtAsync(matchId, earlierFrameInsightId,
+            laterProjection.CanonicalRevision, laterProjection.ProjectionRevision, 10,
+            laterProjection.AsOfSequence, CancellationToken.None))!);
+        Assert.Equal(1, earlierFrame.SourceCanonicalRevision);
+        Assert.Equal(validFrameId, earlierFrame.Id);
+    }
+
     private static async Task<List<MatchEvent>> ReadSelected(IMatchProjectionReader reader,
         SelectedMatchProjection projection, int selectedSeconds)
     {
@@ -1119,6 +1287,16 @@ public sealed class PostgresLedgerTests
     {
         public Task PublishAsync(Guid messageId, string messageJson, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated persistent transport outage.");
+    }
+
+    private sealed class OutboxMatchCleanup(NpgsqlDataSource source, MatchId matchId) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await using var command = source.CreateCommand("DELETE FROM pitchmind.outbox WHERE match_id = $1");
+            command.Parameters.AddWithValue(matchId.Value);
+            await command.ExecuteNonQueryAsync();
+        }
     }
 
     private sealed class BlockingPublisher : IOutboxPublisher

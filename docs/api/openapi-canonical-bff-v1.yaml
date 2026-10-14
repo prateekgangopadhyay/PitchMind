@@ -1,0 +1,331 @@
+openapi: 3.1.0
+info:
+  title: PitchMind Canonical Match BFF
+  version: 1.0.0
+  description: >-
+    PostgreSQL-backed, selected-time read contracts. These routes are separate from
+    the fixture-backed demo API. Authentication is not yet implemented; cloud exposure
+    is blocked pending EP06-S04 or an explicitly approved synthetic public-read boundary.
+servers:
+  - url: /
+paths:
+  /api/v1/canonical/fixtures:
+    get:
+      operationId: listCanonicalFixtures
+      parameters:
+        - name: afterMatchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Latest persisted match projections.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalMatchPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/summary:
+    get:
+      operationId: getCanonicalMatchSummary
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: Persisted state projection at the selected time.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/events:
+    get:
+      operationId: listCanonicalMatchEvents
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Sequence-ordered canonical event page bounded by selected time.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalEventPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/insights:
+    get:
+      operationId: listCanonicalMatchInsights
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Persisted insights with resolvable selected-time evidence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalInsightPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/insights/{insightId}:
+    get:
+      operationId: getCanonicalMatchInsight
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - name: insightId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: One persisted insight with resolvable selected-time evidence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalInsight' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/evidence/{insightId}:
+    get:
+      operationId: getCanonicalInsightEvidence
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - name: insightId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '200':
+          description: Persisted insight with complete event/frame evidence visible at the selected time and sequence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalEvidence' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/replay:
+    get:
+      operationId: getCanonicalReplayPage
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Point-in-time persisted snapshot and event page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalReplay' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/key-moments:
+    get:
+      operationId: listCanonicalKeyMoments
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+      responses:
+        '400': { $ref: '#/components/responses/Problem' }
+        '503':
+          description: No persisted canonical key-moment projection exists; demo moments are not substituted.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ApiProblem' }
+components:
+  parameters:
+    MatchId:
+      name: matchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AtSeconds:
+      name: atSeconds
+      in: query
+      schema: { type: integer, minimum: 0, maximum: 5400, default: 0 }
+    Revision:
+      name: revision
+      in: query
+      description: Maximum projectionRevision for the selected-time read. This is distinct from the canonicalRevision admission sequence returned in responses.
+      schema: { type: integer, minimum: 1 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 2048 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+  responses:
+    Problem:
+      description: Typed, sanitized API failure.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ApiProblem' }
+  schemas:
+    ApiProblem:
+      type: object
+      required: [type, title, status, code, correlationId]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        correlationId: { type: string }
+        detail: { type: [string, 'null'] }
+        instance: { type: [string, 'null'] }
+    PlayerState:
+      type: object
+      required: [playerId, teamId, active, dismissed, yellowCards]
+      properties:
+        playerId: { type: string }
+        teamId: { type: string }
+        active: { type: boolean }
+        dismissed: { type: boolean }
+        yellowCards: { type: integer, minimum: 0 }
+    CanonicalMatchCard:
+      type: object
+      required: [matchId, canonicalRevision, projectionRevision, asOfSeconds, throughSequence, phase, homeScore, awayScore, provenance, algorithmVersion, sourceSha256]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer }
+        projectionRevision: { type: integer, minimum: 1 }
+        asOfSeconds: { type: integer }
+        throughSequence: { type: integer }
+        phase: { type: string }
+        homeScore: { type: integer, minimum: 0 }
+        awayScore: { type: integer, minimum: 0 }
+        provenance: { type: string }
+        algorithmVersion: { type: string }
+        sourceSha256: { type: string }
+    CanonicalMatchPage:
+      type: object
+      required: [items, nextMatchId, hasMore]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CanonicalMatchCard' } }
+        nextMatchId: { type: [string, 'null'], format: uuid }
+        hasMore: { type: boolean }
+    CanonicalMatchSnapshot:
+      type: object
+      required: [matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, asOfSeconds, throughSequence, algorithmVersion, sourceSha256, stateSha256, provenance, period, phase, homeScore, awayScore, possessionTeamId, homeActivePlayers, awayActivePlayers, players]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer }
+        projectionRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer }
+        asOfSeconds: { type: integer }
+        throughSequence: { type: integer }
+        algorithmVersion: { type: string }
+        sourceSha256: { type: string }
+        stateSha256: { type: string }
+        provenance: { type: string }
+        period: { type: integer }
+        phase: { type: string }
+        homeScore: { type: integer, minimum: 0 }
+        awayScore: { type: integer, minimum: 0 }
+        possessionTeamId: { type: [string, 'null'] }
+        homeActivePlayers: { type: integer, minimum: 0 }
+        awayActivePlayers: { type: integer, minimum: 0 }
+        players: { type: array, items: { $ref: '#/components/schemas/PlayerState' } }
+    CanonicalEvent:
+      type: object
+      required: [eventId, matchId, sequence, type, clockSeconds, period, occurredAt]
+      properties:
+        eventId: { type: string, format: uuid }
+        matchId: { type: string, format: uuid }
+        sequence: { type: integer }
+        type: { type: string }
+        clockSeconds: { type: integer }
+        period: { type: integer }
+        occurredAt: { type: string, format: date-time }
+    CanonicalEventPage:
+      type: object
+      required: [matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, items, nextCursor, hasMore]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer }
+        projectionRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer }
+        throughSequence: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvent' } }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+    CanonicalEvidenceReference:
+      type: object
+      required: [kind, id, relation]
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        relation: { type: string }
+    CanonicalInsight:
+      type: object
+      required: [insightId, matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, evidence]
+      properties:
+        insightId: { type: string }
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer }
+        projectionRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer }
+        throughSequence: { type: integer }
+        sourceVersion: { type: string }
+        provenance: { type: string }
+        sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        detectorVersion: { type: string }
+        truthClass: { type: string }
+        summary: { type: string }
+        evidence: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidenceReference' } }
+    CanonicalInsightPage:
+      type: object
+      required: [matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, items, nextCursor, hasMore]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer }
+        projectionRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer }
+        throughSequence: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/CanonicalInsight' } }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+    CanonicalEvidencePayload:
+      type: object
+      required: [kind, id, relation, sourceCanonicalRevision, sequence, clockSeconds, period, payload]
+      properties:
+        kind: { type: string, enum: [event, frame] }
+        id: { type: string }
+        relation: { type: string }
+        sourceCanonicalRevision: { type: integer, minimum: 1 }
+        sequence: { type: integer }
+        clockSeconds: { type: integer }
+        period: { type: integer }
+        payload: { type: object, additionalProperties: true }
+    CanonicalEvidence:
+      type: object
+      required: [insight, items]
+      properties:
+        insight: { $ref: '#/components/schemas/CanonicalInsight' }
+        items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidencePayload' } }
+    CanonicalReplay:
+      type: object
+      required: [snapshot, events]
+      properties:
+        snapshot: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
+        events: { $ref: '#/components/schemas/CanonicalEventPage' }

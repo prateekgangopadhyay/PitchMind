@@ -10,3 +10,4 @@ Accepted as **target decisions**, pending executable verification:
 - [ADR-007](ADR-007-environments-security.md) — Azure-only environments and identity
 
 - [ADR-008 — Bounded offline synthetic vertical slice](ADR-008-offline-vertical-slice.md)
+- [ADR-009 — Separate canonical BFF from offline demo routes](ADR-009-canonical-bff-boundary.md)

@@ -22,9 +22,21 @@ public sealed record MatchReplaySnapshot(SelectedMatchProjection Projection, IRe
 public sealed record MatchReplaySourceIdentity(string FixtureVersion, string Provenance,
     double PitchLengthMetres, double PitchWidthMetres, MatchCompetitionRules CompetitionRules);
 
+public sealed record PersistedMatchEventPage(IReadOnlyList<MatchEvent> Events, long? NextAfterSequence, bool HasMore);
+
 /// <summary>Reads only persisted projection state and events visible at the requested match time/revision.</summary>
 public interface IMatchProjectionReader
 {
+    Task<IReadOnlyList<PersistedMatchProjection>> ListLatestAsync(MatchId? afterMatchId, int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the most recent persisted snapshot within optional canonical and projection revision bounds.</summary>
+    Task<SelectedMatchProjection?> GetForApiAtAsync(MatchId matchId, int selectedSeconds,
+        long? maximumCanonicalRevision, int? maximumProjectionRevision, CancellationToken cancellationToken);
+
+    Task<PersistedMatchEventPage> ReadEventsPageAtAsync(SelectedMatchProjection projection, int selectedSeconds,
+        long afterSequence, int limit, CancellationToken cancellationToken);
+
     /// <summary>Reads every selected-time replay input from one consistent persistence snapshot.</summary>
     Task<MatchReplaySnapshot?> ReadReplaySnapshotAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken);
