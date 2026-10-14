@@ -1,11 +1,13 @@
 using PitchMind.Domain.Match;
+using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Application.Abstractions;
 
 /// <summary>Immutable source identity required before admitting a canonical match.</summary>
 public sealed record MatchSourceMetadata(Guid MatchId, string FixtureVersion, string SourceVersion,
     string SourceSha256, string Provenance, decimal PitchLengthMetres, decimal PitchWidthMetres,
-    string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null);
+    string? CompetitionId = null, string? CompetitionRulesVersion = null, int? MaximumSubstituteReentriesPerPlayer = null,
+    MatchReplaySeed? ReplaySeed = null, MatchReplayContext? ReplayContext = null);
 
 /// <summary>A deterministic projection tied to its PostgreSQL admission revision and algorithm revision.</summary>
 public sealed record PersistedMatchProjection(Guid MatchId, long CanonicalRevision, int Revision, long AsOfSequence,

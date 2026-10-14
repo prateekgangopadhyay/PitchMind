@@ -129,6 +129,12 @@
           "Npgsql": "[10.0.3, )",
           "PitchMind.Application": "[1.0.0, )"
         }
+      },
+      "pitchmind.testfixtures": {
+        "type": "Project",
+        "dependencies": {
+          "PitchMind.Domain": "[1.0.0, )"
+        }
       }
     }
   }

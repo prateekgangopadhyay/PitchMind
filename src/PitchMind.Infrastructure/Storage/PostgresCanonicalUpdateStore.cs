@@ -5,6 +5,7 @@ using Npgsql;
 using NpgsqlTypes;
 using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
+using PitchMind.Domain.Simulation;
 using PitchMind.Domain.Match;
 
 namespace PitchMind.Infrastructure.Storage;
@@ -22,11 +23,13 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         var priorStateJson = JsonSerializer.Serialize(update.PriorState, JsonOptions);
         var priorStateHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(priorStateJson)));
         var eventJson = JsonSerializer.Serialize(update.Event);
+        var sourceEventJson = JsonSerializer.Serialize(update.SourceEvent, JsonOptions);
         var messageId = update.Event.EventId;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await LockMatchAsync(connection, transaction, update.Event.MatchId.ToString(), cancellationToken);
+        await EnsureReplaySeedRegisteredAsync(connection, transaction, update, cancellationToken);
 
         if (await EventExistsAsync(connection, transaction, update.Event.EventId, cancellationToken))
         {
@@ -58,8 +61,8 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             update.Event.ClockSeconds, update.AlgorithmVersion, update.SourceSha256, stateHash, update.State), JsonOptions);
 
         await using (var command = new NpgsqlCommand("""
-            INSERT INTO pitchmind.match_events(event_id, match_id, canonical_revision, sequence, event_type, clock_seconds, period, occurred_at, payload)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO pitchmind.match_events(event_id, match_id, canonical_revision, sequence, event_type, clock_seconds, period, occurred_at, payload, source_event_json)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """, connection, transaction))
         {
             command.Parameters.AddWithValue(update.Event.EventId);
@@ -71,6 +74,7 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             command.Parameters.AddWithValue(update.Event.Period);
             command.Parameters.AddWithValue(update.Event.OccurredAt.ToUniversalTime());
             command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, eventJson);
+            command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, sourceEventJson);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -160,7 +164,10 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
             if (state.LastSequence != -1 || state.ClockSeconds != 0 || state.Period != 1 ||
                 state.Phase != MatchPhase.NotStarted || state.HomeScore != 0 || state.AwayScore != 0 ||
                 state.PossessionTeamId is not null || state.HomeActivePlayers != 11 || state.AwayActivePlayers != 11 ||
-                state.Players.Count != 22 || state.Players.Any(player => !player.Active || player.Dismissed || player.YellowCards != 0))
+                state.Players.Count(player => player.Active && player.TeamId == update.ReplaySeed.HomeTeamId) != 11 ||
+                state.Players.Count(player => player.Active && player.TeamId == update.ReplaySeed.AwayTeamId) != 11 ||
+                state.Players.Select(player => player.PlayerId).Distinct(StringComparer.Ordinal).Count() != state.Players.Count ||
+                state.Players.Any(player => player.Dismissed || player.YellowCards != 0))
                 throw new InvalidOperationException("The initial aggregate state is not a valid canonical match starting state.");
             return;
         }
@@ -196,6 +203,23 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private static async Task EnsureReplaySeedRegisteredAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        CanonicalUpdate update, CancellationToken cancellationToken)
+    {
+        var seedJson = JsonSerializer.Serialize(update.ReplaySeed, JsonOptions);
+        await using var command = new NpgsqlCommand("""
+            SELECT replay_seed_json = $2::jsonb AND provenance = $3
+            FROM pitchmind.matches
+            WHERE match_id = $1 AND source_sha256 = $4
+            """, connection, transaction);
+        command.Parameters.AddWithValue(update.Event.MatchId.Value);
+        command.Parameters.AddWithValue(NpgsqlDbType.Jsonb, seedJson);
+        command.Parameters.AddWithValue(update.ReplaySeed.Provenance);
+        command.Parameters.AddWithValue(update.SourceSha256);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+            throw new InvalidOperationException("Canonical update replay seed does not match the immutable registered match source.");
+    }
+
     private static async Task<bool> EventExistsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid eventId,
         CancellationToken cancellationToken)
     {
@@ -207,13 +231,17 @@ public sealed class PostgresCanonicalUpdateStore(NpgsqlDataSource dataSource) : 
     private static async Task<bool> IsExactRetryAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
         CanonicalUpdate update, string eventJson, string stateHash, CancellationToken cancellationToken)
     {
-        await using var eventCommand = new NpgsqlCommand("SELECT payload::text, canonical_revision FROM pitchmind.match_events WHERE event_id = $1", connection, transaction);
+        var sourceEventJson = JsonSerializer.Serialize(update.SourceEvent, JsonOptions);
+        await using var eventCommand = new NpgsqlCommand("SELECT payload::text, canonical_revision, source_event_json::text FROM pitchmind.match_events WHERE event_id = $1", connection, transaction);
         eventCommand.Parameters.AddWithValue(update.Event.EventId);
         await using var eventReader = await eventCommand.ExecuteReaderAsync(cancellationToken);
         if (!await eventReader.ReadAsync(cancellationToken) || eventReader.IsDBNull(1)) return false;
         var storedEvent = eventReader.GetString(0);
         var canonicalRevision = eventReader.GetInt64(1);
+        var storedSourceEvent = eventReader.IsDBNull(2) ? null : eventReader.GetString(2);
         if (JsonSerializer.Deserialize<PitchMind.Domain.Events.MatchEvent>(storedEvent) != update.Event) return false;
+        var storedEnvelope = storedSourceEvent is null ? null : JsonSerializer.Deserialize<SimulationEvent>(storedSourceEvent, JsonOptions);
+        if (storedEnvelope != update.SourceEvent) return false;
         await eventReader.DisposeAsync();
 
         await using var projectionCommand = new NpgsqlCommand("SELECT state_sha256 FROM pitchmind.match_projections WHERE match_id = $1 AND canonical_revision = $2 AND revision = $3 AND as_of_sequence = $4", connection, transaction);

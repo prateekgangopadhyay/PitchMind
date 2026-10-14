@@ -13,6 +13,9 @@ flowchart TB
   API --> Contracts["PitchMind.Contracts — versioned transport DTOs"]
   Test["PitchMind.TestFixtures — fictional golden fixtures"] -. "test-only reference" .-> AppTests["Application tests"]
   Ledger["PostgresMatchEventStore"] --> DB[("Local PostgreSQL event ledger")]
+  ProjectionRead["PostgresMatchProjectionStore: source metadata + projection/provenance read"] --> DB
+  CanonicalWrite["PostgresCanonicalUpdateStore: event + projection + outbox transaction"] --> DB
+  PointInTime["Internal Application: GetMatchAtQueryService"] --> ReplayReader["PostgresMatchProjectionReader: projection + replay envelope + bounded frames"] --> DB
   Migrator["PostgresSchemaMigrator"] --> DB
   Candidate["Candidate JSON"] -. "raw schema only" .-> RawReader["ManuLivCandidateFeedReader"]
   RawReader -. "not connected to canonical admission" .-> Boundary["Mapping blocked: source semantics unverified"]
@@ -20,7 +23,7 @@ flowchart TB
   AgentWorker["AgentWorker scaffold (idle)"]
 ```
 
-The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. The in-memory event store is registered only for the local profile; Azure startup does not fall back to it. This does not configure Azure authentication, managed identity, or canonical service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `ManuLivCandidateFeedReader` computes the exact source SHA-256 and parses source identity/order/time labels while retaining each original JSON record. It does not map event types, convert coordinates or clocks, persist data, or enable API reads; it is not wired into runtime composition. The candidate therefore still does not drive canonical match service behavior.
+The profile guard rejects selecting local-only adapters outside Development while allowing an explicit Azure profile in Development, Staging, or Production. The in-memory event store is registered only for the local profile; Azure startup does not fall back to it. This does not configure Azure authentication, managed identity, or canonical service adapters. The event store is a separately exercised adapter; current API paths do **not** consume it. The PostgreSQL projection and canonical-write stores and the point-in-time query/reader are implementation components but are not registered in API/EventWorker composition; the diagram does not imply a live request path. `EventWorker`, `AgentWorker` and Azure adapters must not be described as production-enabled. `ManuLivCandidateFeedReader` computes the exact source SHA-256 and parses source identity/order/time labels while retaining each original JSON record. It does not map event types, convert coordinates or clocks, persist data, or enable API reads; it is not wired into runtime composition. The candidate therefore still does not drive canonical match service behavior.
 
 ## Target Ports and Adapters
 
