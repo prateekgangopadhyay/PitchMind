@@ -1,0 +1,88 @@
+using PitchMind.Domain.Events;
+
+namespace PitchMind.Domain.Simulation;
+
+/// <summary>
+/// An append-only correction record for a synthetic fixture event. The replacement
+/// retains the original event identity and match-time position; only event content
+/// may be corrected. Persistence/admission of correction history is an outer-layer concern.
+/// </summary>
+public sealed record FixtureEventCorrection(
+    long Revision,
+    string CorrectionId,
+    Guid TargetEventId,
+    string Provenance,
+    SimulationEvent Replacement);
+
+/// <summary>A replay event with immutable source identity and any applied correction lineage.</summary>
+public sealed record ResolvedFixtureEvent(
+    SimulationEvent Event,
+    string SourceProvenance,
+    long? CorrectionRevision,
+    string? CorrectionId,
+    string? CorrectionProvenance);
+
+/// <summary>Resolves an immutable fixture plus correction history into ordered replay input.</summary>
+public static class FixtureCorrectionHistory
+{
+    public static IReadOnlyList<ResolvedFixtureEvent> Resolve(
+        SyntheticFixture fixture,
+        IEnumerable<FixtureEventCorrection> corrections)
+    {
+        ArgumentNullException.ThrowIfNull(fixture);
+        ArgumentNullException.ThrowIfNull(corrections);
+
+        var history = corrections.ToArray();
+        if (history.Any(correction => correction is null))
+            throw new ArgumentException("Correction history cannot contain null records.", nameof(corrections));
+
+        var sourceEvents = fixture.Events.ToDictionary(item => item.Event.EventId);
+        var correctionIds = new HashSet<string>(StringComparer.Ordinal);
+        var correctedAtRevision = new HashSet<(long Revision, Guid EventId)>();
+        var effectiveEvents = new Dictionary<Guid, FixtureEventCorrection>();
+
+        foreach (var correction in history.OrderBy(item => item.Revision))
+        {
+            if (correction.Revision <= 0) throw new InvalidOperationException("Correction revision must be positive.");
+            if (string.IsNullOrWhiteSpace(correction.CorrectionId) || !correctionIds.Add(correction.CorrectionId))
+                throw new InvalidOperationException("Correction ID is required and must be unique.");
+            if (string.IsNullOrWhiteSpace(correction.Provenance))
+                throw new InvalidOperationException("Correction provenance is required.");
+            if (correction.Replacement is null) throw new InvalidOperationException("Corrected event is required.");
+            if (correction.Replacement.Event is null) throw new InvalidOperationException("Corrected event payload is required.");
+            if (!sourceEvents.TryGetValue(correction.TargetEventId, out var original))
+                throw new InvalidOperationException("Correction target does not exist in the source fixture.");
+            if (!correctedAtRevision.Add((correction.Revision, correction.TargetEventId)))
+                throw new InvalidOperationException("A correction revision cannot contain conflicting replacements for the same event.");
+
+            ValidatePreservedEventIdentity(original.Event, correction.Replacement.Event);
+            ValidateGoalEnvelopeSemantics(correction.Replacement);
+            effectiveEvents[correction.TargetEventId] = correction;
+        }
+
+        return Array.AsReadOnly(fixture.Events
+            .Select(item => effectiveEvents.TryGetValue(item.Event.EventId, out var correction)
+                ? new ResolvedFixtureEvent(correction.Replacement, fixture.Provenance, correction.Revision,
+                    correction.CorrectionId, correction.Provenance)
+                : new ResolvedFixtureEvent(item, fixture.Provenance, null, null, null))
+            .ToArray());
+    }
+
+    private static void ValidatePreservedEventIdentity(MatchEvent original, MatchEvent replacement)
+    {
+        if (replacement.EventId != original.EventId || replacement.MatchId != original.MatchId ||
+            replacement.Sequence != original.Sequence || replacement.ClockSeconds != original.ClockSeconds ||
+            replacement.Period != original.Period || replacement.OccurredAt != original.OccurredAt)
+            throw new InvalidOperationException(
+                "A correction must preserve the original event ID, match ID, sequence, period, clock, and occurred-at time.");
+    }
+
+    private static void ValidateGoalEnvelopeSemantics(SimulationEvent replacement)
+    {
+        var isGoalType = replacement.Event.Type == MatchEventType.Goal;
+        var hasGoalAction = string.Equals(replacement.Action, "goal", StringComparison.Ordinal);
+        var hasScoredOutcome = string.Equals(replacement.Outcome, "scored", StringComparison.Ordinal);
+        if (isGoalType != (hasGoalAction && hasScoredOutcome) || (!isGoalType && (hasGoalAction || hasScoredOutcome)))
+            throw new InvalidOperationException("Goal event type, action, and scored outcome must remain consistent in a fixture correction.");
+    }
+}
