@@ -48,6 +48,10 @@ public sealed class SyntheticMatchTests
         Assert.Equal(0m, contextNode.NumericValue);
         Assert.Equal("active-players", contextNode.Unit);
         Assert.Contains(graph.Edges, edge => edge.FromNodeId == graph.ClaimNodeId && edge.ToNodeId == contextNode.Id && edge.Relation == "derived_from");
+        var selectedContextCondition = Assert.Single(graph.Conditions, condition => condition.Id == "selected-context");
+        Assert.Contains(activeRosterNode.Id, selectedContextCondition.SourceNodeIds);
+        Assert.All(graph.Edges.Where(edge => edge.FromNodeId == contextNode.Id && edge.ToNodeId.StartsWith("event:", StringComparison.Ordinal)),
+            edge => Assert.Contains(edge.ToNodeId, selectedContextCondition.SourceNodeIds));
         Assert.All(graph.Edges, edge => Assert.Contains(edge.FromNodeId, graph.Nodes.Select(node => node.Id)));
         Assert.All(graph.Edges, edge => Assert.Contains(edge.ToNodeId, graph.Nodes.Select(node => node.Id)));
         Assert.Equal(graph.Nodes.Count(node => node.Kind == "event") - 1, graph.Edges.Count(edge => edge.Relation == "precedes"));

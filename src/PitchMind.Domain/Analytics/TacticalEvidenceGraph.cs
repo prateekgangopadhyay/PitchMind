@@ -154,7 +154,7 @@ public static class TacticalEvidenceGraphValidator
         ArgumentNullException.ThrowIfNull(graph);
         if (string.IsNullOrWhiteSpace(graph.MatchId) || string.IsNullOrWhiteSpace(graph.SourceVersion) ||
             !IsSha256(graph.SourceSha256) ||
-            graph.SelectedTimeSeconds < 0 || graph.CanonicalRevision is <= 0 || graph.Nodes is null || graph.Edges is null ||
+            graph.SelectedTimeSeconds < 0 || graph.ThroughSequence < -1 || graph.CanonicalRevision is <= 0 || graph.Nodes is null || graph.Edges is null ||
             string.IsNullOrWhiteSpace(graph.Uncertainty) || graph.Conditions is null)
             throw new ArgumentException("Evidence graph metadata is invalid.", nameof(graph));
 
@@ -173,7 +173,8 @@ public static class TacticalEvidenceGraphValidator
             node.Kind == "metric" && (node.NumericValue is null || string.IsNullOrWhiteSpace(node.Unit)) ||
             node.Kind is not "metric" && (node.NumericValue is not null || node.Unit is not null) ||
             node.Kind is not ("claim" or "event" or "frame" or "metric") ||
-            node.Kind == "event" && (node.EventId is null || node.Sequence is null || node.ClockSeconds is null || node.FrameId is not null) ||
+            node.Kind == "event" && (node.EventId is null || node.Sequence is null || node.Sequence < 0 ||
+                node.Sequence > graph.ThroughSequence || node.ClockSeconds is null || node.FrameId is not null) ||
             node.Kind == "frame" && (node.FrameId is null || node.ClockSeconds is null || node.EventId is not null || node.Sequence is not null) ||
             (node.Kind is "claim" or "metric") && (node.EventId is not null || node.FrameId is not null)))
             throw new InvalidDataException("Evidence nodes must use the graph's source revision and selected time.");

@@ -305,6 +305,22 @@ public sealed class PressSequenceDetectorTests
     }
 
     [Fact]
+    public void EventNodeSequenceMustNotExceedGraphThroughSequence()
+    {
+        var sourceHash = new string('a', 64);
+        var claim = new TacticalEvidenceNode("claim:one", "claim", "pattern", "claim", null, null,
+            10, 1, "synthetic-v2", sourceHash, null, null, null);
+        var lateEvent = new TacticalEvidenceNode("event:late", "event", "fact", "late source event", Guid.NewGuid(), null,
+            9, 2, "synthetic-v2", sourceHash, null, null, null);
+        var graph = new TacticalEvidenceGraph("match", "synthetic-v2", sourceHash, "synthetic", null,
+            10, 1, "press-sequence-v2", "unapproved-demo", false, claim.Id,
+            new[] { claim, lateEvent }, new[] { new TacticalEvidenceEdge(claim.Id, lateEvent.Id, "derived_from") },
+            "Uncalibrated.", new[] { new TacticalEvidenceCondition("source", true, "observed", null, new[] { lateEvent.Id }, null) });
+
+        Assert.Throws<InvalidDataException>(() => TacticalEvidenceGraphValidator.Validate(graph));
+    }
+
+    [Fact]
     public void GraphMustContainExactlyOneClaimNode()
     {
         var sourceHash = new string('a', 64);
