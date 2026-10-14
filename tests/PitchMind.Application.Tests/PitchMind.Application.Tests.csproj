@@ -7,4 +7,7 @@
     <ProjectReference Include="../../src/PitchMind.Application/PitchMind.Application.csproj" />
     <ProjectReference Include="../PitchMind.TestFixtures/PitchMind.TestFixtures.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
