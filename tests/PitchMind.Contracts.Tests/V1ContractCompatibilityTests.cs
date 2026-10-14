@@ -133,7 +133,11 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
-        var source = SyntheticFixtureGenerator.Generate();
+        var source = SyntheticFixtureGenerator.Generate() with
+        {
+            PitchLengthMetres = 110,
+            PitchWidthMetres = 75
+        };
         var mapped = source.ToResponse();
 
         Assert.Equal(source.Version, mapped.Version);
@@ -142,7 +146,7 @@ public sealed class V1ContractCompatibilityTests
         Assert.Equal(source.HalfTimeSeconds, mapped.HalfTimeSeconds);
         Assert.Equal(source.PitchLengthMetres, mapped.PitchLengthMetres);
         Assert.Equal(source.PitchWidthMetres, mapped.PitchWidthMetres);
-        Assert.Contains("105 x 68 metre pitch", mapped.Frames[0].CoordinateConvention);
+        Assert.Equal(source.CoordinateConvention, mapped.Frames[0].CoordinateConvention);
         var state = new SyntheticMatchService(source).GetState(source.DurationSeconds).ToResponse();
         Assert.Equal(mapped.Frames[0].CoordinateConvention, state.Frame.CoordinateConvention);
         Assert.Equal(source.Events.Count, mapped.Events.Count);

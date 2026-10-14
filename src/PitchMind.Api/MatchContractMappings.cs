@@ -73,7 +73,7 @@ public static class MatchContractMappings
 
     private static TrackingFrameResponse ToResponse(this TrackingFrame frame, string coordinateConvention) => new(
         frame.Id, frame.ClockSeconds, frame.BallX, frame.BallY,
-        "metres; fixed 105 x 68 metre pitch; attack direction changes at halftime",
+        coordinateConvention,
         Array.AsReadOnly(frame.Players.Select(player => new PitchPositionResponse(player.PlayerId, player.TeamId, player.X, player.Y)).ToArray()));
 
     public static SimulationEventResponse ToResponse(this SimulationEvent simulationEvent) => new(
