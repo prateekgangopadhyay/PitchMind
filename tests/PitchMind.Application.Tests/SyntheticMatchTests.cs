@@ -11,6 +11,9 @@ public sealed class SyntheticMatchTests
         Assert.Equal(0, service.GetState(3308).HomeScore); Assert.Empty(service.GetInsights(3308));
         Assert.Equal(1, service.GetState(3309).HomeScore); Assert.Single(service.GetInsights(3309));
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
+        Assert.Equal("harbour", service.GetState(3308).PossessionTeamId);
+        Assert.Null(service.GetState(3309).PossessionTeamId);
+        Assert.Null(service.GetState(4680).PossessionTeamId);
         var insight = service.GetInsights(5400).Single(); Assert.Null(service.GetEvidence(insight.Id, 3308));
         Assert.All(service.GetEvidence(insight.Id, 3309)!.Events, e => Assert.True(e.Event.ClockSeconds <= 3309));
     }
@@ -29,6 +32,24 @@ public sealed class SyntheticMatchTests
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         Assert.Empty(PressingSequenceDetector.Detect(fixture with { Frames = Array.Empty<TrackingFrame>() }, 5400));
+    }
+    [Fact] public void FixtureWithoutKickoffFrameIsRejectedAtConstruction()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Where(frame => frame.ClockSeconds != 0).ToArray();
+
+        var error = Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+
+        Assert.Contains("tracking frame at kickoff", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact] public void FixtureWhoseFirstSampleIsAfterSelectedTimeIsRejectedBeforeQuery()
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Where(frame => frame.ClockSeconds >= 60).ToArray();
+
+        var error = Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+
+        Assert.Contains("elapsed second zero", error.Message, StringComparison.OrdinalIgnoreCase);
     }
     [Fact] public void SuccessfulCirculationDoesNotBecomePressingTrap()
     {
@@ -76,6 +97,31 @@ public sealed class SyntheticMatchTests
         var fixture = SyntheticFixtureGenerator.Generate();
         var frames = fixture.Frames.Select(f => f with { Players = f.Players.Select(p => p with { X = double.NaN }).ToArray() }).ToArray();
         Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+    }
+    [Theory]
+    [InlineData(double.NaN, 0)]
+    [InlineData(121, 0)]
+    [InlineData(0, double.PositiveInfinity)]
+    [InlineData(0, 81)]
+    public void InvalidBallCoordinatesAreRejected(double ballX, double ballY)
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        var frames = fixture.Frames.Select((frame, index) => index == 0 ? frame with { BallX = ballX, BallY = ballY } : frame).ToArray();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with { Frames = frames }));
+    }
+    [Theory]
+    [InlineData(89, 68)]
+    [InlineData(105, 44)]
+    [InlineData(121, 68)]
+    [InlineData(105, 91)]
+    public void UnsupportedFootballPitchDimensionsAreRejected(double pitchLength, double pitchWidth)
+    {
+        var fixture = SyntheticFixtureGenerator.Generate();
+        Assert.Throws<ArgumentException>(() => new SyntheticMatchService(fixture with
+        {
+            PitchLengthMetres = pitchLength,
+            PitchWidthMetres = pitchWidth
+        }));
     }
     [Fact] public void ExplanationsUseEvidenceTeamNames()
     {

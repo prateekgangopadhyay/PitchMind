@@ -1,4 +1,5 @@
 using PitchMind.Domain.Events;
+using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Application.Matches;
@@ -10,16 +11,29 @@ public sealed class SyntheticMatchService
     public SyntheticMatchService(SyntheticFixture fixture)
     {
         ArgumentNullException.ThrowIfNull(fixture);
-        if (fixture.DurationSeconds != 5400 || fixture.Provenance != "synthetic" || fixture.Frames.Count == 0)
+        if (fixture.DurationSeconds <= 0 || fixture.HalfTimeSeconds <= 0 || fixture.HalfTimeSeconds >= fixture.DurationSeconds ||
+            !FootballPitchDimensions.AreValid(fixture.PitchLengthMetres, fixture.PitchWidthMetres) ||
+            fixture.Provenance != "synthetic" || fixture.Frames.Count == 0)
             throw new ArgumentException("A complete synthetic fixture with tracking is required.", nameof(fixture));
         if (fixture.Events.Count == 0 || fixture.Events.Select(e => e.Event.EventId).Distinct().Count() != fixture.Events.Count)
             throw new ArgumentException("Unique source events are required.", nameof(fixture));
         foreach (var entry in fixture.Events) MatchEventValidator.Validate(entry.Event);
-        if (fixture.Events.Where((e, i) => e.Event.Sequence != i || e.Event.ClockSeconds > 5400 || e.Event.MatchId.ToString() != fixture.MatchId).Any()
-            || fixture.Events.Zip(fixture.Events.Skip(1)).Any(p => p.First.Event.ClockSeconds > p.Second.Event.ClockSeconds))
+        if (fixture.Events.Where((e, i) => e.Event.Sequence != i || e.Event.ClockSeconds > fixture.DurationSeconds || e.Event.MatchId.ToString() != fixture.MatchId).Any()
+            || fixture.Events.Zip(fixture.Events.Skip(1)).Any(p => p.First.Event.ClockSeconds > p.Second.Event.ClockSeconds)
+            || fixture.Events.Any(e => e.Event.ClockSeconds < fixture.HalfTimeSeconds && e.Event.Period != 1
+                || e.Event.ClockSeconds > fixture.HalfTimeSeconds && e.Event.Period != 2
+                || e.Event.ClockSeconds == fixture.HalfTimeSeconds && !(
+                    e.Event.Type == MatchEventType.HalfTime && e.Event.Period == 1
+                    || e.Event.Type == MatchEventType.KickOff && e.Event.Period == 2)))
             throw new ArgumentException("Ordered contiguous match events are required.", nameof(fixture));
-        if (fixture.Frames.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > 5400 || f.Players.Any(p => !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > 105 || p.Y < 0 || p.Y > 68)))
+        if (fixture.Frames.Any(f => f.ClockSeconds < 0 || f.ClockSeconds > fixture.DurationSeconds ||
+                !double.IsFinite(f.BallX) || f.BallX < 0 || f.BallX > fixture.PitchLengthMetres ||
+                !double.IsFinite(f.BallY) || f.BallY < 0 || f.BallY > fixture.PitchWidthMetres || f.Players.Any(p =>
+                !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.X > fixture.PitchLengthMetres ||
+                p.Y < 0 || p.Y > fixture.PitchWidthMetres)))
             throw new ArgumentException("Tracking must use finite in-pitch coordinates.", nameof(fixture));
+        if (!fixture.Frames.Any(frame => frame.ClockSeconds == 0))
+            throw new ArgumentException("A tracking frame at kickoff (elapsed second zero) is required to initialize the active roster.", nameof(fixture));
         Fixture = fixture with
         {
             Home = fixture.Home with { Players = Array.AsReadOnly(fixture.Home.Players.ToArray()) },
@@ -33,10 +47,19 @@ public sealed class SyntheticMatchService
     {
         ValidateTime(clockSeconds);
         var events = GetEvents(clockSeconds);
-        return new(Fixture.MatchId, clockSeconds, clockSeconds < 2700 ? 1 : 2,
-            clockSeconds == 5400 ? "full-time" : "replay", events.Count(e => e.Event.Type == MatchEventType.Goal && e.TeamId == Fixture.Home.Id),
-            events.Count(e => e.Event.Type == MatchEventType.Goal && e.TeamId == Fixture.Away.Id), Fixture.Provenance,
-            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), events.Last().Event.Sequence);
+        var initialPlayers = Fixture.Home.Players.Concat(Fixture.Away.Players)
+            .Select(player => (player.Id, player.TeamId)).ToArray();
+        var activeAtKickoff = Fixture.Frames.First(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId).ToArray();
+        var aggregate = new MatchAggregate(new(Guid.Parse(Fixture.MatchId)), Fixture.Home.Id, Fixture.Away.Id,
+            initialPlayers, activeAtKickoff, Fixture.Provenance,
+            new(Fixture.CompetitionId, Fixture.CompetitionRulesVersion, Fixture.MaximumSubstituteReentriesPerPlayer));
+        foreach (var item in events) aggregate.Apply(item);
+        var state = aggregate.Snapshot();
+        var status = clockSeconds == Fixture.DurationSeconds ? "full-time" : "replay";
+        return new(Fixture.MatchId, clockSeconds, state.Period, status, state.HomeScore, state.AwayScore, state.Provenance,
+            Fixture.Frames.Last(f => f.ClockSeconds <= clockSeconds), state.LastSequence,
+            state.Phase, state.PossessionTeamId, state.HomeActivePlayers, state.AwayActivePlayers, state.Players, Fixture.CoordinateConvention,
+            state.CompetitionId, state.CompetitionRulesVersion, state.MaximumSubstituteReentriesPerPlayer);
     }
     public IReadOnlyList<SimulationEvent> GetEvents(int clockSeconds)
     {
@@ -54,7 +77,7 @@ public sealed class SyntheticMatchService
         if (insight is null) return null;
         return new(insight, Fixture.Events.Where(e => insight.EventIds.Contains(e.Event.EventId)).ToArray(),
             Fixture.Frames.Where(f => insight.FrameIds.Contains(f.Id)).ToArray(),
-            "Metres: x=0..105, y=0..68; fixed stadium coordinates; attack direction switches at 2700 seconds.",
+            Fixture.CoordinateConvention,
             new[] { "Back-pass received by goalkeeper", "Opponent within 3 metres at press arrival", "Incomplete pressured pass within 10 seconds", "Same pressing team regains within 10 seconds", "Cutback then shot and goal within 15 seconds of regain" },
             new[] { "Synthetic scenario; thresholds are uncalibrated demonstration rules.", "Sequence supports a pressing interpretation, not proof of player or manager intent.", "Routine frames sampled every 30 seconds; do not treat gaps as observed movement." });
     }
@@ -73,7 +96,8 @@ public sealed class SyntheticMatchService
     }
     private void ValidateTime(int clockSeconds)
     {
-        if (clockSeconds < 0 || clockSeconds > Fixture.DurationSeconds) throw new ArgumentOutOfRangeException(nameof(clockSeconds), "Clock must be between 0 and 5400 seconds.");
+        if (clockSeconds < 0 || clockSeconds > Fixture.DurationSeconds)
+            throw new ArgumentOutOfRangeException(nameof(clockSeconds), $"Clock must be between 0 and {Fixture.DurationSeconds} seconds.");
     }
 }
 

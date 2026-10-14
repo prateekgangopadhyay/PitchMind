@@ -26,6 +26,9 @@ public sealed record FixtureResponse(
     int Seed,
     string Provenance,
     int DurationSeconds,
+    int HalfTimeSeconds,
+    double PitchLengthMetres,
+    double PitchWidthMetres,
     TeamResponse Home,
     TeamResponse Away,
     IReadOnlyList<SimulationEventResponse> Events,
@@ -36,11 +39,21 @@ public sealed record MatchStateResponse(
     int ClockSeconds,
     int Period,
     string Status,
+    string Phase,
     int HomeScore,
     int AwayScore,
     string Provenance,
     TrackingFrameResponse Frame,
-    long LastSequence);
+    long LastSequence,
+    string? PossessionTeamId,
+    int HomeActivePlayers,
+    int AwayActivePlayers,
+    IReadOnlyList<MatchPlayerStateResponse> Players,
+    string? CompetitionId = null,
+    string? CompetitionRulesVersion = null,
+    int? MaximumSubstituteReentriesPerPlayer = null);
+
+public sealed record MatchPlayerStateResponse(string PlayerId, string TeamId, bool Active, bool Dismissed, int YellowCards);
 
 public sealed record InsightResponse(
     string Id,

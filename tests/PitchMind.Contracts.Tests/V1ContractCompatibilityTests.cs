@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using PitchMind.Api;
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Simulation;
 using PitchMind.Infrastructure.Storage;
@@ -59,12 +60,12 @@ public sealed class V1ContractCompatibilityTests
     [Fact]
     public void Fixture_serialization_preserves_the_v1_consumer_shape()
     {
-        var fixture = new FixtureResponse("match", "source-v1", 0, "synthetic", 0,
+        var fixture = new FixtureResponse("match", "source-v1", 0, "synthetic", 0, 0, 105, 68,
             new TeamResponse("home", "Home", "unknown", Array.Empty<PlayerResponse>()),
             new TeamResponse("away", "Away", "unknown", Array.Empty<PlayerResponse>()),
             Array.Empty<SimulationEventResponse>(), Array.Empty<TrackingFrameResponse>());
 
-        AssertJsonProperties(fixture, "matchId", "version", "seed", "provenance", "durationSeconds", "home", "away", "events", "frames");
+        AssertJsonProperties(fixture, "matchId", "version", "seed", "provenance", "durationSeconds", "halfTimeSeconds", "pitchLengthMetres", "pitchWidthMetres", "home", "away", "events", "frames");
         Assert.Equal("source-v1", fixture.Version);
         Assert.Equal("1", ContractVersion.V1);
     }
@@ -116,13 +117,48 @@ public sealed class V1ContractCompatibilityTests
     }
 
     [Fact]
+    public void State_response_exposes_selected_time_projection_fields()
+    {
+        var fixture = SyntheticFixtureGenerator.GenerateScenario(seed: 42).Fixture;
+        fixture = fixture with
+        {
+            CompetitionId = "synthetic-competition",
+            CompetitionRulesVersion = "rules-v1",
+            MaximumSubstituteReentriesPerPlayer = 0
+        };
+        var state = new SyntheticMatchService(fixture).GetState(3600).ToResponse();
+        AssertJsonProperties(state, "matchId", "clockSeconds", "period", "status", "phase", "homeScore", "awayScore",
+            "provenance", "frame", "lastSequence", "possessionTeamId",
+            "homeActivePlayers", "awayActivePlayers", "players", "competitionId", "competitionRulesVersion",
+            "maximumSubstituteReentriesPerPlayer");
+        Assert.Equal("replay", state.Status);
+        Assert.Equal("secondhalf", state.Phase);
+        Assert.Equal("synthetic-competition", state.CompetitionId);
+        Assert.Equal("rules-v1", state.CompetitionRulesVersion);
+        Assert.Equal(0, state.MaximumSubstituteReentriesPerPlayer);
+        Assert.False(state.Players.Single(player => player.PlayerId == "harbour-7").Active);
+        Assert.True(state.Players.Single(player => player.PlayerId == "harbour-12").Active);
+    }
+
+    [Fact]
     public void Domain_mapping_preserves_original_event_identity_sequence_and_occurrence_time()
     {
-        var source = SyntheticFixtureGenerator.Generate();
+        var source = SyntheticFixtureGenerator.Generate() with
+        {
+            PitchLengthMetres = 110,
+            PitchWidthMetres = 75
+        };
         var mapped = source.ToResponse();
 
         Assert.Equal(source.Version, mapped.Version);
         Assert.NotEqual(ContractVersion.V1, mapped.Version);
+        Assert.Equal(source.DurationSeconds, mapped.DurationSeconds);
+        Assert.Equal(source.HalfTimeSeconds, mapped.HalfTimeSeconds);
+        Assert.Equal(source.PitchLengthMetres, mapped.PitchLengthMetres);
+        Assert.Equal(source.PitchWidthMetres, mapped.PitchWidthMetres);
+        Assert.Equal(source.CoordinateConvention, mapped.Frames[0].CoordinateConvention);
+        var state = new SyntheticMatchService(source).GetState(source.DurationSeconds).ToResponse();
+        Assert.Equal(mapped.Frames[0].CoordinateConvention, state.Frame.CoordinateConvention);
         Assert.Equal(source.Events.Count, mapped.Events.Count);
         for (var index = 0; index < source.Events.Count; index++)
         {

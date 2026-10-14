@@ -1,0 +1,86 @@
+{
+  "version": "synthetic-v2",
+  "fixtureId": "8c15e1af-66b9-4d1f-a801-ff68d647dc78",
+  "provenance": "synthetic",
+  "startUtc": "2026-10-09T12:00:00Z",
+  "durationSeconds": 5400,
+  "halfTimeSeconds": 2700,
+  "circulationIntervalSeconds": 30,
+  "pitchLengthMetres": 105,
+  "pitchWidthMetres": 68,
+  "teams": [
+    {
+      "id": "harbour",
+      "name": "Harbour FC",
+      "formation": "4-2-3-1",
+      "attacksRightInPeriodOne": true,
+      "circulationPlayerId": "harbour-6",
+      "circulationReceiverId": "harbour-8",
+      "players": [
+        {"id":"harbour-1","name":"Harbour Player 1","shirtNumber":1,"role":"GK","baseX":5,"baseY":34},
+        {"id":"harbour-2","name":"Harbour Player 2","shirtNumber":2,"role":"RB","baseX":30,"baseY":60},
+        {"id":"harbour-3","name":"Harbour Player 3","shirtNumber":3,"role":"CB","baseX":22,"baseY":43},
+        {"id":"harbour-4","name":"Harbour Player 4","shirtNumber":4,"role":"CB","baseX":22,"baseY":25},
+        {"id":"harbour-5","name":"Harbour Player 5","shirtNumber":5,"role":"LB","baseX":30,"baseY":8},
+        {"id":"harbour-6","name":"Harbour Player 6","shirtNumber":6,"role":"CM","baseX":38,"baseY":45},
+        {"id":"harbour-7","name":"Harbour Player 7","shirtNumber":7,"role":"CM","baseX":42,"baseY":24,"activeUntilSeconds":3600},
+        {"id":"harbour-8","name":"Harbour Player 8","shirtNumber":8,"role":"AM","baseX":55,"baseY":34},
+        {"id":"harbour-9","name":"Harbour Player 9","shirtNumber":9,"role":"RW","baseX":70,"baseY":54},
+        {"id":"harbour-10","name":"Harbour Player 10","shirtNumber":10,"role":"ST","baseX":75,"baseY":34},
+        {"id":"harbour-11","name":"Harbour Player 11","shirtNumber":11,"role":"LW","baseX":70,"baseY":14},
+        {"id":"harbour-12","name":"Harbour Player 12","shirtNumber":12,"role":"CM","baseX":42,"baseY":24,"activeFromSeconds":3600}
+      ]
+    },
+    {
+      "id": "ridge",
+      "name": "Ridge Athletic",
+      "formation": "4-3-3",
+      "attacksRightInPeriodOne": false,
+      "circulationPlayerId": "ridge-6",
+      "circulationReceiverId": "ridge-8",
+      "players": [
+        {"id":"ridge-1","name":"Ridge Player 1","shirtNumber":1,"role":"GK","baseX":5,"baseY":34},
+        {"id":"ridge-2","name":"Ridge Player 2","shirtNumber":2,"role":"RB","baseX":30,"baseY":60},
+        {"id":"ridge-3","name":"Ridge Player 3","shirtNumber":3,"role":"CB","baseX":22,"baseY":43},
+        {"id":"ridge-4","name":"Ridge Player 4","shirtNumber":4,"role":"CB","baseX":22,"baseY":25},
+        {"id":"ridge-5","name":"Ridge Player 5","shirtNumber":5,"role":"LB","baseX":30,"baseY":8},
+        {"id":"ridge-6","name":"Ridge Player 6","shirtNumber":6,"role":"CM","baseX":38,"baseY":45},
+        {"id":"ridge-7","name":"Ridge Player 7","shirtNumber":7,"role":"CM","baseX":42,"baseY":24},
+        {"id":"ridge-8","name":"Ridge Player 8","shirtNumber":8,"role":"CM","baseX":55,"baseY":34},
+        {"id":"ridge-9","name":"Ridge Player 9","shirtNumber":9,"role":"RW","baseX":70,"baseY":54,"activeUntilSeconds":4100},
+        {"id":"ridge-10","name":"Ridge Player 10","shirtNumber":10,"role":"ST","baseX":75,"baseY":34},
+        {"id":"ridge-11","name":"Ridge Player 11","shirtNumber":11,"role":"LW","baseX":70,"baseY":14},
+        {"id":"ridge-12","name":"Ridge Player 12","shirtNumber":12,"role":"FW","baseX":75,"baseY":34,"activeFromSeconds":4100}
+      ]
+    }
+  ],
+  "scenarioEvents": [
+    {"clockSeconds":0,"period":1,"type":"KickOff","team":"home","playerId":"harbour-10","action":"kick-off","outcome":"complete"},
+    {"clockSeconds":2700,"period":1,"type":"HalfTime","team":"none","playerId":"","action":"half-time","outcome":"complete"},
+    {"clockSeconds":2700,"period":2,"type":"KickOff","team":"away","playerId":"ridge-10","action":"second-half-kick-off","outcome":"complete"},
+    {"clockSeconds":1600,"period":1,"type":"YellowCard","team":"away","playerId":"ridge-4","action":"yellow-card","outcome":"cautioned"},
+    {"clockSeconds":3290,"period":2,"type":"Pass","team":"away","playerId":"ridge-3","action":"back-pass","outcome":"complete","relatedPlayerId":"ridge-1"},
+    {"clockSeconds":3293,"period":2,"type":"Pressure","team":"home","playerId":"harbour-10","action":"press-arrival","outcome":"pressure","relatedPlayerId":"ridge-1"},
+    {"clockSeconds":3296,"period":2,"type":"Pass","team":"away","playerId":"ridge-1","action":"pressured-pass","outcome":"incomplete","relatedPlayerId":"ridge-2"},
+    {"clockSeconds":3299,"period":2,"type":"Turnover","team":"home","playerId":"harbour-11","action":"high-regain","outcome":"won","relatedPlayerId":"ridge-2"},
+    {"clockSeconds":3304,"period":2,"type":"Pass","team":"home","playerId":"harbour-11","action":"cutback","outcome":"complete","relatedPlayerId":"harbour-10"},
+    {"clockSeconds":3308,"period":2,"type":"Shot","team":"home","playerId":"harbour-10","action":"shot","outcome":"on-target"},
+    {"clockSeconds":3309,"period":2,"type":"Goal","team":"home","playerId":"harbour-10","action":"goal","outcome":"scored"},
+    {"clockSeconds":3600,"period":2,"type":"Substitution","team":"home","playerId":"harbour-7","action":"substitution","outcome":"completed","relatedPlayerId":"harbour-12"},
+    {"clockSeconds":4100,"period":2,"type":"Substitution","team":"away","playerId":"ridge-9","action":"substitution","outcome":"completed","relatedPlayerId":"ridge-12"},
+    {"clockSeconds":4680,"period":2,"type":"Goal","team":"away","playerId":"ridge-10","action":"goal","outcome":"scored"},
+    {"clockSeconds":5400,"period":2,"type":"FullTime","team":"none","playerId":"","action":"full-time","outcome":"complete"}
+  ],
+  "suppressedCirculationWindows": [
+    {"startSeconds":3290,"endSeconds":3330}
+  ],
+  "frameOverrides": [
+    {"clockSeconds":3290,"ballX":5,"ballY":34,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[10,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3293,"ballX":5,"ballY":34,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3296,"ballX":5,"ballY":34,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3299,"ballX":14,"ballY":13,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3304,"ballX":14,"ballY":13,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3308,"ballX":7,"ballY":34,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}},
+    {"clockSeconds":3309,"ballX":7,"ballY":34,"playerPositions":{"ridge-1":[5,34],"ridge-2":[15,12],"harbour-10":[7,34],"harbour-11":[14,13]}}
+  ]
+}

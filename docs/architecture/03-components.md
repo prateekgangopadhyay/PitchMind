@@ -38,7 +38,8 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
-    Ports["IEventLedger / IFrameStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
+    CanonicalPorts["ICanonicalUpdateStore / IOutboxPublisher / consumer inbox"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
@@ -64,6 +65,10 @@ flowchart TB
   Query --> Ports
   Explain --> Ports
   Pg -. "implements" .-> Ports
+  Pg -. "implements canonical update ports" .-> CanonicalPorts
+  Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
+  OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
+  Pg -. "implements consumer inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   Model -. "implements" .-> Ports
