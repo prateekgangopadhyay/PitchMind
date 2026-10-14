@@ -36,7 +36,8 @@ public static class MatchContractMappings
         snapshot.HomeActivePlayers,
         snapshot.AwayActivePlayers,
         Array.AsReadOnly(snapshot.Players.Select(player => new MatchPlayerStateResponse(
-            player.PlayerId, player.TeamId, player.Active, player.Dismissed, player.YellowCards)).ToArray()));
+            player.PlayerId, player.TeamId, player.Active, player.Dismissed, player.YellowCards)).ToArray()),
+        snapshot.CompetitionId);
 
     public static InsightResponse ToResponse(this TacticalInsight insight) => new(
         insight.Id,

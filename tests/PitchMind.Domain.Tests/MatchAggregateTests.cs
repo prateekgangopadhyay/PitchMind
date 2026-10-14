@@ -7,12 +7,12 @@ namespace PitchMind.Domain.Tests;
 
 public sealed class MatchAggregateTests
 {
-    private static (MatchAggregate Aggregate, SyntheticFixture Fixture) Create()
+    private static (MatchAggregate Aggregate, SyntheticFixture Fixture) Create(MatchCompetitionRules? rules = null)
     {
         var fixture = SyntheticFixtureGenerator.Generate();
         var players = fixture.Home.Players.Concat(fixture.Away.Players).Select(player => (player.Id, player.TeamId));
         var active = fixture.Frames.Single(frame => frame.ClockSeconds == 0).Players.Select(player => player.PlayerId);
-        return (new(new(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id, players, active, fixture.Provenance), fixture);
+        return (new(new(Guid.Parse(fixture.MatchId)), fixture.Home.Id, fixture.Away.Id, players, active, fixture.Provenance, rules), fixture);
     }
 
     [Fact]
@@ -208,6 +208,58 @@ public sealed class MatchAggregateTests
 
         Assert.Throws<InvalidOperationException>(() => aggregate.Apply(returnAttempt));
         Assert.False(aggregate.Snapshot().Players.Single(player => player.PlayerId == firstSubstitution.RelatedPlayerId).Active);
+    }
+
+    [Fact]
+    public void SubstitutedPlayerCannotReenterWithoutExplicitCompetitionRule()
+    {
+        var (aggregate, fixture) = Create();
+        var substitution = fixture.Events.First(item => item.Event.Type == MatchEventType.Substitution && item.TeamId == fixture.Home.Id);
+        foreach (var item in fixture.Events.TakeWhile(item => item.Event.Sequence <= substitution.Event.Sequence)) aggregate.Apply(item);
+        var reentry = substitution with
+        {
+            Event = substitution.Event with { EventId = Guid.NewGuid(), Sequence = substitution.Event.Sequence + 1, ClockSeconds = substitution.Event.ClockSeconds + 1 },
+            PlayerId = substitution.RelatedPlayerId!,
+            RelatedPlayerId = substitution.PlayerId
+        };
+
+        Assert.Throws<InvalidOperationException>(() => aggregate.Apply(reentry));
+        Assert.Equal(substitution.Event.Sequence, aggregate.Snapshot().LastSequence);
+        Assert.False(aggregate.Snapshot().Players.Single(player => player.PlayerId == substitution.PlayerId).Active);
+    }
+
+    [Fact]
+    public void CompetitionRuleLimitAllowsAtMostOneSubstituteReentry()
+    {
+        var (aggregate, fixture) = Create(new MatchCompetitionRules("synthetic-rules-test", "rules-v1", 1));
+        var substitution = fixture.Events.First(item => item.Event.Type == MatchEventType.Substitution && item.TeamId == fixture.Home.Id);
+        foreach (var item in fixture.Events.TakeWhile(item => item.Event.Sequence <= substitution.Event.Sequence)) aggregate.Apply(item);
+        var reentry = substitution with
+        {
+            Event = substitution.Event with { EventId = Guid.NewGuid(), Sequence = substitution.Event.Sequence + 1, ClockSeconds = substitution.Event.ClockSeconds + 1 },
+            PlayerId = substitution.RelatedPlayerId!,
+            RelatedPlayerId = substitution.PlayerId
+        };
+
+        aggregate.Apply(reentry);
+        var substituteOffAgain = reentry with
+        {
+            Event = reentry.Event with { EventId = Guid.NewGuid(), Sequence = reentry.Event.Sequence + 1, ClockSeconds = reentry.Event.ClockSeconds + 1 },
+            PlayerId = substitution.PlayerId,
+            RelatedPlayerId = substitution.RelatedPlayerId
+        };
+        aggregate.Apply(substituteOffAgain);
+        var excessiveReentry = substituteOffAgain with
+        {
+            Event = substituteOffAgain.Event with { EventId = Guid.NewGuid(), Sequence = substituteOffAgain.Event.Sequence + 1, ClockSeconds = substituteOffAgain.Event.ClockSeconds + 1 },
+            PlayerId = substitution.RelatedPlayerId!,
+            RelatedPlayerId = substitution.PlayerId
+        };
+
+        Assert.Throws<InvalidOperationException>(() => aggregate.Apply(excessiveReentry));
+        Assert.False(aggregate.Snapshot().Players.Single(player => player.PlayerId == substitution.PlayerId).Active);
+        Assert.Equal("synthetic-rules-test", aggregate.Snapshot().CompetitionId);
+        Assert.Equal("rules-v1", aggregate.Snapshot().CompetitionRulesVersion);
     }
 
     [Fact]
