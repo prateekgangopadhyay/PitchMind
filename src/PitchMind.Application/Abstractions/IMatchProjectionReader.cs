@@ -41,6 +41,10 @@ public interface IMatchProjectionReader
     Task<MatchReplaySnapshot?> ReadReplaySnapshotAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken);
 
+    Task<SelectedMatchProjection?> GetAtCanonicalRevisionAsync(MatchId matchId, long canonicalRevision,
+        int selectedSeconds, string algorithmVersion, CancellationToken cancellationToken) =>
+        GetAtAsync(matchId, selectedSeconds, canonicalRevision, algorithmVersion, cancellationToken);
+
     Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
         long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken);
 
