@@ -1,12 +1,16 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using PitchMind.Application.Abstractions;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
@@ -114,11 +118,11 @@ public sealed class CanonicalBackfillTests
             $"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=-1&atSeconds=120");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorizedResponse.StatusCode);
 
-        var authorization = factory.Services.GetRequiredService<IAuthorizationService>();
-        var coach = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim("roles", "coach")], authenticationType: "contract-test", nameType: "sub", roleType: "roles"));
-        var denied = await authorization.AuthorizeAsync(coach, "MatchRead");
-        Assert.False(denied.Succeeded);
+        using var forbidden = factory.CreateClient();
+        forbidden.DefaultRequestHeaders.Add("X-Test-Role", "coach");
+        using var forbiddenResponse = await forbidden.GetAsync(
+            $"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=-1&atSeconds=120");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
     }
 
     [Theory]
@@ -156,6 +160,13 @@ public sealed class CanonicalBackfillTests
                 services.RemoveAll<IMatchProjectionReader>();
                 services.AddSingleton<IMatchProjectionReader>(reader);
             });
+            builder.ConfigureTestServices(services => services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "backfill-test";
+                    options.DefaultChallengeScheme = "backfill-test";
+                    options.DefaultForbidScheme = "backfill-test";
+                })
+                .AddScheme<AuthenticationSchemeOptions, BackfillTestAuthenticationHandler>("backfill-test", _ => { }));
         });
 
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
@@ -217,6 +228,24 @@ public sealed class CanonicalBackfillTests
         {
             await Task.Yield();
             yield break;
+        }
+    }
+
+    private sealed class BackfillTestAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var role = Request.Headers["X-Test-Role"].FirstOrDefault() ??
+                Request.Headers["X-Dev-Roles"].ToString().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (role is null) return Task.FromResult(AuthenticateResult.NoResult());
+
+            var subject = Request.Headers["X-Dev-Subject"].FirstOrDefault() ?? "backfill-contract-test";
+            var identity = new ClaimsIdentity([new Claim("sub", subject), new Claim("roles", role)], Scheme.Name, "sub", "roles");
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
         }
     }
 }

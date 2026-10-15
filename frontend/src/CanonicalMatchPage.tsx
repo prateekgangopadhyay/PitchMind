@@ -31,7 +31,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [focusAfterLoad, setFocusAfterLoad] = useState<FocusRequest | null>(null);
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const canonicalRevision = view?.snapshot.canonicalRevision;
+  const projectionRevision = view?.snapshot.projectionRevision;
   const canonicalSelectedSeconds = view?.snapshot.selectedTimeSeconds;
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
@@ -49,7 +49,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     if (requestedRevision) summaryQuery.set('revision', String(requestedRevision));
     request<CanonicalMatchSnapshot>(`canonical/matches/${encodeURIComponent(matchId)}/summary?${summaryQuery}`, controller.signal)
       .then(async snapshot => {
-        const revision = snapshot.canonicalRevision;
+        const revision = snapshot.projectionRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
         const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
@@ -75,27 +75,27 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
-        const emptyContext = { matchId, canonicalRevision: revision, projectionRevision: snapshot.projectionRevision,
+        const emptyContext = { matchId, canonicalRevision: snapshot.canonicalRevision, projectionRevision: snapshot.projectionRevision,
           selectedTimeSeconds: selectedSeconds, throughSequence: snapshot.throughSequence };
         const events = eventResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const insights = insightResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const trackingFrames = frameResult.page;
         const requiredPages = [snapshot, ...(eventResult.page ? [events] : []), ...(insightResult.page ? [insights] : [])];
         const exactContext = requiredPages.every(item => item.matchId === matchId &&
-          item.canonicalRevision === revision && item.projectionRevision === snapshot.projectionRevision &&
+          item.canonicalRevision === snapshot.canonicalRevision && item.projectionRevision === snapshot.projectionRevision &&
           item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
           event.matchId === matchId && event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
           (index === 0 || events.items[index - 1].sequence < event.sequence));
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
-          insight.canonicalRevision === revision && insight.projectionRevision === snapshot.projectionRevision &&
+          insight.canonicalRevision === snapshot.canonicalRevision && insight.projectionRevision === snapshot.projectionRevision &&
           insight.selectedTimeSeconds === selectedSeconds &&
           insight.throughSequence <= snapshot.throughSequence);
         const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
-          trackingFrames.canonicalRevision === revision && trackingFrames.selectedTimeSeconds === selectedSeconds &&
+          trackingFrames.canonicalRevision === snapshot.canonicalRevision && trackingFrames.selectedTimeSeconds === selectedSeconds &&
           trackingFrames.throughSequence === snapshot.throughSequence && trackingFrames.items.every(frame =>
-            frame.canonicalRevision > 0 && frame.canonicalRevision <= revision && frame.sourceSha256 === snapshot.sourceSha256 &&
+            frame.canonicalRevision > 0 && frame.canonicalRevision <= snapshot.canonicalRevision && frame.sourceSha256 === snapshot.sourceSha256 &&
             frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
             frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
             frame.frame.sequence === frame.sequence && frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&
@@ -152,11 +152,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   useEffect(() => {
     if (!playing) return;
     if (selectedSeconds >= 5400) { setPlaying(false); return; }
-    if (canonicalSelectedSeconds !== selectedSeconds || canonicalRevision === undefined) return;
+    if (canonicalSelectedSeconds !== selectedSeconds || projectionRevision === undefined) return;
     const timer = window.setInterval(() =>
-      replaceCurrentMatchContext(matchId, Math.min(selectedSeconds + 1, 5400), canonicalRevision), 1_000);
+      replaceCurrentMatchContext(matchId, Math.min(selectedSeconds + 1, 5400), projectionRevision), 1_000);
     return () => window.clearInterval(timer);
-  }, [playing, matchId, selectedSeconds, canonicalRevision, canonicalSelectedSeconds]);
+  }, [playing, matchId, selectedSeconds, projectionRevision, canonicalSelectedSeconds]);
 
   const snapshot = view?.snapshot;
   const requestedFrameSequence = typeof window === 'undefined'
@@ -196,7 +196,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
               aria-valuetext={clock(selectedSeconds)}
-              onChange={event => { setPlaying(false); replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.canonicalRevision); }} />
+              onChange={event => { setPlaying(false); replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.projectionRevision); }} />
             <span>{clock(selectedSeconds)}</span>
             {reducedMotion
               ? <span className="reduced-motion-note" role="status">Automatic replay is off under reduced motion. Use the selected-time slider to inspect the match.</span>
@@ -250,7 +250,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               {view.events.items.length === 0 ? <p className="empty" role="status">{view.eventsStatus || 'No recorded events are visible at this time.'}</p>
                 : <ol className="canonical-events">{view.events.items.map(event => <li id={`canonical-event-${event.sequence}`} tabIndex={-1} key={`${event.sequence}:${event.eventId}`}>
                   <button type="button" className="canonical-event" aria-label={`Select ${eventLabel(event.type)} at ${clock(event.clockSeconds)}, sequence ${event.sequence}`}
-                    onClick={() => { setFocusAfterLoad({ kind: 'event', eventId: event.eventId }); setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.canonicalRevision); }} data-event-id={event.eventId}>
+                    onClick={() => { setFocusAfterLoad({ kind: 'event', eventId: event.eventId }); setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.projectionRevision); }} data-event-id={event.eventId}>
                     <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
                     <span>{eventLabel(event.type)}</span>
                     {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}
@@ -274,10 +274,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                   </div>}
                   <small>{insight.evidence.length} evidence reference(s)</small>
                   <CanonicalEvidenceDisclosure matchId={matchId} selectedSeconds={selectedSeconds}
-                    revision={snapshot.canonicalRevision} throughSequence={snapshot.throughSequence} insight={insight} />
-                  <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>Inspect evidence</a>
+                    projectionRevision={snapshot.projectionRevision} throughSequence={snapshot.throughSequence} insight={insight} />
+                  <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.projectionRevision)}>Inspect evidence</a>
                 </li>)}</ul>}
-              <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.canonicalRevision)}>View insights</a>
+              <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.projectionRevision)}>View insights</a>
             </section>
             <section className="panel" aria-labelledby="key-moments-title">
               <h2 id="key-moments-title">Key moments</h2>
