@@ -29,3 +29,7 @@
 ## Admission decision
 
 **Structural audit: passed for these checks. Canonical admission: blocked.** Continue to preserve raw event IDs, sequence, raw clock values, coordinate values and provenance. Before mapping or presenting football facts, obtain definitions for clock/period semantics, coordinate frame and attack orientation, player metric fields and identity, all event labels and score authority; complete independent football and rights/privacy review. Synthetic confirmation and redistribution permission establish owner-provided provenance only, not those semantics or reviews.
+
+## Period-field integrity follow-up — 2026-10-16
+
+Quality-audit version 1.1.0 adds an exact JSON type-and-value comparison for top-level `period` and nested `metadata.period`. On the same pinned source bytes, the audit found three records with the nested field, zero exact type/value matches, and three mismatch examples: sequences 1, 1037 and 1038. All nested fields are strings and all top-level fields are integers; at sequence 1037, the displayed values additionally differ (`"1"` vs `2`). This records structural inconsistency only; it does not decide which field controls period interpretation. The generated machine report was refreshed at [the JSON evidence file](EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-12.json). Focused tests and exact-source regression results are recorded in [the 2026-10-16 evidence note](EP03-S01-PERIOD-FIELD-AUDIT-2026-10-16.md).

@@ -1,5 +1,5 @@
 {
-  "auditVersion": "1.0.0",
+  "auditVersion": "1.1.0",
   "canonicalizationStatus": "blocked_pending_source_semantics_and_football_review",
   "chronology": {
     "adjacentEqualClockPairs": 11,
@@ -103,6 +103,53 @@
       }
     ],
     "medianAdjacentClockDelta": 2.0,
+    "metadataPeriodFieldComparison": {
+      "exactValueAndJsonTypeMatches": 0,
+      "interpretation": "Exact source-value and JSON-type comparison only; neither field is treated as authoritative and no period meaning is inferred.",
+      "mismatchCount": 3,
+      "mismatchExamples": [
+        {
+          "eventType": "KickOff",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "1",
+            "valueTruncated": false
+          },
+          "sequence": 1,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 1
+          }
+        },
+        {
+          "eventType": "HalfTime",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "1",
+            "valueTruncated": false
+          },
+          "sequence": 1037,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 2
+          }
+        },
+        {
+          "eventType": "KickOff",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "2",
+            "valueTruncated": false
+          },
+          "sequence": 1038,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 2
+          }
+        }
+      ],
+      "recordsWithMetadataPeriod": 3
+    },
     "periodCounts": {
       "1": 1035,
       "2": 1164
@@ -201,25 +248,33 @@
   "eventTypeComparison": {
     "currentDomainEnumTypes": [
       "KickOff",
+      "HalfTime",
       "Pass",
       "Shot",
       "Goal",
       "Foul",
+      "YellowCard",
+      "Substitution",
       "Turnover",
       "FullTime",
-      "Pressure"
+      "Pressure",
+      "RedCard"
     ],
     "domainTypesWithoutExactSourceName": [
       "Pressure",
-      "Turnover"
+      "Turnover",
+      "YellowCard"
     ],
     "exactNameOverlapOnly": [
       "Foul",
       "FullTime",
       "Goal",
+      "HalfTime",
       "KickOff",
       "Pass",
-      "Shot"
+      "RedCard",
+      "Shot",
+      "Substitution"
     ],
     "interpretation": "No semantic event mappings are inferred by this audit.",
     "manifestMappingStatus": "not_approved",
@@ -248,15 +303,12 @@
       "BallRecovery",
       "Carry",
       "Clearance",
-      "HalfTime",
       "Interception",
       "LineBreakingPass",
       "PossessionLost",
       "PressureApplied",
       "ProgressiveCarry",
       "ProgressivePass",
-      "RedCard",
-      "Substitution",
       "Tackle"
     ]
   },
