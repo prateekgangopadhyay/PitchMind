@@ -74,6 +74,7 @@ export class MatchRealtimeClient {
   private readonly connectionFactory: NonNullable<RealtimeClientOptions['connectionFactory']>;
   private connection: RealtimeConnection | null = null;
   private transportConnected = false;
+  private subscriptionReady = false;
   private started = false;
   private stopped = false;
   private lifecycleGeneration = 0;
@@ -102,10 +103,12 @@ export class MatchRealtimeClient {
       const connection = this.connectionFactory(hubUrl, () => this.requireAccessToken());
       this.connection = connection;
       this.transportConnected = false;
+      this.subscriptionReady = false;
       connection.on('MatchUpdated', (...args) => this.handleNotification(args[0], generation, connection));
       connection.onreconnecting(() => {
         if (!this.isActive(generation)) return;
         this.transportConnected = false;
+        this.subscriptionReady = false;
         this.markDisconnected();
         this.setStatus('reconnecting');
       });
@@ -115,6 +118,7 @@ export class MatchRealtimeClient {
       });
       connection.onclose(() => {
         this.transportConnected = false;
+        this.subscriptionReady = false;
         if (this.isActive(generation)) {
           this.markDisconnected();
           this.setStatus('disconnected');
@@ -146,6 +150,7 @@ export class MatchRealtimeClient {
   async stop(): Promise<void> {
     this.stopped = true;
     this.transportConnected = false;
+    this.subscriptionReady = false;
     this.lifecycleGeneration++;
     this.lifecycleAbortController.abort();
     await this.disposeConnection();
@@ -199,7 +204,8 @@ export class MatchRealtimeClient {
   private async subscribeAndBackfill(cursor: RealtimeCursorV1, generation: number, connection: RealtimeConnection): Promise<void> {
     if (!this.isActive(generation) || this.connection !== connection) return;
     await connection.invoke('SubscribeToMatch', this.options.matchId);
-    if (!this.isActive(generation) || this.connection !== connection) return;
+    if (!this.isActive(generation) || this.connection !== connection || !this.transportConnected) return;
+    this.subscriptionReady = true;
     this.setStatus('connected');
     this.applyCursorWakeup(cursor);
     // Read after group join to close the initial snapshot/subscription race.
@@ -216,9 +222,12 @@ export class MatchRealtimeClient {
       if (!this.isActive(generation) || this.connection !== connection) return;
       this.applyCursorWakeup(negotiation.cursor);
       await this.refreshFromCanonicalStore(generation);
-      if (this.isActive(generation) && this.connection === connection)
-        this.setStatus(this.transportConnected && !this.options.getState().needsBackfill ? 'connected' : 'disconnected');
+      if (this.isActive(generation) && this.connection === connection && this.transportConnected) {
+        this.subscriptionReady = true;
+        this.setStatus(!this.options.getState().needsBackfill ? 'connected' : 'disconnected');
+      }
     } catch {
+      this.subscriptionReady = false;
       if (this.isActive(generation)) this.setStatus('disconnected');
     }
   }
@@ -229,7 +238,8 @@ export class MatchRealtimeClient {
     this.applyCursorWakeup(value);
     // The payload is never treated as a match fact; it only wakes the durable reader.
     void this.refreshFromCanonicalStore(generation).then(() => {
-      if (!this.isActive(generation) || this.connection !== connection || !this.transportConnected) return;
+      if (!this.isActive(generation) || this.connection !== connection ||
+          !this.transportConnected || !this.subscriptionReady) return;
       const state = this.options.getState();
       if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
     }).catch(() => {
@@ -342,6 +352,8 @@ export class MatchRealtimeClient {
   private async disposeConnection(): Promise<void> {
     const existing = this.connection;
     this.connection = null;
+    this.transportConnected = false;
+    this.subscriptionReady = false;
     if (existing) await existing.stop().catch(() => undefined);
   }
 }

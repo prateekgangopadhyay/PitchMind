@@ -50,17 +50,19 @@ function backfillPage(atSeconds: number, throughSequence: number, items: Canonic
 
 class FakeConnection implements RealtimeConnection {
   handlers = new Map<string, (...args: unknown[]) => void>();
+  reconnecting: (() => void) | undefined;
   reconnected: (() => void) | undefined;
   closed: (() => void) | undefined;
   calls: Array<[string, ...unknown[]]> = [];
   on(method: string, callback: (...args: unknown[]) => void) { this.handlers.set(method, callback); }
-  onreconnecting() { /* not needed in this test */ }
+  onreconnecting(callback: () => void) { this.reconnecting = callback; }
   onreconnected(callback: () => void) { this.reconnected = callback; }
   onclose(callback: () => void) { this.closed = callback; }
   async start() { /* connected */ }
   async stop() { /* stopped */ }
   async invoke(method: string, ...args: unknown[]) { this.calls.push([method, ...args]); }
   close() { this.closed?.(); }
+  beginReconnect() { this.reconnecting?.(); }
 }
 
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
@@ -187,6 +189,49 @@ describe('MatchRealtimeClient', () => {
 
     await vi.waitFor(() => expect(state.throughSequence).toBe(1));
     expect(status).toHaveBeenLastCalledWith('disconnected');
+    await client.stop();
+  });
+
+  it('waits for match resubscription before restoring connected status after reconnect', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let negotiateCalls = 0;
+    let backfillCalls = 0;
+    let resolvePendingBackfill: ((response: Response) => void) | undefined;
+    let resolveReconnectNegotiation: ((response: Response) => void) | undefined;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate')) {
+        negotiateCalls++;
+        if (negotiateCalls === 2) return new Promise(resolve => { resolveReconnectNegotiation = resolve; });
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(), revisionChanged: false });
+      }
+      backfillCalls++;
+      if (backfillCalls === 3) return new Promise(resolve => { resolvePendingBackfill = resolve; });
+      return Response.json(backfillCalls > 3
+        ? backfillPage(5400, 1, [event(1)], false, null)
+        : backfill(5400));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+    connection.handlers.get('MatchUpdated')?.(cursor(1));
+    await vi.waitFor(() => expect(backfillCalls).toBe(3));
+    connection.beginReconnect();
+    connection.reconnected?.();
+    await vi.waitFor(() => expect(resolveReconnectNegotiation).toBeDefined());
+    resolvePendingBackfill?.(Response.json(backfillPage(5400, 1, [event(1)], false, null)));
+    await vi.waitFor(() => expect(state.throughSequence).toBe(1));
+
+    expect(status).toHaveBeenLastCalledWith('reconnecting');
+    resolveReconnectNegotiation?.(Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches',
+      accessToken: null, cursor: cursor(1), revisionChanged: false }));
+    await vi.waitFor(() => expect(connection.calls.filter(call => call[0] === 'SubscribeToMatch')).toHaveLength(2));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('connected'));
     await client.stop();
   });
 
