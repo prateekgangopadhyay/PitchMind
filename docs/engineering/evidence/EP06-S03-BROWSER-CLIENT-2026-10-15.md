@@ -3,7 +3,7 @@
 **Story:** EP06-S03 — Reconnect, backfill and historical context (P0).
 **Accountable skill:** `lead-frontend-engineer`.
 **Consult skills:** `real-time-streaming-engineer`, `accessibility-engineer`, `application-security-engineer`, `qa-architect`.
-**Branch:** `codex/ep06-s03-client-integration`, stacked on draft parent PR #267 (`codex/ep06-s03-hub-auth`).
+**Pull request:** [#268](https://github.com/prateekgangopadhyay/PitchMind/pull/268), draft and stacked on parent PR #267 (`codex/ep06-s03-hub-auth`).
 **Base revision:** parent implementation head `acfa8d328fe9572afb3e8ccd87738a79d1a222eb`.
 
 ## Scope
@@ -28,4 +28,4 @@ Commands ran in the local worktree, with its available linked dependencies. A cl
 
 ## Status and remaining risks
 
-PR #267's backend browser-auth implementation is the parent of this stack and remains draft. This child is submitted as a draft PR against that feature branch. Exact-head independent review and hosted checks are pending. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
+PR #267's backend browser-auth implementation is the parent of this stack and remains draft. PR #268 is submitted as a draft against that feature branch. Exact-head independent review and hosted checks are pending. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
