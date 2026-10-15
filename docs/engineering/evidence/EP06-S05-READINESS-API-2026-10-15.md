@@ -16,6 +16,7 @@
 | Focused readiness test without `PITCHMIND_TEST_POSTGRES` | 0 passed, 1 skipped as configured. |
 | `COMPOSE_PROJECT_NAME=pitchmind ./scripts/test-postgres.sh` | Infrastructure: 64 passed, 0 skipped, 0 failed. Contracts/API: 147 passed, 0 skipped, 0 failed. Script reported both suites executed without skips and cleaned up the isolated test database. Existing local services/volumes remained running and unchanged. |
 | `dotnet test PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false` | 489 passed, 29 skipped, 0 failed. Skips: 28 opt-in Infrastructure PostgreSQL tests plus the new API readiness test because this full-suite invocation had no test connection. |
+| `python3 scripts/api-contract-integration.py` | Passed: health; fail-closed match reads/replay; Analyst validation; unsupported media type; exact 4096-byte and oversized content handling; and rate limiting (30 fail-closed responses followed by a 429). |
 | `dotnet build PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | Passed, 0 warnings, 0 errors. |
 | `bash -n scripts/test-postgres.sh`, embedded Python syntax parse, `node scripts/validate_operating_model.mjs`, and `git diff --check` | Passed. |
 
