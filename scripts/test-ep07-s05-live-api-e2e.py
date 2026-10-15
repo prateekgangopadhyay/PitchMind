@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import shutil
 import subprocess
@@ -34,6 +35,43 @@ def quote_connection_value(value: object) -> str:
     return '"' + str(value).replace('"', '""') + '"'
 
 
+def stop_process_group(process: subprocess.Popen) -> None:
+    """Stop dotnet and any app child it started before dropping the test DB."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+    # The dotnet parent can exit before its child. Check the whole group and
+    # escalate if anything is still alive, including when the parent exited.
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        return
+    os.killpg(process.pid, signal.SIGKILL)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def wait_for_api_port_release() -> bool:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind(("127.0.0.1", API_PORT))
+                return True
+            except OSError:
+                time.sleep(0.1)
+    return False
+
+
 def main() -> int:
     if not DOCKER_ENV.is_file():
         fail("Set PITCHMIND_DOCKER_ENV to the local Docker Compose .env file, or create docker/.env using docker/.env.example.")
@@ -44,6 +82,7 @@ def main() -> int:
             fail(f"Required local executable is missing: {executable}")
 
     with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind(("127.0.0.1", API_PORT))
         except OSError:
@@ -130,7 +169,7 @@ def main() -> int:
         api = subprocess.Popen([
             "dotnet", "run", "--project", "src/PitchMind.Api/PitchMind.Api.csproj", "--configuration", "Release",
             "--no-restore", "--no-build", "--no-launch-profile"
-        ], cwd=ROOT, env=api_env, stdout=api_log, stderr=subprocess.STDOUT, text=True)
+        ], cwd=ROOT, env=api_env, stdout=api_log, stderr=subprocess.STDOUT, text=True, start_new_session=True)
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             if api.poll() is not None:
@@ -154,13 +193,11 @@ def main() -> int:
     except RuntimeError as error:
         print(f"FAIL: {error}", file=sys.stderr)
     finally:
-        if api is not None and api.poll() is None:
-            api.terminate()
-            try:
-                api.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                api.kill()
-                api.wait()
+        if api is not None:
+            stop_process_group(api)
+            if not wait_for_api_port_release():
+                print(f"FAIL: API process group left port {API_PORT} bound after cleanup.", file=sys.stderr)
+                exit_code = 1
         api_log.close()
         dropped = pg(["dropdb", "-U", str(username), "--if-exists", "--force", database])
         if dropped.returncode:

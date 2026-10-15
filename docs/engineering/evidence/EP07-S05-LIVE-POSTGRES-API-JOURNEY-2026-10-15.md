@@ -14,6 +14,7 @@ The first live journey exposed a response-contract defect: the API returned an i
 - Add OpenAPI and API documentation for both fields.
 - Add a Playwright case that uses real PostgreSQL-backed canonical summary, event, insight and evidence routes without route interception, then follows the citation to the selected event and verifies match time, projection revision and focused replay event.
 - Add a Python runner that reuses the current local Postgres service, creates a random database, runs the migration/seed test, starts the local Development API on loopback, runs the Playwright case, stops the API, and drops the database.
+- Launch the API in its own process group and stop the full group before dropping the database. The runner verifies port 5080 is released; the probe allows TCP `TIME_WAIT` reuse while still detecting a live listener.
 
 ## Verification performed
 
@@ -26,9 +27,13 @@ The first live journey exposed a response-contract defect: the API returned an i
 - `node scripts/validate_operating_model.mjs`: **passed**, 12 epics, 59 stories, 28 Council skills, 5 design skills, no dependency cycles, 2 approval gates.
 - `git diff --check`: **passed**.
 
+## Independent review follow-up
+
+The first exact-head review found that terminating only the `dotnet run` parent could leave the API child running. The runner now starts the API in a dedicated process group, terminates and escalates against the entire group, and checks the loopback port before database cleanup. The live PostgreSQL/API/browser journey was rerun after this change and passed; the required port-release check passed. Follow-up independent review of the updated head is pending.
+
 ## Remaining gates
 
-The change is implementation and local verification only. Independent exact-head review, hosted CI, manual keyboard/screen-reader review, axe/WCAG review, comparison with approved football evidence, and Product Owner acceptance are **pending**. The source feed's coordinate, clock, metric and canonical-mapping semantics remain unresolved. This evidence does not mark EP07-S05 verified or accepted and does not authorize deployment.
+The change is implementation and local verification only. Follow-up independent exact-head review, hosted CI, manual keyboard/screen-reader review, axe/WCAG review, comparison with approved football evidence, and Product Owner acceptance are **pending**. The source feed's coordinate, clock, metric and canonical-mapping semantics remain unresolved. This evidence does not mark EP07-S05 verified or accepted and does not authorize deployment.
 
 ## Local environment recovery
 
