@@ -36,6 +36,20 @@ class DevBootstrapTests(unittest.TestCase):
             """#!/bin/sh
 set -eu
 printf '%s\\n' \"$*\" >> \"$PITCHMIND_FAKE_DOCKER_LOG\"
+if [ "${1:-}" = volume ] && [ "${2:-}" = ls ]; then
+  if [ "${PITCHMIND_FAKE_VOLUME_EXISTS:-1}" = 1 ]; then printf '%s\\n' "${PITCHMIND_FAKE_POSTGRES_VOLUME:-pitchmind_postgres_data}"; fi
+  exit 0
+fi
+case " $* " in
+  *" compose --env-file docker/.env -f docker/compose.yml config --format json "*)
+    printf '{"volumes":{"postgres-data":{"name":"%s"}}}\\n' "${PITCHMIND_FAKE_POSTGRES_VOLUME:-pitchmind_postgres_data}"
+    exit 0 ;;
+esac
+if [ "${1:-}" = run ]; then
+  if [ "${PITCHMIND_FAKE_PG_VERSION_STATUS:-0}" != 0 ]; then exit 1; fi
+  printf '%s\\n' "${PITCHMIND_FAKE_PG_VERSION:-17}"
+  exit 0
+fi
 if [ "${1:-}" = context ] && [ "${2:-}" = show ]; then
   printf '%s\n' "${PITCHMIND_FAKE_DOCKER_CONTEXT:-desktop-linux}"
   exit 0
@@ -102,6 +116,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         )
 
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
         result = self._run("dev-up.sh")
         env_file = self.root / "docker" / ".env"
 
@@ -112,6 +127,7 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
         redis_password = values["REDIS_PASSWORD"]
         self.assertRegex(postgres_password, r"^[0-9a-f]{48}$")
         self.assertRegex(redis_password, r"^[0-9a-f]{48}$")
+        self.assertEqual(values["POSTGRES_IMAGE"], "postgres:17-alpine")
         self.assertNotEqual(postgres_password, redis_password)
         self.assertNotIn(postgres_password, result.stdout + result.stderr)
         self.assertNotIn(redis_password, result.stdout + result.stderr)
@@ -121,6 +137,8 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
+                "volume ls -q --filter name=pitchmind_postgres_data",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
@@ -164,6 +182,9 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
             [
                 "context inspect desktop-local --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
+                "volume ls -q --filter name=pitchmind_postgres_data",
+                "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
@@ -287,9 +308,63 @@ if [ \"$count\" -eq 1 ]; then printf '0123456789abcdef0123456789abcdef0123456789
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
+                "volume ls -q --filter name=pitchmind_postgres_data",
+                "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
         )
+
+    def test_postgres_major_version_mismatch_refuses_start_before_compose(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_IMAGE=postgres:16-alpine\n"
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "17"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("contains PostgreSQL major 17", result.stderr)
+        self.assertIn("requests 16", result.stderr)
+        log = self.docker_log.read_text()
+        self.assertIn("postgres:16-alpine -c cat /pgdata/PG_VERSION", log)
+        self.assertNotIn("compose --env-file docker/.env -f docker/compose.yml up", log)
+
+    def test_matching_postgres_major_version_allows_compose_start(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_IMAGE=postgres:16-alpine\n"
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        log = self.docker_log.read_text()
+        self.assertIn("postgres:16-alpine -c cat /pgdata/PG_VERSION", log)
+        self.assertIn("compose --env-file docker/.env -f docker/compose.yml up -d --wait", log)
+
+    def test_unreadable_existing_postgres_volume_fails_closed(self) -> None:
+        env_file = self.root / "docker" / ".env"
+        env_file.write_text(
+            "POSTGRES_PASSWORD=0123456789abcdef0123456789abcdef0123456789abcdef\n"
+            "REDIS_PASSWORD=fedcba9876543210fedcba9876543210fedcba9876543210\n",
+            encoding="utf-8",
+        )
+        self.env["PITCHMIND_FAKE_PG_VERSION_STATUS"] = "1"
+
+        result = self._run("dev-up.sh")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot read PG_VERSION", result.stderr)
+        self.assertNotIn("compose --env-file docker/.env -f docker/compose.yml up", self.docker_log.read_text())
 
     def test_placeholder_or_short_existing_password_is_rejected_without_disclosure(self) -> None:
         env_file = self.root / "docker" / ".env"
