@@ -271,10 +271,10 @@ public static class TelemetryContractValidatorV1
 
         if (time.SourceClockBasis == "match_elapsed" && time.SourceClockUnit is ("seconds" or "milliseconds"))
         {
-            var sourceElapsedSeconds = time.SourceClockUnit == "seconds"
-                ? time.SourceClockValue
-                : time.SourceClockValue / 1000m;
-            if (sourceElapsedSeconds != time.ElapsedSeconds)
+            var expectedSourceClock = time.SourceClockUnit == "seconds"
+                ? (decimal)time.ElapsedSeconds
+                : (decimal)time.ElapsedSeconds * 1000m;
+            if (time.SourceClockValue != expectedSourceClock)
                 Add(errors, "SOURCE_MATCH_TIME_MISMATCH", "matchTime.sourceClockValue", "A match-elapsed source clock must equal canonical elapsedSeconds after exact unit conversion.");
         }
     }

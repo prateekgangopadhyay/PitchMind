@@ -83,6 +83,17 @@ public sealed class TelemetryContractTests
         });
         Assert.Contains(fractionalMillisecondMismatch.Errors, error => error.Code == "SOURCE_MATCH_TIME_MISMATCH");
 
+        var tinyMillisecondMismatch = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with
+            {
+                ElapsedSeconds = 0,
+                SourceClockValue = 0.0000000000000000000000000001m,
+                SourceClockUnit = "milliseconds"
+            }
+        });
+        Assert.Contains(tinyMillisecondMismatch.Errors, error => error.Code == "SOURCE_MATCH_TIME_MISMATCH");
+
         var periodElapsedUsesReviewedOffsetElsewhere = TelemetryContractValidatorV1.Validate(Event("Pass") with
         {
             MatchTime = Event("Pass").MatchTime with
