@@ -75,6 +75,7 @@ export class MatchRealtimeClient {
   private connection: RealtimeConnection | null = null;
   private transportConnected = false;
   private subscriptionReady = false;
+  private transportEpoch = 0;
   private started = false;
   private stopped = false;
   private lifecycleGeneration = 0;
@@ -104,9 +105,11 @@ export class MatchRealtimeClient {
       this.connection = connection;
       this.transportConnected = false;
       this.subscriptionReady = false;
+      this.transportEpoch = 0;
       connection.on('MatchUpdated', (...args) => this.handleNotification(args[0], generation, connection));
       connection.onreconnecting(() => {
         if (!this.isActive(generation)) return;
+        this.transportEpoch++;
         this.transportConnected = false;
         this.subscriptionReady = false;
         this.markDisconnected();
@@ -114,9 +117,10 @@ export class MatchRealtimeClient {
       });
       connection.onreconnected(() => {
         this.transportConnected = true;
-        void this.resubscribeAndBackfill(generation, connection);
+        void this.resubscribeAndBackfill(generation, connection, this.transportEpoch);
       });
       connection.onclose(() => {
+        this.transportEpoch++;
         this.transportConnected = false;
         this.subscriptionReady = false;
         if (this.isActive(generation)) {
@@ -160,8 +164,10 @@ export class MatchRealtimeClient {
   /** Called when the host explicitly changes selected time or returns to LIVE. */
   async refresh(): Promise<void> {
     const generation = this.lifecycleGeneration;
+    const epoch = this.transportEpoch;
     await this.refreshFromCanonicalStore(generation);
-    if (!this.isActive(generation) || !this.transportConnected || !this.subscriptionReady) return;
+    if (!this.isActive(generation) || epoch !== this.transportEpoch ||
+        !this.transportConnected || !this.subscriptionReady) return;
     const state = this.options.getState();
     if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
   }
@@ -206,9 +212,11 @@ export class MatchRealtimeClient {
   }
 
   private async subscribeAndBackfill(cursor: RealtimeCursorV1, generation: number, connection: RealtimeConnection): Promise<void> {
+    const epoch = this.transportEpoch;
     if (!this.isActive(generation) || this.connection !== connection) return;
     await connection.invoke('SubscribeToMatch', this.options.matchId);
-    if (!this.isActive(generation) || this.connection !== connection || !this.transportConnected) return;
+    if (!this.isActive(generation) || this.connection !== connection ||
+        epoch !== this.transportEpoch || !this.transportConnected) return;
     this.subscriptionReady = true;
     this.setStatus('connected');
     this.applyCursorWakeup(cursor);
@@ -216,33 +224,39 @@ export class MatchRealtimeClient {
     await this.refreshFromCanonicalStore(generation);
   }
 
-  private async resubscribeAndBackfill(generation: number, connection: RealtimeConnection): Promise<void> {
-    if (!this.isActive(generation) || this.connection !== connection) return;
+  private async resubscribeAndBackfill(generation: number, connection: RealtimeConnection, epoch: number): Promise<void> {
+    if (!this.isActive(generation) || this.connection !== connection || epoch !== this.transportEpoch) return;
     this.setStatus('reconnecting');
     try {
       const negotiation = await this.negotiate(generation);
-      if (!this.isActive(generation) || !negotiation || this.connection !== connection) return;
+      if (!this.isActive(generation) || !negotiation || this.connection !== connection ||
+          epoch !== this.transportEpoch || !this.transportConnected) return;
       await connection.invoke('SubscribeToMatch', this.options.matchId);
-      if (!this.isActive(generation) || this.connection !== connection) return;
+      if (!this.isActive(generation) || this.connection !== connection ||
+          epoch !== this.transportEpoch || !this.transportConnected) return;
       this.applyCursorWakeup(negotiation.cursor);
       await this.refreshFromCanonicalStore(generation);
-      if (this.isActive(generation) && this.connection === connection && this.transportConnected) {
+      if (this.isActive(generation) && this.connection === connection &&
+          epoch === this.transportEpoch && this.transportConnected) {
         this.subscriptionReady = true;
         this.setStatus(!this.options.getState().needsBackfill ? 'connected' : 'disconnected');
       }
     } catch {
-      this.subscriptionReady = false;
-      if (this.isActive(generation)) this.setStatus('disconnected');
+      if (epoch === this.transportEpoch) {
+        this.subscriptionReady = false;
+        if (this.isActive(generation)) this.setStatus('disconnected');
+      }
     }
   }
 
   private handleNotification(value: unknown, generation: number, connection: RealtimeConnection): void {
     if (!this.isActive(generation) || this.connection !== connection) return;
     if (!validCursor(value, this.options.matchId)) return;
+    const epoch = this.transportEpoch;
     this.applyCursorWakeup(value);
     // The payload is never treated as a match fact; it only wakes the durable reader.
     void this.refreshFromCanonicalStore(generation).then(() => {
-      if (!this.isActive(generation) || this.connection !== connection ||
+      if (!this.isActive(generation) || this.connection !== connection || epoch !== this.transportEpoch ||
           !this.transportConnected || !this.subscriptionReady) return;
       const state = this.options.getState();
       if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
@@ -356,6 +370,7 @@ export class MatchRealtimeClient {
   private async disposeConnection(): Promise<void> {
     const existing = this.connection;
     this.connection = null;
+    this.transportEpoch++;
     this.transportConnected = false;
     this.subscriptionReady = false;
     if (existing) await existing.stop().catch(() => undefined);

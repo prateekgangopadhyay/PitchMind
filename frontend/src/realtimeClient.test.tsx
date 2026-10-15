@@ -54,15 +54,28 @@ class FakeConnection implements RealtimeConnection {
   reconnected: (() => void) | undefined;
   closed: (() => void) | undefined;
   calls: Array<[string, ...unknown[]]> = [];
+  private invokeGate: Promise<void> | null = null;
+  private releaseInvokeGate: (() => void) | undefined;
   on(method: string, callback: (...args: unknown[]) => void) { this.handlers.set(method, callback); }
   onreconnecting(callback: () => void) { this.reconnecting = callback; }
   onreconnected(callback: () => void) { this.reconnected = callback; }
   onclose(callback: () => void) { this.closed = callback; }
   async start() { /* connected */ }
   async stop() { /* stopped */ }
-  async invoke(method: string, ...args: unknown[]) { this.calls.push([method, ...args]); }
+  async invoke(method: string, ...args: unknown[]) {
+    this.calls.push([method, ...args]);
+    const gate = this.invokeGate;
+    if (gate) {
+      this.invokeGate = null;
+      await gate;
+    }
+  }
   close() { this.closed?.(); }
   beginReconnect() { this.reconnecting?.(); }
+  holdNextInvoke() {
+    this.invokeGate = new Promise(resolve => { this.releaseInvokeGate = resolve; });
+  }
+  releaseInvoke() { this.releaseInvokeGate?.(); }
 }
 
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
@@ -265,6 +278,53 @@ describe('MatchRealtimeClient', () => {
     resolveReconnectNegotiation?.(Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches',
       accessToken: null, cursor: cursor(1), revisionChanged: false }));
     await vi.waitFor(() => expect(connection.calls.filter(call => call[0] === 'SubscribeToMatch')).toHaveLength(2));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('connected'));
+    await client.stop();
+  });
+
+  it('ignores an older reconnect backfill after a newer reconnect has begun', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let negotiateCalls = 0;
+    let backfillCalls = 0;
+    let resolveFirstReconnectBackfill: ((response: Response) => void) | undefined;
+    let resolveSecondNegotiation: ((response: Response) => void) | undefined;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate')) {
+        negotiateCalls++;
+        if (negotiateCalls === 3) return new Promise(resolve => { resolveSecondNegotiation = resolve; });
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(), revisionChanged: false });
+      }
+      backfillCalls++;
+      if (backfillCalls === 3) return new Promise(resolve => { resolveFirstReconnectBackfill = resolve; });
+      return Response.json(backfillCalls > 3
+        ? backfillPage(5400, 1, [event(1)], false, null)
+        : backfill(5400));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+    connection.beginReconnect();
+    connection.reconnected?.();
+    await vi.waitFor(() => expect(backfillCalls).toBe(3));
+
+    connection.beginReconnect();
+    connection.holdNextInvoke();
+    connection.reconnected?.();
+    await vi.waitFor(() => expect(resolveSecondNegotiation).toBeDefined());
+    resolveSecondNegotiation?.(Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches',
+      accessToken: null, cursor: cursor(), revisionChanged: false }));
+    await vi.waitFor(() => expect(connection.calls.filter(call => call[0] === 'SubscribeToMatch')).toHaveLength(3));
+    resolveFirstReconnectBackfill?.(Response.json(backfillPage(5400, 1, [event(1)], false, null)));
+    await vi.waitFor(() => expect(state.throughSequence).toBe(1));
+
+    expect(status).toHaveBeenLastCalledWith('reconnecting');
+    connection.releaseInvoke();
     await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('connected'));
     await client.stop();
   });
