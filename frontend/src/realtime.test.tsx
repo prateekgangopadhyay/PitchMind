@@ -76,6 +76,10 @@ describe('realtime reconnect state', () => {
       kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 1,
       serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
     });
+    const staleRevision = observeRealtimeCursor(historical, {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 1, lastSequence: 9,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
     const newer = observeRealtimeCursor(historical, {
       kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 2, lastSequence: 3,
       serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
@@ -83,6 +87,7 @@ describe('realtime reconnect state', () => {
 
     expect(duplicate.hasNewMatchUpdate).toBe(false);
     expect(stale).toBe(historical);
+    expect(staleRevision).toBe(historical);
     expect(newer.hasNewMatchUpdate).toBe(true);
     const live = state();
     expect(observeRealtimeCursor(live, {

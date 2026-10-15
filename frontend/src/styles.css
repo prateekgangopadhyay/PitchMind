@@ -121,3 +121,7 @@ button, select { min-height: 44px; }
 @media (prefers-reduced-motion: reduce) {
   .primary-nav a { transition: none; }
 }
+
+.realtime-status { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.realtime-status > p { margin: 0; }
+.new-match-updates { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .6rem .8rem; border-left: 3px solid var(--pm-accent); border-radius: 6px; background: var(--pm-surface); color: var(--pm-text); }
