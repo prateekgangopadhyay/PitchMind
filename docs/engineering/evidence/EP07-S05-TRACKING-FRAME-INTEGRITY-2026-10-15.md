@@ -17,7 +17,7 @@
 - `npm run lint`: passed.
 - `node scripts/validate_operating_model.mjs`: passed (12 epics, 59 stories, 28 Council skills, no dependency cycles).
 - `git diff --check`: passed before the code commit.
-- Independent exact-head review of this child is pending; the review that raised the findings inspected the parent, not this child. These local test results are not submitted GitHub review or hosted CI.
+- An independent read-only review of code commit `1cc437dd9ec89876cf59ef05c076574992a8686e` found no actionable findings in the fixes or apparent regressions. The reviewer did not execute tests. Submitted GitHub review and hosted CI remain pending.
 
 ## Remaining evidence and acceptance
 
