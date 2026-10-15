@@ -17,7 +17,7 @@
 - Quality-audit CLI regenerated the checked-in JSON report byte-for-byte; an independent assertion confirmed the pinned source hash and period comparison values above.
 - Candidate structural validator completed successfully and reported `structurally_valid_candidate_blocked_for_canonicalization` for 2,199 events and 48,048 attached positions, preserving the source sequence, event-ID ledger and ordered-record digest.
 - Council operating-model validator passed (12 epics, 59 stories, 28 Council skills, zero dependency cycles); `git diff --check origin/main` passed.
-- Independent exact-head review identified the non-finite-number serialization edge case; it was fixed and covered by the new regression. Independent re-review of the patched head remains pending.
+- Independent exact-head review identified the non-finite-number serialization edge case; it was fixed and covered by the new regression. Independent exact-head re-review at `72a76fb87dc1d8deaa30187fc9635a012eb04e0e` confirmed the fix and found no further actionable issue; the reviewer did not rerun tests or submit a GitHub review.
 
 ## Remaining gates
 
