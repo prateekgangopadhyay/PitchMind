@@ -13,6 +13,7 @@ public sealed record PersistedMatchInsight(
     string DetectorVersion,
     string TruthClass,
     string Summary,
+    string ConditionsJson,
     string SourceVersion,
     string Provenance,
     string SourceSha256,

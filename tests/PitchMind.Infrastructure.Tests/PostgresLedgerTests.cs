@@ -25,6 +25,82 @@ public sealed class PostgresIntegrationFactAttribute : FactAttribute
 
 public sealed class PostgresLedgerTests
 {
+    // Called only by scripts/test-ep07-s05-live-api-e2e.py against its disposable
+    // database. These values are synthetic test fixtures, not football facts.
+    [PostgresIntegrationFact]
+    public async Task SeedLocalBrowserJourneyFixtureForApiE2E()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await IsolateOutboxAsync(source);
+
+        var matchId = new MatchId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+        var insightId = "local-e2e-synthetic-insight";
+        var eventId = Guid.Parse("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+        var players = Enumerable.Range(1, 11)
+            .SelectMany(number => new[] { ($"home-test-player-{number}", "home-test"), ($"away-test-player-{number}", "away-test") })
+            .ToArray();
+        var aggregate = new MatchAggregate(matchId, "home-test", "away-test", players,
+            players.Select(player => player.Item1), "synthetic-test-only");
+        var sourceHash = new string('a', 64);
+        await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
+            new MatchSourceMetadata(matchId.Value, "local-e2e-fixture-v1", "local-e2e-test-source-v1", sourceHash,
+                "synthetic-test-only", 105m, 68m, ReplaySeed: aggregate.ReplaySeed), CancellationToken.None);
+        var writer = new CanonicalMatchEventWriter(new PostgresCanonicalUpdateStore(source));
+
+        var homePlayerId = "home-test-player-1";
+        var kickoff = MatchEvent.Create(Guid.Parse("11111111-1111-4111-8111-111111111111"), matchId, 0,
+            MatchEventType.KickOff, 0, 1, DateTimeOffset.UnixEpoch);
+        await writer.AppendAsync(aggregate, new SimulationEvent(kickoff, "home-test", homePlayerId, "KickOff", "complete"),
+            1, "local-e2e-test-projector-v1", sourceHash, CancellationToken.None);
+        var observedEvent = MatchEvent.Create(eventId, matchId, 1, MatchEventType.Pass, 10, 1,
+            DateTimeOffset.UnixEpoch.AddSeconds(10));
+        await writer.AppendAsync(aggregate, new SimulationEvent(observedEvent, "home-test", homePlayerId, "Pass", "complete"),
+            2, "local-e2e-test-projector-v1", sourceHash, CancellationToken.None);
+
+        await using (var insight = source.CreateCommand("""
+            INSERT INTO pitchmind.insights(insight_id, match_id, canonical_revision, revision, as_of_sequence,
+                detector_version, truth_class, summary, conditions_json)
+            VALUES ($1, $2, 2, 2, 1, 'local-e2e-test-detector-v1', 'simulated',
+                'Test-only evidence record. No match claim.', '{"fixture":"synthetic-test-only"}'::jsonb)
+            """))
+        {
+            insight.Parameters.AddWithValue(insightId);
+            insight.Parameters.AddWithValue(matchId.Value);
+            await insight.ExecuteNonQueryAsync();
+        }
+        await using (var evidence = source.CreateCommand("""
+            INSERT INTO pitchmind.insight_evidence(insight_id, evidence_kind, evidence_id, match_id,
+                canonical_revision, evidence_canonical_revision, revision, relation, event_id)
+            VALUES ($1, 'event', $2, $3, 2, 2, 2, 'supports', $4)
+            """))
+        {
+            evidence.Parameters.AddWithValue(insightId);
+            evidence.Parameters.AddWithValue(eventId.ToString("D"));
+            evidence.Parameters.AddWithValue(matchId.Value);
+            evidence.Parameters.AddWithValue(eventId);
+            Assert.Equal(1, await evidence.ExecuteNonQueryAsync());
+        }
+
+        var insightReader = new PostgresMatchInsightReader(source);
+        var persisted = await insightReader.GetAtAsync(matchId, insightId, 2, 2, 10, 1, CancellationToken.None);
+        Assert.NotNull(persisted);
+        using var persistedConditions = JsonDocument.Parse(persisted.ConditionsJson);
+        Assert.Equal("synthetic-test-only", persistedConditions.RootElement.GetProperty("fixture").GetString());
+        await using (var malformedConditions = source.CreateCommand("UPDATE pitchmind.insights SET conditions_json = '[]'::jsonb WHERE insight_id = $1"))
+        {
+            malformedConditions.Parameters.AddWithValue(insightId);
+            Assert.Equal(1, await malformedConditions.ExecuteNonQueryAsync());
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => insightReader.GetAtAsync(
+            matchId, insightId, 2, 2, 10, 1, CancellationToken.None));
+        await using (var restoreConditions = source.CreateCommand("UPDATE pitchmind.insights SET conditions_json = '{\"fixture\":\"synthetic-test-only\"}'::jsonb WHERE insight_id = $1"))
+        {
+            restoreConditions.Parameters.AddWithValue(insightId);
+            Assert.Equal(1, await restoreConditions.ExecuteNonQueryAsync());
+        }
+    }
+
     [PostgresIntegrationFact]
     public async Task TrackingFrameReaderUsesExactTimeRevisionSourceAndStableCompositePagination()
     {

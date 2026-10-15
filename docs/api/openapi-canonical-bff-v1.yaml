@@ -545,7 +545,7 @@ components:
         relation: { type: string }
     CanonicalInsight:
       type: object
-      required: [insightId, matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, evidence]
+      required: [insightId, matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, sourceVersion, provenance, sourceSha256, detectorVersion, truthClass, summary, conditions, limitations, evidence]
       properties:
         insightId: { type: string }
         matchId: { type: string, format: uuid }
@@ -559,6 +559,8 @@ components:
         detectorVersion: { type: string }
         truthClass: { type: string }
         summary: { type: string }
+        conditions: { type: object, additionalProperties: true }
+        limitations: { type: [array, 'null'], items: { type: string } }
         evidence: { type: array, items: { $ref: '#/components/schemas/CanonicalEvidenceReference' } }
     CanonicalInsightPage:
       type: object

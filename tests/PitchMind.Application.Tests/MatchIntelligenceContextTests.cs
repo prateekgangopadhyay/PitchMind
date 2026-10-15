@@ -307,7 +307,7 @@ public sealed class MatchIntelligenceContextTests
                 return Task.FromResult<PersistedMatchInsight?>(new(insightId, matchId, fixture.InsightCanonicalRevision,
                     fixture.InsightProjectionRevision, 9,
                     "press-sequence-v1", fixture.TruthClass, fixture.Summary,
-                    fixture.SourceVersion, fixture.Provenance, fixture.InsightSourceSha256, References));
+                    "{}", fixture.SourceVersion, fixture.Provenance, fixture.InsightSourceSha256, References));
             }
 
             public Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
