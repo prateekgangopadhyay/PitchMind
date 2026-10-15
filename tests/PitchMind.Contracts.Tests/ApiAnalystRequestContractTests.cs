@@ -28,6 +28,8 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
             CreateNoWindow = true
         };
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        start.Environment["DOTNET_ENVIRONMENT"] = "Development";
+        start.Environment["Identity__DevelopmentHeaderAuthEnabled"] = "true";
         start.Environment["Runtime__Profile"] = "local";
         foreach (var argument in new[]
                  {
@@ -51,6 +53,8 @@ public sealed class ApiAnalystRequestContractTests : IAsyncLifetime
 
         var address = await _listeningAddress.Task;
         _client = new HttpClient { BaseAddress = address, Timeout = TimeSpan.FromSeconds(3) };
+        _client.DefaultRequestHeaders.Add("X-Dev-Subject", "contract-test-analyst");
+        _client.DefaultRequestHeaders.Add("X-Dev-Roles", "analyst");
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
         while (DateTimeOffset.UtcNow < deadline)

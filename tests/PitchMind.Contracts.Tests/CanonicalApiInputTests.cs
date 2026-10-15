@@ -12,7 +12,14 @@ public sealed class CanonicalApiInputTests : IClassFixture<CanonicalApiInputTest
 
     public CanonicalApiInputTests(LocalApiFactory factory)
     {
+        // EP06-S04 requires an explicit runtime profile, including in local API integration tests.
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
+        Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
+        Environment.SetEnvironmentVariable("Runtime__Profile", "local");
+        Environment.SetEnvironmentVariable("Identity__DevelopmentHeaderAuthEnabled", "true");
         client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-Subject", "contract-test");
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", "fan");
     }
 
     public sealed class LocalApiFactory : WebApplicationFactory<Program>

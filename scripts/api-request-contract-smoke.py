@@ -16,7 +16,10 @@ def request(body, expected, code, content_type="application/json"):
     if content_type is None:
         target = urlsplit(base)
         connection = http.client.HTTPConnection(target.hostname, target.port, timeout=10)
-        connection.request("POST", path, body=body, headers={})
+        connection.request("POST", path, body=body, headers={
+            "X-Dev-Subject": "api-contract-smoke",
+            "X-Dev-Roles": "analyst",
+        })
         response = connection.getresponse()
         status = response.status
         headers = response.headers
@@ -28,7 +31,11 @@ def request(body, expected, code, content_type="application/json"):
         req = urllib.request.Request(
             base + path,
             data=body,
-            headers={"Content-Type": content_type},
+            headers={
+                "Content-Type": content_type,
+                "X-Dev-Subject": "api-contract-smoke",
+                "X-Dev-Roles": "analyst",
+            },
         )
         try:
             response = urllib.request.urlopen(req, timeout=10)
@@ -84,6 +91,8 @@ connection = http.client.HTTPConnection("127.0.0.1", int(base.rsplit(":", 1)[1])
 chunk = b'{"insightId":"' + b"x" * 5000 + b'","atSeconds":0,"audience":"fan"}'
 connection.putrequest("POST", path)
 connection.putheader("Content-Type", "application/json")
+connection.putheader("X-Dev-Subject", "api-contract-smoke")
+connection.putheader("X-Dev-Roles", "analyst")
 connection.putheader("Transfer-Encoding", "chunked")
 connection.endheaders()
 connection.send(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n0\r\n\r\n")

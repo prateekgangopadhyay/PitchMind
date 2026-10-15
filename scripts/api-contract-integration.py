@@ -64,6 +64,7 @@ def run_api_contracts(scripts):
             "ASPNETCORE_ENVIRONMENT": "Development",
             "ASPNETCORE_URLS": base_url,
             "Runtime__Profile": "local",
+            "Identity__DevelopmentHeaderAuthEnabled": "true",
         }
     )
 

@@ -10,7 +10,11 @@ base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5080"
 
 def request(path, expected=200, payload=None):
     body = None if payload is None else json.dumps(payload).encode()
-    req = urllib.request.Request(base + path, data=body, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(base + path, data=body, headers={
+        "Content-Type": "application/json",
+        "X-Dev-Subject": "api-smoke",
+        "X-Dev-Roles": "analyst",
+    })
     try:
         response = urllib.request.urlopen(req, timeout=10)
     except urllib.error.HTTPError as error:

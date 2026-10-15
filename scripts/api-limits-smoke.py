@@ -19,7 +19,11 @@ for attempt in range(31):
     request = urllib.request.Request(
         route,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "X-Dev-Subject": "api-limits-smoke",
+            "X-Dev-Roles": "analyst",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
