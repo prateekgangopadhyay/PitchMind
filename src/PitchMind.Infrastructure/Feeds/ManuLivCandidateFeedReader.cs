@@ -11,6 +11,7 @@ public static class ManuLivCandidateFeedReader
 {
     public const string ContractVersion = "manu-liv-raw-v1";
     public const long MaximumSourceBytes = 64 * 1024 * 1024;
+    public const int MaximumSourceRecords = 100_000;
 
     public static async Task<CandidateFeedDocument> ReadAsync(
         Stream source,
@@ -31,6 +32,8 @@ public static class ManuLivCandidateFeedReader
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var recordIndex = events.Count;
+                if (recordIndex >= MaximumSourceRecords)
+                    throw new CandidateFeedParseException("too_many_source_records", recordIndex);
                 if (item.ValueKind != JsonValueKind.Object)
                     throw new CandidateFeedParseException("record_not_object", recordIndex);
 
