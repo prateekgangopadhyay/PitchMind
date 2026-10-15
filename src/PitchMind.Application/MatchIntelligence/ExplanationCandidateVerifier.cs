@@ -119,9 +119,12 @@ public sealed class ExplanationCandidateVerifier
 
     private static string FormatCategory(MatchIntelligenceClaimCategory category) => category switch
     {
+        MatchIntelligenceClaimCategory.ObservedFact => "an observed fact",
+        MatchIntelligenceClaimCategory.DerivedFact => "a derived fact",
         MatchIntelligenceClaimCategory.EvidenceSupportedPattern => "an evidence-supported pattern",
         MatchIntelligenceClaimCategory.SupportedInterpretation => "a supported interpretation",
         MatchIntelligenceClaimCategory.Hypothesis => "a hypothesis",
+        MatchIntelligenceClaimCategory.Simulated => "a simulated claim",
         _ => throw new ArgumentOutOfRangeException(nameof(category), PolicyVersion)
     };
 
