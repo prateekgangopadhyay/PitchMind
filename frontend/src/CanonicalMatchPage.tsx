@@ -3,7 +3,7 @@ import { ApiRequestError, clock, provenanceLabel, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
 import { CanonicalEvidenceDisclosure } from './CanonicalEvidenceDisclosure';
 import { RealtimeMatchUpdates } from './RealtimeMatchUpdates';
-import { selectHistoricalTime, type RealtimeTimelineState } from './realtime';
+import { mergeHistoricalProjectionRefresh, selectHistoricalTime, type RealtimeTimelineState } from './realtime';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
 type MatchView = {
@@ -160,7 +160,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
 
   useEffect(() => {
     if (!view || view.snapshot.matchId !== matchId || view.snapshot.selectedTimeSeconds !== selectedSeconds) return;
-    setRealtimeState({
+    const refreshedState: RealtimeTimelineState = {
       matchId,
       mode: realtimeMode,
       selectedTimeSeconds: realtimeMode === 'LIVE' ? view.snapshot.asOfSeconds : selectedSeconds,
@@ -176,7 +176,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       needsBackfill: false,
       hasNewMatchUpdate: false,
       reconnecting: false,
-    });
+    };
+    setRealtimeState(current => mergeHistoricalProjectionRefresh(current, refreshedState));
   }, [view, matchId, selectedSeconds, realtimeMode]);
 
   useEffect(() => {

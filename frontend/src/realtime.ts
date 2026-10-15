@@ -29,6 +29,38 @@ export function selectHistoricalTime(state: RealtimeTimelineState, selectedTimeS
   return { ...state, mode: 'HISTORICAL', selectedTimeSeconds, hasNewMatchUpdate: false, needsBackfill: true };
 }
 
+/** Refreshes a historical projection without replacing the separately observed LIVE cursor or notice. */
+export function mergeHistoricalProjectionRefresh(
+  previous: RealtimeTimelineState | null,
+  refreshed: RealtimeTimelineState,
+): RealtimeTimelineState {
+  if (!previous || previous.matchId !== refreshed.matchId || refreshed.mode !== 'HISTORICAL') return refreshed;
+
+  const previousCursorIsNewer = previous.observedLiveRevision > refreshed.observedLiveRevision ||
+    (previous.observedLiveRevision === refreshed.observedLiveRevision &&
+      previous.observedLiveSequence > refreshed.observedLiveSequence);
+  const observedLiveRevision = previousCursorIsNewer
+    ? previous.observedLiveRevision
+    : refreshed.observedLiveRevision;
+  const observedLiveSequence = previousCursorIsNewer
+    ? previous.observedLiveSequence
+    : previous.observedLiveRevision === refreshed.observedLiveRevision
+      ? Math.max(previous.observedLiveSequence, refreshed.observedLiveSequence)
+      : refreshed.observedLiveSequence;
+  const cursorAheadOfProjection = observedLiveRevision > refreshed.canonicalRevision ||
+    (observedLiveRevision === refreshed.canonicalRevision && observedLiveSequence > refreshed.throughSequence);
+
+  return {
+    ...refreshed,
+    liveAsOfSeconds: previous.liveAsOfSeconds ?? previous.snapshot.asOfSeconds,
+    observedLiveRevision,
+    observedLiveSequence,
+    needsBackfill: previous.needsBackfill,
+    hasNewMatchUpdate: previous.hasNewMatchUpdate || cursorAheadOfProjection,
+    reconnecting: previous.reconnecting,
+  };
+}
+
 export function returnToLive(state: RealtimeTimelineState): RealtimeTimelineState {
   return {
     ...state,

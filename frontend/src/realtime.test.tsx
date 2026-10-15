@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected, observeRealtimeCursor, returnToLive, selectHistoricalTime } from './realtime';
+import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected, mergeHistoricalProjectionRefresh, observeRealtimeCursor, returnToLive, selectHistoricalTime } from './realtime';
 import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, CanonicalTimelineBackfill } from './api';
 import type { RealtimeTimelineState } from './realtime';
 
@@ -59,6 +59,27 @@ describe('realtime reconnect state', () => {
     expect(next.selectedTimeSeconds).toBe(45);
     expect(next.hasNewMatchUpdate).toBe(true);
     expect(next.snapshot.canonicalRevision).toBe(2);
+  });
+
+  it('preserves the live cursor and new-update notice across historical projection refreshes', () => {
+    const notified = observeRealtimeCursor(selectHistoricalTime(state(), 45), {
+      kind: 'matchUpdated', matchId: 'match-a', canonicalRevision: 3, lastSequence: 7,
+      serverUtc: '2026-10-11T00:00:00Z', schemaVersion: 1,
+    });
+    const refreshed: RealtimeTimelineState = {
+      ...state(), mode: 'HISTORICAL', selectedTimeSeconds: 46, canonicalRevision: 2, throughSequence: 1,
+      snapshot: snapshot(2, 1, 60, 46), events: [event(0), event(1)],
+    };
+
+    const merged = mergeHistoricalProjectionRefresh(notified, refreshed);
+
+    expect(merged.selectedTimeSeconds).toBe(46);
+    expect(merged.snapshot.selectedTimeSeconds).toBe(46);
+    expect(merged.observedLiveRevision).toBe(3);
+    expect(merged.observedLiveSequence).toBe(7);
+    expect(merged.liveAsOfSeconds).toBe(60);
+    expect(merged.hasNewMatchUpdate).toBe(true);
+    expect(merged.needsBackfill).toBe(true);
   });
 
   it('ignores duplicate and stale cursors when deciding whether newer match state exists', () => {
