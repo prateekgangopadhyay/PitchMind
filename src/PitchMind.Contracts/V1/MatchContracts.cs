@@ -293,6 +293,28 @@ public sealed record CanonicalReplayResponse(
     CanonicalMatchSnapshotResponse Snapshot,
     CanonicalEventPageResponse Events);
 
+public sealed record CanonicalTrackingFrameResponse(
+    string FrameId,
+    long Sequence,
+    long CanonicalRevision,
+    int ProjectionRevision,
+    int Period,
+    int ClockSeconds,
+    string CoordinateVersion,
+    System.Text.Json.JsonElement Quality,
+    string SourceSha256,
+    PitchMind.Contracts.Telemetry.V1.TrackingFrameV1 Frame);
+
+public sealed record CanonicalTrackingFramePageResponse(
+    string MatchId,
+    long CanonicalRevision,
+    int ProjectionRevision,
+    int SelectedTimeSeconds,
+    long ThroughSequence,
+    IReadOnlyList<CanonicalTrackingFrameResponse> Items,
+    string? NextCursor,
+    bool HasMore);
+
 /// <summary>Selected-time snapshot and bounded canonical catch-up page for a reconnecting client.</summary>
 public sealed record CanonicalTimelineBackfillResponse(
     CanonicalMatchSnapshotResponse Snapshot,

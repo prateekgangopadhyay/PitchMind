@@ -5,7 +5,7 @@ using PitchMind.Domain.Simulation;
 
 namespace PitchMind.Api;
 
-internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader, IMatchInsightReader
+internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader, IMatchInsightReader, IMatchTrackingReader
 {
     public Task<IReadOnlyList<PersistedMatchProjection>> ListLatestAsync(MatchId? afterMatchId, int limit,
         CancellationToken cancellationToken) => throw new CanonicalReadUnavailableException();
@@ -53,5 +53,9 @@ internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader,
     public Task<IReadOnlyList<PersistedCanonicalEvidenceItem>?> ReadEvidenceAtAsync(MatchId matchId, string insightId,
         long maximumCanonicalRevision, int maximumProjectionRevision, int selectedSeconds, long throughSequence,
         CancellationToken cancellationToken, int maximumItems = 100, int maximumItemBytes = 65_536) =>
+        throw new CanonicalReadUnavailableException();
+
+    public Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds,
+        long? afterSequence, string? afterFrameId, int limit, CancellationToken cancellationToken) =>
         throw new CanonicalReadUnavailableException();
 }

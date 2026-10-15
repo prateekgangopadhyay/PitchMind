@@ -247,6 +247,36 @@ public sealed class V1ContractCompatibilityTests
             3000, 2, JsonSerializer.Deserialize<JsonElement>("{\"eventId\":\"sample\"}"));
         var canonicalEvidence = new CanonicalEvidenceResponse(insight, new[] { evidencePayload });
         var replay = new CanonicalReplayResponse(snapshot, eventPage);
+        var trackingFrame = new CanonicalTrackingFrameResponse("frame-1", 43, 7, 4, 2, 3300,
+            "pitch-v1", JsonSerializer.Deserialize<JsonElement>("{\"complete\":true}"), new string('a', 64),
+            new PitchMind.Contracts.Telemetry.V1.TrackingFrameV1
+            {
+                SchemaVersion = 1,
+                MatchId = Guid.NewGuid().ToString("D"),
+                CanonicalRevision = 7,
+                FrameId = "frame-1",
+                Sequence = 43,
+                MatchTime = new PitchMind.Contracts.Telemetry.V1.MatchTimeV1
+                {
+                    Period = 2, ElapsedSeconds = 3300, SourceClockValue = 3300,
+                    SourceClockUnit = "seconds", SourceClockBasis = "elapsed"
+                },
+                CoordinateSystem = new PitchMind.Contracts.Telemetry.V1.PitchCoordinateSystemV1
+                {
+                    LengthMetres = 105, WidthMetres = 68, Unit = "metres", AxisOrigin = "bottom_left",
+                    TeamDirections = Array.Empty<PitchMind.Contracts.Telemetry.V1.TeamAttackingDirectionV1>()
+                },
+                Ball = new PitchMind.Contracts.Telemetry.V1.PitchPointV1 { X = 52.5m, Y = 34m },
+                Players = Array.Empty<PitchMind.Contracts.Telemetry.V1.PlayerPositionV1>(),
+                Source = new PitchMind.Contracts.Telemetry.V1.SourceReferenceV1
+                {
+                    ProviderId = "provider", SourceMatchId = "source-match", SourceRecordId = "source-frame",
+                    SourceSequence = 43, SourceSchemaVersion = "v1", SourceSha256 = new string('a', 64),
+                    ProvenanceStatus = "synthetic", RightsReviewStatus = "reviewed"
+                }
+            });
+        var trackingPage = new CanonicalTrackingFramePageResponse(Guid.NewGuid().ToString("D"), 7, 4, 3300,
+            50, new[] { trackingFrame }, "opaque-cursor", true);
 
         AssertJsonProperties(card, "matchId", "canonicalRevision", "projectionRevision", "asOfSeconds", "throughSequence", "phase",
             "homeScore", "awayScore", "provenance", "algorithmVersion", "sourceSha256");
@@ -264,6 +294,10 @@ public sealed class V1ContractCompatibilityTests
         AssertJsonProperties(evidencePayload, "kind", "id", "relation", "sourceCanonicalRevision", "sequence", "clockSeconds", "period", "payload");
         AssertJsonProperties(canonicalEvidence, "insight", "items");
         AssertJsonProperties(replay, "snapshot", "events");
+        AssertJsonProperties(trackingFrame, "frameId", "sequence", "canonicalRevision", "projectionRevision", "period",
+            "clockSeconds", "coordinateVersion", "quality", "sourceSha256", "frame");
+        AssertJsonProperties(trackingPage, "matchId", "canonicalRevision", "projectionRevision", "selectedTimeSeconds",
+            "throughSequence", "items", "nextCursor", "hasMore");
     }
 
     [Fact]

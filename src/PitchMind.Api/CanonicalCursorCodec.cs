@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PitchMind.Application.Abstractions;
 
 namespace PitchMind.Api;
 
@@ -35,6 +36,34 @@ internal static class CanonicalCursorCodec
         return value;
     }
 
+    public static string EncodeFrame(Guid matchId, int selectedTimeSeconds, long canonicalRevision,
+        int projectionRevision, string sourceSha256, long afterSequence, string afterFrameId) =>
+        Encode(new FrameCursor(matchId, selectedTimeSeconds, canonicalRevision, projectionRevision,
+            sourceSha256, afterSequence, afterFrameId));
+
+    public static FrameCursor DecodeFrame(string cursor, Guid matchId, int selectedTimeSeconds, int? requestedRevision)
+    {
+        var value = Decode<FrameCursor>(cursor);
+        if (value.MatchId != matchId || value.SelectedTimeSeconds != selectedTimeSeconds ||
+            requestedRevision is not null && requestedRevision != value.ProjectionRevision ||
+            value.CanonicalRevision <= 0 || value.ProjectionRevision <= 0 || value.AfterSequence < 0 ||
+            string.IsNullOrWhiteSpace(value.AfterFrameId) || value.AfterFrameId.Length > 128 ||
+            !IsSha256(value.SourceSha256))
+            throw new ArgumentException("Cursor does not match the requested match, time, or revision.", nameof(cursor));
+        return value;
+    }
+
+    public static void ValidateFrameProjection(FrameCursor cursor, SelectedMatchProjection projection)
+    {
+        if (cursor.CanonicalRevision != projection.CanonicalRevision ||
+            cursor.ProjectionRevision != projection.ProjectionRevision ||
+            !string.Equals(cursor.SourceSha256, projection.SourceSha256, StringComparison.Ordinal))
+            throw new ArgumentException("Cursor does not match the selected projection source.", nameof(cursor));
+    }
+
+    private static bool IsSha256(string value) => value is { Length: 64 } &&
+        value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+
     private static string Encode<T>(T value) => Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(value, Json))
         .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
@@ -63,4 +92,6 @@ internal static class CanonicalCursorCodec
         int ProjectionRevision, long AfterSequence);
     internal sealed record InsightCursor(Guid MatchId, int SelectedTimeSeconds, long CanonicalRevision,
         int ProjectionRevision, long AfterSequence, string AfterInsightId);
+    internal sealed record FrameCursor(Guid MatchId, int SelectedTimeSeconds, long CanonicalRevision,
+        int ProjectionRevision, string SourceSha256, long AfterSequence, string AfterFrameId);
 }

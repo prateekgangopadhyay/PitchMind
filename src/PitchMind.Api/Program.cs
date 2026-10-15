@@ -44,6 +44,7 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton(dataSource);
         builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
         builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+        builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
         if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
                 builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"], postgresConnectionString))
         {
@@ -57,6 +58,7 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
     {
         builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
         builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+        builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
     }
 }
 else
@@ -64,6 +66,7 @@ else
     // Until an Azure PostgreSQL adapter is configured, authenticated canonical reads fail closed.
     builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
     builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+    builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
 }
 builder.Services.AddHealthChecks();
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
@@ -157,6 +160,12 @@ app.Use(async (context, next) =>
     {
         await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
             "Canonical match data is not configured").ExecuteAsync(context);
+    }
+    catch (InvalidDataException exception)
+    {
+        app.Logger.LogError(exception, "Canonical persisted data failed validation for {Path}", context.Request.Path);
+        await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "CANONICAL_DATA_INVALID",
+            "Canonical match data failed integrity validation").ExecuteAsync(context);
     }
     catch (NpgsqlException exception)
     {

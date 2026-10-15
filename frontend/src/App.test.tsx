@@ -176,7 +176,7 @@ it('loads a canonical match using one exact selected time and revision without d
 it('does not describe an unrelated key-moments 503 as an empty canonical projection', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
@@ -187,8 +187,8 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Service offline', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false}
+        : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -208,13 +208,13 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
 it('exposes observed positions as a screen-reader table and keeps event and time controls keyboard focusable', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
   };
   const observedFrame = {
-    frameId: 'observed-frame', sequence: 19, canonicalRevision: 4, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
+    frameId: 'observed-frame', sequence: 19, canonicalRevision: 4, projectionRevision: 4, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
     sourceSha256: 'a'.repeat(64), quality: {coverage: 'observed'},
     frame: {
       schemaVersion: 1, matchId, frameId: 'observed-frame', sequence: 19,
@@ -231,12 +231,12 @@ it('exposes observed positions as a screen-reader table and keeps event and time
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
         {eventId: 'event-1', matchId, sequence: 18, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'},
         {eventId: 'event-2', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}
       ], nextCursor: null, hasMore: false}
-        : parsed.pathname.endsWith('/frames') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [observedFrame], hasMore: false}
-          : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+        : parsed.pathname.endsWith('/frames') ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [observedFrame], nextCursor: null, hasMore: false}
+          : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -272,13 +272,13 @@ it('exposes observed positions as a screen-reader table and keeps event and time
 it('opens a frame evidence deep link on the exact observed frame and focuses its nonvisual account', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, asOfSeconds: 3308, throughSequence: 20,
+    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, asOfSeconds: 3308, throughSequence: 20,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
   };
   const frame = (sequence: number, frameId: string) => ({
-    frameId, sequence, canonicalRevision: 4, period: 2, clockSeconds: 3308, coordinateVersion: 'pitch-v1',
+    frameId, sequence, canonicalRevision: 4, projectionRevision: 4, period: 2, clockSeconds: 3308, coordinateVersion: 'pitch-v1',
     sourceSha256: 'a'.repeat(64), quality: { coverage: 'observed' },
     frame: {
       schemaVersion: 1, matchId, frameId, sequence,
@@ -295,9 +295,9 @@ it('opens a frame evidence deep link on the exact observed frame and focuses its
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503, json: async () => ({ status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test' }) };
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false }
-        : parsed.pathname.endsWith('/frames') ? { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [frame(18, 'source-frame'), frame(19, 'later-same-time-frame')], hasMore: false }
-          : { matchId, canonicalRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false };
+      : parsed.pathname.endsWith('/events') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false }
+        : parsed.pathname.endsWith('/frames') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [frame(18, 'source-frame'), frame(19, 'later-same-time-frame')], nextCursor: null, hasMore: false }
+          : { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false };
     return { ok: true, json: async () => body };
   }));
   const container = document.createElement('div');
@@ -327,12 +327,12 @@ it('keeps selected-time scrubbing available and disables auto replay when reduce
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
-    const snapshot = {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    const snapshot = {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
       algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
       provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
       possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+      : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
   const container = document.createElement('div');
@@ -352,7 +352,7 @@ it('keeps selected-time scrubbing available and disables auto replay when reduce
 it('rejects events and insights with a different match, revision or selected-time sequence', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
@@ -363,7 +363,7 @@ it('rejects events and insights with a different match, revision or selected-tim
     const parsed = new URL(url, 'http://localhost');
     if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'DEPENDENCY_UNAVAILABLE', correlationId: 'test'})};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{eventId: 'foreign-event', matchId: '22222222-2222-2222-2222-222222222222', sequence: 18, type: 'goal', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}], nextCursor: null, hasMore: false}
+      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{eventId: 'foreign-event', matchId: '22222222-2222-2222-2222-222222222222', sequence: 18, type: 'goal', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'}], nextCursor: null, hasMore: false}
         : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [{insightId: 'foreign-insight', matchId, canonicalRevision: 3, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'A mismatched revision insight', evidence: []}], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
@@ -384,7 +384,7 @@ it('rejects events and insights with a different match, revision or selected-tim
 it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical row with a mismatched %s', async mismatch => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
-    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
     algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
     provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
     possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
@@ -401,9 +401,9 @@ it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical ro
       detectorVersion: 'test-v1', truthClass: 'interpretation', summary: 'Must not be shown', evidence: []};
     const body = parsed.pathname.endsWith('/summary') ? snapshot
       : parsed.pathname.endsWith('/events')
-        ? {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
+        ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
           items: mismatch === 'event-match-id' ? [event] : [], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
+        : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19,
           items: mismatch === 'insight-revision' ? [insight] : [], nextCursor: null, hasMore: false};
     return {ok: true, json: async () => body};
   }));
@@ -420,6 +420,55 @@ it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical ro
     window.history.replaceState(null, '', '/');
   }
 });
+
+it.each(['frame-page-projection-revision', 'frame-item-projection-revision'] as const)(
+  'rejects tracking frames with a mismatched %s', async mismatch => {
+    const matchId = '11111111-1111-1111-1111-111111111111';
+    const snapshot = {
+      matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
+      algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+      provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+      possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+    };
+    const sourceSha256 = 'a'.repeat(64);
+    const frame = {
+      frameId: 'frame-1', sequence: 19, canonicalRevision: 4, projectionRevision: mismatch === 'frame-item-projection-revision' ? 3 : 4,
+      period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1', sourceSha256, quality: {coverage: 'observed'},
+      frame: {
+        schemaVersion: 1, matchId, frameId: 'frame-1', sequence: 19,
+        matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
+        coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
+        ball: {x: 52.5, y: 34}, players: [],
+        source: {providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: 'frame-1', sourceSequence: 1,
+          sourceSchemaVersion: 'test-v1', sourceSha256, provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
+      }
+    };
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const parsed = new URL(url, 'http://localhost');
+      if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, code: 'DEPENDENCY_UNAVAILABLE'})};
+      const page = {matchId, canonicalRevision: 4, projectionRevision: mismatch === 'frame-page-projection-revision' ? 3 : 4,
+        selectedTimeSeconds: 3309, throughSequence: 19, items: [frame], nextCursor: null, hasMore: false};
+      const body = parsed.pathname.endsWith('/summary') ? snapshot
+        : parsed.pathname.endsWith('/frames') ? page
+          : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309,
+            throughSequence: 19, items: [], nextCursor: null, hasMore: false};
+      return {ok: true, json: async () => body};
+    }));
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => { root.render(createElement(App)); });
+      expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+      expect(container.querySelector('svg[role="img"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      vi.unstubAllGlobals();
+      window.history.replaceState(null, '', '/');
+    }
+  }
+);
 
 it('renders persisted home cards from canonical fields and keeps the match id in navigation', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';

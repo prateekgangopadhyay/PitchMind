@@ -95,12 +95,12 @@ export interface TelemetryTrackingFrameV1 {
   source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: string };
 }
 export interface CanonicalTrackingFrame {
-  frameId: string; sequence: number; canonicalRevision: number; period: number; clockSeconds: number;
+  frameId: string; sequence: number; canonicalRevision: number; projectionRevision: number; period: number; clockSeconds: number;
   coordinateVersion: string; sourceSha256: string; quality: unknown; frame: TelemetryTrackingFrameV1;
 }
 export interface CanonicalTrackingFramePage {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
-  items: CanonicalTrackingFrame[]; hasMore: boolean;
+  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  items: CanonicalTrackingFrame[]; nextCursor: string | null; hasMore: boolean;
 }
 export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
