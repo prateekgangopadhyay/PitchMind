@@ -81,6 +81,7 @@ public sealed class PostgresLedgerTests
 
         await AddFrame("frame-b", 3, 9, 120);
         await AddFrame("frame-a", 3, 9, 120);
+        await AddFrame("old-source-revision", 2, 8, 121);
         await AddFrame("future-revision", 4, 10, 120);
         await AddFrame("future-sequence", 6, 9, 120);
         await AddFrame("other-time", 4, 9, 121);
@@ -103,10 +104,14 @@ public sealed class PostgresLedgerTests
         Assert.Equal("frame-b", second.Frames[0].FrameId);
         Assert.False(second.HasMore);
 
-        var targeted = await reader.ReadByIdAtAsync(selectedProjection, 120, "frame-b", CancellationToken.None);
+        var targeted = await reader.ReadByIdAtAsync(selectedProjection, 120, "frame-b", null, CancellationToken.None);
         Assert.NotNull(targeted);
         Assert.Equal("frame-b", targeted.FrameId);
         Assert.Equal(3, targeted.Sequence);
+        var exactSource = await reader.ReadByIdAtAsync(selectedProjection, 121, "old-source-revision", 8, CancellationToken.None);
+        Assert.NotNull(exactSource);
+        Assert.Equal(8, exactSource.CanonicalRevision);
+        Assert.Null(await reader.ReadByIdAtAsync(selectedProjection, 121, "old-source-revision", 7, CancellationToken.None));
     }
 
     [PostgresIntegrationFact]

@@ -70,7 +70,7 @@ public sealed class CanonicalBackfillTests
         using var factory = CreateFactory(new ProjectionReader(revision: 5), tracking);
         using var client = CreateClient(factory, "analyst");
 
-        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&frameId=frame-b");
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&frameId=frame-b&sourceRevision=100");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -79,6 +79,7 @@ public sealed class CanonicalBackfillTests
         Assert.Null(root.GetProperty("nextCursor").GetString());
         Assert.False(root.GetProperty("hasMore").GetBoolean());
         Assert.Equal("frame-b", tracking.LastRequestedFrameId);
+        Assert.Equal(100, tracking.LastRequestedSourceRevision);
     }
 
     [Fact]
@@ -92,6 +93,22 @@ public sealed class CanonicalBackfillTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("INVALID_CURSOR", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("sourceRevision=0", "INVALID_SOURCE_REVISION")]
+    [InlineData("frameId=frame-b&sourceRevision=101", "INVALID_SOURCE_REVISION")]
+    [InlineData("sourceRevision=1", "INVALID_SOURCE_REVISION")]
+    public async Task Tracking_frame_source_revision_requires_a_valid_frame_and_selected_revision(string query, string code)
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5));
+        using var client = CreateClient(factory, "analyst");
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&{query}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(code, json.RootElement.GetProperty("code").GetString());
     }
 
     [Fact]
@@ -285,6 +302,7 @@ public sealed class CanonicalBackfillTests
         private readonly PersistedTrackingFrame[] frames;
         public string? LastAfterFrameId { get; private set; }
         public string? LastRequestedFrameId { get; private set; }
+        public long? LastRequestedSourceRevision { get; private set; }
 
         public TrackingReader(bool malformedFramePayload = false, bool invalidCoordinates = false)
         {
@@ -306,10 +324,12 @@ public sealed class CanonicalBackfillTests
         }
 
         public Task<PersistedTrackingFrame?> ReadByIdAtAsync(SelectedMatchProjection projection, int selectedSeconds,
-            string frameId, CancellationToken cancellationToken)
+            string frameId, long? exactCanonicalRevision, CancellationToken cancellationToken)
         {
             LastRequestedFrameId = frameId;
-            return Task.FromResult(frames.LastOrDefault(frame => frame.FrameId == frameId));
+            LastRequestedSourceRevision = exactCanonicalRevision;
+            return Task.FromResult(frames.LastOrDefault(frame => frame.FrameId == frameId &&
+                (exactCanonicalRevision is null || frame.CanonicalRevision == exactCanonicalRevision)));
         }
 
         private static PersistedTrackingFrame Frame(string id, long sequence, bool invalidCoordinates = false)

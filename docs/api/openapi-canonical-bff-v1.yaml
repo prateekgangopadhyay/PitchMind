@@ -79,7 +79,9 @@ paths:
       summary: Read persisted tracking frames at the exact selected match second.
       description: >-
         Frames are bounded by the selected projection sequence, canonical admission revision,
-        and immutable source hash. Pages use stable (sequence, frameId) keyset ordering. The
+        and immutable source hash. Pages use stable (sequence, frameId) keyset ordering. Exact
+        evidence deep links may pair frameId with sourceRevision to resolve the frame at its
+        recorded source revision instead of a newer frame sharing that identity. The
         cursor binds match, selected time, both revision axes, and source hash. No positions
         are interpolated or fabricated by this endpoint.
       parameters:
@@ -91,6 +93,10 @@ paths:
           in: query
           description: Exact frame identity lookup at the selected match time and revisions; 1–128 non-whitespace characters; cannot be combined with cursor.
           schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: sourceRevision
+          in: query
+          description: Optional exact canonical admission revision for a frameId evidence deep link. Must be positive, no greater than the selected canonical revision, and requires frameId.
+          schema: { type: integer, format: int64, minimum: 1 }
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 25, default: 12 }

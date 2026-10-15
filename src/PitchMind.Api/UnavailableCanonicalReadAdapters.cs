@@ -60,6 +60,6 @@ internal sealed class UnavailableCanonicalReadAdapters : IMatchProjectionReader,
         throw new CanonicalReadUnavailableException();
 
     public Task<PersistedTrackingFrame?> ReadByIdAtAsync(SelectedMatchProjection projection, int selectedSeconds,
-        string frameId, CancellationToken cancellationToken) =>
+        string frameId, long? exactCanonicalRevision, CancellationToken cancellationToken) =>
         throw new CanonicalReadUnavailableException();
 }

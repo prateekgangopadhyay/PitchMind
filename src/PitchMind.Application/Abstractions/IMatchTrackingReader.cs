@@ -26,5 +26,5 @@ public interface IMatchTrackingReader
         long? afterSequence, string? afterFrameId, int limit, CancellationToken cancellationToken);
 
     Task<PersistedTrackingFrame?> ReadByIdAtAsync(SelectedMatchProjection projection, int selectedSeconds,
-        string frameId, CancellationToken cancellationToken);
+        string frameId, long? exactCanonicalRevision, CancellationToken cancellationToken);
 }

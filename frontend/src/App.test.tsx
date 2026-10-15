@@ -292,9 +292,13 @@ it('opens a frame evidence deep link on the exact observed frame when sequences 
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', `/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4&sourceRevision=4#canonical-frame-later-same-time-frame`);
   let requestedFrameId: string | null = null;
+  let requestedSourceRevision: string | null = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const parsed = new URL(url, 'http://localhost');
-    if (parsed.pathname.endsWith('/frames')) requestedFrameId = parsed.searchParams.get('frameId');
+    if (parsed.pathname.endsWith('/frames')) {
+      requestedFrameId = parsed.searchParams.get('frameId');
+      requestedSourceRevision = parsed.searchParams.get('sourceRevision');
+    }
     if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503, json: async () => ({ status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test' }) };
     const body = parsed.pathname.endsWith('/summary') ? snapshot
       : parsed.pathname.endsWith('/events') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false }
@@ -311,6 +315,7 @@ it('opens a frame evidence deep link on the exact observed frame when sequences 
     expect(container.textContent).not.toContain('Observed frame source-frame');
     expect(document.activeElement?.id).toBe('canonical-frame-later-same-time-frame');
     expect(requestedFrameId).toBe('later-same-time-frame');
+    expect(requestedSourceRevision).toBe('4');
     expect(new URL(window.location.href).searchParams.get('sourceRevision')).toBe('4');
   } finally {
     await act(async () => root.unmount());

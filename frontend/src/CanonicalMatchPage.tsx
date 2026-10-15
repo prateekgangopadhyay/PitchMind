@@ -68,7 +68,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const revision = snapshot.projectionRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
         const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
-        if (requestedFrameId !== null) frameQuery.set('frameId', requestedFrameId);
+        if (requestedFrameId !== null) {
+          frameQuery.set('frameId', requestedFrameId);
+          if (requestedSourceRevision !== null && requestedSourceRevision > 0)
+            frameQuery.set('sourceRevision', String(requestedSourceRevision));
+        }
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
         const [eventResult, insightResult, frameResult, keyMomentsStatus] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal)
@@ -132,7 +136,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Canonical match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [matchId, requestedRevision, requestedFrameId, selectedSeconds, retryCounter]);
+  }, [matchId, requestedRevision, requestedFrameId, requestedSourceRevision, selectedSeconds, retryCounter]);
 
   useEffect(() => {
     if (reducedMotion) setPlaying(false);

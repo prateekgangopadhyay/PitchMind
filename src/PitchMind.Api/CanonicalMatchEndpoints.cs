@@ -72,7 +72,7 @@ internal static class CanonicalMatchEndpoints
         });
 
         match.MapGet("/frames", async (
-            string matchId, int? atSeconds, int? revision, string? cursor, string? frameId, int? limit,
+            string matchId, int? atSeconds, int? revision, string? cursor, string? frameId, long? sourceRevision, int? limit,
             IMatchProjectionReader projections, IMatchTrackingReader tracking, HttpContext context,
             CancellationToken cancellationToken) =>
         {
@@ -84,6 +84,10 @@ internal static class CanonicalMatchEndpoints
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 25.");
             if (frameId is { } requestedFrameId && (string.IsNullOrWhiteSpace(requestedFrameId) || requestedFrameId.Length > 128))
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_FRAME_ID", "frameId must contain between 1 and 128 non-whitespace characters.");
+            if (sourceRevision is <= 0)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_SOURCE_REVISION", "sourceRevision must be a positive canonical admission revision.");
+            if (sourceRevision is not null && frameId is null)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_SOURCE_REVISION", "sourceRevision can only be used with frameId.");
             if (frameId is not null && cursor is not null)
                 return Problem(context, StatusCodes.Status400BadRequest, "INVALID_CURSOR", "frameId lookup cannot be combined with cursor pagination.");
 
@@ -93,7 +97,9 @@ internal static class CanonicalMatchEndpoints
                     null, revision, cancellationToken);
                 if (projectionForFrame is null)
                     return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-                var frame = await tracking.ReadByIdAtAsync(projectionForFrame, selectedTime, frameId, cancellationToken);
+                if (sourceRevision is { } requestedSourceRevision && requestedSourceRevision > projectionForFrame.CanonicalRevision)
+                    return Problem(context, StatusCodes.Status400BadRequest, "INVALID_SOURCE_REVISION", "sourceRevision cannot exceed the selected canonical revision.");
+                var frame = await tracking.ReadByIdAtAsync(projectionForFrame, selectedTime, frameId, sourceRevision, cancellationToken);
                 var targetedItems = frame is null ? Array.Empty<CanonicalTrackingFrameResponse>()
                     : [ToTrackingFrameResponse(frame, projectionForFrame, selectedTime)];
                 return Results.Ok(new CanonicalTrackingFramePageResponse(canonicalMatchId.ToString("D"),
