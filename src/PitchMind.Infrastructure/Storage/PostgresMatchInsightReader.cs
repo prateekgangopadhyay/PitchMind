@@ -9,6 +9,7 @@ namespace PitchMind.Infrastructure.Storage;
 public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IMatchInsightReader
 {
     private const int MaximumPageSize = 100;
+    private const int MaximumSummaryBytes = 6_144;
 
     public async Task<PersistedMatchInsightPage> ReadAtAsync(MatchId matchId, long maximumCanonicalRevision,
         int maximumProjectionRevision, int selectedSeconds, long throughSequence, long? afterSequence,
@@ -33,6 +34,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             WHERE i.match_id = $1 AND i.canonical_revision <= $2 AND i.revision <= $3
               AND i.as_of_sequence <= $4
               AND ($5::bigint IS NULL OR i.as_of_sequence > $5 OR (i.as_of_sequence = $5 AND i.insight_id > $6))
+              AND octet_length(i.summary) <= $8
               AND EXISTS (SELECT 1 FROM pitchmind.insight_evidence any_ref
                           WHERE any_ref.insight_id = i.insight_id AND any_ref.canonical_revision = i.canonical_revision)
               AND NOT EXISTS (
@@ -58,7 +60,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             GROUP BY i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
                      i.detector_version, i.truth_class, i.summary, m.source_version, m.provenance, p.source_sha256
             ORDER BY i.as_of_sequence, i.insight_id
-            LIMIT $8
+            LIMIT $9
             """);
         command.Parameters.AddWithValue(matchId.Value);
         command.Parameters.AddWithValue(maximumCanonicalRevision);
@@ -67,6 +69,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         command.Parameters.AddWithValue((object?)afterSequence ?? DBNull.Value);
         command.Parameters.AddWithValue((object?)afterInsightId ?? DBNull.Value);
         command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(MaximumSummaryBytes);
         command.Parameters.AddWithValue(limit + 1);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -104,6 +107,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                 AND e.canonical_revision = i.canonical_revision
             WHERE i.match_id = $1 AND i.insight_id = $2
               AND i.canonical_revision <= $3 AND i.revision <= $4 AND i.as_of_sequence <= $5
+              AND octet_length(i.summary) <= $8
               AND (SELECT count(*) FROM pitchmind.insight_evidence any_ref
                    WHERE any_ref.insight_id = i.insight_id AND any_ref.canonical_revision = i.canonical_revision)
                    BETWEEN 1 AND $7
@@ -138,6 +142,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         command.Parameters.AddWithValue(throughSequence);
         command.Parameters.AddWithValue(selectedSeconds);
         command.Parameters.AddWithValue(maximumEvidenceItems);
+        command.Parameters.AddWithValue(MaximumSummaryBytes);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadInsight(reader) : null;
     }

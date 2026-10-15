@@ -436,6 +436,19 @@ public sealed class PostgresLedgerTests
         Assert.Equal(stateHash, provenance.StateSha256);
         await Assert.ThrowsAsync<InvalidDataException>(() => readStore.ReadInsightProvenanceAsync(futureInsightId, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidDataException>(() => readStore.ReadInsightProvenanceAsync(futureFrameInsightId, CancellationToken.None));
+
+        await using (var oversizedSummary = reopened.CreateCommand("UPDATE pitchmind.insights SET summary = $2 WHERE insight_id = $1 AND canonical_revision = 1"))
+        {
+            oversizedSummary.Parameters.AddWithValue(insightId);
+            oversizedSummary.Parameters.AddWithValue(new string('x', 6_145));
+            Assert.Equal(1, await oversizedSummary.ExecuteNonQueryAsync());
+        }
+        var insightReader = new PostgresMatchInsightReader(reopened);
+        Assert.Null(await insightReader.GetAtAsync(new MatchId(matchId), insightId, 1, 7, 0, 0,
+            CancellationToken.None));
+        var oversizedPage = await insightReader.ReadAtAsync(new MatchId(matchId), 1, 7, 0, 0,
+            null, null, 10, CancellationToken.None);
+        Assert.DoesNotContain(oversizedPage.Insights, insight => insight.InsightId == insightId);
     }
 
     [PostgresIntegrationFact]

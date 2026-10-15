@@ -61,6 +61,43 @@ public sealed class MatchIntelligenceContextTests
         Assert.Equal(0, fixture.EvidenceReads);
     }
 
+    [Theory]
+    [InlineData("projection", MatchIntelligenceContextFailure.MatchStateUnavailable)]
+    [InlineData("insight", MatchIntelligenceContextFailure.ClaimUnavailable)]
+    [InlineData("evidence", MatchIntelligenceContextFailure.EvidenceUnavailable)]
+    public async Task BuildAsync_RefusesWhenCanonicalReadPortIsUnavailable(string stage,
+        MatchIntelligenceContextFailure expectedFailure)
+    {
+        var fixture = new Fixture { UnavailableStage = stage };
+
+        var result = await fixture.Builder().BuildAsync(fixture.Request(), CancellationToken.None);
+
+        Assert.Equal(expectedFailure, result.Failure);
+    }
+
+    [Theory]
+    [InlineData("projection")]
+    [InlineData("insight")]
+    [InlineData("evidence")]
+    public async Task BuildAsync_PropagatesCancellationFromEveryCanonicalReadPort(string stage)
+    {
+        var fixture = new Fixture { CancellationStage = stage };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            fixture.Builder().BuildAsync(fixture.Request(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task BuildAsync_RejectsSummaryThatExceedsUtf8ByteLimit()
+    {
+        var fixture = new Fixture { Summary = new string('é', 3_073) };
+
+        var result = await fixture.Builder().BuildAsync(fixture.Request(), CancellationToken.None);
+
+        Assert.Equal(MatchIntelligenceContextFailure.ClaimUnavailable, result.Failure);
+        Assert.Equal(0, fixture.EvidenceReads);
+    }
+
     [Fact]
     public async Task BuildAsync_RejectsUnknownTruthClass()
     {
@@ -180,6 +217,9 @@ public sealed class MatchIntelligenceContextTests
     {
         public MatchId MatchId { get; } = new(Guid.NewGuid());
         public bool Authorized { get; init; } = true;
+        public string? UnavailableStage { get; init; }
+        public string? CancellationStage { get; init; }
+        public string Summary { get; init; } = "A candidate pattern is supported by this event.";
         public int InsightProjectionRevision { get; init; } = 3;
         public long InsightCanonicalRevision { get; init; } = 5;
         public string InsightSourceSha256 { get; init; } = new string('a', 64);
@@ -215,6 +255,8 @@ public sealed class MatchIntelligenceContextTests
                 long? maximumCanonicalRevision, int? maximumProjectionRevision, CancellationToken cancellationToken)
             {
                 fixture.ProjectionReads++;
+                if (fixture.CancellationStage == "projection") throw new OperationCanceledException();
+                if (fixture.UnavailableStage == "projection") throw new CanonicalReadUnavailableException();
                 var state = new MatchState(matchId.ToString(), 110, 1, MatchPhase.FirstHalf, 2, 1, null,
                     11, 11, Array.Empty<MatchPlayerState>(), 10, "synthetic-fixture-v1");
                 return Task.FromResult<SelectedMatchProjection?>(new(state, 5, 3, 10, 110, "projection-v1",
@@ -260,9 +302,11 @@ public sealed class MatchIntelligenceContextTests
                 int maximumEvidenceItems = 100)
             {
                 fixture.InsightReads++;
+                if (fixture.CancellationStage == "insight") throw new OperationCanceledException();
+                if (fixture.UnavailableStage == "insight") throw new CanonicalReadUnavailableException();
                 return Task.FromResult<PersistedMatchInsight?>(new(insightId, matchId, fixture.InsightCanonicalRevision,
                     fixture.InsightProjectionRevision, 9,
-                    "press-sequence-v1", fixture.TruthClass, "A candidate pattern is supported by this event.",
+                    "press-sequence-v1", fixture.TruthClass, fixture.Summary,
                     fixture.SourceVersion, fixture.Provenance, fixture.InsightSourceSha256, References));
             }
 
@@ -271,6 +315,8 @@ public sealed class MatchIntelligenceContextTests
                 CancellationToken cancellationToken, int maximumItems = 100, int maximumItemBytes = 65_536)
             {
                 fixture.EvidenceReads++;
+                if (fixture.CancellationStage == "evidence") throw new OperationCanceledException();
+                if (fixture.UnavailableStage == "evidence") throw new CanonicalReadUnavailableException();
                 IReadOnlyList<PersistedCanonicalEvidenceItem> rows = Array.AsReadOnly(
                     Enumerable.Range(1, fixture.EvidenceCount).Select(index =>
                         new PersistedCanonicalEvidenceItem("event", $"event-{index}", "supports", 5, fixture.EvidenceSequence,
