@@ -12,8 +12,10 @@ public static partial class LocalApiRoleProvisioner
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(migrationDataSource);
-        if (!ApiPasswordPattern().IsMatch(password))
-            throw new ArgumentException("LOCAL API password must be 48 lowercase hexadecimal characters.", nameof(password));
+        if (string.IsNullOrEmpty(password) || !ApiPasswordPattern().IsMatch(password) || password.Distinct().Count() < 12)
+            throw new ArgumentException(
+                "LOCAL API password must be 48 lowercase hexadecimal characters with at least 12 unique hex digits.",
+                nameof(password));
 
         await using var connection = await migrationDataSource.OpenConnectionAsync(cancellationToken);
         await using (var createRoleSql = new NpgsqlCommand(

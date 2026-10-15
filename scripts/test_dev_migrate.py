@@ -25,6 +25,7 @@ class LocalMigrationLauncherTests(unittest.TestCase):
 
     def test_rejects_missing_duplicate_and_weak_api_passwords(self) -> None:
         cases = ("POSTGRES_USER=pitchmind\n", "PITCHMIND_API_PASSWORD=bad\n",
+                 f"PITCHMIND_API_PASSWORD={'a' * 48}\n",
                  f"PITCHMIND_API_PASSWORD={'a' * 48}\nPITCHMIND_API_PASSWORD={'b' * 48}\n")
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"

@@ -26,6 +26,16 @@ public sealed class PostgresIntegrationFactAttribute : FactAttribute
 
 public sealed class PostgresLedgerTests
 {
+    [Fact]
+    public async Task LocalApiRoleProvisionerRejectsLowDiversityPasswordBeforeDatabaseConnection()
+    {
+        await using var source = NpgsqlDataSource.Create(
+            "Host=127.0.0.1;Username=unused;Password=unused;Database=unused;Timeout=1");
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            LocalApiRoleProvisioner.ProvisionAsync(source, new string('a', 48), CancellationToken.None));
+        Assert.Contains("12 unique hex digits", exception.Message, StringComparison.Ordinal);
+    }
+
     [PostgresIntegrationFact]
     public async Task LocalApiRoleCanReadCanonicalDataAndDispatchOutboxWithoutSchemaOrLedgerWrites()
     {

@@ -25,8 +25,8 @@ def read_api_password(path: Path) -> str:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("PITCHMIND_API_PASSWORD="):
             values.append(line.partition("=")[2])
-    if len(values) != 1 or not PASSWORD.fullmatch(values[0]):
-        fail("docker/.env must contain one valid PITCHMIND_API_PASSWORD; credentials were not displayed")
+    if len(values) != 1 or not PASSWORD.fullmatch(values[0]) or len(set(values[0])) < 12:
+        fail("docker/.env must contain one strong PITCHMIND_API_PASSWORD with at least 12 unique hex digits; credentials were not displayed")
     return values[0]
 
 
