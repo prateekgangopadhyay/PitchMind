@@ -75,6 +75,17 @@ internal static class ApiSecurity
                 options.Audience = audience;
                 options.RequireHttpsMetadata = true;
                 options.MapInboundClaims = false;
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        // Browser WebSocket/SSE transports cannot attach Authorization headers.
+                        // Never accept access_token from query strings on other API routes.
+                        if (GetMatchHubQueryToken(context.Request) is { } token)
+                            context.Token = token;
+                        return Task.CompletedTask;
+                    }
+                };
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -135,6 +146,17 @@ internal static class ApiSecurity
             endpoint.DisplayName ?? "unknown", context.Response.StatusCode, actor, context.TraceIdentifier);
     }
 
+    internal static bool IsMatchHubPath(HttpRequest request) =>
+        string.Equals(request.Path.Value, "/hubs/matches", StringComparison.OrdinalIgnoreCase);
+
+    internal static string? GetMatchHubQueryToken(HttpRequest request)
+    {
+        if (!IsMatchHubPath(request) || !request.Query.TryGetValue("access_token", out var values) ||
+            values.Count != 1 || values[0] is not { Length: > 0 and <= 8192 } token)
+            return null;
+        return token;
+    }
+
     public static string[] GetConfiguredCorsOrigins(IConfiguration configuration, IHostEnvironment environment)
     {
         var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
@@ -185,14 +207,84 @@ internal sealed class DevelopmentHeaderAuthenticationHandler(
         var requestedRoles = Request.Headers["X-Dev-Roles"].ToString()
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (subject.Length == 0 && requestedRoles.Length == 0)
-            return Task.FromResult(AuthenticateResult.NoResult());
-        if (subject.Length is < 1 or > 128 || requestedRoles.Length == 0 || requestedRoles.Any(role => !Roles.Contains(role)))
+        {
+            var token = GetDevelopmentBearerToken();
+            if (token is null)
+                return Task.FromResult(AuthenticateResult.NoResult());
+            return Task.FromResult(TryCreateDevelopmentTicket(token, out var tokenTicket)
+                ? AuthenticateResult.Success(tokenTicket)
+                : AuthenticateResult.Fail("Development bearer token is invalid."));
+        }
+        if (!TryCreateDevelopmentPrincipal(subject, requestedRoles, out var principal))
             return Task.FromResult(AuthenticateResult.Fail("Development identity headers are invalid."));
+
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
+    }
+
+    private string? GetDevelopmentBearerToken()
+    {
+        if (ApiSecurity.IsMatchHubPath(Request) && Request.Query.TryGetValue("access_token", out var queryValues))
+            return queryValues.Count == 1 && queryValues[0] is { Length: > 0 and <= 8192 } queryToken
+                ? queryToken
+                : null;
+
+        var authorization = Request.Headers.Authorization.ToString();
+        return authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) && authorization.Length <= 8200
+            ? authorization[7..].Trim()
+            : null;
+    }
+
+    private bool TryCreateDevelopmentTicket(string token, out AuthenticationTicket ticket)
+    {
+        ticket = null!;
+        const string prefix = "pmdev.v1.";
+        if (!token.StartsWith(prefix, StringComparison.Ordinal) || token.Length > 4096)
+            return false;
+
+        try
+        {
+            var encoded = token[prefix.Length..].Replace('-', '+').Replace('_', '/');
+            encoded = encoded.PadRight((encoded.Length + 3) / 4 * 4, '=');
+            var payload = Convert.FromBase64String(encoded);
+            using var document = JsonDocument.Parse(payload, new JsonDocumentOptions { MaxDepth = 4 });
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 2 ||
+                root.EnumerateObject().Select(property => property.Name).Distinct(StringComparer.Ordinal).Count() != 2 ||
+                !root.TryGetProperty("sub", out var subject) || subject.ValueKind != JsonValueKind.String ||
+                !root.TryGetProperty("roles", out var roles) || roles.ValueKind != JsonValueKind.Array)
+                return false;
+
+            var roleValues = roles.EnumerateArray()
+                .Where(role => role.ValueKind == JsonValueKind.String)
+                .Select(role => role.GetString()!)
+                .ToArray();
+            if (roleValues.Length != roles.GetArrayLength() ||
+                !TryCreateDevelopmentPrincipal(subject.GetString() ?? string.Empty, roleValues, out var principal))
+                return false;
+
+            ticket = new AuthenticationTicket(principal, Scheme.Name);
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    private bool TryCreateDevelopmentPrincipal(string subject, IReadOnlyCollection<string> requestedRoles,
+        out ClaimsPrincipal principal)
+    {
+        principal = new ClaimsPrincipal();
+        if (subject.Length is < 1 or > 128 || requestedRoles.Count == 0 || requestedRoles.Count > Roles.Count ||
+            requestedRoles.Any(role => !Roles.Contains(role)) ||
+            requestedRoles.Distinct(StringComparer.Ordinal).Count() != requestedRoles.Count)
+            return false;
 
         var claims = new List<Claim> { new("sub", subject) };
         claims.AddRange(requestedRoles.Select(role => new Claim("roles", role)));
         var identity = new ClaimsIdentity(claims, Scheme.Name, "sub", "roles");
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
+        principal = new ClaimsPrincipal(identity);
+        return true;
     }
 
     protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
