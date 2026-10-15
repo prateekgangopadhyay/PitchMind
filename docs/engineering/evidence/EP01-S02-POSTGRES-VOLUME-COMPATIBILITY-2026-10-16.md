@@ -25,4 +25,4 @@ Docker API access was denied during `docker compose ps`, so this run does not cl
 
 ## Status and remaining evidence
 
-The update is prepared for draft PR #44 based on current head `4b8b4a363416ecbf556949e86d19fe1fe29a7711`. The PR remains draft. Hosted CI, independent technical review, fresh-machine bootstrap, and Product Owner acceptance remain pending; EP01-S02 remains unaccepted.
+The tested implementation tree is `cd2fcdeac0c6a5183d52a1b1b9574f7c172ba84d` (local verification commit `9b780c5a662c04407bf3aa07b2b4e73efd635297`), now published on draft PR #44 as commit `ca5d80ed75065a92859d253143936abccc0d2c87`. The PR remains draft. Hosted CI, independent technical review, fresh-machine bootstrap, and Product Owner acceptance remain pending; EP01-S02 remains unaccepted.
