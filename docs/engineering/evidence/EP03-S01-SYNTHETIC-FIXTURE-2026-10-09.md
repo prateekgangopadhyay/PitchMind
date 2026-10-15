@@ -1,5 +1,7 @@
 # EP03-S01 synthetic fixture evidence — 2026-10-09
 
+**Current resource location (2026-10-15):** `tests/PitchMind.TestFixtures/Fixtures/synthetic-fixture-v2.json`. The historical commands and paths below reflect the revisions on which those checks were executed; this follow-up moved the fixture out of the production Domain assembly. See the [EP01-S01 resource-boundary evidence](EP01-S01-RESOURCE-BOUNDARY-2026-10-15.md).
+
 **Scope:** Local deterministic generation from the fictional `synthetic-v2` definition. This does not admit the Manchester United–Liverpool candidate feed or establish independent football/Product Owner acceptance.
 
 ## Versioned input
