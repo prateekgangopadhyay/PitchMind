@@ -7,9 +7,9 @@
   "required": ["schemaVersion", "matchId", "canonicalRevision", "frameId", "sequence", "matchTime", "coordinateSystem", "ball", "players", "source"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "matchId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
     "canonicalRevision": { "type": "integer", "minimum": 1, "maximum": 9223372036854775807 },
-    "frameId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+    "frameId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
     "sequence": { "type": "integer", "minimum": 0, "maximum": 9223372036854775807 },
     "matchTime": { "$ref": "event-envelope.schema.json#/$defs/matchTime" },
     "coordinateSystem": { "$ref": "#/$defs/coordinateSystem" },
@@ -32,8 +32,8 @@
       "additionalProperties": false,
       "required": ["playerId", "teamId", "position"],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
-        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+        "playerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
         "position": { "$ref": "#/$defs/point" }
       }
     },
@@ -55,7 +55,7 @@
             "additionalProperties": false,
             "required": ["teamId", "direction"],
             "properties": {
-              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": ".*\\S.*" },
+              "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
               "direction": { "enum": ["left", "right"] }
             }
           }
