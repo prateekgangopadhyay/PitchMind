@@ -138,6 +138,6 @@ public static partial class LocalApiRoleProvisioner
         await grants.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    [GeneratedRegex("^[0-9a-f]{48}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\A[0-9a-f]{48}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ApiPasswordPattern();
 }
