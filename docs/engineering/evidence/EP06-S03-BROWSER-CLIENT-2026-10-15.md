@@ -3,7 +3,7 @@
 **Story:** EP06-S03 — Reconnect, backfill and historical context (P0).
 **Accountable skill:** `lead-frontend-engineer`.
 **Consult skills:** `real-time-streaming-engineer`, `accessibility-engineer`, `application-security-engineer`, `qa-architect`.
-**Pull request:** [#268](https://github.com/prateekgangopadhyay/PitchMind/pull/268), draft, restacked after parent PR #267 merged.
+**Pull request:** [#268](https://github.com/prateekgangopadhyay/PitchMind/pull/268), merged to main at `1492d661e1327275cae652f7bd2e9fea201c21f2` after the exact-head review.
 **Base revision:** `main` at `f000e561fe32a0b26f34b09ffe6b6cea98e75cc4`.
 **Code revision after restack:** `64cf6646ac71d3576aec5a411838d0197d28d0ae`.
 
@@ -29,8 +29,8 @@ Historical projection refreshes also retain the separately observed LIVE cursor,
 - `git diff --check`: passed.
 - `npm run test:e2e`: could not start because the available linked `node_modules` has no `playwright` executable (`command not found`). Browser automation was not run.
 
-Commands ran in the local worktree, with its available linked dependencies. A clean `npm ci` was not available offline in this environment. No API/PostgreSQL integration, connected-client reconnect, real Entra tenant, manual screen-reader test, hosted checks, or Product Owner/football acceptance was performed for this slice. Independent re-review found two issues in prior code heads: replay started from Live could not advance reliably, and a historical refresh could clear a pending live-update notice. Both corrections have regression coverage; review of the exact current head is pending. Playwright remains unrun because its executable is missing from the linked dependencies. No Azure resources or deployments changed.
+Commands ran in the local worktree, with its available linked dependencies. A clean `npm ci` was not available offline in this environment. No API/PostgreSQL integration, connected-client reconnect, real Entra tenant, manual screen-reader test, hosted checks, or Product Owner/football acceptance was performed for this slice. Independent re-review found two issues in prior code heads: replay started from Live could not advance reliably, and a historical refresh could clear a pending live-update notice. Both corrections have regression coverage; independent static review of exact PR head `8742a2d6b2d7607441458a8f0ca4d9d4e6412e38` found no actionable P0–P2 issues and did not execute tests. Playwright remains unrun because its executable is missing from the linked dependencies. No Azure resources or deployments changed.
 
 ## Status and remaining risks
 
-PR #267's backend browser-auth implementation was merged to main at `f000e561fe32a0b26f34b09ffe6b6cea98e75cc4`. PR #268 targets main. Corrected code is pushed at `64cf6646ac71d3576aec5a411838d0197d28d0ae`; exact-head independent review and hosted checks are pending. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
+PR #267's backend browser-auth implementation was merged to main at `f000e561fe32a0b26f34b09ffe6b6cea98e75cc4`. PR #268 was merged on 2026-10-15 at `1492d661e1327275cae652f7bd2e9fea201c21f2`. PR #268 merged to main at `1492d661e1327275cae652f7bd2e9fea201c21f2`. Corrected code is pushed at `64cf6646ac71d3576aec5a411838d0197d28d0ae`; exact-head independent static review found no actionable P0–P2 issues (review did not execute tests); hosted checks were absent. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
