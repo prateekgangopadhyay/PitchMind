@@ -217,7 +217,7 @@ it('exposes observed positions as a screen-reader table and keeps event and time
     frameId: 'observed-frame', sequence: 19, canonicalRevision: 4, projectionRevision: 4, period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1',
     sourceSha256: 'a'.repeat(64), quality: {coverage: 'observed'},
     frame: {
-      schemaVersion: 1, matchId, frameId: 'observed-frame', sequence: 19,
+      schemaVersion: 1, matchId, frameId: 'observed-frame', sequence: 19, canonicalRevision: 4,
       matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
       coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
       ball: {x: 52.5, y: 34}, players: [{playerId: 'player-a', teamId: 'team-a', position: {x: 10, y: 20}}],
@@ -281,7 +281,7 @@ it('opens a frame evidence deep link on the exact observed frame and focuses its
     frameId, sequence, canonicalRevision: 4, projectionRevision: 4, period: 2, clockSeconds: 3308, coordinateVersion: 'pitch-v1',
     sourceSha256: 'a'.repeat(64), quality: { coverage: 'observed' },
     frame: {
-      schemaVersion: 1, matchId, frameId, sequence,
+      schemaVersion: 1, matchId, frameId, sequence, canonicalRevision: 4,
       matchTime: { period: 2, elapsedSeconds: 3308, sourceClockValue: 3308, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed' },
       coordinateSystem: { lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{ teamId: 'team-a', direction: 'right' }] },
       ball: { x: 52.5, y: 34 }, players: [{ playerId: `player-${sequence}`, teamId: 'team-a', position: { x: sequence, y: 20 } }],
@@ -421,7 +421,7 @@ it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical ro
   }
 });
 
-it.each(['frame-page-projection-revision', 'frame-item-projection-revision'] as const)(
+it.each(['frame-page-projection-revision', 'frame-item-projection-revision', 'nested-frame-canonical-revision'] as const)(
   'rejects tracking frames with a mismatched %s', async mismatch => {
     const matchId = '11111111-1111-1111-1111-111111111111';
     const snapshot = {
@@ -436,6 +436,7 @@ it.each(['frame-page-projection-revision', 'frame-item-projection-revision'] as 
       period: 2, clockSeconds: 3309, coordinateVersion: 'pitch-v1', sourceSha256, quality: {coverage: 'observed'},
       frame: {
         schemaVersion: 1, matchId, frameId: 'frame-1', sequence: 19,
+        canonicalRevision: mismatch === 'nested-frame-canonical-revision' ? 3 : 4,
         matchTime: {period: 2, elapsedSeconds: 3309, sourceClockValue: 3309, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed'},
         coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
         ball: {x: 52.5, y: 34}, players: [],

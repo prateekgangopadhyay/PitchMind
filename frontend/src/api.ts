@@ -84,7 +84,7 @@ export interface RealtimeCursorV1 {
   serverUtc: string; schemaVersion: 1;
 }
 export interface TelemetryTrackingFrameV1 {
-  schemaVersion: number; matchId: string; frameId: string; sequence: number;
+  schemaVersion: number; matchId: string; frameId: string; sequence: number; canonicalRevision: number;
   matchTime: { period: number; elapsedSeconds: number; sourceClockValue: number; sourceClockUnit: string; sourceClockBasis: string };
   coordinateSystem: {
     lengthMetres: number; widthMetres: number; unit: 'metres' | 'normalized_0_1' | 'percent_0_100';
