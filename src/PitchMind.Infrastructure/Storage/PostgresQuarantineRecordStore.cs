@@ -52,7 +52,7 @@ public sealed class PostgresQuarantineRecordStore(NpgsqlDataSource dataSource) :
         return new QuarantineRecord(
             reader.GetGuid(0),
             reader.IsDBNull(1) ? null : reader.GetGuid(1),
-            reader.GetString(2),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
             reader.IsDBNull(3) ? null : reader.GetString(3).TrimEnd(),
             reader.GetString(4),
             reader.GetFieldValue<DateTimeOffset>(5));

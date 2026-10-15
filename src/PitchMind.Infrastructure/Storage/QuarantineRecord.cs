@@ -7,7 +7,7 @@ namespace PitchMind.Infrastructure.Storage;
 public sealed record QuarantineRecord(
     Guid RecordId,
     Guid? MatchId,
-    string SourcePointer,
+    string? SourcePointer,
     string? PayloadHash,
     string Reason,
     DateTimeOffset ObservedAt);

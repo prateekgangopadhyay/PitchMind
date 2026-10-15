@@ -10,7 +10,7 @@ This slice persists a classified canonical-ledger rejection only when a caller s
 
 - `record_id`: caller-created non-empty UUID. It is not an idempotency key.
 - `match_id`: nullable UUID; null is allowed if the source could not be associated with a valid match.
-- `source_ptr`: required opaque locator, 1–2048 characters. It may be sensitive and must not be logged or exposed without authorization.
+- `source_ptr`: required for every new append as an opaque locator of 1–2048 characters. Historical schema-v2 rows may have NULL pointers; v10 preserves and exposes that legacy absence as null. It may be sensitive and must not be logged or exposed without authorization.
 - `payload_hash`: nullable SHA-256 digest encoded as 64 hexadecimal characters. Null means original source bytes were not available for hashing. The raw payload is never stored.
 - `reason`: stable uppercase code, 1–100 characters from `A-Z`, `0-9`, and underscore, beginning with a letter. Exception text is not stored.
 - `observed_at`: observation instant, stored in PostgreSQL as UTC.
@@ -24,7 +24,7 @@ This is an application seam, not producer wiring. The current API still uses a s
 
 ## Schema v10 migration
 
-Current `main` already created `pitchmind.quarantine` in schema v2 with columns `quarantine_id`, `source_pointer`, `payload_sha256`, `reason_code`, and non-null `retry_status`. Schema v10 renames those columns to the evidence contract, makes the hash and retry status nullable, and preserves all existing row values. It adds new-record validation and append-only UPDATE/DELETE/TRUNCATE triggers. The migration is transactional and leaves prior schema versions unchanged.
+Current `main` already created `pitchmind.quarantine` in schema v2 with columns `quarantine_id`, `source_pointer`, `payload_sha256`, `reason_code`, and non-null `retry_status`. Schema v10 renames those columns to the evidence contract, makes the hash and retry status nullable, and preserves all existing row values, including any historical NULL source pointers. A NOT VALID constraint keeps those historical rows readable while requiring every new or updated row to have a 1–2048 character source pointer; the application append API enforces the same requirement. It adds new-record validation and append-only UPDATE/DELETE/TRUNCATE triggers. The migration is transactional and leaves prior schema versions unchanged.
 
 Before adding the nonzero record-ID constraint, PostgreSQL validates existing rows. A legacy zero UUID causes v10 to fail and roll back without rewriting or deleting the row; remove or explicitly remediate such a row through an owner-approved data procedure before retrying. The migration does not guess a hash, source pointer, reason, or retry state for old records.
 
