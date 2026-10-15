@@ -425,7 +425,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';
   const card = (matchId: string, phase: string, homeScore: number, awayScore: number) => ({
-    matchId, canonicalRevision: 3, asOfSeconds: 2700, throughSequence: 12, phase, homeScore, awayScore,
+    matchId, canonicalRevision: 100, projectionRevision: 5, asOfSeconds: 2700, throughSequence: 12, phase, homeScore, awayScore,
     provenance: 'synthetic-approved', algorithmVersion: 'projection-v1', sourceSha256: 'c'.repeat(64)
   });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -440,7 +440,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).toContain('Second half');
     const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(link => link.href.includes(firstId));
-    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=2700&revision=3`);
+    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=2700&revision=5`);
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(phaseFilter, 'secondhalf');
@@ -450,6 +450,39 @@ it('renders persisted home cards from canonical fields and keeps the match id in
     expect(container.textContent).not.toContain(secondId);
     expect(window.location.search).toBe('?phase=secondhalf');
     expect(container.textContent).not.toContain('Arsenal');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+
+it('preserves projection revision from an insight into selected-match navigation', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const insight = {
+    insightId: 'insight-press', matchId, canonicalRevision: 100, projectionRevision: 5,
+    selectedTimeSeconds: 3309, throughSequence: 19, sourceVersion: 'test-v1', provenance: 'synthetic-approved',
+    sourceSha256: 'c'.repeat(64), detectorVersion: 'test-v1', truthClass: 'interpretation',
+    summary: 'Evidence-backed pattern.', evidence: [{kind: 'event', id: 'event-19', relation: 'supports'}]
+  };
+  const requested: string[] = [];
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/insights?matchId=${matchId}&atSeconds=3309&revision=5`);
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    requested.push(url.toString());
+    return {ok: true, json: async () => ({matchId, canonicalRevision: 100, projectionRevision: 5,
+      selectedTimeSeconds: 3309, throughSequence: 19, items: [insight], nextCursor: null, hasMore: false})};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(requested).toHaveLength(1);
+    expect(new URL(requested[0]).searchParams.get('revision')).toBe('5');
+    const link = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(anchor => anchor.textContent === 'Open selected match');
+    expect(link?.getAttribute('href')).toBe(`/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=5`);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
