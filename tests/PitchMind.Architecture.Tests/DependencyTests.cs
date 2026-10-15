@@ -24,7 +24,8 @@ public sealed class DependencyTests
             ["PitchMind.Infrastructure"] = ["PitchMind.Application"],
             ["PitchMind.Api"] = ["PitchMind.Application", "PitchMind.Infrastructure", "PitchMind.Contracts"],
             ["PitchMind.EventWorker"] = ["PitchMind.Application", "PitchMind.Contracts", "PitchMind.Infrastructure"],
-            ["PitchMind.AgentWorker"] = ["PitchMind.Application"]
+            ["PitchMind.AgentWorker"] = ["PitchMind.Application"],
+            ["PitchMind.DbMigrator"] = ["PitchMind.Infrastructure"]
         };
 
     [Xunit.Fact]

@@ -26,6 +26,47 @@ public sealed class PostgresIntegrationFactAttribute : FactAttribute
 
 public sealed class PostgresLedgerTests
 {
+    [PostgresIntegrationFact]
+    public async Task LocalApiRoleCanReadCanonicalDataAndDispatchOutboxWithoutSchemaOrLedgerWrites()
+    {
+        await using var migrationSource = Source();
+        await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
+        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
+
+        var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
+        { Username = "pitchmind_api", Password = password };
+        try
+        {
+            await using var apiSource = NpgsqlDataSource.Create(builder.ConnectionString);
+            await using (var read = apiSource.CreateCommand("SELECT COUNT(*) FROM pitchmind.matches"))
+                Assert.True((long)(await read.ExecuteScalarAsync())! >= 0);
+            await using (var readiness = apiSource.CreateCommand("SELECT COALESCE(MAX(version), 0) FROM pitchmind.schema_versions"))
+                Assert.Equal(PostgresSchemaMigrator.CurrentSchemaVersion, (int)(await readiness.ExecuteScalarAsync())!);
+
+            await using (var dispatch = apiSource.CreateCommand("UPDATE pitchmind.outbox SET attempt_count = attempt_count WHERE false"))
+                Assert.Equal(0, await dispatch.ExecuteNonQueryAsync());
+
+            foreach (var sql in new[]
+            {
+                "UPDATE pitchmind.match_events SET sequence = sequence WHERE false",
+                "UPDATE pitchmind.schema_versions SET version = version WHERE false",
+                "DELETE FROM pitchmind.outbox WHERE false",
+                "CREATE TABLE pitchmind.local_api_must_not_ddl (id integer)"
+            })
+            {
+                await using var forbidden = apiSource.CreateCommand(sql);
+                var denied = await Assert.ThrowsAsync<PostgresException>(() => forbidden.ExecuteNonQueryAsync());
+                Assert.Equal("42501", denied.SqlState);
+            }
+        }
+        finally
+        {
+            await using var cleanup = migrationSource.CreateCommand("DROP OWNED BY pitchmind_api; DROP ROLE IF EXISTS pitchmind_api");
+            await cleanup.ExecuteNonQueryAsync();
+        }
+    }
+
     // Called only by scripts/test-ep07-s05-live-api-e2e.py against its disposable
     // database. These values are synthetic test fixtures, not football facts.
     [PostgresIntegrationFact]

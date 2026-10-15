@@ -24,12 +24,19 @@ if [[ ! -f docker/.env ]]; then
   command -v openssl >/dev/null || { echo "OpenSSL required for local password generation" >&2; exit 1; }
   umask 077
   postgres_password="$(openssl rand -hex 24)"
+  api_password="$(openssl rand -hex 24)"
   redis_password="$(openssl rand -hex 24)"
-  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$redis_password" > docker/.env
+  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD=%s\nPITCHMIND_API_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$api_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
 require_regular_credentials_file
 chmod 600 docker/.env
+
+if ! grep -q '^PITCHMIND_API_PASSWORD=.' docker/.env; then
+  command -v openssl >/dev/null || { echo "OpenSSL required to create a local API password" >&2; exit 1; }
+  api_password="$(openssl rand -hex 24)"
+  printf '\nPITCHMIND_API_PASSWORD=%s\n' "$api_password" >> docker/.env
+fi
 
 read_local_password() {
   local key="$1" line count=0 value="" unique_chars="" char index
@@ -91,7 +98,7 @@ read_local_postgres_image() {
 
 ensure_existing_postgres_volume_compatible() {
   local configured_image="$1" compose_config postgres_volume existing_volumes volume_name volume_exists=0 configured_major data_version data_major
-  if ! compose_config="$(env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
+  if ! compose_config="$(env -u POSTGRES_PASSWORD -u PITCHMIND_API_PASSWORD -u REDIS_PASSWORD \
     docker compose --env-file docker/.env -f docker/compose.yml config --format json)"; then
     echo "Cannot resolve the local Compose configuration; refusing startup to protect local data." >&2
     return 1
@@ -142,9 +149,12 @@ print(name)
 }
 
 if ! postgres_password="$(read_local_password POSTGRES_PASSWORD)" \
+  || ! api_password="$(read_local_password PITCHMIND_API_PASSWORD)" \
   || ! redis_password="$(read_local_password REDIS_PASSWORD)" \
-  || [[ "$postgres_password" == "$redis_password" ]]; then
-  echo "docker/.env must contain distinct 48-character lowercase hexadecimal POSTGRES_PASSWORD and REDIS_PASSWORD values with at least 12 unique hex digits each. Replace the local values; secrets were not displayed." >&2
+  || [[ "$postgres_password" == "$api_password" ]] \
+  || [[ "$postgres_password" == "$redis_password" ]] \
+  || [[ "$api_password" == "$redis_password" ]]; then
+  echo "docker/.env must contain distinct 48-character lowercase hexadecimal POSTGRES_PASSWORD, PITCHMIND_API_PASSWORD and REDIS_PASSWORD values with at least 12 unique hex digits each. Replace the local values; secrets were not displayed." >&2
   exit 1
 fi
 
@@ -153,7 +163,7 @@ if ! postgres_image="$(read_local_postgres_image)"; then
 fi
 ensure_existing_postgres_volume_compatible "$postgres_image"
 
-if ! env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
+if ! env -u POSTGRES_PASSWORD -u PITCHMIND_API_PASSWORD -u REDIS_PASSWORD \
   docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
   echo "Local services did not become healthy. Inspect Docker logs, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
   exit 1
