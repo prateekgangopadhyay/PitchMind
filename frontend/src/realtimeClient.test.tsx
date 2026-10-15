@@ -689,6 +689,7 @@ it('renders an accessible fail-closed host state and keeps the historical update
 
 it('announces stale data after the manual canonical refresh fails', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const retryLive = vi.spyOn(MatchRealtimeClient.prototype, 'retry').mockResolvedValue();
   let refreshRequests = 0;
   const fetcher = vi.fn<typeof fetch>(async input => {
     if (String(input).endsWith('/realtime/negotiate')) return new Response(null, { status: 503 });
@@ -708,6 +709,10 @@ it('announces stale data after the manual canonical refresh fails', async () => 
       children: createElement(RealtimeMatchUpdates, { state, onStateChange: vi.fn() }),
     })));
     await vi.waitFor(() => expect(container.textContent).toContain('Match data can be refreshed manually'));
+    const retryButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry live connection');
+    expect(retryButton).toBeDefined();
+    await act(async () => retryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(retryLive).toHaveBeenCalledTimes(1);
     const requestsBeforeClick = refreshRequests;
     const refreshButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Refresh match data');
     expect(refreshButton).toBeDefined();
@@ -720,6 +725,7 @@ it('announces stale data after the manual canonical refresh fails', async () => 
     expect(container.textContent).toContain('Your selected time remains unchanged.');
   } finally {
     await act(async () => root.unmount());
+    retryLive.mockRestore();
     vi.unstubAllGlobals();
   }
 });

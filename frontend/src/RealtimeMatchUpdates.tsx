@@ -105,7 +105,7 @@ export function RealtimeMatchUpdates({ state, onStateChange }: {
 
   return <section className="realtime-status" aria-label="Live match update status">
     <p role="status" aria-live="polite" aria-atomic="true">{statusText(status)}</p>
-    {(status === 'unavailable' || status === 'disconnected' || status === 'refresh-failed') && hasAuthProvider &&
+    {(status === 'unavailable' || status === 'fallback' || status === 'disconnected' || status === 'refresh-failed') && hasAuthProvider &&
       <button type="button" onClick={retry}>Retry live connection</button>}
     {(status === 'fallback' || status === 'disconnected' || status === 'refresh-failed') && hasAuthProvider &&
       <button type="button" onClick={() => void refreshFallback()} disabled={refreshingFallback}>
