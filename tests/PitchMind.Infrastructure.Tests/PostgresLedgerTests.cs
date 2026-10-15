@@ -57,6 +57,16 @@ public sealed class PostgresLedgerTests
             DateTimeOffset.UnixEpoch.AddSeconds(10));
         await writer.AppendAsync(aggregate, new SimulationEvent(observedEvent, "home-test", homePlayerId, "Pass", "complete"),
             2, "local-e2e-test-projector-v1", sourceHash, CancellationToken.None);
+        await using (var rights = source.CreateCommand("""
+            UPDATE pitchmind.match_events
+            SET payload = payload || '{"source":{"rightsReviewStatus":"approved_for_use"}}'::jsonb
+            WHERE match_id = $1 AND event_id = $2
+            """))
+        {
+            rights.Parameters.AddWithValue(matchId.Value);
+            rights.Parameters.AddWithValue(eventId);
+            Assert.Equal(1, await rights.ExecuteNonQueryAsync());
+        }
 
         await using (var insight = source.CreateCommand("""
             INSERT INTO pitchmind.insights(insight_id, match_id, canonical_revision, revision, as_of_sequence,
@@ -1372,10 +1382,24 @@ public sealed class PostgresLedgerTests
         await RegisterSourceAsync(source, update);
         var updateStore = new PostgresCanonicalUpdateStore(source);
         await updateStore.CommitAsync(update, CancellationToken.None);
+        async Task SetEventRightsAsync(Guid eventId, string status)
+        {
+            await using var rights = source.CreateCommand("""
+                UPDATE pitchmind.match_events
+                SET payload = payload || jsonb_build_object('source', jsonb_build_object('rightsReviewStatus', $3))
+                WHERE match_id = $1 AND event_id = $2
+                """);
+            rights.Parameters.AddWithValue(matchId.Value);
+            rights.Parameters.AddWithValue(eventId);
+            rights.Parameters.AddWithValue(status);
+            Assert.Equal(1, await rights.ExecuteNonQueryAsync());
+        }
+        await SetEventRightsAsync(update.Event.EventId, "approved_for_use");
         var futureEvent = MatchEvent.Create(Guid.NewGuid(), matchId, 1, MatchEventType.Pass, 10, 1, DateTimeOffset.UtcNow);
         aggregate.Apply(new SimulationEvent(futureEvent, "home", "home-2", "pass", "complete"));
         var futureUpdate = CanonicalUpdate.FromAppliedAggregate(aggregate, futureEvent, 2, "aggregate-v1", update.SourceSha256);
         await updateStore.CommitAsync(futureUpdate, CancellationToken.None);
+        await SetEventRightsAsync(futureEvent.EventId, "pending");
 
         async Task AddInsight(string insightId, string truthClass, string evidenceKind, string evidenceId,
             long insightCanonicalRevision, int projectionRevision, long insightSequence, long? sourceCanonicalRevision)
@@ -1419,20 +1443,30 @@ public sealed class PostgresLedgerTests
         var futureEventInsightId = $"future-event-{Guid.NewGuid():N}";
         var metricInsightId = $"metric-{Guid.NewGuid():N}";
         var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
+        var pendingEventInsightId = $"pending-event-{Guid.NewGuid():N}";
+        var pendingFrameInsightId = $"pending-frame-{Guid.NewGuid():N}";
         var earlierEventInsightId = $"earlier-event-{Guid.NewGuid():N}";
         var earlierFrameInsightId = $"earlier-frame-{Guid.NewGuid():N}";
         var validFrameId = $"frame-{Guid.NewGuid():N}";
         var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
-        foreach (var (frameId, sequence) in new[] { (validFrameId, 0L), (futureFrameId, 1L) })
+        var pendingFrameId = $"pending-frame-{Guid.NewGuid():N}";
+        foreach (var (frameId, sequence, rightsStatus) in new[]
+                 {
+                     (validFrameId, 0L, "approved_for_use"),
+                     (futureFrameId, 1L, "approved_for_use"),
+                     (pendingFrameId, 0L, "pending")
+                 })
         {
             await using var frame = source.CreateCommand("""
                 INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload, canonical_revision)
-                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4, '{}'::jsonb, 1)
+                VALUES ($1, $2, $3, 1, 0, 'pitch-v1', '{}'::jsonb, $4,
+                    jsonb_build_object('source', jsonb_build_object('rightsReviewStatus', $5)), 1)
                 """);
             frame.Parameters.AddWithValue(matchId.Value);
             frame.Parameters.AddWithValue(frameId);
             frame.Parameters.AddWithValue(sequence);
             frame.Parameters.AddWithValue(update.SourceSha256);
+            frame.Parameters.AddWithValue(rightsStatus);
             await frame.ExecuteNonQueryAsync();
         }
         await AddInsight(validInsightId, "derived", "event", update.Event.EventId.ToString(), 1, 1, 0, 1);
@@ -1440,6 +1474,8 @@ public sealed class PostgresLedgerTests
         await AddInsight(futureEventInsightId, "derived", "event", futureEvent.EventId.ToString(), 1, 1, 0, 2);
         await AddInsight(metricInsightId, "derived", "condition", "unpersisted-metric", 1, 1, 0, null);
         await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId, 1, 1, 0, 1);
+        await AddInsight(pendingFrameInsightId, "derived", "frame", pendingFrameId, 1, 1, 0, 1);
+        await AddInsight(pendingEventInsightId, "derived", "event", futureEvent.EventId.ToString(), 2, 2, 1, 2);
         await AddInsight(earlierEventInsightId, "derived", "event", update.Event.EventId.ToString(), 2, 2, 0, 1);
         await AddInsight(earlierFrameInsightId, "derived", "frame", validFrameId, 2, 2, 0, 1);
 
@@ -1463,6 +1499,8 @@ public sealed class PostgresLedgerTests
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, futureFrameInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
             projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, pendingFrameInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
+            projection.AsOfSequence, CancellationToken.None));
         var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
             projection.CanonicalRevision, projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None);
         var framePayload = Assert.Single(validFrameEvidence!);
@@ -1470,13 +1508,15 @@ public sealed class PostgresLedgerTests
         Assert.Equal(0, framePayload.Sequence);
         Assert.Equal(0, framePayload.ClockSeconds);
         Assert.Equal(1, framePayload.Period);
-        Assert.Equal("{}", framePayload.PayloadJson);
+        Assert.Equal("{\"source\": {\"rightsReviewStatus\": \"approved_for_use\"}}", framePayload.PayloadJson);
         var eventEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validInsightId,
             projection.CanonicalRevision, projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(eventEvidence!).Id);
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, futureFrameInsightId, projection.CanonicalRevision,
             projection.ProjectionRevision, 0,
             projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, pendingFrameInsightId, projection.CanonicalRevision,
+            projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None));
 
         // Evidence visible to the later projection still cannot support an insight persisted earlier.
         var laterProjection = await projectionReader.GetForApiAtAsync(matchId, 10, null, null, CancellationToken.None);
@@ -1496,6 +1536,12 @@ public sealed class PostgresLedgerTests
             null, null, 10, CancellationToken.None);
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureEventInsightId);
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureFrameInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == pendingFrameInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == pendingEventInsightId);
+        Assert.Null(await insightReader.GetAtAsync(matchId, pendingEventInsightId, laterProjection.CanonicalRevision,
+            laterProjection.ProjectionRevision, 10, laterProjection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, pendingEventInsightId, laterProjection.CanonicalRevision,
+            laterProjection.ProjectionRevision, 10, laterProjection.AsOfSequence, CancellationToken.None));
         Assert.Contains(laterPage.Insights, insight => insight.InsightId == earlierEventInsightId);
         Assert.Contains(laterPage.Insights, insight => insight.InsightId == earlierFrameInsightId);
         var earlierEvent = Assert.Single((await insightReader.ReadEvidenceAtAsync(matchId, earlierEventInsightId,
