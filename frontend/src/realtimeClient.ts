@@ -73,6 +73,7 @@ export class MatchRealtimeClient {
   private readonly fetcher: typeof fetch;
   private readonly connectionFactory: NonNullable<RealtimeClientOptions['connectionFactory']>;
   private connection: RealtimeConnection | null = null;
+  private transportConnected = false;
   private started = false;
   private stopped = false;
   private lifecycleGeneration = 0;
@@ -100,16 +101,20 @@ export class MatchRealtimeClient {
       if (!this.isActive(generation)) return;
       const connection = this.connectionFactory(hubUrl, () => this.requireAccessToken());
       this.connection = connection;
+      this.transportConnected = false;
       connection.on('MatchUpdated', (...args) => this.handleNotification(args[0], generation, connection));
       connection.onreconnecting(() => {
         if (!this.isActive(generation)) return;
+        this.transportConnected = false;
         this.markDisconnected();
         this.setStatus('reconnecting');
       });
       connection.onreconnected(() => {
+        this.transportConnected = true;
         void this.resubscribeAndBackfill(generation, connection);
       });
       connection.onclose(() => {
+        this.transportConnected = false;
         if (this.isActive(generation)) {
           this.markDisconnected();
           this.setStatus('disconnected');
@@ -121,6 +126,7 @@ export class MatchRealtimeClient {
         await connection.stop().catch(() => undefined);
         return;
       }
+      this.transportConnected = true;
       await this.subscribeAndBackfill(negotiation.cursor, generation, connection);
     } catch {
       if (this.isActive(generation)) {
@@ -139,6 +145,7 @@ export class MatchRealtimeClient {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.transportConnected = false;
     this.lifecycleGeneration++;
     this.lifecycleAbortController.abort();
     await this.disposeConnection();
@@ -209,8 +216,8 @@ export class MatchRealtimeClient {
       if (!this.isActive(generation) || this.connection !== connection) return;
       this.applyCursorWakeup(negotiation.cursor);
       await this.refreshFromCanonicalStore(generation);
-      if (this.isActive(generation))
-        this.setStatus(this.options.getState().needsBackfill ? 'disconnected' : 'connected');
+      if (this.isActive(generation) && this.connection === connection)
+        this.setStatus(this.transportConnected && !this.options.getState().needsBackfill ? 'connected' : 'disconnected');
     } catch {
       if (this.isActive(generation)) this.setStatus('disconnected');
     }
@@ -222,7 +229,7 @@ export class MatchRealtimeClient {
     this.applyCursorWakeup(value);
     // The payload is never treated as a match fact; it only wakes the durable reader.
     void this.refreshFromCanonicalStore(generation).then(() => {
-      if (!this.isActive(generation) || this.connection !== connection) return;
+      if (!this.isActive(generation) || this.connection !== connection || !this.transportConnected) return;
       const state = this.options.getState();
       if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
     }).catch(() => {
