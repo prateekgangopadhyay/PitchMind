@@ -176,17 +176,24 @@ internal static class CanonicalMatchEndpoints
                 maximumCanonicalRevision, maximumProjectionRevision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var page = await insights.ReadAtAsync(new MatchId(canonicalMatchId), projection.CanonicalRevision,
-                projection.ProjectionRevision, selectedTime, projection.AsOfSequence,
-                decodedCursor?.AfterSequence, decodedCursor?.AfterInsightId, pageSize, cancellationToken);
-            var nextCursor = page.HasMore && page.NextAfterSequence is { } afterSequence && page.NextAfterInsightId is { } afterInsightId
-                ? CanonicalCursorCodec.EncodeInsight(canonicalMatchId, selectedTime, projection.CanonicalRevision,
-                    projection.ProjectionRevision, afterSequence, afterInsightId)
-                : null;
-            return Results.Ok(new CanonicalInsightPageResponse(canonicalMatchId.ToString("D"), projection.CanonicalRevision,
-                projection.ProjectionRevision,
-                selectedTime, projection.AsOfSequence, Array.AsReadOnly(page.Insights.Select(i => ToInsight(i, selectedTime)).ToArray()),
-                nextCursor, page.HasMore));
+            try
+            {
+                var page = await insights.ReadAtAsync(new MatchId(canonicalMatchId), projection.CanonicalRevision,
+                    projection.ProjectionRevision, selectedTime, projection.AsOfSequence,
+                    decodedCursor?.AfterSequence, decodedCursor?.AfterInsightId, pageSize, cancellationToken);
+                var nextCursor = page.HasMore && page.NextAfterSequence is { } afterSequence && page.NextAfterInsightId is { } afterInsightId
+                    ? CanonicalCursorCodec.EncodeInsight(canonicalMatchId, selectedTime, projection.CanonicalRevision,
+                        projection.ProjectionRevision, afterSequence, afterInsightId)
+                    : null;
+                return Results.Ok(new CanonicalInsightPageResponse(canonicalMatchId.ToString("D"), projection.CanonicalRevision,
+                    projection.ProjectionRevision,
+                    selectedTime, projection.AsOfSequence, Array.AsReadOnly(page.Insights.Select(i => ToInsight(i, selectedTime)).ToArray()),
+                    nextCursor, page.HasMore));
+            }
+            catch (InvalidDataException)
+            {
+                return CanonicalInsightDataInvalid(context);
+            }
         });
 
         match.MapGet("/insights/{insightId}", async (
@@ -202,12 +209,19 @@ internal static class CanonicalMatchEndpoints
                 null, revision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
-                projection.ProjectionRevision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
-            return insight is null
-                ? Problem(context, StatusCodes.Status404NotFound, "INSIGHT_UNAVAILABLE", "No persisted insight is available at the selected time.")
-                : Results.Ok(ToInsight(insight, selectedTime));
+            try
+            {
+                var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
+                    projection.ProjectionRevision, selectedTime,
+                    projection.AsOfSequence, cancellationToken);
+                return insight is null
+                    ? Problem(context, StatusCodes.Status404NotFound, "INSIGHT_UNAVAILABLE", "No persisted insight is available at the selected time.")
+                    : Results.Ok(ToInsight(insight, selectedTime));
+            }
+            catch (InvalidDataException)
+            {
+                return CanonicalInsightDataInvalid(context);
+            }
         });
 
         match.MapGet("/evidence/{insightId}", async (
@@ -223,20 +237,27 @@ internal static class CanonicalMatchEndpoints
                 null, revision, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
-            var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
-                projection.ProjectionRevision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
-            if (insight is null)
-                return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No persisted evidence is available at the selected time.");
-            var evidence = await insights.ReadEvidenceAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
-                projection.ProjectionRevision, selectedTime,
-                projection.AsOfSequence, cancellationToken);
-            if (evidence is null)
-                return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No complete persisted evidence is available at the selected time.");
-            var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,
-                item.SourceCanonicalRevision, item.Sequence, item.ClockSeconds, item.Period,
-                ParsePayload(item.PayloadJson))).ToArray();
-            return Results.Ok(new CanonicalEvidenceResponse(ToInsight(insight, selectedTime), Array.AsReadOnly(items)));
+            try
+            {
+                var insight = await insights.GetAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
+                    projection.ProjectionRevision, selectedTime,
+                    projection.AsOfSequence, cancellationToken);
+                if (insight is null)
+                    return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No persisted evidence is available at the selected time.");
+                var evidence = await insights.ReadEvidenceAtAsync(new MatchId(canonicalMatchId), insightId, projection.CanonicalRevision,
+                    projection.ProjectionRevision, selectedTime,
+                    projection.AsOfSequence, cancellationToken);
+                if (evidence is null)
+                    return Problem(context, StatusCodes.Status404NotFound, "EVIDENCE_UNAVAILABLE", "No complete persisted evidence is available at the selected time.");
+                var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,
+                    item.SourceCanonicalRevision, item.Sequence, item.ClockSeconds, item.Period,
+                    ParsePayload(item.PayloadJson))).ToArray();
+                return Results.Ok(new CanonicalEvidenceResponse(ToInsight(insight, selectedTime), Array.AsReadOnly(items)));
+            }
+            catch (InvalidDataException)
+            {
+                return CanonicalInsightDataInvalid(context);
+            }
         }).RequireAuthorization("MatchReplay");
 
         match.MapGet("/replay", async (
@@ -298,6 +319,7 @@ internal static class CanonicalMatchEndpoints
         insight.InsightId, insight.MatchId.ToString(), insight.CanonicalRevision, insight.Revision, selectedTime, insight.AsOfSequence,
         insight.SourceVersion, insight.Provenance, insight.SourceSha256,
         insight.DetectorVersion, insight.TruthClass, insight.Summary,
+        ParsePayload(insight.ConditionsJson), null,
         Array.AsReadOnly(insight.Evidence.Select(e => new CanonicalEvidenceReferenceResponse(e.Kind, e.Id, e.Relation)).ToArray()));
 
     private static CanonicalTrackingFrameResponse ToTrackingFrameResponse(PersistedTrackingFrame frame,
@@ -341,6 +363,10 @@ internal static class CanonicalMatchEndpoints
     private static IResult Problem(HttpContext context, int status, string code, string title) =>
         Results.Json(new ApiProblemResponse("about:blank", title, status, code, context.TraceIdentifier,
                 Instance: context.Request.Path), statusCode: status, contentType: "application/problem+json");
+
+    private static IResult CanonicalInsightDataInvalid(HttpContext context) =>
+        Problem(context, StatusCodes.Status503ServiceUnavailable, "CANONICAL_DATA_INVALID",
+            "Persisted canonical insight data is invalid.");
 
     private static System.Text.Json.JsonElement ParsePayload(string json)
     {

@@ -19,7 +19,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             afterSequence, afterInsightId, limit);
         await using var command = dataSource.CreateCommand("""
             SELECT i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
-                   i.detector_version, i.truth_class, i.summary, m.source_version, m.provenance, p.source_sha256,
+                   i.detector_version, i.truth_class, i.summary, i.conditions_json::text, m.source_version, m.provenance, p.source_sha256,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
@@ -58,7 +58,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $7)))
               )
             GROUP BY i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
-                     i.detector_version, i.truth_class, i.summary, m.source_version, m.provenance, p.source_sha256
+                     i.detector_version, i.truth_class, i.summary, i.conditions_json, m.source_version, m.provenance, p.source_sha256
             ORDER BY i.as_of_sequence, i.insight_id
             LIMIT $9
             """);
@@ -93,7 +93,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
         if (maximumEvidenceItems is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(maximumEvidenceItems));
         await using var command = dataSource.CreateCommand("""
             SELECT i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
-                   i.detector_version, i.truth_class, i.summary, m.source_version, m.provenance, p.source_sha256,
+                   i.detector_version, i.truth_class, i.summary, i.conditions_json::text, m.source_version, m.provenance, p.source_sha256,
                    COALESCE(jsonb_agg(jsonb_build_object(
                        'kind', e.evidence_kind, 'id', e.evidence_id, 'relation', e.relation)
                        ORDER BY e.evidence_kind, e.evidence_id)
@@ -132,7 +132,7 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND tf.sequence <= $5 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $6)))
               )
             GROUP BY i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
-                     i.detector_version, i.truth_class, i.summary, m.source_version, m.provenance, p.source_sha256
+                     i.detector_version, i.truth_class, i.summary, i.conditions_json, m.source_version, m.provenance, p.source_sha256
             LIMIT 1
             """);
         command.Parameters.AddWithValue(matchId.Value);
@@ -225,12 +225,18 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
 
     private static PersistedMatchInsight ReadInsight(NpgsqlDataReader reader)
     {
-        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(11),
+        var conditionsJson = reader.GetString(8);
+        using (var conditions = JsonDocument.Parse(conditionsJson))
+        {
+            if (conditions.RootElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Persisted insight conditions must be a JSON object.");
+        }
+        var evidence = JsonSerializer.Deserialize<PersistedEvidenceReference[]>(reader.GetString(12),
             new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidDataException("Persisted insight evidence references are empty.");
         return new PersistedMatchInsight(reader.GetString(1), new MatchId(reader.GetGuid(2)), reader.GetInt64(0),
             reader.GetInt32(3), reader.GetInt64(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
-            reader.GetString(8), reader.GetString(9), reader.GetString(10).Trim(), Array.AsReadOnly(evidence));
+            conditionsJson, reader.GetString(9), reader.GetString(10), reader.GetString(11).Trim(), Array.AsReadOnly(evidence));
     }
 
     private static void Validate(MatchId matchId, long maximumCanonicalRevision, int maximumProjectionRevision,

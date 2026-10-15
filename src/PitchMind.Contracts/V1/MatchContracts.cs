@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PitchMind.Contracts.V1;
@@ -263,6 +264,8 @@ public sealed record CanonicalInsightResponse(
     string DetectorVersion,
     string TruthClass,
     string Summary,
+    JsonElement Conditions,
+    IReadOnlyList<string>? Limitations,
     IReadOnlyList<CanonicalEvidenceReferenceResponse> Evidence);
 
 public sealed record CanonicalInsightPageResponse(
