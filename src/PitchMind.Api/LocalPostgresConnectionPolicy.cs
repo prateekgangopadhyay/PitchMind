@@ -30,7 +30,7 @@ public static class LocalPostgresConnectionPolicy
 
     public static bool IsLocalRealtimeProfile(string? environmentName, string? runtimeProfile, string? provider) =>
         string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) &&
-        runtimeProfile == "local" &&
+        string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) &&
         string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
 
     public static bool ShouldRegisterOutboxWorker(

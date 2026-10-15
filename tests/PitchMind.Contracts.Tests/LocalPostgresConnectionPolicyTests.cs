@@ -41,4 +41,19 @@ public sealed class LocalPostgresConnectionPolicyTests
         Assert.False(LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
             "Development", "local", "local", "Host=127.0.0.1,postgres.internal;Port=5432;Database=pitchmind"));
     }
+
+    [Theory]
+    [InlineData("Development", "LOCAL", "LOCAL")]
+    [InlineData("development", "Local", "Local")]
+    public void Local_realtime_profile_matching_is_case_insensitive(
+        string environmentName,
+        string runtimeProfile,
+        string provider)
+    {
+        Assert.True(LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
+            environmentName, runtimeProfile, provider));
+        Assert.True(LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
+            environmentName, runtimeProfile, provider,
+            "Host=127.0.0.1;Port=5432;Database=pitchmind"));
+    }
 }
