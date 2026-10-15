@@ -5,26 +5,26 @@ export interface Frame { id: string; clockSeconds: number; ballX: number; ballY:
 export interface MatchEvent { event: {eventId: string; matchId: string; sequence: number; type: string; clockSeconds: number; period: number; occurredAt: string}; teamId: string; playerId: string; action: string; outcome: string; relatedPlayerId: string | null }
 export interface Fixture { matchId: string; version: string; seed: number; provenance: string; durationSeconds: number; halfTimeSeconds: number; pitchLengthMetres: number; pitchWidthMetres: number; home: Team; away: Team; events: MatchEvent[]; frames: Frame[] }
 export interface MatchPlayerState { playerId: string; teamId: string; active: boolean; dismissed: boolean; yellowCards: number }
-export interface Snapshot { matchId: string; clockSeconds: number; period: number; status: 'replay' | 'full-time'; phase: 'notstarted' | 'firsthalf' | 'halftime' | 'secondhalf' | 'fulltime'; homeScore: number; awayScore: number; provenance: string; frame: Frame; lastSequence: number; possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number; players: MatchPlayerState[] }
+export interface Snapshot { matchId: string; clockSeconds: number; period: number; status: 'replay' | 'full-time'; phase: 'notstarted' | 'firsthalf' | 'halftime' | 'secondhalf' | 'fulltime'; homeScore: number; awayScore: number; provenance: string; frame: Frame; lastSequence: number; possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number; players: MatchPlayerState[]; competitionId: string | null; competitionRulesVersion: string | null; maximumSubstituteReentriesPerPlayer: number | null }
 export interface TacticalContext { scoreline: string; teamRole: 'home' | 'away'; numericalAdvantage: number; opponentPhase: string; matchPhase: string }
 export interface EvidenceNode { id: string; kind: 'claim' | 'event' | 'frame' | 'metric'; truthClass: 'fact' | 'derivation' | 'pattern' | 'interpretation' | 'hypothesis'; description: string; eventId: string | null; frameId: string | null; clockSeconds: number | null; sequence: number | null; sourceVersion: string; sourceSha256: string; canonicalRevision: number | null; numericValue: number | null; unit: string | null }
 export interface EvidenceEdge { fromNodeId: string; toNodeId: string; relation: 'precedes' | 'derived_from' }
 export interface EvidenceCondition { id: string; passed: boolean; observed: string; threshold: string | null; sourceNodeIds: string[]; exclusionReason: string | null }
 export interface EvidenceGraph { matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; detectorVersion: string; policyStatus: string; publishable: boolean; claimNodeId: string; nodes: EvidenceNode[]; edges: EvidenceEdge[]; uncertainty: string; conditions: EvidenceCondition[] }
 export interface KeyMoment {
-  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
+  id: string; matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null;
   selectedTimeSeconds: number; throughSequence: number; clockSeconds: number; sequence: number;
   kind: string; truthClass: string; title: string; summary: string; relevance: number;
   policyVersion: string; policyStatus: string; publishable: boolean;
   eventIds: string[]; frameIds: string[]; evidenceClaimNodeIds: string[];
 }
 export interface MechanismReplay {
-  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
+  id: string; matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null;
   selectedTimeSeconds: number; throughSequence: number; startSeconds: number; endSeconds: number;
   detectorVersion: string; policyStatus: string; publishable: boolean; eventIds: string[]; mechanismEventIds: string[]; frameIds: string[];
   participantIds: string[]; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; evidenceGraph: EvidenceGraph; limitations: string[];
 }
-export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
+export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; sourceSha256: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
 export interface Evidence { insight: Insight; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; conditions: string[]; limitations: string[] }
 export interface Explanation { insightId: string; clockSeconds: number; audience: string; source: string; text: string; eventIds: string[]; limitations: string[] }
 export interface ApiProblem { type: string; title: string; status: number; code: string; correlationId: string; detail?: string; instance?: string }
