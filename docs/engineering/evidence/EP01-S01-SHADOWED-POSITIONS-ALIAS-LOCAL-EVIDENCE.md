@@ -4,6 +4,7 @@
 
 **Base:** PR #136 updated feature head `154260b9a4e15ef45df8870eef1fd0e437d86fe9`.
 **Working branch:** `codex/ep01-s01-shadowed-positions-alias`.
+**Code/evidence commit:** `0dcbb85b1476cfcc2c6b275446e24e003a54c305`.
 
 ## Regression and behavior
 
