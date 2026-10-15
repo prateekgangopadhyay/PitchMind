@@ -79,8 +79,9 @@ paths:
       description: >-
         Reads only the durable PostgreSQL event ledger and projection. The response
         binds snapshot and events to one selected time and projection revision. If
-        the client's projection revision changed or its sequence is ahead of the durable head,
-        replayRequired is true and events restart from sequence -1. A cursor message
+        the client's projection revision changed, its sequence is ahead of the durable head,
+        or it resumes with a sequence but no revision, replayRequired is true and events restart
+        from sequence -1. A cursor message
         is only a wake-up; clients use this endpoint to recover canonical facts.
       parameters:
         - $ref: '#/components/parameters/MatchId'
@@ -105,6 +106,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CanonicalTimelineBackfill' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/insights:

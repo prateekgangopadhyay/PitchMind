@@ -88,7 +88,8 @@ internal static class CanonicalMatchEndpoints
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
 
             var revisionChanged = revision is not null && revision != projection.ProjectionRevision;
-            var replayRequired = revisionChanged || afterSequence > projection.AsOfSequence;
+            var revisionMissingForResume = revision is null && afterSequence >= 0;
+            var replayRequired = revisionChanged || revisionMissingForResume || afterSequence > projection.AsOfSequence;
             var effectiveAfterSequence = replayRequired ? -1 : afterSequence;
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, effectiveAfterSequence, pageSize, cancellationToken);
             var events = ToEventPage(projection, selectedTime, page, canonicalMatchId);

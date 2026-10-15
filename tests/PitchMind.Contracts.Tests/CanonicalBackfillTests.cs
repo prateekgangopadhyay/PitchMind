@@ -1,5 +1,7 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -81,6 +83,42 @@ public sealed class CanonicalBackfillTests
         Assert.True(root.GetProperty("replayRequired").GetBoolean());
         Assert.Equal(0, root.GetProperty("events").GetProperty("items")[0].GetProperty("sequence").GetInt64());
         Assert.Equal(-1, reader.LastAfterSequence);
+    }
+
+    [Fact]
+    public async Task Resume_without_a_prior_revision_requests_full_replay()
+    {
+        var reader = new ProjectionReader(revision: 5);
+        using var factory = CreateFactory(reader);
+        using var client = CreateClient(factory);
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=1&atSeconds=120&limit=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("revisionChanged").GetBoolean());
+        Assert.True(root.GetProperty("replayRequired").GetBoolean());
+        Assert.Equal(1, root.GetProperty("requestedAfterSequence").GetInt64());
+        Assert.Equal(0, root.GetProperty("events").GetProperty("items")[0].GetProperty("sequence").GetInt64());
+        Assert.Equal(-1, reader.LastAfterSequence);
+    }
+
+    [Fact]
+    public async Task Backfill_requires_match_read_authorization()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5));
+
+        using var unauthenticated = factory.CreateClient();
+        using var unauthorizedResponse = await unauthenticated.GetAsync(
+            $"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=-1&atSeconds=120");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorizedResponse.StatusCode);
+
+        var authorization = factory.Services.GetRequiredService<IAuthorizationService>();
+        var coach = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("roles", "coach")], authenticationType: "contract-test", nameType: "sub", roleType: "roles"));
+        var denied = await authorization.AuthorizeAsync(coach, "MatchRead");
+        Assert.False(denied.Succeeded);
     }
 
     [Theory]
