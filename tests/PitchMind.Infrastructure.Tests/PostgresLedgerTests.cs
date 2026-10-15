@@ -25,6 +25,85 @@ public sealed class PostgresIntegrationFactAttribute : FactAttribute
 
 public sealed class PostgresLedgerTests
 {
+    [PostgresIntegrationFact]
+    public async Task TrackingFrameReaderUsesExactTimeRevisionSourceAndStableCompositePagination()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        var matchGuid = Guid.NewGuid();
+        var matchId = new MatchId(matchGuid);
+        const string sourceHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        await using (var metadata = source.CreateCommand("""
+            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance,
+                pitch_length_metres, pitch_width_metres)
+            VALUES ($1, 'fixture-v1', 'source-v1', $2, 'synthetic', 105, 68)
+            """))
+        {
+            metadata.Parameters.AddWithValue(matchGuid);
+            metadata.Parameters.AddWithValue(sourceHash);
+            await metadata.ExecuteNonQueryAsync();
+        }
+        await using (var projection = source.CreateCommand("""
+            INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
+                as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
+            VALUES ($1, 9, 3, 5, 120, 'aggregate-v1', $2, '{}'::jsonb, $3)
+            """))
+        {
+            projection.Parameters.AddWithValue(matchGuid);
+            projection.Parameters.AddWithValue(sourceHash);
+            projection.Parameters.AddWithValue(new string('b', 64));
+            await projection.ExecuteNonQueryAsync();
+        }
+
+        async Task AddFrame(string frameId, long sequence, long canonicalRevision, int clockSeconds)
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                matchId = matchGuid.ToString("D"), frameId, sequence, canonicalRevision,
+                matchTime = new { elapsedSeconds = clockSeconds, period = 2 },
+                source = new { sourceSha256 = sourceHash }
+            });
+            await using var command = source.CreateCommand("""
+                INSERT INTO pitchmind.tracking_frames(match_id, frame_id, canonical_revision, sequence, period,
+                    clock_seconds, coordinate_version, quality, source_sha256, payload)
+                VALUES ($1, $2, $3, $4, 2, $5, 'pitch-v1', '{}'::jsonb, $6, $7::jsonb)
+                """);
+            command.Parameters.AddWithValue(matchGuid);
+            command.Parameters.AddWithValue(frameId);
+            command.Parameters.AddWithValue(canonicalRevision);
+            command.Parameters.AddWithValue(sequence);
+            command.Parameters.AddWithValue(clockSeconds);
+            command.Parameters.AddWithValue(sourceHash);
+            command.Parameters.AddWithValue(payload);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await AddFrame("frame-b", 3, 9, 120);
+        await AddFrame("frame-a", 3, 9, 120);
+        await AddFrame("future-revision", 4, 10, 120);
+        await AddFrame("future-sequence", 6, 9, 120);
+        await AddFrame("other-time", 4, 9, 121);
+
+        var selectedProjection = new SelectedMatchProjection(
+            new MatchState(matchGuid.ToString("D"), 120, 2, MatchPhase.SecondHalf, 0, 0, null,
+                11, 11, Array.Empty<MatchPlayerState>(), 6, "synthetic-test"),
+            9, 3, 5, 120, "rules-v1", sourceHash, new string('b', 64));
+        var reader = new PostgresMatchTrackingReader(source);
+        var first = await reader.ReadAtAsync(selectedProjection, 120, null, null, 1, CancellationToken.None);
+        Assert.Single(first.Frames);
+        Assert.Equal("frame-a", first.Frames[0].FrameId);
+        Assert.True(first.HasMore);
+        Assert.Equal(3, first.NextAfterSequence);
+        Assert.Equal("frame-a", first.NextAfterFrameId);
+
+        var second = await reader.ReadAtAsync(selectedProjection, 120, first.NextAfterSequence,
+            first.NextAfterFrameId, 1, CancellationToken.None);
+        Assert.Single(second.Frames);
+        Assert.Equal("frame-b", second.Frames[0].FrameId);
+        Assert.False(second.HasMore);
+    }
+
     private static async Task<List<MatchEvent>> Read(PostgresMatchEventStore store, MatchId matchId)
     {
         var results = new List<MatchEvent>();

@@ -93,9 +93,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           insight.selectedTimeSeconds === selectedSeconds &&
           insight.throughSequence <= snapshot.throughSequence);
         const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
-          trackingFrames.canonicalRevision === snapshot.canonicalRevision && trackingFrames.selectedTimeSeconds === selectedSeconds &&
+          trackingFrames.canonicalRevision === snapshot.canonicalRevision && trackingFrames.projectionRevision === snapshot.projectionRevision &&
+          trackingFrames.selectedTimeSeconds === selectedSeconds &&
           trackingFrames.throughSequence === snapshot.throughSequence && trackingFrames.items.every(frame =>
-            frame.canonicalRevision > 0 && frame.canonicalRevision <= snapshot.canonicalRevision && frame.sourceSha256 === snapshot.sourceSha256 &&
+            frame.canonicalRevision > 0 && frame.canonicalRevision <= snapshot.canonicalRevision &&
+            frame.projectionRevision === snapshot.projectionRevision && frame.sourceSha256 === snapshot.sourceSha256 &&
             frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
             frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
             frame.frame.sequence === frame.sequence && frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&

@@ -72,6 +72,36 @@ paths:
         '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/frames:
+    get:
+      operationId: listCanonicalTrackingFrames
+      x-required-roles: [analyst, admin]
+      summary: Read persisted tracking frames at the exact selected match second.
+      description: >-
+        Frames are bounded by the selected projection sequence, canonical admission revision,
+        and immutable source hash. Pages use stable (sequence, frameId) keyset ordering. The
+        cursor binds match, selected time, both revision axes, and source hash. No positions
+        are interpolated or fabricated by this endpoint.
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 25, default: 12 }
+      responses:
+        '200':
+          description: Persisted tracking-frame page for the selected source and projection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalTrackingFramePage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/timeline/backfill:
     get:
       operationId: backfillCanonicalTimeline
@@ -393,6 +423,99 @@ components:
         throughSequence: { type: integer }
         items: { type: array, items: { $ref: '#/components/schemas/CanonicalEvent' } }
         nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+    CanonicalTrackingFrame:
+      type: object
+      required: [frameId, sequence, canonicalRevision, projectionRevision, period, clockSeconds, coordinateVersion, quality, sourceSha256, frame]
+      properties:
+        frameId: { type: string, minLength: 1, maxLength: 128 }
+        sequence: { type: integer, format: int64, minimum: 0 }
+        canonicalRevision: { type: integer, format: int64, minimum: 1 }
+        projectionRevision: { type: integer, minimum: 1 }
+        period: { type: integer, minimum: 1 }
+        clockSeconds: { type: integer, minimum: 0, maximum: 5400 }
+        coordinateVersion: { type: string }
+        quality: { type: object, additionalProperties: true }
+        sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        frame: { $ref: '#/components/schemas/TrackingFrameV1' }
+    TrackingFrameV1:
+      type: object
+      required: [schemaVersion, matchId, canonicalRevision, frameId, sequence, matchTime, coordinateSystem, ball, players, source]
+      properties:
+        schemaVersion: { type: integer, const: 1 }
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer, format: int64, minimum: 1 }
+        frameId: { type: string, minLength: 1, maxLength: 128 }
+        sequence: { type: integer, format: int64, minimum: 0 }
+        matchTime:
+          type: object
+          required: [period, elapsedSeconds, sourceClockValue, sourceClockUnit, sourceClockBasis]
+          properties:
+            period: { type: integer, minimum: 1, maximum: 5 }
+            elapsedSeconds: { type: integer, format: int64, minimum: 0 }
+            sourceClockValue: { type: number }
+            sourceClockUnit: { type: string }
+            sourceClockBasis: { type: string }
+        coordinateSystem:
+          type: object
+          required: [lengthMetres, widthMetres, unit, axisOrigin, teamDirections]
+          properties:
+            lengthMetres: { type: number, exclusiveMinimum: 0 }
+            widthMetres: { type: number, exclusiveMinimum: 0 }
+            unit: { type: string, enum: [metres, normalized_0_1, percent_0_100] }
+            axisOrigin: { type: string, enum: [bottom_left, top_left] }
+            teamDirections:
+              type: array
+              items:
+                type: object
+                required: [teamId, direction]
+                properties:
+                  teamId: { type: string }
+                  direction: { type: string, enum: [left, right] }
+        ball:
+          type: object
+          required: [x, y]
+          properties:
+            x: { type: number }
+            y: { type: number }
+        players:
+          type: array
+          items:
+            type: object
+            required: [playerId, teamId, position]
+            properties:
+              playerId: { type: string }
+              teamId: { type: string }
+              position:
+                type: object
+                required: [x, y]
+                properties:
+                  x: { type: number }
+                  y: { type: number }
+        source:
+          type: object
+          required: [providerId, sourceMatchId, sourceRecordId, sourceSequence, sourceSchemaVersion, sourceSha256, provenanceStatus, rightsReviewStatus]
+          properties:
+            providerId: { type: string }
+            sourceMatchId: { type: string }
+            sourceRecordId: { type: string }
+            sourceSequence: { type: integer, format: int64 }
+            sourceSchemaVersion: { type: string }
+            sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+            sourceTimestampUtc: { type: [string, 'null'], format: date-time }
+            provenanceStatus: { type: string }
+            rightsReviewStatus: { type: string }
+    CanonicalTrackingFramePage:
+      type: object
+      required: [matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, items, nextCursor, hasMore]
+      properties:
+        matchId: { type: string, format: uuid }
+        canonicalRevision: { type: integer, format: int64, minimum: 1 }
+        projectionRevision: { type: integer, minimum: 1 }
+        selectedTimeSeconds: { type: integer, minimum: 0, maximum: 5400 }
+        throughSequence: { type: integer, format: int64, minimum: -1 }
+        items: { type: array, maxItems: 25, items: { $ref: '#/components/schemas/CanonicalTrackingFrame' } }
+        nextCursor: { type: [string, 'null'], maxLength: 2048 }
         hasMore: { type: boolean }
     CanonicalTimelineBackfill:
       type: object

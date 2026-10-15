@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PitchMind.Application.Abstractions;
+using PitchMind.Contracts.Telemetry.V1;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
@@ -29,6 +30,74 @@ public sealed class CanonicalBackfillTests
         MatchEvent.Create(Guid.Parse("00000000-0000-0000-0000-000000000002"), Match, 1, MatchEventType.Pass, 60, 1, DateTimeOffset.UnixEpoch.AddSeconds(60)),
         MatchEvent.Create(Guid.Parse("00000000-0000-0000-0000-000000000003"), Match, 2, MatchEventType.Shot, 120, 1, DateTimeOffset.UnixEpoch.AddSeconds(120))
     ];
+
+    [Fact]
+    public async Task Tracking_frame_cursor_pages_by_sequence_and_frame_id_with_both_revisions_bound()
+    {
+        var tracking = new TrackingReader();
+        using var factory = CreateFactory(new ProjectionReader(revision: 5), tracking);
+        using var client = CreateClient(factory, "analyst");
+
+        using var first = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&limit=1");
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var firstRoot = firstJson.RootElement;
+        Assert.Equal(100, firstRoot.GetProperty("canonicalRevision").GetInt64());
+        Assert.Equal(5, firstRoot.GetProperty("projectionRevision").GetInt32());
+        Assert.Equal("frame-a", firstRoot.GetProperty("items")[0].GetProperty("frameId").GetString());
+        var cursor = firstRoot.GetProperty("nextCursor").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(cursor));
+
+        using var second = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&cursor={Uri.EscapeDataString(cursor!)}&limit=1");
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("frame-b", secondJson.RootElement.GetProperty("items")[0].GetProperty("frameId").GetString());
+        Assert.True(secondJson.RootElement.GetProperty("hasMore").GetBoolean());
+        Assert.Equal("frame-a", tracking.LastAfterFrameId);
+
+        var nextCursor = secondJson.RootElement.GetProperty("nextCursor").GetString();
+        using var third = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&cursor={Uri.EscapeDataString(nextCursor!)}&limit=1");
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("frame-c", thirdJson.RootElement.GetProperty("items")[0].GetProperty("frameId").GetString());
+        Assert.False(thirdJson.RootElement.GetProperty("hasMore").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Tracking_frames_require_analyst_or_admin_role()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5));
+        using var fan = CreateClient(factory, "fan");
+        using var response = await fan.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Malformed_persisted_frame_returns_a_typed_integrity_failure()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5), new TrackingReader(malformedFramePayload: true));
+        using var client = CreateClient(factory, "analyst");
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("CANONICAL_DATA_INVALID", body.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Semantically_invalid_frame_coordinates_are_not_returned_as_canonical_facts()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5), new TrackingReader(invalidCoordinates: true));
+        using var client = CreateClient(factory, "analyst");
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("CANONICAL_DATA_INVALID", body.RootElement.GetProperty("code").GetString());
+    }
 
     [Fact]
     public async Task Revision_change_refreshes_snapshot_and_replays_from_sequence_zero()
@@ -143,7 +212,7 @@ public sealed class CanonicalBackfillTests
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(ProjectionReader reader) =>
+    private static WebApplicationFactory<Program> CreateFactory(ProjectionReader reader, IMatchTrackingReader? trackingReader = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
@@ -159,6 +228,8 @@ public sealed class CanonicalBackfillTests
             {
                 services.RemoveAll<IMatchProjectionReader>();
                 services.AddSingleton<IMatchProjectionReader>(reader);
+                services.RemoveAll<IMatchTrackingReader>();
+                services.AddSingleton<IMatchTrackingReader>(trackingReader ?? new TrackingReader());
             });
             builder.ConfigureTestServices(services => services.AddAuthentication(options =>
                 {
@@ -169,12 +240,73 @@ public sealed class CanonicalBackfillTests
                 .AddScheme<AuthenticationSchemeOptions, BackfillTestAuthenticationHandler>("backfill-test", _ => { }));
         });
 
-    private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
+    private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string role = "fan")
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Dev-Subject", "backfill-test");
-        client.DefaultRequestHeaders.Add("X-Dev-Roles", "fan");
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", role);
         return client;
+    }
+
+    private sealed class TrackingReader : IMatchTrackingReader
+    {
+        private const string SourceHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        private readonly PersistedTrackingFrame[] frames;
+        public string? LastAfterFrameId { get; private set; }
+
+        public TrackingReader(bool malformedFramePayload = false, bool invalidCoordinates = false)
+        {
+            frames = [Frame("frame-a", 0, invalidCoordinates), Frame("frame-b", 0), Frame("frame-c", 1)];
+            if (malformedFramePayload) frames[0] = frames[0] with { PayloadJson = "{" };
+        }
+
+        public Task<PersistedTrackingFramePage> ReadAtAsync(SelectedMatchProjection projection, int selectedSeconds,
+            long? afterSequence, string? afterFrameId, int limit, CancellationToken cancellationToken)
+        {
+            LastAfterFrameId = afterFrameId;
+            var page = frames.Where(frame => afterSequence is null || frame.Sequence > afterSequence ||
+                    frame.Sequence == afterSequence && string.CompareOrdinal(frame.FrameId, afterFrameId) > 0)
+                .Take(limit + 1).ToArray();
+            var hasMore = page.Length > limit;
+            if (hasMore) page = page[..limit];
+            var last = hasMore ? page[^1] : null;
+            return Task.FromResult(new PersistedTrackingFramePage(Array.AsReadOnly(page), last?.Sequence, last?.FrameId, hasMore));
+        }
+
+        private static PersistedTrackingFrame Frame(string id, long sequence, bool invalidCoordinates = false)
+        {
+            var frame = new TrackingFrameV1
+            {
+                SchemaVersion = 1,
+                MatchId = MatchGuid.ToString("D"),
+                CanonicalRevision = 100,
+                FrameId = id,
+                Sequence = sequence,
+                MatchTime = new MatchTimeV1
+                {
+                    Period = 1, ElapsedSeconds = 120, SourceClockValue = 120,
+                    SourceClockUnit = "seconds", SourceClockBasis = "match_elapsed"
+                },
+                CoordinateSystem = new PitchCoordinateSystemV1
+                {
+                    LengthMetres = 105, WidthMetres = 68, Unit = "metres", AxisOrigin = "bottom_left",
+                    TeamDirections = [new TeamAttackingDirectionV1 { TeamId = "team-a", Direction = "right" }]
+                },
+                Ball = new PitchPointV1 { X = invalidCoordinates ? 106m : 52.5m, Y = 34m },
+                Players = [new PlayerPositionV1
+                {
+                    PlayerId = "player-a", TeamId = "team-a", Position = new PitchPointV1 { X = 50m, Y = 34m }
+                }],
+                Source = new SourceReferenceV1
+                {
+                    ProviderId = "synthetic-test", SourceMatchId = MatchGuid.ToString("D"), SourceRecordId = id,
+                    SourceSequence = sequence, SourceSchemaVersion = "v1", SourceSha256 = SourceHash,
+                    ProvenanceStatus = "synthetic", RightsReviewStatus = "reviewed"
+                }
+            };
+            return new PersistedTrackingFrame(id, sequence, 100, 1, 120, "pitch-v1", "{}", SourceHash,
+                JsonSerializer.Serialize(frame, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        }
     }
 
     private sealed class ProjectionReader(int revision) : IMatchProjectionReader

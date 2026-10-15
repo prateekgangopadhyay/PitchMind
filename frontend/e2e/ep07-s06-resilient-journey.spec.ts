@@ -24,7 +24,7 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
       return;
     }
 
-    const context = { matchId, canonicalRevision, selectedTimeSeconds, throughSequence };
+    const context = { matchId, canonicalRevision, projectionRevision: 4, selectedTimeSeconds, throughSequence };
     const bodyByResource: Record<string, unknown> = {
       summary: {
         ...context, asOfSeconds: selectedTimeSeconds, algorithmVersion: 'test-projection-v1', sourceSha256,
@@ -42,7 +42,7 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
           sourceSha256, detectorVersion: 'test-detector-v1', truthClass: 'observed', summary: insightSummary,
           conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'], evidence: [] }]
       },
-      frames: { ...context, items: [], hasMore: false },
+      frames: { ...context, items: [], nextCursor: null, hasMore: false },
       'key-moments': { ...context, items: [], hasMore: false }
     };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bodyByResource[resource ?? ''] ?? {}) });
