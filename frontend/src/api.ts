@@ -31,7 +31,7 @@ export interface ApiProblem { type: string; title: string; status: number; code:
 // PostgreSQL-backed BFF contracts. Kept separate from fixture/demo contracts above;
 // canonical requests never fall back to the local synthetic fixture.
 export interface CanonicalMatchCard {
-  matchId: string; canonicalRevision: number; asOfSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; projectionRevision: number; asOfSeconds: number; throughSequence: number;
   phase: string; homeScore: number; awayScore: number; provenance: string;
   algorithmVersion: string; sourceSha256: string;
 }
@@ -43,14 +43,14 @@ export function provenanceLabel(provenance: string): string {
 }
 export interface CanonicalMatchPage { items: CanonicalMatchCard[]; nextMatchId: string | null; hasMore: boolean }
 export interface CanonicalMatchSnapshot {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
+  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
   throughSequence: number; algorithmVersion: string; sourceSha256: string; stateSha256: string;
   provenance: string; period: number; phase: string; homeScore: number; awayScore: number;
   possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number;
   players: MatchPlayerState[];
 }
 export interface CanonicalEventPage {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalLedgerEvent[]; nextCursor: string | null; hasMore: boolean;
 }
 export interface CanonicalLedgerEvent {
@@ -59,18 +59,18 @@ export interface CanonicalLedgerEvent {
 }
 export interface CanonicalEvidenceReference { kind: string; id: string; relation: string }
 export interface CanonicalInsight {
-  insightId: string; matchId: string; canonicalRevision: number; selectedTimeSeconds: number;
+  insightId: string; matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number;
   throughSequence: number; sourceVersion: string; provenance: string; sourceSha256: string;
   detectorVersion: string; truthClass: string; summary: string;
   conditions: Record<string, unknown>; limitations: string[] | null;
   evidence: CanonicalEvidenceReference[];
 }
 export interface CanonicalInsightPage {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalInsight[]; nextCursor: string | null; hasMore: boolean;
 }
 export interface CanonicalEvidencePayload {
-  kind: 'event' | 'frame'; id: string; relation: string; sequence: number;
+  kind: 'event' | 'frame'; id: string; relation: string; sourceCanonicalRevision: number; sequence: number;
   clockSeconds: number; period: number; payload: Record<string, unknown>;
 }
 export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }

@@ -75,19 +75,22 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
-        const emptyContext = { matchId, canonicalRevision: revision, selectedTimeSeconds: selectedSeconds, throughSequence: snapshot.throughSequence };
+        const emptyContext = { matchId, canonicalRevision: revision, projectionRevision: snapshot.projectionRevision,
+          selectedTimeSeconds: selectedSeconds, throughSequence: snapshot.throughSequence };
         const events = eventResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const insights = insightResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const trackingFrames = frameResult.page;
         const requiredPages = [snapshot, ...(eventResult.page ? [events] : []), ...(insightResult.page ? [insights] : [])];
         const exactContext = requiredPages.every(item => item.matchId === matchId &&
-          item.canonicalRevision === revision && item.selectedTimeSeconds === selectedSeconds &&
+          item.canonicalRevision === revision && item.projectionRevision === snapshot.projectionRevision &&
+          item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
           event.matchId === matchId && event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
           (index === 0 || events.items[index - 1].sequence < event.sequence));
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
-          insight.canonicalRevision === revision && insight.selectedTimeSeconds === selectedSeconds &&
+          insight.canonicalRevision === revision && insight.projectionRevision === snapshot.projectionRevision &&
+          insight.selectedTimeSeconds === selectedSeconds &&
           insight.throughSequence <= snapshot.throughSequence);
         const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
           trackingFrames.canonicalRevision === revision && trackingFrames.selectedTimeSeconds === selectedSeconds &&

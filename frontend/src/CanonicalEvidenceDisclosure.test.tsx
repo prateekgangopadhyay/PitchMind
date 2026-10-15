@@ -6,7 +6,7 @@ import type { CanonicalEvidence, CanonicalInsight } from './api';
 
 const matchId = '11111111-1111-1111-1111-111111111111';
 const insight: CanonicalInsight = {
-  insightId: 'insight-press-1', matchId, canonicalRevision: 4, selectedTimeSeconds: 3308,
+  insightId: 'insight-press-1', matchId, canonicalRevision: 4, projectionRevision: 1, selectedTimeSeconds: 3308,
   throughSequence: 19, sourceVersion: 'synthetic-v1', provenance: 'synthetic-approved',
   sourceSha256: 'a'.repeat(64), detectorVersion: 'press-detector-v2', truthClass: 'pattern',
   summary: 'A recorded pressing sequence is available for inspection.',
@@ -17,7 +17,7 @@ const insight: CanonicalInsight = {
 function evidenceAt(selectedTimeSeconds: number, currentInsight: CanonicalInsight = insight): CanonicalEvidence {
   return {
     insight: { ...currentInsight, selectedTimeSeconds },
-    items: [{ kind: 'event', id: 'event-source-1', relation: 'supports', sequence: 19,
+    items: [{ kind: 'event', id: 'event-source-1', relation: 'supports', sourceCanonicalRevision: 4, sequence: 19,
       clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } }]
   };
 }
@@ -112,9 +112,9 @@ describe('Canonical evidence disclosure', () => {
     const sourcedEvidence: CanonicalEvidence = {
       insight: sourcedInsight,
       items: [
-        { kind: 'event', id: 'event-source-1', relation: 'supports', sequence: 19,
+        { kind: 'event', id: 'event-source-1', relation: 'supports', sourceCanonicalRevision: 4, sequence: 19,
           clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } },
-        { kind: 'frame', id: 'frame-source-2', relation: 'supports', sequence: 18,
+        { kind: 'frame', id: 'frame-source-2', relation: 'supports', sourceCanonicalRevision: 4, sequence: 18,
           clockSeconds: 3308, period: 2, payload: { frameId: 'frame-source-2' } }
       ]
     };
