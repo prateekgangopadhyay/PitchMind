@@ -55,6 +55,60 @@ public sealed class RealtimeApiTests
         Assert.DoesNotContain("private", json, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Subscription_state_deduplicates_inflight_and_active_subscriptions()
+    {
+        var state = new RealtimeSubscriptionState();
+        var matchId = Guid.NewGuid();
+
+        Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchId));
+        Assert.Equal(SubscriptionReservation.AlreadyInProgress, state.TryBegin(matchId));
+
+        state.Complete(matchId, subscribed: true);
+        Assert.Equal(SubscriptionReservation.AlreadySubscribed, state.TryBegin(matchId));
+
+        state.Remove(matchId);
+        Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchId));
+    }
+
+    [Fact]
+    public void Subscription_state_bounds_unique_lookup_attempts_and_active_groups()
+    {
+        var state = new RealtimeSubscriptionState();
+        var matchIds = Enumerable.Range(0, RealtimeSubscriptionState.MaxUniqueAttemptsPerConnection)
+            .Select(_ => Guid.NewGuid()).ToArray();
+
+        for (var i = 0; i < RealtimeSubscriptionState.MaxActiveSubscriptions; i++)
+        {
+            Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchIds[i]));
+            state.Complete(matchIds[i], subscribed: true);
+        }
+
+        Assert.Equal(SubscriptionReservation.LimitExceeded, state.TryBegin(Guid.NewGuid()));
+        state.Remove(matchIds[0]);
+        Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchIds[10]));
+        state.Complete(matchIds[10], subscribed: false);
+
+        for (var i = 11; i < RealtimeSubscriptionState.MaxUniqueAttemptsPerConnection; i++)
+        {
+            Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchIds[i]));
+            state.Complete(matchIds[i], subscribed: false);
+        }
+
+        Assert.Equal(SubscriptionReservation.LimitExceeded, state.TryBegin(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void Subscription_state_releases_failed_authorization_reservations_without_refunding_attempts()
+    {
+        var state = new RealtimeSubscriptionState();
+        var matchId = Guid.NewGuid();
+
+        Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchId));
+        state.Complete(matchId, subscribed: false);
+        Assert.Equal(SubscriptionReservation.Reserved, state.TryBegin(matchId));
+    }
+
     [Theory]
     [InlineData("extra")]
     [InlineData("duplicate")]
