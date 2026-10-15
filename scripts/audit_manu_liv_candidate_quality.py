@@ -50,6 +50,34 @@ def _is_number(value: Any) -> bool:
         return False
 
 
+def _json_type(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return "unknown"
+
+
+def _period_value_observation(value: Any) -> dict[str, Any]:
+    observation: dict[str, Any] = {"jsonType": _json_type(value)}
+    if isinstance(value, str):
+        observation["value"] = value[:128]
+        observation["valueTruncated"] = len(value) > 128
+    elif value is None or isinstance(value, (bool, int, float)):
+        observation["value"] = value
+    return observation
+
+
 def _range_profile(values: list[Any], *, coordinate_interval: bool = False) -> dict[str, Any]:
     numeric = [value for value in values if _is_number(value)]
     result = {
@@ -96,6 +124,31 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     periods = Counter(event.get("period") for event in events)
     clocks = [event.get("clockSeconds") for event in events]
     sequences = [event.get("sequence") for event in events]
+    metadata_period_rows = 0
+    exact_period_field_matches = 0
+    period_field_mismatch_count = 0
+    period_field_mismatch_examples = []
+    for event in events:
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict) or "period" not in metadata:
+            continue
+        metadata_period_rows += 1
+        same_raw_value = (
+            "period" in event
+            and type(event["period"]) is type(metadata["period"])
+            and event["period"] == metadata["period"]
+        )
+        if same_raw_value:
+            exact_period_field_matches += 1
+            continue
+        period_field_mismatch_count += 1
+        if len(period_field_mismatch_examples) < 20:
+            period_field_mismatch_examples.append({
+                "sequence": event.get("sequence"),
+                "eventType": event.get("eventType"),
+                "topLevelPeriod": _period_value_observation(event["period"]) if "period" in event else {"jsonType": "missing"},
+                "metadataPeriod": _period_value_observation(metadata["period"]),
+            })
     clock_deltas = [right - left for left, right in zip(clocks, clocks[1:])
                     if _is_number(left) and _is_number(right)]
     clock_regressions = sum(delta < 0 for delta in clock_deltas)
@@ -248,7 +301,7 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
     }
 
     return {
-        "auditVersion": "1.0.0",
+        "auditVersion": "1.1.0",
         "source": {
             "path": source_policy.get("path"),
             "manifestVersion": manifest.get("manifestVersion"),
@@ -283,6 +336,13 @@ def audit_data(data: bytes, manifest: dict[str, Any], domain_source: str) -> dic
                 manifest.get("source", {}).get("sequenceStart", sequences[0]),
                 manifest.get("source", {}).get("sequenceStart", sequences[0]) + len(sequences))),
             "periodCounts": {str(period): periods[period] for period in sorted(periods)},
+            "metadataPeriodFieldComparison": {
+                "recordsWithMetadataPeriod": metadata_period_rows,
+                "exactValueAndJsonTypeMatches": exact_period_field_matches,
+                "mismatchCount": period_field_mismatch_count,
+                "mismatchExamples": period_field_mismatch_examples,
+                "interpretation": "Exact source-value and JSON-type comparison only; neither field is treated as authoritative and no period meaning is inferred.",
+            },
             "clockUnitDeclaredByManifest": manifest.get("match", {}).get("sourceClockUnit"),
             "clockStart": clocks[0],
             "clockEnd": clocks[-1],

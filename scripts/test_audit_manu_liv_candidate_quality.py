@@ -81,6 +81,69 @@ class CandidateQualityAuditTests(unittest.TestCase):
         })
         self.assertNotIn("elapsedRangeSecondsFromSourceValues", chronology)
 
+    def test_metadata_period_comparison_preserves_exact_value_and_json_type_without_authority(self):
+        events = [
+            event(1, metadata={"period": 1}),
+            event(2, metadata={"period": "1"}),
+            event(3),
+        ]
+
+        comparison = report_for(events)["chronology"]["metadataPeriodFieldComparison"]
+
+        self.assertEqual(comparison["recordsWithMetadataPeriod"], 2)
+        self.assertEqual(comparison["exactValueAndJsonTypeMatches"], 1)
+        self.assertEqual(comparison["mismatchCount"], 1)
+        self.assertEqual(comparison["mismatchExamples"], [{
+            "sequence": 2,
+            "eventType": "Pass",
+            "topLevelPeriod": {"jsonType": "integer", "value": 1},
+            "metadataPeriod": {"jsonType": "string", "value": "1", "valueTruncated": False},
+        }])
+        self.assertIn("neither field is treated as authoritative", comparison["interpretation"])
+
+    def test_pinned_candidate_reports_known_metadata_period_conflict(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "data/simulations/manu-liv-match-dataset.json").read_bytes()
+        manifest = json.loads((root / "data/simulations/manu-liv-candidate-manifest.json").read_text(encoding="utf-8"))
+        domain = (root / audit.CANONICAL_ENUM).read_text(encoding="utf-8")
+
+        comparison = audit.audit_data(source, manifest, domain)["chronology"]["metadataPeriodFieldComparison"]
+
+        self.assertEqual(comparison["recordsWithMetadataPeriod"], 3)
+        self.assertEqual(comparison["exactValueAndJsonTypeMatches"], 0)
+        self.assertEqual(comparison["mismatchCount"], 3)
+        self.assertEqual([row["sequence"] for row in comparison["mismatchExamples"]], [1, 1037, 1038])
+        self.assertEqual(comparison["mismatchExamples"][0], {
+            "sequence": 1,
+            "eventType": "KickOff",
+            "topLevelPeriod": {"jsonType": "integer", "value": 1},
+            "metadataPeriod": {"jsonType": "string", "value": "1", "valueTruncated": False},
+        })
+        self.assertEqual(comparison["mismatchExamples"][1], {
+            "sequence": 1037,
+            "eventType": "HalfTime",
+            "topLevelPeriod": {"jsonType": "integer", "value": 2},
+            "metadataPeriod": {"jsonType": "string", "value": "1", "valueTruncated": False},
+        })
+        self.assertEqual(comparison["mismatchExamples"][2], {
+            "sequence": 1038,
+            "eventType": "KickOff",
+            "topLevelPeriod": {"jsonType": "integer", "value": 2},
+            "metadataPeriod": {"jsonType": "string", "value": "2", "valueTruncated": False},
+        })
+        self.assertFalse(comparison["interpretation"].startswith("Top-level period is authoritative"))
+
+    def test_metadata_period_mismatch_examples_are_bounded(self):
+        long_period = "x" * 200
+        events = [event(index + 1, metadata={"period": long_period}) for index in range(25)]
+
+        comparison = report_for(events)["chronology"]["metadataPeriodFieldComparison"]
+
+        self.assertEqual(comparison["mismatchCount"], 25)
+        self.assertEqual(len(comparison["mismatchExamples"]), 20)
+        self.assertEqual(len(comparison["mismatchExamples"][0]["metadataPeriod"]["value"]), 128)
+        self.assertTrue(comparison["mismatchExamples"][0]["metadataPeriod"]["valueTruncated"])
+
     def test_report_output_cannot_alias_and_overwrite_source_or_manifest(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
