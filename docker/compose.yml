@@ -38,9 +38,9 @@ services:
 
 volumes:
   postgres-data:
-    name: pitchmind_postgres_data
+    name: ${POSTGRES_DATA_VOLUME:-pitchmind_postgres_data}
   redis-data:
-    name: pitchmind_redis_data
+    name: ${REDIS_DATA_VOLUME:-pitchmind_redis_data}
 
 networks:
   local:
