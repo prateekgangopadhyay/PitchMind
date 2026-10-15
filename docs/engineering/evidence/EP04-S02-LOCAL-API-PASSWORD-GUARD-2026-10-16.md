@@ -1,6 +1,6 @@
 # EP04-S02 LOCAL API password guard — 2026-10-16
 
-**Code commits:** `57a6406e` and `5fa9ab55` on the EP04-S02 child branch stacked on PR #299.
+**Locally verified code commits:** `57a6406e` and `5fa9ab55`. The corresponding changes are published in draft PR #301, stacked on PR #299.
 
 ## Change
 
