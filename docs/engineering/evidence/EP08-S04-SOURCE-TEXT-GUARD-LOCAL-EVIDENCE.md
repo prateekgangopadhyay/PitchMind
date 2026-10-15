@@ -2,8 +2,8 @@
 
 **Scope:** A deterministic, non-publishing Application guard rejects model-added wording unless a single claim exactly matches the selected canonical insight text and cites the complete evidence set. This is a follow-up implementation slice, not EP08-S04 acceptance.
 
-**Base:** PR #256 merge `bc08d4b48b13f77cf03a91a4e02f996d967cc770`.
-**Implementation code head:** `d5c893e54a78117ed2564877c228d61c7ec00d2c` on `codex/ep08-s04-source-bound-verifier`.
+**Base:** Current `main` at `5b678320ec8c7cd5f04f9a7a3cb8d1749767fb47`, including PR #256 merge `bc08d4b48b13f77cf03a91a4e02f996d967cc770`.
+**Implementation code commit:** `6e8e57f` on `codex/ep08-s04-source-bound-verifier`; verification was rerun after rebasing onto the current main base above.
 **SDK:** .NET 10.0.401.
 
 ## Behavior exercised
@@ -20,12 +20,12 @@
 | Command | Result |
 |---|---|
 | `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --filter FullyQualifiedName~CandidateExplanationSourceTextGuardTests --no-restore --disable-build-servers -m:1` | 10 passed, 0 failed, 0 skipped. Includes the multi-claim regression. Exit code 0. |
-| `dotnet test PitchMind.slnx -c Release --no-restore --disable-build-servers -m:1` | 367 passed, 0 failed, 24 skipped. All skips are opt-in PostgreSQL integration tests; no test connection was configured. Exit code 0. |
+| `dotnet test PitchMind.slnx -c Release --no-restore --disable-build-servers -m:1` | 392 passed, 0 failed, 24 skipped. All skips are opt-in PostgreSQL integration tests; no test connection was configured. Exit code 0. |
 | `dotnet build PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | Succeeded, 0 warnings, 0 errors. |
 | `node scripts/validate_operating_model.mjs --self-test` | Passed. |
 | `git diff --check` | Passed. |
 
-VSTest used local execution permission for its loopback socket. The full suite built all projects in Release. The test suite does not establish a live PostgreSQL path, hosted CI, Foundry behavior, or cloud integration.
+VSTest used local execution permission for its loopback socket. The full suite built all projects in Release; the Application suite passed 145/145 on the rebased tree. The test suite does not establish a live PostgreSQL path, hosted CI, Foundry behavior, or cloud integration.
 
 ## Remaining blockers
 
