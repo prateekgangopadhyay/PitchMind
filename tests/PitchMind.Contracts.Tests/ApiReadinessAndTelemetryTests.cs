@@ -161,6 +161,8 @@ public sealed class ApiReadinessAndTelemetryTests
                 tag.Value?.ToString() == $"{(int)hub.StatusCode / 100}xx"));
         var errors = observations.Where(x => x.Name == "pitchmind.api.errors").ToArray();
         Assert.Equal(2, errors.Length);
+        Assert.Contains(errors, x => x.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/hubs/matches/negotiate"));
+        Assert.Contains(errors, x => x.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/hubs/matches"));
         var durations = observations.Where(x => x.Name == "pitchmind.api.request.duration").ToArray();
         Assert.Single(durations);
         Assert.Contains(durations[0].Tags, tag => tag.Key == "http.request.method" && tag.Value?.ToString() == "POST");
