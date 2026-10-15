@@ -1,6 +1,6 @@
 # EP07-S05 source revision disclosure — design review
 
-**Result: UNVERIFIED.** This is a local review of the uncommitted diff on `codex/ep07-s05-source-revision-integrity`, based on PR #264 head `e2710931ad40c09a2092e4e1d6e035913bc0990a`. The story is not accepted. Independent exact-diff review of the compact-width/keyboard E2E addition found no actionable findings. Hosted CI, manual assistive-technology testing, axe/WCAG checks, and Product Owner acceptance remain outstanding.
+**Result: UNVERIFIED.** This is a local design review of the implementation on `codex/ep07-s05-source-revision-integrity`, stacked on PR #264 head `e2710931ad40c09a2092e4e1d6e035913bc0990a`. The story is not accepted. Independent exact-diff review of the compact-width/keyboard E2E addition found no actionable findings. Hosted CI, manual assistive-technology testing, axe/WCAG checks, and Product Owner acceptance remain outstanding.
 
 ## Scope and user outcome
 
