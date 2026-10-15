@@ -6,13 +6,15 @@
 
 ## Realized application components (source verified, not new test evidence)
 
-`ApiRequestTelemetry` records bounded HTTP request/error/duration instruments and trace tags without high-cardinality metric dimensions; unrecognized HTTP methods map to `_OTHER`. SignalR hub and negotiate requests are excluded from HTTP duration metrics because they can remain open for a connection lifetime; realtime lag/reconnect instruments are not implemented in this increment. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` requires configured PostgreSQL and a bounded probe of the current canonical schema version. Local without PostgreSQL is unready. There is no metrics exporter or operator-visible live-update lag signal in this increment.
+`ApiRequestTelemetry` records bounded HTTP request/error/duration instruments and trace tags without high-cardinality metric dimensions; unrecognized HTTP methods map to `_OTHER`. SignalR hub and negotiate requests are excluded from HTTP duration metrics because they can remain open for a connection lifetime. `PostgresOutboxDispatcher` measures durable message age and publication/retry/dead-letter counts; this is dispatch lag, not browser receipt lag or client reconnect state. An OTLP metrics exporter is registered only when an explicit standard OTLP endpoint variable is present; non-local profiles require HTTPS. No collector/backend is configured here, and no measured SLO or operator dashboard is claimed. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` requires configured PostgreSQL and a bounded probe of the current canonical schema version. Local without PostgreSQL is unready.
 
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
   API --> Security["ApiSecurity: Entra JWT / role policies / rate limits / security headers"]
   API --> Telemetry["ApiRequestTelemetry: low-cardinality counters + duration histogram"]
+  Telemetry --> OtlpExporter["Optional OTLP metrics exporter: explicit endpoint; HTTPS outside Development/local"]
+  OtlpExporter -. "destination is deployment configuration; none provisioned" .-> MetricsBackend["Azure Monitor or Azure-hosted OpenTelemetry Collector"]
   API --> Health["Liveness + bounded LOCAL PostgreSQL readiness"]
   API --> Guard["Fixture/demo routes fail closed; malformed requests → typed 4xx; body capped at 4 KiB including chunked input"]
   API --> BFF["Canonical BFF routes: protected in local and Azure profiles"]
@@ -30,6 +32,8 @@ flowchart TB
   CanonicalWrite["PostgresCanonicalUpdateStore: event + projection + outbox transaction"] --> DB
   DispatchWorker["OutboxDispatchWorker: Development/local + explicit local provider + loopback PostgreSQL only"] --> Dispatcher
   Dispatcher["PostgresOutboxDispatcher: leased at-least-once delivery"] --> RealtimePublisher
+  Dispatcher --> OutboxMetrics["Published/retried/dead-lettered counters + outbox message-age histogram"]
+  OutboxMetrics --> OtlpExporter
   PointInTime["Internal Application: GetMatchAtQueryService"] --> ReplayReader["PostgresMatchProjectionReader: projection + replay envelope + bounded frames"] --> DB
   BFF --> FrameRoute["GET /api/v1/canonical/matches/{matchId}/frames"] --> TrackingReader
   Migrator["PostgresSchemaMigrator"] --> DB
