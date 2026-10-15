@@ -257,6 +257,16 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     replaceCurrentMatchContext(matchId, seconds, revision);
   };
 
+  const toggleReplay = () => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    setRealtimeMode('HISTORICAL');
+    if (snapshot) replaceCurrentMatchContext(matchId, selectedSeconds, snapshot.projectionRevision);
+    setPlaying(true);
+  };
+
   return <section className="content-page" aria-busy={loading}>
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
@@ -285,7 +295,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <span>{clock(selectedSeconds)}</span>
             {reducedMotion
               ? <span className="reduced-motion-note" role="status">Automatic replay is off under reduced motion. Use the selected-time slider to inspect the match.</span>
-              : <button type="button" aria-pressed={playing} onClick={() => setPlaying(value => !value)} disabled={selectedSeconds >= 5400}>
+              : <button type="button" aria-pressed={playing} onClick={toggleReplay} disabled={selectedSeconds >= 5400}>
                 {playing ? 'Pause replay' : 'Play replay'}
               </button>}
           </div>

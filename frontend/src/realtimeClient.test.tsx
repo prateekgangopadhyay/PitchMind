@@ -591,12 +591,13 @@ describe('MatchRealtimeClient', () => {
   });
 });
 
-it('renders an accessible fail-closed host state and keeps historical time in the update notice', () => {
+it('renders an accessible fail-closed host state and keeps the historical update notice stable', () => {
   const state = { ...selectHistoricalTime(initialState(), 45), hasNewMatchUpdate: true };
   const markup = renderToStaticMarkup(createElement(RealtimeMatchUpdates, { state, onStateChange: vi.fn() }));
   expect(markup).toContain('Live updates unavailable. Sign in and retry.');
   expect(markup).toContain('role="status" aria-live="polite"');
-  expect(markup).toContain('Your selected time stays at 00:45.');
+  expect(markup).toContain('Your selected time remains unchanged.');
+  expect(markup).not.toContain('Historical view at 00:45.');
   expect(markup).toContain('Return to live');
 });
 

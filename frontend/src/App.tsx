@@ -125,7 +125,8 @@ export function App() {
     <main id="main-content" tabIndex={-1}>
       {route.kind === 'matches' && matchId
         ? <RealtimeAuthProvider getAccessToken={getHostAccessToken}>
-          <CanonicalMatchPage key={`${matchId}:${revision ?? ''}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
+          {/* Preserve replay state as the selected revision changes between seconds. */}
+          <CanonicalMatchPage key={`${matchId}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
             requestedRevision={revision} replay={route.replay} initialMode={realtimeMode} />
         </RealtimeAuthProvider>
         : route.kind === 'demo-match'

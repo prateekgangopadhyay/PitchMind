@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { clock } from './api';
 import { markRealtimeDisconnected, returnToLive, type RealtimeTimelineState } from './realtime';
 import { MatchRealtimeClient, type RealtimeAccessTokenProvider, type RealtimeStatus } from './realtimeClient';
 
@@ -94,10 +93,10 @@ export function RealtimeMatchUpdates({ state, onStateChange }: {
     {(status === 'unavailable' || status === 'disconnected') && hasAuthProvider &&
       <button type="button" onClick={retry}>Retry live connection</button>}
     {!hasAuthProvider && <p>Live updates require the host application’s signed-in identity.</p>}
-    {state.mode === 'HISTORICAL' && <div className="new-match-updates" role="status" aria-live="polite" aria-atomic="true">
-      <span>{state.hasNewMatchUpdate
-        ? `New match updates are available. Your selected time stays at ${clock(state.selectedTimeSeconds)}.`
-        : `Historical view at ${clock(state.selectedTimeSeconds)}. Live updates will not move this selected time.`}</span>
+    {state.mode === 'HISTORICAL' && <div className="new-match-updates">
+      <span role="status" aria-live="polite" aria-atomic="true">{state.hasNewMatchUpdate
+        ? 'New match updates are available. Your selected time remains unchanged.'
+        : 'Historical view. Live updates will not move the selected time.'}</span>
       <button type="button" onClick={returnLive}>Return to live</button>
     </div>}
   </section>;
