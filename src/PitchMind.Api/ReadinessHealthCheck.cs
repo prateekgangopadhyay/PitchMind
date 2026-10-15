@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Npgsql;
+using PitchMind.Infrastructure.Storage;
 
 namespace PitchMind.Api;
 
 public sealed class ReadinessHealthCheck(
-    IHostEnvironment environment,
     IConfiguration configuration,
     IServiceProvider services,
     ILogger<ReadinessHealthCheck> logger) : IHealthCheck
@@ -20,10 +20,7 @@ public sealed class ReadinessHealthCheck(
 
         if (!connectionStringConfigured)
         {
-            var syntheticLocalMode = environment.IsDevelopment() && configuration["Runtime:Profile"] == "local";
-            return syntheticLocalMode
-                ? HealthCheckResult.Healthy("local synthetic mode")
-                : HealthCheckResult.Unhealthy("required data dependency is not configured");
+            return HealthCheckResult.Unhealthy("canonical data dependency is not configured");
         }
 
         var dataSource = services.GetService<NpgsqlDataSource>();
@@ -35,10 +32,14 @@ public sealed class ReadinessHealthCheck(
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(timeout.Token);
-            await using var command = new NpgsqlCommand("SELECT 1", connection);
+            await using var command = new NpgsqlCommand(
+                "SELECT COALESCE(MAX(version), 0) FROM pitchmind.schema_versions", connection);
             command.CommandTimeout = (int)DatabaseProbeTimeout.TotalSeconds;
-            await command.ExecuteScalarAsync(timeout.Token);
-            return HealthCheckResult.Healthy("PostgreSQL is reachable");
+            var schemaVersion = (int)(await command.ExecuteScalarAsync(timeout.Token) ?? 0);
+            if (schemaVersion != PostgresSchemaMigrator.CurrentSchemaVersion)
+                return HealthCheckResult.Unhealthy("canonical PostgreSQL schema is not current");
+
+            return HealthCheckResult.Healthy("PostgreSQL is reachable and the canonical schema version is current");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

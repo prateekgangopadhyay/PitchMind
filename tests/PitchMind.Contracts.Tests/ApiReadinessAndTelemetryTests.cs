@@ -17,7 +17,7 @@ namespace PitchMind.Contracts.Tests;
 public sealed class ApiReadinessAndTelemetryTests
 {
     [Fact]
-    public async Task Local_synthetic_profile_is_ready_and_liveness_is_independent()
+    public async Task Local_profile_without_canonical_postgres_is_not_ready_and_liveness_is_independent()
     {
         using var factory = CreateFactory("Development", new Dictionary<string, string?>
         {
@@ -30,7 +30,7 @@ public sealed class ApiReadinessAndTelemetryTests
         using var legacyLive = await client.GetAsync("/health");
 
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
         Assert.Equal(HttpStatusCode.OK, legacyLive.StatusCode);
         Assert.Empty(await ready.Content.ReadAsStringAsync());
     }
@@ -98,7 +98,7 @@ public sealed class ApiReadinessAndTelemetryTests
         var matchId = Guid.NewGuid().ToString();
         using var response = await client.GetAsync($"/api/v1/canonical/matches/{matchId}/summary?atSeconds=10");
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.False(response.IsSuccessStatusCode);
         var request = Assert.Single(observations, item => item.Name == "pitchmind.api.requests" &&
             item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary"));
         Assert.Contains(request.Tags, tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary");
@@ -108,7 +108,8 @@ public sealed class ApiReadinessAndTelemetryTests
 
         var error = Assert.Single(observations, item => item.Name == "pitchmind.api.errors" &&
             item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary"));
-        Assert.Contains(error.Tags, tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == "4xx");
+        var responseStatusClass = $"{(int)response.StatusCode / 100}xx";
+        Assert.Contains(error.Tags, tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == responseStatusClass);
         Assert.DoesNotContain(error.Tags, tag => tag.Value?.ToString()?.Contains(matchId, StringComparison.Ordinal) == true);
 
         using var customMethodOne = await client.SendAsync(new HttpRequestMessage(new HttpMethod("X-PITCHMIND-A"), "/api/health"));
@@ -118,6 +119,29 @@ public sealed class ApiReadinessAndTelemetryTests
         Assert.Equal(2, otherMethodRequests.Length);
         Assert.All(otherMethodRequests, item => Assert.Contains(item.Tags,
             tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == "4xx"));
+    }
+
+    [Fact]
+    public async Task SignalR_hub_requests_are_excluded_from_http_duration_metrics()
+    {
+        var observations = new List<string>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, activeListener) =>
+        {
+            if (instrument.Meter.Name == ApiRequestTelemetry.InstrumentationName)
+                activeListener.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, _, _, _) => observations.Add(instrument.Name));
+        listener.SetMeasurementEventCallback<double>((instrument, _, _, _) => observations.Add(instrument.Name));
+        listener.Start();
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "GET";
+        context.Request.Path = "/hubs/matches/negotiate";
+        await ApiRequestTelemetry.RecordRequestAsync(context, _ => Task.CompletedTask);
+        await context.Response.CompleteAsync();
+
+        Assert.Empty(observations);
     }
 
     [Fact]

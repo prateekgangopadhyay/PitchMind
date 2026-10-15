@@ -178,7 +178,12 @@ export class MatchRealtimeClient {
   async refreshFallback(): Promise<void> {
     try {
       await this.refreshFromCanonicalStore();
-      if (!this.stopped && this.connection === null) this.setStatus('fallback');
+      if (!this.stopped) {
+        const state = this.options.getState();
+        const liveReady = this.connection !== null && this.transportConnected && this.subscriptionReady &&
+          !state.needsBackfill && !state.reconnecting;
+        this.setStatus(liveReady ? 'connected' : 'fallback');
+      }
     } catch (error) {
       if (!this.stopped) {
         this.markDisconnected();

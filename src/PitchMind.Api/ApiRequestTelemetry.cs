@@ -40,25 +40,31 @@ public static class ApiRequestTelemetry
                     activity.SetTag("pitchmind.insight.id", insightId?.ToString());
             }
 
-            // OnCompleted observes the final status after the outer exception boundary has
-            // converted dependency failures into sanitized ProblemDetails responses.
-            context.Response.OnCompleted(() =>
+            // SignalR hub requests may remain open for the life of a connection. Exclude the
+            // hub route (including negotiate/long-poll requests) from HTTP request durations.
+            // Connection lag/reconnect instruments belong to the realtime telemetry workstream.
+            if (!context.Request.Path.StartsWithSegments("/hubs/matches", StringComparison.OrdinalIgnoreCase))
             {
-                var tags = new TagList
+                // OnCompleted observes the final status after the outer exception boundary has
+                // converted dependency failures into sanitized ProblemDetails responses.
+                context.Response.OnCompleted(() =>
                 {
-                    { "http.request.method", BoundedMethodName(context.Request.Method) },
-                    { "http.route", route },
-                    { "http.response.status_class", $"{context.Response.StatusCode / 100}xx" }
-                };
-                Requests.Add(1, tags);
-                RequestDuration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds, tags);
-                if (context.Response.StatusCode >= StatusCodes.Status400BadRequest)
-                {
-                    Errors.Add(1, tags);
-                    activity?.SetStatus(ActivityStatusCode.Error);
-                }
-                return Task.CompletedTask;
-            });
+                    var tags = new TagList
+                    {
+                        { "http.request.method", BoundedMethodName(context.Request.Method) },
+                        { "http.route", route },
+                        { "http.response.status_class", $"{context.Response.StatusCode / 100}xx" }
+                    };
+                    Requests.Add(1, tags);
+                    RequestDuration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds, tags);
+                    if (context.Response.StatusCode >= StatusCodes.Status400BadRequest)
+                    {
+                        Errors.Add(1, tags);
+                        activity?.SetStatus(ActivityStatusCode.Error);
+                    }
+                    return Task.CompletedTask;
+                });
+            }
         }
     }
 

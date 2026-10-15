@@ -643,6 +643,38 @@ describe('MatchRealtimeClient', () => {
     expect(status).toHaveBeenLastCalledWith('refresh-failed');
     await client.stop();
   });
+
+  it('clears a stale reconnect status after explicit refresh catches up', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let backfillCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(), revisionChanged: false });
+      backfillCalls++;
+      if (backfillCalls === 3) return new Response(null, { status: 503 });
+      if (backfillCalls > 3) return Response.json(backfillPage(5400, 1, [event(1)], false, null));
+      return Response.json(backfill(5400));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+    connection.handlers.get('MatchUpdated')?.(cursor(1));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('refresh-failed'));
+    expect(state.needsBackfill).toBe(true);
+
+    await client.refreshFallback();
+
+    expect(state.throughSequence).toBe(1);
+    expect(state.needsBackfill).toBe(false);
+    expect(status).toHaveBeenLastCalledWith('connected');
+    await client.stop();
+  });
 });
 
 it('renders an accessible fail-closed host state and keeps the historical update notice stable', () => {

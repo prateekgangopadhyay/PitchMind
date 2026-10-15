@@ -12,7 +12,7 @@ These `/api/v1/matches` endpoints are the legacy fixture/demo route family. They
 | GET | `/api/health` | **CURRENT** | Process identification, not readiness of external dependencies |
 | GET | `/health/live` | **CURRENT** | Liveness only; does not probe external dependencies |
 | GET | `/health` | **CURRENT** | Backward-compatible liveness alias; does not probe external dependencies |
-| GET | `/health/ready` | **CURRENT** | Readiness: local synthetic profile if PostgreSQL is not configured; otherwise a bounded PostgreSQL probe. Empty body, 200 or 503 only. Azure PostgreSQL readers are unavailable, so this does not establish Azure readiness. |
+| GET | `/health/ready` | **CURRENT** | Readiness requires configured PostgreSQL, a successful bounded probe, and the current canonical schema version. Empty body, 200 or 503 only. A local profile without PostgreSQL is not ready; Azure PostgreSQL readers remain unavailable, so this does not establish Azure readiness. |
 | GET | `/api/v1/matches` | **MAPPED / UNAVAILABLE** | Legacy route returns `503 MATCH_DATA_UNAVAILABLE`; only the distinct canonical BFF reads persisted PostgreSQL projections |
 | GET | `/api/v1/matches/{matchId}/state?atSeconds=N` | **MAPPED / UNAVAILABLE** | Legacy route returns `503 MATCH_DATA_UNAVAILABLE`; use `/api/v1/canonical/matches/{matchId}/summary` for a persisted selected-time projection |
 | GET | `/api/v1/matches/{matchId}/events?atSeconds=N` | **MAPPED / UNAVAILABLE** | Legacy route returns `503 MATCH_DATA_UNAVAILABLE`; use the canonical BFF event route for persisted events |
