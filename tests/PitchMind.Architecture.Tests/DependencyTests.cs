@@ -23,7 +23,7 @@ public sealed class DependencyTests
             ["PitchMind.Application"] = ["PitchMind.Domain"],
             ["PitchMind.Infrastructure"] = ["PitchMind.Application"],
             ["PitchMind.Api"] = ["PitchMind.Application", "PitchMind.Infrastructure", "PitchMind.Contracts"],
-            ["PitchMind.EventWorker"] = ["PitchMind.Application"],
+            ["PitchMind.EventWorker"] = ["PitchMind.Application", "PitchMind.Contracts", "PitchMind.Infrastructure"],
             ["PitchMind.AgentWorker"] = ["PitchMind.Application"]
         };
 

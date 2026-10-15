@@ -16,13 +16,12 @@ flowchart LR
 FEED[Approved synthetic JSON Blob] --> GEN[ACA feeder Job / source mapper]
 GEN --> PG
 PG --> OUT[Transactional outbox; admission assigns revision]
- OUT --> PUB[Dispatcher]
-PUB --> EH[Event Hubs canonical envelope partition=matchId]
-EH --> EW[.NET Event Worker projection consumers]
-EW --> RULES[Domain Tactical Engine]
-RULES --> PG
- PUB --> SR
- PUB --> SB[Service Bus commands + DLQ]
+OUT --> PUB[EventWorker PostgreSQL outbox dispatcher]
+PUB --> EH[Event Hubs ProjectionPublishedV1 partition=matchId]
+EH -. future consumer; not implemented .-> EW[.NET Event Worker projection consumers]
+EW -. future consumer .-> RULES[Domain Tactical Engine]
+RULES -. future consumer .-> PG
+PUB -. future adapter .-> SB[Service Bus commands + DLQ]
  SB --> AW[Agent Worker ACA]
  AW --> TOOLS[Read-only evidence tools]
  TOOLS --> PG
@@ -64,6 +63,8 @@ For the current `canonical-dev-topology.bicep` candidate, ACA is internal with p
 - EventWorker processes match-partition streams, validates monotonic sequence/idempotency, commits event+projection+evidence+outbox atomically; checkpoints only after DB success.
 - AgentWorker accesses **read-only** typed tools, invokes Foundry with bounded evidence, deterministically validates claims, writes validated output via authorized application port; returns fallback on timeout/reject.
 - React shell renders factual DTOs only; no hardcoded football results or derived metric business logic.
+
+**Observed code slice:** EP04-S03 now composes an Azure-only EventWorker publisher over the PostgreSQL leased outbox. It validates the persisted `ProjectionPublishedV1` contract, preserves the JSON body and stable outbox message ID, and uses the match ID as the Event Hubs partition key. Managed identity is used for Event Hubs and password-free Azure PostgreSQL access with verified TLS. This is code and local automated-test evidence only; no Azure resource, credential, network connection, Event Hubs consumer, checkpoint, or deployment has been exercised.
 
 ## Critical flows
 ```mermaid

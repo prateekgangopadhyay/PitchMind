@@ -54,12 +54,12 @@ flowchart LR
   Mapper --> Admission["Canonical admission transaction"]
   Admission --> PG
   PG --> Outbox["Transactional outbox intent + assigned revision"]
-  Outbox --> Dispatcher["Outbox dispatcher"]
-  Dispatcher --> EH["Azure Event Hubs (admitted canonical telemetry)"]
-  EH --> Worker["ACA EventWorker: projections / tactical"]
-  Worker --> PG
-  Dispatcher --> Signal
-  Dispatcher --> Bus["Azure Service Bus commands / DLQ"]
+  Outbox --> Dispatcher["ACA EventWorker: leased PostgreSQL outbox dispatcher"]
+  Dispatcher -->|ProjectionPublishedV1; partition key matchId| EH["Azure Event Hubs (at-least-once)"]
+  EH -. "consumer/checkpoint not implemented" .-> Worker["Future projection consumer"]
+  Worker -.-> PG
+  API -. "LOCAL only: cursor notification" .-> Signal["Local SignalR"]
+  Dispatcher -. "future adapter" .-> Bus["Azure Service Bus commands / DLQ"]
   Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
   Agent --> PG
   Agent --> Foundry["Microsoft Foundry (candidate explanation)"]
@@ -75,6 +75,8 @@ flowchart LR
 
 **Non-negotiable contract:** raw source candidates are never published directly to the canonical telemetry channel. PostgreSQL assigns each admitted per-match `canonicalRevision` atomically with the record and outbox intent. Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
+**Implemented adapter boundary (code only):** `EventWorker` leases only committed PostgreSQL outbox rows, validates the exact `ProjectionPublishedV1` payload, and sends its original JSON to Event Hubs with the stable outbox ID and `matchId` partition key. The Azure host requires `Runtime:Profile=azure`, Event Hubs namespace/name, a password-free PostgreSQL connection string, TLS verification, and managed identity for both services. Local SignalR remains an API-local adapter. This code has local automated evidence only; no Azure connection, resource, consumer checkpoint, or deployment has been verified.
+
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 
 ## C# project responsibilities and dependency policy
@@ -88,7 +90,7 @@ flowchart LR
 | `PitchMind.Application` | Use cases and ports | `PitchMind.Domain` |
 | `PitchMind.Infrastructure` | Persistence and external adapters | `PitchMind.Application` |
 | `PitchMind.Api` | HTTP composition and endpoints | `PitchMind.Application`, `PitchMind.Infrastructure`, `PitchMind.Contracts` |
-| `PitchMind.EventWorker` | Event-processing host composition | `PitchMind.Application` |
+| `PitchMind.EventWorker` | Azure PostgreSQL outbox dispatcher and Event Hubs publisher host | `PitchMind.Application`, `PitchMind.Contracts`, `PitchMind.Infrastructure` |
 | `PitchMind.AgentWorker` | Explanation-worker host composition | `PitchMind.Application` |
 
 **Release state:** The Azure integration arrows above are **proposed**. An existing hosted offline demo does not prove the connectivity represented here, and no new DEV deployment is authorized by this diagram.
