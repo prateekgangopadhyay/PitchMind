@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -196,6 +197,53 @@ public sealed class RealtimeApiTests
     }
 
     [Fact]
+    public async Task Local_browser_bearer_and_hub_query_tokens_use_the_dev_adapter_only_on_the_hub_path()
+    {
+        using var factory = CreateFactory(local: true, testAuthentication: false);
+        var token = CreateLocalDevelopmentToken("browser-realtime-test", "fan");
+        using var bearerClient = factory.CreateClient();
+        bearerClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        using var negotiate = await bearerClient.PostAsJsonAsync("/api/v1/realtime/negotiate",
+            new { matchId = MatchId, clientRevision = (long?)null });
+        Assert.Equal(HttpStatusCode.OK, negotiate.StatusCode);
+
+        using var hubClient = factory.CreateClient();
+        hubClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var hubHandshake = await hubClient.PostAsync("/hubs/matches/negotiate?negotiateVersion=1", null);
+        Assert.Equal(HttpStatusCode.OK, hubHandshake.StatusCode);
+
+        using var queryClient = factory.CreateClient();
+        using var websocketHandshake = await queryClient.GetAsync(
+            $"/hubs/matches?access_token={Uri.EscapeDataString(token)}");
+        Assert.NotEqual(HttpStatusCode.Unauthorized, websocketHandshake.StatusCode);
+
+        using var queryOnlyApi = await queryClient.PostAsJsonAsync(
+            $"/api/v1/realtime/negotiate?access_token={Uri.EscapeDataString(token)}",
+            new { matchId = MatchId, clientRevision = (long?)null });
+        Assert.Equal(HttpStatusCode.Unauthorized, queryOnlyApi.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/hubs/matches", "?access_token=local-token", "local-token")]
+    [InlineData("/hubs/matches/negotiate", "?access_token=local-token", null)]
+    [InlineData("/api/v1/realtime/negotiate", "?access_token=local-token", null)]
+    [InlineData("/hubs/other", "?access_token=local-token", null)]
+    [InlineData("/hubs/matches", "?access_token=one&access_token=two", null)]
+    [InlineData("/hubs/matches", "?access_token=", null)]
+    public void Jwt_query_token_extraction_is_limited_to_one_bounded_token_on_the_exact_hub_path(
+        string path, string query, string? expected)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+        context.Request.QueryString = new QueryString(query);
+
+        Assert.Equal(expected, ApiSecurity.GetMatchHubQueryToken(context.Request));
+    }
+
+    [Fact]
     public async Task Negotiate_uses_the_shared_api_rate_limit()
     {
         using var factory = CreateFactory(local: true);
@@ -213,7 +261,14 @@ public sealed class RealtimeApiTests
         Assert.Equal(HttpStatusCode.TooManyRequests, throttled.StatusCode);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(bool local) => new WebApplicationFactory<Program>()
+    private static string CreateLocalDevelopmentToken(string subject, params string[] roles)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new { sub = subject, roles });
+        var encoded = Convert.ToBase64String(payload).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        return $"pmdev.v1.{encoded}";
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(bool local, bool testAuthentication = true) => new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(local ? "Development" : "Production");
@@ -237,12 +292,13 @@ public sealed class RealtimeApiTests
             {
                 services.RemoveAll<IMatchProjectionReader>();
                 services.AddSingleton<IMatchProjectionReader, TestProjectionReader>();
-                services.AddAuthentication(options =>
-                    {
-                        options.DefaultAuthenticateScheme = "test";
-                        options.DefaultChallengeScheme = "test";
-                    })
-                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>("test", _ => { });
+                if (testAuthentication)
+                    services.AddAuthentication(options =>
+                        {
+                            options.DefaultAuthenticateScheme = "test";
+                            options.DefaultChallengeScheme = "test";
+                        })
+                        .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>("test", _ => { });
             });
         });
 
