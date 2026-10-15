@@ -182,7 +182,7 @@ button, select { min-height: 44px; }
 }
 @media (max-width: 640px) {
   .site-header { align-items: flex-start; flex-wrap: wrap; padding: 16px 18px; }
-  .main-navigation { padding: 0 12px; }
+  .main-navigation { flex-wrap: wrap; overflow-x: visible; padding: 0 12px; }
   .main-navigation a { padding: 0 .7rem; }
   main { padding: 18px; }
   .content-page { padding-top: .75rem; }

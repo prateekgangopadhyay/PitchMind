@@ -69,6 +69,56 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
         return new PersistedTrackingFramePage(Array.AsReadOnly(frames.ToArray()), last?.Sequence, last?.FrameId, hasMore);
     }
 
+    public async Task<PersistedTrackingFrame?> ReadByIdAtAsync(SelectedMatchProjection projection,
+        int selectedSeconds, string frameId, long? exactCanonicalRevision, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        if (selectedSeconds is < 0 or > 5400) throw new ArgumentOutOfRangeException(nameof(selectedSeconds));
+        if (string.IsNullOrWhiteSpace(frameId) || frameId.Length > 128)
+            throw new ArgumentException("Frame ID must contain between 1 and 128 non-whitespace characters.", nameof(frameId));
+        if (projection.CanonicalRevision <= 0 || projection.ProjectionRevision <= 0 || projection.AsOfSequence < -1 ||
+            projection.AsOfClockSeconds > selectedSeconds)
+            throw new ArgumentException("Projection must be valid and visible at the selected time.", nameof(projection));
+        if (exactCanonicalRevision is <= 0 || exactCanonicalRevision > projection.CanonicalRevision)
+            throw new ArgumentOutOfRangeException(nameof(exactCanonicalRevision));
+        if (!IsSha256(projection.SourceSha256))
+            throw new InvalidDataException("Persisted projection has an invalid source hash.");
+        if (!Guid.TryParse(projection.State.MatchId, out var matchId) || matchId == Guid.Empty)
+            throw new InvalidDataException("Persisted projection has an invalid match ID.");
+
+        await using var command = dataSource.CreateCommand("""
+            SELECT frame_id, sequence, canonical_revision, period, clock_seconds, coordinate_version,
+                   CASE WHEN octet_length(quality::text) <= 4096 THEN quality::text ELSE NULL END,
+                   source_sha256,
+                   CASE WHEN octet_length(payload::text) <= 32768 THEN payload::text ELSE NULL END,
+                   octet_length(payload::text), octet_length(quality::text)
+            FROM pitchmind.tracking_frames
+            WHERE match_id = $1 AND frame_id = $2 AND sequence <= $3 AND clock_seconds = $4
+              AND canonical_revision IS NOT NULL AND canonical_revision <= $5 AND source_sha256 = $6
+              AND ($7 IS NULL OR canonical_revision = $7)
+            ORDER BY canonical_revision DESC
+            LIMIT 1
+            """);
+        command.Parameters.AddWithValue(matchId);
+        command.Parameters.AddWithValue(frameId);
+        command.Parameters.AddWithValue(projection.AsOfSequence);
+        command.Parameters.AddWithValue(selectedSeconds);
+        command.Parameters.AddWithValue(projection.CanonicalRevision);
+        command.Parameters.AddWithValue(projection.SourceSha256);
+        command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Bigint,
+            Value = (object?)exactCanonicalRevision ?? DBNull.Value });
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+        if (reader.GetInt32(9) > MaximumPayloadBytes || reader.GetInt32(10) > 4096)
+            throw new InvalidDataException("Persisted tracking frame exceeds the response size bound.");
+        var frame = new PersistedTrackingFrame(reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2),
+            reader.GetInt32(3), reader.GetInt32(4), reader.GetString(5), reader.GetString(6),
+            reader.GetString(7).Trim(), reader.GetString(8));
+        ValidatePayload(frame, matchId, projection.SourceSha256);
+        return frame;
+    }
+
     private static void ValidatePayload(PersistedTrackingFrame indexed, Guid matchId, string sourceSha256)
     {
         try

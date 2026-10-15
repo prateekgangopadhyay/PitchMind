@@ -83,13 +83,14 @@ describe('Canonical evidence disclosure', () => {
       expect(container.textContent).toContain('event event-source-1');
       expect(container.textContent).toContain('55:08');
       expect(container.textContent).toContain('sequence 19');
+      expect(container.textContent).toContain('source revision 4');
       expect(container.textContent).toContain('synthetic-approved');
       expect(container.textContent).toContain('press-detector-v2');
       expect(container.textContent).toContain('Stored detector conditions');
       expect(container.textContent).toContain('"sampleSize": 11');
       expect(container.textContent).toContain('Sparse frame coverage');
       expect(container.querySelector('summary')?.textContent).toContain('Why? Inspect evidence for 55:08');
-      const sourceLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19"]');
+      const sourceLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19, source revision 4"]');
       expect(sourceLink?.tagName).toBe('A');
       expect(sourceLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-event-19`);
       const summary = container.querySelector('summary')!;
@@ -106,7 +107,8 @@ describe('Canonical evidence disclosure', () => {
       ...insight,
       evidence: [
         { kind: 'event', id: 'event-source-1', relation: 'supports' },
-        { kind: 'frame', id: 'frame-source-2', relation: 'supports' }
+        { kind: 'frame', id: 'frame-source-2', relation: 'supports' },
+        { kind: 'frame', id: 'frame-duplicate-3', relation: 'supports' }
       ]
     };
     const sourcedEvidence: CanonicalEvidence = {
@@ -115,7 +117,9 @@ describe('Canonical evidence disclosure', () => {
         { kind: 'event', id: 'event-source-1', relation: 'supports', sourceCanonicalRevision: 4, sequence: 19,
           clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } },
         { kind: 'frame', id: 'frame-source-2', relation: 'supports', sourceCanonicalRevision: 4, sequence: 18,
-          clockSeconds: 3308, period: 2, payload: { frameId: 'frame-source-2' } }
+          clockSeconds: 3308, period: 2, payload: { frameId: 'frame-source-2' } },
+        { kind: 'frame', id: 'frame-duplicate-3', relation: 'supports', sourceCanonicalRevision: 4, sequence: 18,
+          clockSeconds: 3308, period: 2, payload: { frameId: 'frame-duplicate-3' } }
       ]
     };
     vi.stubGlobal('fetch', vi.fn(async () => response(sourcedEvidence)));
@@ -125,12 +129,15 @@ describe('Canonical evidence disclosure', () => {
     try {
       await openDisclosure(container);
       await settle();
-      const eventLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19"]');
-      const frameLink = container.querySelector('a[aria-label="Open frame frame-source-2 at 55:08, sequence 18"]');
+      const eventLink = container.querySelector('a[aria-label="Open event event-source-1 at 55:08, sequence 19, source revision 4"]');
+      const frameLink = container.querySelector('a[aria-label="Open frame frame-source-2 at 55:08, sequence 18, source revision 4"]');
+      const duplicateFrameLink = container.querySelector('a[aria-label="Open frame frame-duplicate-3 at 55:08, sequence 18, source revision 4"]');
       expect(eventLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-event-19`);
-      expect(frameLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-frame-18`);
+      expect(frameLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4&sourceRevision=4#canonical-frame-frame-source-2`);
+      expect(duplicateFrameLink?.getAttribute('href')).toBe(`/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4&sourceRevision=4#canonical-frame-frame-duplicate-3`);
       expect(eventLink?.tagName).toBe('A');
       expect(frameLink?.tagName).toBe('A');
+      expect(duplicateFrameLink?.tagName).toBe('A');
     } finally {
       await act(async () => root.unmount());
     }
@@ -162,7 +169,7 @@ describe('Canonical evidence disclosure', () => {
     }
   });
 
-  it.each(['match', 'canonical revision', 'projection revision', 'time', 'sequence', 'source lineage'])('rejects mismatched %s context without showing evidence', async mismatch => {
+  it.each(['match', 'canonical revision', 'projection revision', 'time', 'sequence', 'source lineage', 'future source canonical revision', 'zero source canonical revision', 'non-integer source canonical revision', 'unsafe source canonical revision'])('rejects mismatched %s context without showing evidence', async mismatch => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const mismatchedInsight = { ...insight };
     if (mismatch === 'match') mismatchedInsight.matchId = '22222222-2222-2222-2222-222222222222';
@@ -171,11 +178,22 @@ describe('Canonical evidence disclosure', () => {
     if (mismatch === 'time') mismatchedInsight.selectedTimeSeconds = 3307;
     if (mismatch === 'sequence') mismatchedInsight.throughSequence = 21;
     if (mismatch === 'source lineage') mismatchedInsight.sourceSha256 = 'b'.repeat(64);
-    const fetchMock = vi.fn(async () => response({ ...evidenceAt(3308), insight: mismatchedInsight }));
+    const mismatchedEvidence = { ...evidenceAt(3308), insight: mismatchedInsight };
+    if (mismatch === 'future source canonical revision') {
+      mismatchedEvidence.items[0].sourceCanonicalRevision = mismatchedInsight.canonicalRevision + 1;
+    }
+    if (mismatch === 'zero source canonical revision') mismatchedEvidence.items[0].sourceCanonicalRevision = 0;
+    if (mismatch === 'non-integer source canonical revision') mismatchedEvidence.items[0].sourceCanonicalRevision = 4.5;
+    if (mismatch === 'unsafe source canonical revision') {
+      mismatchedInsight.canonicalRevision = Number.MAX_SAFE_INTEGER + 10;
+      mismatchedEvidence.items[0].sourceCanonicalRevision = mismatchedInsight.canonicalRevision;
+    }
+    const fetchMock = vi.fn(async () => response(mismatchedEvidence));
     vi.stubGlobal('fetch', fetchMock);
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const { root } = renderEvidence(container);
+    const { root } = renderEvidence(container, 3308,
+      mismatch === 'unsafe source canonical revision' ? mismatchedInsight : insight);
     try {
       await openDisclosure(container);
       await settle();
