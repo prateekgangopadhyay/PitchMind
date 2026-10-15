@@ -141,6 +141,24 @@ public sealed class RealtimeApiTests
         Assert.Equal("SIGNALR_UNAVAILABLE", body.RootElement.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task Negotiate_uses_the_shared_api_rate_limit()
+    {
+        using var factory = CreateFactory(local: true);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", "fan");
+        HttpResponseMessage? last = null;
+
+        for (var requestNumber = 0; requestNumber < 121; requestNumber++)
+        {
+            last?.Dispose();
+            last = await client.PostAsJsonAsync("/api/v1/realtime/negotiate", new { matchId = MatchId });
+        }
+
+        using var throttled = last ?? throw new InvalidOperationException("No negotiation response was received.");
+        Assert.Equal(HttpStatusCode.TooManyRequests, throttled.StatusCode);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(bool local) => new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
@@ -149,11 +167,17 @@ public sealed class RealtimeApiTests
                 local ? "Development" : "Production");
             builder.UseSetting("Runtime:Profile", local ? "local" : "azure");
             builder.UseSetting("Realtime:Provider", local ? "local" : "azure");
+            builder.UseSetting("Identity:Authority", local ? string.Empty : "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000001/v2.0");
+            builder.UseSetting("Identity:Audience", local ? string.Empty : "api://pitchmind-test");
+            builder.UseSetting("Identity:DevelopmentHeaderAuthEnabled", local ? "true" : "false");
             builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
                     ["Runtime:Profile"] = local ? "local" : "azure",
-                    ["Realtime:Provider"] = local ? "local" : "azure"
+                    ["Realtime:Provider"] = local ? "local" : "azure",
+                    ["Identity:Authority"] = local ? null : "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000001/v2.0",
+                    ["Identity:Audience"] = local ? null : "api://pitchmind-test",
+                    ["Identity:DevelopmentHeaderAuthEnabled"] = local ? "true" : "false"
                 }));
             builder.ConfigureTestServices(services =>
             {
