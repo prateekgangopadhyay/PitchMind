@@ -157,7 +157,7 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Goal');
     expect(container.textContent).toContain('Score event');
     expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
-    expect(container.textContent).toContain('No observed tracking frame is recorded at 55:09. Positions are not estimated.');
+    expect(container.textContent).toContain('No observed tracking frame approved for display is available at 55:09. Positions are not estimated.');
     expect(observedRequests).toHaveLength(5);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');

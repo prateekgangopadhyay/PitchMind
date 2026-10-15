@@ -132,13 +132,14 @@ public sealed class PostgresLedgerTests
             await projection.ExecuteNonQueryAsync();
         }
 
-        async Task AddFrame(string frameId, long sequence, long canonicalRevision, int clockSeconds)
+        async Task AddFrame(string frameId, long sequence, long canonicalRevision, int clockSeconds,
+            string rightsReviewStatus = "approved_for_use")
         {
             var payload = JsonSerializer.Serialize(new
             {
                 matchId = matchGuid.ToString("D"), frameId, sequence, canonicalRevision,
                 matchTime = new { elapsedSeconds = clockSeconds, period = 2 },
-                source = new { sourceSha256 = sourceHash }
+                source = new { sourceSha256 = sourceHash, rightsReviewStatus }
             });
             await using var command = source.CreateCommand("""
                 INSERT INTO pitchmind.tracking_frames(match_id, frame_id, canonical_revision, sequence, period,
@@ -161,6 +162,7 @@ public sealed class PostgresLedgerTests
         await AddFrame("future-revision", 4, 10, 120);
         await AddFrame("future-sequence", 6, 9, 120);
         await AddFrame("other-time", 4, 9, 121);
+        await AddFrame("pending-rights", 4, 9, 120, "pending");
 
         var selectedProjection = new SelectedMatchProjection(
             new MatchState(matchGuid.ToString("D"), 120, 2, MatchPhase.SecondHalf, 0, 0, null,
@@ -179,6 +181,7 @@ public sealed class PostgresLedgerTests
         Assert.Single(second.Frames);
         Assert.Equal("frame-b", second.Frames[0].FrameId);
         Assert.False(second.HasMore);
+        Assert.Null(await reader.ReadByIdAtAsync(selectedProjection, 120, "pending-rights", null, CancellationToken.None));
 
         var targeted = await reader.ReadByIdAtAsync(selectedProjection, 120, "frame-b", null, CancellationToken.None);
         Assert.NotNull(targeted);
@@ -231,7 +234,7 @@ public sealed class PostgresLedgerTests
         {
             matchId = matchGuid.ToString("D"), frameId = "oversize-frame", sequence = 3L, canonicalRevision = 9L,
             matchTime = new { elapsedSeconds = 120, period = 2 },
-            source = new { sourceSha256 = sourceHash },
+            source = new { sourceSha256 = sourceHash, rightsReviewStatus = "approved_for_use" },
             padding = new string('x', oversizedField == "payload" ? 40_000 : 8)
         });
         var quality = JsonSerializer.Serialize(new

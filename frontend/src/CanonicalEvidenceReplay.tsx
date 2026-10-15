@@ -90,7 +90,15 @@ export function CanonicalEvidenceReplay({ evidence }: { evidence: CanonicalEvide
           </g>;
         })}
       </svg>
-      <div className="position-table-details">
+      <div className="position-table-details" role="region" aria-label="Observed replay positions"
+        aria-description="Use the left and right arrow keys to scroll the position table on narrow screens."
+        tabIndex={0} onKeyDown={event => {
+          const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+          if (direction) {
+            event.preventDefault();
+            event.currentTarget.scrollBy({ left: direction * 64 });
+          }
+        }}>
         <table>
           <caption>Observed positions · frame {selected.frame.frameId} · sequence {selected.item.sequence}</caption>
           <thead><tr><th scope="col">Marker</th><th scope="col">Team ID</th><th scope="col">Player ID</th><th scope="col">View X (m)</th><th scope="col">View Y (m)</th><th scope="col">Evidence link</th></tr></thead>

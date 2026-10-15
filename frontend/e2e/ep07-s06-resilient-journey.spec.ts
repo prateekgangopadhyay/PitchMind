@@ -9,9 +9,9 @@ const throughSequence = 19;
 const sourceSha256 = 'c'.repeat(64);
 const insightSummary = 'Recorded sequence is available for review.';
 
-type StubOptions = { unavailable?: string[]; withEvidence?: boolean; withReplay?: boolean; withTracking?: boolean };
+type StubOptions = { unavailable?: string[]; withEvidence?: boolean; withReplay?: boolean; withTracking?: boolean; trackingRightsStatus?: string };
 
-function trackingFrame(selectedTimeSeconds: number) {
+function trackingFrame(selectedTimeSeconds: number, rightsReviewStatus = 'approved_for_use') {
   return {
     frameId: 'test-tracking-frame', sequence: 18, canonicalRevision, projectionRevision: 4, period: 2,
     clockSeconds: selectedTimeSeconds, coordinateVersion: 'coordinates-test-v1', sourceSha256, quality: null,
@@ -27,7 +27,7 @@ function trackingFrame(selectedTimeSeconds: number) {
       ],
       source: { providerId: 'synthetic-test', sourceMatchId: 'test-source-match', sourceRecordId: 'test-tracking-frame',
         sourceSequence: 18, sourceSchemaVersion: 'tracking-test-v1', sourceSha256,
-        provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'approved_for_use' }
+        provenanceStatus: 'synthetic-test-only', rightsReviewStatus }
     }
   };
 }
@@ -118,7 +118,7 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
           evidence: options.withReplay ? replayEvidenceItems(selectedTimeSeconds).references
             : options.withEvidence ? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }] : [] }]
       },
-      frames: { ...context, items: options.withTracking ? [trackingFrame(selectedTimeSeconds)] : [], nextCursor: null, hasMore: false },
+      frames: { ...context, items: options.withTracking ? [trackingFrame(selectedTimeSeconds, options.trackingRightsStatus)] : [], nextCursor: null, hasMore: false },
       'key-moments': { ...context, items: [], hasMore: false }
     };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bodyByResource[resource ?? ''] ?? {}) });
@@ -139,7 +139,14 @@ test('steps through source-bound observed frames with keyboard controls at three
   await expect(replay).toContainText('Team test-home · attacks toward right');
   await expect(replay).toContainText('Team test-away · attacks toward left');
   await expect(replay.getByRole('img', { name: 'Observed tracking frame at 55:00, period 2, sequence 18' })).toBeVisible();
-  await expect(replay.getByRole('table', { name: 'Observed positions · frame test-frame-18 · sequence 18' })).toBeVisible();
+  const replayPositions = replay.getByRole('region', { name: 'Observed replay positions' });
+  await expect(replayPositions.getByRole('table', { name: 'Observed positions · frame test-frame-18 · sequence 18' })).toBeVisible();
+  const replayTableSize = await replayPositions.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+  expect(replayTableSize.scroll).toBeGreaterThan(replayTableSize.client);
+  await replayPositions.focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await replayPositions.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   const next = replay.getByRole('button', { name: 'Next observed frame' });
   await next.focus();
@@ -182,6 +189,18 @@ test('keeps observed position columns readable in a keyboard-scrollable mobile t
   await page.keyboard.press('ArrowRight');
   expect(await positions.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
   await positions.screenshot({ path: '../docs/engineering/evidence/ep07-s05-replay/mobile-position-table-scrolled-375x812.png' });
+});
+
+test('does not display canonical pitch positions until tracking rights are approved', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await stubCanonicalMatch(page, { withTracking: true, trackingRightsStatus: 'pending' });
+  await openSelectedMatch(page);
+
+  const pitch = page.getByRole('region', { name: 'Observed pitch' });
+  await expect(pitch.getByText('Observed tracking is unavailable until the source is approved for canonical use. Positions are not estimated.')).toBeVisible();
+  await expect(pitch.getByRole('img', { name: /Observed player and ball positions/ })).toHaveCount(0);
+  await expect(pitch.getByRole('table', { name: /Pitch view coordinates/ })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Canonical match score' })).toBeVisible();
 });
 
 async function openSelectedMatch(page: Page) {

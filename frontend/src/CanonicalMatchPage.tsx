@@ -225,17 +225,21 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [playing, matchId, selectedSeconds, projectionRevision, canonicalSelectedSeconds]);
 
   const snapshot = view?.snapshot;
+  const approvedTrackingFrames = view?.trackingFrames?.items.filter(frame => frame?.frame?.source?.rightsReviewStatus === 'approved_for_use') ?? [];
+  const hasUnapprovedTrackingFrames = view?.trackingFrames?.items.some(frame => frame?.frame?.source?.rightsReviewStatus !== 'approved_for_use') ?? false;
   const selectedFrame = requestedFrameId === null
-    ? view?.trackingFrames?.items.at(-1) ?? null
-    : view?.trackingFrames?.items.find(frame => frame.frameId === requestedFrameId &&
+    ? approvedTrackingFrames.at(-1) ?? null
+    : approvedTrackingFrames.find(frame => frame.frameId === requestedFrameId &&
       (requestedSourceRevision === null || frame.canonicalRevision === requestedSourceRevision)) ?? null;
   const pitch = selectedFrame ? pitchCoordinates(selectedFrame) : null;
-  const trackingMessage = view?.trackingStatus || (requestedFrameId !== null && !selectedFrame
+  const trackingMessage = view?.trackingStatus || (hasUnapprovedTrackingFrames && !selectedFrame
+    ? 'Observed tracking is unavailable until the source is approved for canonical use. Positions are not estimated.'
+    : requestedFrameId !== null && !selectedFrame
     ? 'The linked observed frame is not present at this selected time and source revision. No other frame is substituted.'
-    : view?.trackingFrames?.items.length
+    : approvedTrackingFrames.length
     ? pitch ? `Observed frame ${selectedFrame?.frameId} at ${clock(selectedSeconds)} · period ${selectedFrame?.period}. No positions are interpolated.`
       : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
-    : `No observed tracking frame is recorded at ${clock(selectedSeconds)}. Positions are not estimated.`);
+    : `No observed tracking frame approved for display is available at ${clock(selectedSeconds)}. Positions are not estimated.`);
 
   const onRealtimeStateChange = (next: RealtimeTimelineState) => {
     setRealtimeState(next);
