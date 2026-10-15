@@ -33,6 +33,7 @@ public sealed class FoundryExplanationAdapterTests
         Assert.Equal("approved-synthetic-feed", candidate.Provenance);
         Assert.Equal(new string('a', 64), candidate.SourceSha256);
         Assert.Equal(new string('b', 64), candidate.StateSha256);
+        Assert.Equal(MatchIntelligenceContextFingerprint.Compute(Packet()), candidate.ContextPacketSha256);
         Assert.Equal("match-intelligence-context-v1", candidate.ContextPolicyVersion);
         Assert.Equal(12, candidate.InputTokens);
         Assert.Equal(8, candidate.OutputTokens);

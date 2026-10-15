@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -29,6 +30,19 @@ public sealed record CandidateExplanationLineageCheck(
 
     public static CandidateExplanationLineageCheck Pass() => new(true, CandidateExplanationLineageFailure.None);
     public static CandidateExplanationLineageCheck Refuse(CandidateExplanationLineageFailure failure) => new(false, failure);
+}
+
+/// <summary>Computes the stable wire-format identity used to bind an untrusted candidate to its packet.</summary>
+public static class MatchIntelligenceContextFingerprint
+{
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    public static string Compute(MatchIntelligenceContextPacket context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(context, WebJson);
+        return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
 }
 
 /// <summary>
@@ -105,6 +119,7 @@ public sealed class CandidateExplanationLineageChecker
             !IsBounded(context.SourceMetadataTrustBoundary, 256) ||
             !Sha256Pattern.IsMatch(context.SourceSha256 ?? string.Empty) ||
             !Sha256Pattern.IsMatch(context.StateSha256 ?? string.Empty) ||
+            context.SelectedTimeSeconds > 5_400 ||
             !IsBounded(context.ContextPolicyVersion, 128) ||
             context.SerializedSizeBytes is < 1 or > 32_768 ||
             context.Claim is null || !Enum.IsDefined(context.Claim.Category) ||
@@ -123,12 +138,12 @@ public sealed class CandidateExplanationLineageChecker
                 item.SourceCanonicalRevision <= 0 || item.SourceCanonicalRevision > context.CanonicalRevision ||
                 item.Sequence < 0 || item.Sequence > context.ThroughSequence ||
                 item.ClockSeconds < 0 || item.ClockSeconds > context.ProjectionAsOfTimeSeconds ||
-                item.Period < 1 || Encoding.UTF8.GetByteCount(item.PayloadJson ?? string.Empty) > MaximumEvidencePayloadBytes ||
+                item.Period is < 1 or > 5 || Encoding.UTF8.GetByteCount(item.PayloadJson ?? string.Empty) > MaximumEvidencePayloadBytes ||
                 !seenIds.Add(item.Id) || !IsJson(item.PayloadJson))
                 return false;
         }
 
-        return true;
+        return JsonSerializer.SerializeToUtf8Bytes(context).Length == context.SerializedSizeBytes;
     }
 
     private static bool IsVisibleEvidence(MatchIntelligenceEvidence evidence, MatchIntelligenceContextPacket context) =>
@@ -146,6 +161,7 @@ public sealed class CandidateExplanationLineageChecker
         string.Equals(candidate.Provenance, context.Provenance, StringComparison.Ordinal) &&
         string.Equals(candidate.SourceSha256, context.SourceSha256, StringComparison.Ordinal) &&
         string.Equals(candidate.StateSha256, context.StateSha256, StringComparison.Ordinal) &&
+        string.Equals(candidate.ContextPacketSha256, MatchIntelligenceContextFingerprint.Compute(context), StringComparison.Ordinal) &&
         string.Equals(candidate.ContextPolicyVersion, context.ContextPolicyVersion, StringComparison.Ordinal);
 
     private static bool IsBounded(string? value, int maximumLength) =>
@@ -156,8 +172,8 @@ public sealed class CandidateExplanationLineageChecker
         if (string.IsNullOrWhiteSpace(payload)) return false;
         try
         {
-            using var _ = JsonDocument.Parse(payload);
-            return true;
+            using var document = JsonDocument.Parse(payload);
+            return document.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
         }
         catch (JsonException)
         {

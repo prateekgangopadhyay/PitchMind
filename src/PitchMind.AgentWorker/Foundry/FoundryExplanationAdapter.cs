@@ -143,7 +143,7 @@ public sealed class FoundryExplanationAdapter(
                 request.Context.MatchId, request.Context.CanonicalRevision, request.Context.ProjectionRevision,
                 request.Context.SelectedTimeSeconds, request.Context.ThroughSequence, request.Context.SourceVersion,
                 request.Context.Provenance, request.Context.SourceSha256, request.Context.StateSha256,
-                request.Context.ContextPolicyVersion);
+                MatchIntelligenceContextFingerprint.Compute(request.Context), request.Context.ContextPolicyVersion);
             logger.LogInformation("Foundry candidate generated; deployment={Deployment} durationMs={DurationMs} inputTokens={InputTokens} outputTokens={OutputTokens} traceId={TraceId}",
                 options.Deployment, (long)stopwatch.Elapsed.TotalMilliseconds, parsed.InputTokens, parsed.OutputTokens, traceId);
             completed = true;

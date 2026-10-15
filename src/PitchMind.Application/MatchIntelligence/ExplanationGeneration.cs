@@ -32,6 +32,7 @@ public sealed record CandidateExplanation(
     string Provenance,
     string SourceSha256,
     string StateSha256,
+    string ContextPacketSha256,
     string ContextPolicyVersion);
 
 public enum ExplanationGenerationFailure
