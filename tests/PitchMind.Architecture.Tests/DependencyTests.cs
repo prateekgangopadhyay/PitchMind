@@ -320,6 +320,39 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionFixtureGuard_RejectsCandidateCoordinateInShadowedPlayerPositionsArrayAlias()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var firstX = feed.RootElement[0].GetProperty("playerPositions")[0].GetProperty("x").GetRawText();
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-shadowed-player-positions-alias-");
+        try
+        {
+            var source = Path.Combine(sourceRoot.FullName, "PlayerFrame.tsx");
+            File.WriteAllText(source,
+                $"const x = {firstX};\n" +
+                "const positions = [{ x: 987654321 }];\n" +
+                "function render() {\n" +
+                "  const positions = [{ x }];\n" +
+                "  return { playerPositions: positions };\n" +
+                "}\n");
+
+            var violations = FindFixtureDataMarkers(
+                [source],
+                new HashSet<string>(StringComparer.Ordinal),
+                ReadFixtureNumericMarkers(root));
+
+            Xunit.Assert.Contains(violations, item => item.Path == source && item.Line.Contains($"x = {firstX}", StringComparison.Ordinal));
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionFixtureGuard_IgnoresCandidateCoordinateAliasShadowedAtPlayerShorthand()
     {
         var root = FindRepositoryRoot();
@@ -1178,9 +1211,17 @@ public sealed class DependencyTests
                         @"(?:\s*:\s*[^=;\r\n]+)?\s*=\s*(?<open>\[)",
                         RegexOptions.CultureInvariant)
                     .Cast<Match>()
-                    .FirstOrDefault(match => IsScopeVisibleAt(
-                        GetDeclarationScopeAt(source, match.Index, match.Groups["kind"].Value, extension),
-                        assignmentScope));
+                    .Select(match => new
+                    {
+                        Declaration = match,
+                        Scope = GetDeclarationScopeAt(source, match.Index, match.Groups["kind"].Value, extension)
+                    })
+                    .Where(binding => binding.Declaration.Index < assignment.Index &&
+                        IsScopeVisibleAt(binding.Scope, assignmentScope))
+                    .OrderByDescending(binding => binding.Scope.Count)
+                    .ThenByDescending(binding => binding.Declaration.Index)
+                    .Select(binding => binding.Declaration)
+                    .FirstOrDefault();
                 if (arrayDeclaration is null)
                 {
                     continue;
