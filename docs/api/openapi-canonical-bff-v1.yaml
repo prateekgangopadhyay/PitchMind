@@ -187,6 +187,8 @@ paths:
         Returns only the committed canonical revision and sequence cursor. It does not return
         score, events, tracking, or any other canonical football fact. The local ASP.NET Core
         SignalR adapter is available only in Development with the local runtime/provider profile.
+        A connection can hold at most 10 active match groups and make at most 20 unique
+        subscription attempts during its lifetime. Repeating an active subscription is idempotent.
       x-required-roles: [fan, analyst, admin]
       requestBody:
         required: true
