@@ -325,9 +325,10 @@ public sealed class FoundryExplanationAdapter(
                 if (claimElement.ValueKind != JsonValueKind.Object || !HasExactProperties(claimElement, "text", "evidenceIds")) return null;
                 var claimText = claimElement.GetProperty("text").GetString();
                 var refs = claimElement.GetProperty("evidenceIds").EnumerateArray().Select(value => value.GetString()).ToArray();
+                var uniqueRefs = new HashSet<string>(StringComparer.Ordinal);
                 if (string.IsNullOrWhiteSpace(claimText) || claimText.Length > 1_000 || refs.Length is < 1 or > 12 ||
-                    refs.Any(id => string.IsNullOrWhiteSpace(id) || !evidenceIds.Contains(id))) return null;
-                claims.Add(new CandidateExplanationClaim(claimText, Array.AsReadOnly(refs.Select(id => id!).Distinct(StringComparer.Ordinal).ToArray())));
+                    refs.Any(id => string.IsNullOrWhiteSpace(id) || !evidenceIds.Contains(id) || !uniqueRefs.Add(id!))) return null;
+                claims.Add(new CandidateExplanationClaim(claimText, Array.AsReadOnly(refs.Select(id => id!).ToArray())));
             }
 
             int? inputTokens = null;

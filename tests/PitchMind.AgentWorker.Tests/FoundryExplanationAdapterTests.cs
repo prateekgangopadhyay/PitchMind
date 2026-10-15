@@ -83,6 +83,18 @@ public sealed class FoundryExplanationAdapterTests
     }
 
     [Fact]
+    public async Task GenerateAsync_RejectsDuplicateModelCitations()
+    {
+        var handler = new StubHandler(_ => Task.FromResult(JsonResponse(Completion("The press led to a regain.", "event-1", "event-1"))));
+        using var http = new HttpClient(handler);
+        using var adapter = Create(http, new StubTokenProvider());
+
+        var result = await adapter.GenerateAsync(Request(), CancellationToken.None);
+
+        Assert.Equal(ExplanationGenerationFailure.InvalidCandidate, result.Failure);
+    }
+
+    [Fact]
     public async Task GenerateAsync_ReturnsUnavailableForProviderErrorWithoutLeakingBody()
     {
         var handler = new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
@@ -239,10 +251,10 @@ public sealed class FoundryExplanationAdapterTests
             "{\"type\":\"pass\"}", "untrusted data") }),
         Array.AsReadOnly(new[] { "no intent inference" }), 1_024, "match-intelligence-context-v1");
 
-    private static string Completion(string text, string evidenceId) => JsonSerializer.Serialize(new
+    private static string Completion(string text, params string[] evidenceIds) => JsonSerializer.Serialize(new
     {
         model = "deployment-model",
-        choices = new[] { new { finish_reason = "stop", message = new { content = JsonSerializer.Serialize(new { text, claims = new[] { new { text, evidenceIds = new[] { evidenceId } } } }) } } },
+        choices = new[] { new { finish_reason = "stop", message = new { content = JsonSerializer.Serialize(new { text, claims = new[] { new { text, evidenceIds } } }) } } },
         usage = new { prompt_tokens = 12, completion_tokens = 8 }
     });
 
