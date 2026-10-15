@@ -33,6 +33,22 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const projectionRevision = view?.snapshot.projectionRevision;
   const canonicalSelectedSeconds = view?.snapshot.selectedTimeSeconds;
+  const frameFragment = typeof window === 'undefined'
+    ? null
+    : /^#canonical-frame-(.*)$/.exec(window.location.hash)?.[1] ?? null;
+  let requestedFrameId: string | null = null;
+  if (frameFragment !== null) {
+    try { requestedFrameId = decodeURIComponent(frameFragment); }
+    catch { requestedFrameId = ''; }
+  }
+  const sourceRevisionParameter = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('sourceRevision');
+  const requestedSourceRevision = sourceRevisionParameter === null
+    ? null
+    : /^\d+$/.test(sourceRevisionParameter) && Number.isSafeInteger(Number(sourceRevisionParameter)) && Number(sourceRevisionParameter) > 0
+      ? Number(sourceRevisionParameter)
+      : -1;
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -52,6 +68,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const revision = snapshot.projectionRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
         const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
+        if (requestedFrameId !== null) frameQuery.set('frameId', requestedFrameId);
         const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
         const [eventResult, insightResult, frameResult, keyMomentsStatus] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal)
@@ -115,7 +132,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Canonical match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [matchId, requestedRevision, selectedSeconds, retryCounter]);
+  }, [matchId, requestedRevision, requestedFrameId, selectedSeconds, retryCounter]);
 
   useEffect(() => {
     if (reducedMotion) setPlaying(false);
@@ -124,7 +141,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   useEffect(() => {
     if (!view || typeof window === 'undefined') return;
     const targetId = window.location.hash.slice(1);
-    if (!/^canonical-(event|frame)-\d+$/.test(targetId)) return;
+    if (!/^canonical-event-\d+$/.test(targetId) && !/^canonical-frame-.+$/.test(targetId)) return;
     const target = document.getElementById(targetId);
     if (!target) return;
     target.focus();
@@ -162,15 +179,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   }, [playing, matchId, selectedSeconds, projectionRevision, canonicalSelectedSeconds]);
 
   const snapshot = view?.snapshot;
-  const requestedFrameSequence = typeof window === 'undefined'
-    ? null
-    : /^#canonical-frame-(\d+)$/.exec(window.location.hash)?.[1] ?? null;
-  const selectedFrame = requestedFrameSequence === null
+  const selectedFrame = requestedFrameId === null
     ? view?.trackingFrames?.items.at(-1) ?? null
-    : view?.trackingFrames?.items.find(frame => frame.sequence === Number(requestedFrameSequence)) ?? null;
+    : view?.trackingFrames?.items.find(frame => frame.frameId === requestedFrameId &&
+      (requestedSourceRevision === null || frame.canonicalRevision === requestedSourceRevision)) ?? null;
   const pitch = selectedFrame ? pitchCoordinates(selectedFrame) : null;
-  const trackingMessage = view?.trackingStatus || (requestedFrameSequence !== null && !selectedFrame
-    ? 'The linked observed frame is not present at this selected time. No other frame is substituted.'
+  const trackingMessage = view?.trackingStatus || (requestedFrameId !== null && !selectedFrame
+    ? 'The linked observed frame is not present at this selected time and source revision. No other frame is substituted.'
     : view?.trackingFrames?.items.length
     ? pitch ? `Observed frame ${selectedFrame?.frameId} at ${clock(selectedSeconds)} · period ${selectedFrame?.period}. No positions are interpolated.`
       : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
@@ -230,7 +245,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     <title>{`${player.teamId} · ${player.playerId}`}</title>
                   </g>)}
                 </svg>
-                <div id={`canonical-frame-${selectedFrame.sequence}`} tabIndex={-1}>
+                <div id={`canonical-frame-${encodeURIComponent(selectedFrame.frameId)}`} tabIndex={-1}>
                   <p id="pitch-description" className="pitch-caption" role="status" aria-live="polite" aria-atomic="true">
                     Observed frame {selectedFrame.frameId} at {clock(selectedSeconds)} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m. Numbered player positions are listed below.
                   </p>

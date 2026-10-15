@@ -64,6 +64,37 @@ public sealed class CanonicalBackfillTests
     }
 
     [Fact]
+    public async Task Tracking_frame_lookup_returns_exact_frame_id_without_pagination()
+    {
+        var tracking = new TrackingReader();
+        using var factory = CreateFactory(new ProjectionReader(revision: 5), tracking);
+        using var client = CreateClient(factory, "analyst");
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&frameId=frame-b");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+        Assert.Equal("frame-b", root.GetProperty("items")[0].GetProperty("frameId").GetString());
+        Assert.Null(root.GetProperty("nextCursor").GetString());
+        Assert.False(root.GetProperty("hasMore").GetBoolean());
+        Assert.Equal("frame-b", tracking.LastRequestedFrameId);
+    }
+
+    [Fact]
+    public async Task Tracking_frame_lookup_rejects_cursor_combination()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5));
+        using var client = CreateClient(factory, "analyst");
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/frames?atSeconds=120&revision=5&frameId=frame-b&cursor=opaque");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("INVALID_CURSOR", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task Tracking_frames_require_analyst_or_admin_role()
     {
         using var factory = CreateFactory(new ProjectionReader(revision: 5));
@@ -253,6 +284,7 @@ public sealed class CanonicalBackfillTests
         private const string SourceHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         private readonly PersistedTrackingFrame[] frames;
         public string? LastAfterFrameId { get; private set; }
+        public string? LastRequestedFrameId { get; private set; }
 
         public TrackingReader(bool malformedFramePayload = false, bool invalidCoordinates = false)
         {
@@ -271,6 +303,13 @@ public sealed class CanonicalBackfillTests
             if (hasMore) page = page[..limit];
             var last = hasMore ? page[^1] : null;
             return Task.FromResult(new PersistedTrackingFramePage(Array.AsReadOnly(page), last?.Sequence, last?.FrameId, hasMore));
+        }
+
+        public Task<PersistedTrackingFrame?> ReadByIdAtAsync(SelectedMatchProjection projection, int selectedSeconds,
+            string frameId, CancellationToken cancellationToken)
+        {
+            LastRequestedFrameId = frameId;
+            return Task.FromResult(frames.LastOrDefault(frame => frame.FrameId == frameId));
         }
 
         private static PersistedTrackingFrame Frame(string id, long sequence, bool invalidCoordinates = false)

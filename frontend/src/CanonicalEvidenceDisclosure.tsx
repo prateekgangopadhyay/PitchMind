@@ -86,14 +86,17 @@ function EvidenceDetails({ evidence }: { evidence: CanonicalEvidence }) {
 }
 
 function EvidenceRow({ item, insight }: { item: CanonicalEvidencePayload; insight: CanonicalInsight }) {
-  const target = item.kind === 'event' ? `canonical-event-${item.sequence}` : `canonical-frame-${item.sequence}`;
+  const target = item.kind === 'event' ? `canonical-event-${item.sequence}` : `canonical-frame-${encodeURIComponent(item.id)}`;
   const replayHref = contextHref(`/replay/${encodeURIComponent(insight.matchId)}`, insight.matchId,
     item.clockSeconds, insight.projectionRevision);
+  const evidenceHref = item.kind === 'frame'
+    ? `${replayHref}&sourceRevision=${item.sourceCanonicalRevision}`
+    : replayHref;
   return <li>
-    <a href={`${replayHref}#${target}`} aria-label={`Open ${item.kind} ${item.id} at ${clock(item.clockSeconds)}, sequence ${item.sequence}`}>
+    <a href={`${evidenceHref}#${target}`} aria-label={`Open ${item.kind} ${item.id} at ${clock(item.clockSeconds)}, sequence ${item.sequence}, source revision ${item.sourceCanonicalRevision}`}>
       {item.kind} {item.id}
     </a> · {item.relation}
-    <span> · <time dateTime={`PT${item.clockSeconds}S`}>{clock(item.clockSeconds)}</time> · period {item.period} · sequence {item.sequence}</span>
+    <span> · <time dateTime={`PT${item.clockSeconds}S`}>{clock(item.clockSeconds)}</time> · period {item.period} · sequence {item.sequence} · source revision {item.sourceCanonicalRevision}</span>
   </li>;
 }
 
@@ -123,6 +126,8 @@ function canonicalEvidenceMatches(evidence: CanonicalEvidence, expected: Expecte
         !returned.evidence.some(reference => reference.kind === item.kind && reference.id === item.id && reference.relation === item.relation)) return false;
     const identity = `${item.kind}:${item.id}:${item.relation}`;
     if (seen.has(identity)) return false;
+    if (!Number.isSafeInteger(item.sourceCanonicalRevision) || item.sourceCanonicalRevision <= 0 ||
+        item.sourceCanonicalRevision > returned.canonicalRevision) return false;
     seen.add(identity);
     return true;
   });

@@ -9,7 +9,7 @@ const throughSequence = 19;
 const sourceSha256 = 'c'.repeat(64);
 const insightSummary = 'Recorded sequence is available for review.';
 
-type StubOptions = { unavailable?: string[] };
+type StubOptions = { unavailable?: string[]; withEvidence?: boolean };
 
 async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
   await page.route('**/api/v1/canonical/matches/**', async (route: Route) => {
@@ -17,6 +17,7 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
     const resource = url.pathname.split('/').at(-1);
     const atSeconds = Number(url.searchParams.get('atSeconds'));
     const selectedTimeSeconds = Number.isInteger(atSeconds) ? atSeconds : selectedSeconds;
+    const context = { matchId, canonicalRevision, projectionRevision: 4, selectedTimeSeconds, throughSequence };
     if (options.unavailable?.includes(resource ?? '')) {
       await route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify({
         status: 503, title: 'Service unavailable', code: 'CANONICAL_READ_UNAVAILABLE', correlationId: 'test-correlation'
@@ -24,7 +25,22 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
       return;
     }
 
-    const context = { matchId, canonicalRevision, projectionRevision: 4, selectedTimeSeconds, throughSequence };
+    if (url.pathname.includes('/evidence/')) {
+      const evidenceInsight = {
+        insightId: 'test-insight-1', ...context, sourceVersion: 'test-source-v1', provenance: 'synthetic-test-only',
+        sourceSha256, detectorVersion: 'test-detector-v1', truthClass: 'observed', summary: insightSummary,
+        conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'],
+        evidence: [{ kind: 'event', id: 'test-event-18', relation: 'supports' }]
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        insight: evidenceInsight,
+        items: [{ kind: 'event', id: 'test-event-18', relation: 'supports', sourceCanonicalRevision: 4,
+          sequence: 18, clockSeconds: Math.min(selectedTimeSeconds, 3300), period: 2,
+          payload: { eventId: 'test-event-18' } }]
+      }) });
+      return;
+    }
+
     const bodyByResource: Record<string, unknown> = {
       summary: {
         ...context, asOfSeconds: selectedTimeSeconds, algorithmVersion: 'test-projection-v1', sourceSha256,
@@ -40,7 +56,8 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
         ...context, nextCursor: null, hasMore: false,
         items: [{ insightId: 'test-insight-1', ...context, sourceVersion: 'test-source-v1', provenance: 'synthetic-test-only',
           sourceSha256, detectorVersion: 'test-detector-v1', truthClass: 'observed', summary: insightSummary,
-          conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'], evidence: [] }]
+          conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'],
+          evidence: options.withEvidence ? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }] : [] }]
       },
       frames: { ...context, items: [], nextCursor: null, hasMore: false },
       'key-moments': { ...context, items: [], hasMore: false }
@@ -130,4 +147,39 @@ test('native links, buttons, and form controls have a detectable name', async ({
     return name ? [] : [`${control.tagName.toLowerCase()}${control.id ? `#${control.id}` : ''}`];
   }));
   expect(unnamed).toEqual([]);
+});
+
+test('discloses exact evidence lineage at desktop, tablet, and mobile widths', async ({ page }, testInfo) => {
+  await stubCanonicalMatch(page, { withEvidence: true });
+  await openSelectedMatch(page);
+  await page.locator('details.canonical-evidence-disclosure > summary').click();
+
+  const citation = page.getByRole('link', {
+    name: 'Open event test-event-18 at 55:00, sequence 18, source revision 4'
+  });
+  await expect(citation).toBeVisible();
+  await expect(citation).toHaveAttribute('href', `/replay/${matchId}?matchId=${matchId}&atSeconds=3300&revision=4#canonical-event-18`);
+  await expect(page.getByText('source revision 4', { exact: false })).toBeVisible();
+
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 1000 },
+    { name: 'tablet', width: 768, height: 1024 },
+    { name: 'mobile', width: 375, height: 812 }
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const overflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflows, `${viewport.name} evidence disclosure should not cause horizontal page scrolling`).toBe(false);
+    if (viewport.name === 'mobile') {
+      const navigationLinks = await page.locator('.main-navigation a').evaluateAll(links => links.map(link => {
+        const bounds = link.getBoundingClientRect();
+        return { name: link.textContent?.trim(), left: bounds.left, right: bounds.right };
+      }));
+      expect(navigationLinks.length).toBeGreaterThan(0);
+      for (const link of navigationLinks) {
+        expect(link.left, `${link.name} should remain within the mobile viewport`).toBeGreaterThanOrEqual(0);
+        expect(link.right, `${link.name} should remain within the mobile viewport`).toBeLessThanOrEqual(viewport.width);
+      }
+    }
+    await page.screenshot({ path: testInfo.outputPath(`ep07-s05-evidence-${viewport.name}.png`), fullPage: true });
+  }
 });

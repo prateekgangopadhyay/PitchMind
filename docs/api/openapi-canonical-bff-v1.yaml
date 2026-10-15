@@ -87,6 +87,10 @@ paths:
         - $ref: '#/components/parameters/AtSeconds'
         - $ref: '#/components/parameters/Revision'
         - $ref: '#/components/parameters/Cursor'
+        - name: frameId
+          in: query
+          description: Exact frame identity lookup at the selected match time and revisions; 1–128 non-whitespace characters; cannot be combined with cursor.
+          schema: { type: string, minLength: 1, maxLength: 128 }
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 25, default: 12 }

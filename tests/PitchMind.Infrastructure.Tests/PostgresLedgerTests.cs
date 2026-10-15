@@ -102,6 +102,11 @@ public sealed class PostgresLedgerTests
         Assert.Single(second.Frames);
         Assert.Equal("frame-b", second.Frames[0].FrameId);
         Assert.False(second.HasMore);
+
+        var targeted = await reader.ReadByIdAtAsync(selectedProjection, 120, "frame-b", CancellationToken.None);
+        Assert.NotNull(targeted);
+        Assert.Equal("frame-b", targeted.FrameId);
+        Assert.Equal(3, targeted.Sequence);
     }
 
     [PostgresIntegrationFact]

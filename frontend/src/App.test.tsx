@@ -269,7 +269,7 @@ it('exposes observed positions as a screen-reader table and keeps event and time
   }
 });
 
-it('opens a frame evidence deep link on the exact observed frame and focuses its nonvisual account', async () => {
+it('opens a frame evidence deep link on the exact observed frame when sequences are duplicated and focuses its nonvisual account', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
     matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, asOfSeconds: 3308, throughSequence: 20,
@@ -290,13 +290,15 @@ it('opens a frame evidence deep link on the exact observed frame and focuses its
     }
   });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  window.history.replaceState(null, '', `/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4#canonical-frame-18`);
+  window.history.replaceState(null, '', `/replay/${matchId}?matchId=${matchId}&atSeconds=3308&revision=4&sourceRevision=4#canonical-frame-later-same-time-frame`);
+  let requestedFrameId: string | null = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/frames')) requestedFrameId = parsed.searchParams.get('frameId');
     if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503, json: async () => ({ status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test' }) };
     const body = parsed.pathname.endsWith('/summary') ? snapshot
       : parsed.pathname.endsWith('/events') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false }
-        : parsed.pathname.endsWith('/frames') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [frame(18, 'source-frame'), frame(19, 'later-same-time-frame')], nextCursor: null, hasMore: false }
+        : parsed.pathname.endsWith('/frames') ? { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [frame(18, 'source-frame'), frame(18, 'later-same-time-frame')], nextCursor: null, hasMore: false }
           : { matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308, throughSequence: 20, items: [], nextCursor: null, hasMore: false };
     return { ok: true, json: async () => body };
   }));
@@ -305,9 +307,11 @@ it('opens a frame evidence deep link on the exact observed frame and focuses its
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Observed frame source-frame at 55:08');
-    expect(container.textContent).not.toContain('Observed frame later-same-time-frame');
-    expect(document.activeElement?.id).toBe('canonical-frame-18');
+    expect(container.textContent).toContain('Observed frame later-same-time-frame at 55:08');
+    expect(container.textContent).not.toContain('Observed frame source-frame');
+    expect(document.activeElement?.id).toBe('canonical-frame-later-same-time-frame');
+    expect(requestedFrameId).toBe('later-same-time-frame');
+    expect(new URL(window.location.href).searchParams.get('sourceRevision')).toBe('4');
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -808,7 +812,7 @@ it('restores focus to the cited event when following evidence into replay', asyn
     evidence: [{kind: 'event', id: 'event-18', relation: 'supports'}]
   };
   const event = {eventId: 'event-18', matchId, sequence: 18, type: 'pass', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'};
-  const evidence = {insight, items: [{kind: 'event', id: 'event-18', relation: 'supports', sequence: 18, clockSeconds: 3300, period: 2, payload: event}]};
+  const evidence = {insight, items: [{kind: 'event', id: 'event-18', relation: 'supports', sourceCanonicalRevision: 4, sequence: 18, clockSeconds: 3300, period: 2, payload: event}]};
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3300&revision=4`);
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
