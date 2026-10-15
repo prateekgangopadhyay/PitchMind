@@ -298,7 +298,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -443,7 +443,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(9, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(10, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -728,10 +728,212 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task QuarantineV10RenamesLegacyColumnsAndPreservesExistingEvidence()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var recordId = Guid.NewGuid();
+        const string sourcePointer = "legacy/source/record-17";
+        const string payloadHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        var matchId = Guid.NewGuid();
+        var observedAt = new DateTimeOffset(2026, 10, 15, 12, 30, 0, TimeSpan.FromHours(5.5));
+
+        await RecreateV9QuarantineAsync(source, recordId, matchId, sourcePointer, payloadHash, "LEGACY_REASON", observedAt);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        var store = new PostgresQuarantineRecordStore(source);
+        var migrated = await store.ReadAsync(recordId, CancellationToken.None);
+        Assert.Equal(new QuarantineRecord(recordId, matchId, sourcePointer, payloadHash, "LEGACY_REASON", observedAt.ToUniversalTime()), migrated);
+
+        var newEvidence = new QuarantineRecord(Guid.NewGuid(), null, "fixture://source/record/18", null,
+            "SEQUENCE_GAP", DateTimeOffset.UtcNow);
+        await store.AppendAsync(newEvidence, CancellationToken.None);
+        Assert.Equal(newEvidence with { ObservedAt = newEvidence.ObservedAt.ToUniversalTime() },
+            await store.ReadAsync(newEvidence.RecordId, CancellationToken.None));
+        await using var metadata = source.CreateCommand("""
+            SELECT (SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 10),
+                   (SELECT retry_status FROM pitchmind.quarantine WHERE record_id = $1)
+            """);
+        metadata.Parameters.AddWithValue(newEvidence.RecordId);
+        await using var reader = await metadata.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.True(reader.IsDBNull(1));
+
+        await using var zeroId = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(record_id, source_ptr, payload_hash, reason, observed_at)
+            VALUES ($1, $2, NULL, $3, $4)
+            """);
+        zeroId.Parameters.AddWithValue(Guid.Empty);
+        zeroId.Parameters.AddWithValue("source/item/zero-id");
+        zeroId.Parameters.AddWithValue("INVALID_EVENT_PAYLOAD");
+        zeroId.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+        var rejection = await Assert.ThrowsAsync<PostgresException>(() => zeroId.ExecuteNonQueryAsync());
+        Assert.Equal(PostgresErrorCodes.CheckViolation, rejection.SqlState);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task QuarantineV10RejectsLegacyZeroIdAndRollsBackMigration()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await RecreateV9QuarantineAsync(source, Guid.Empty, null, "legacy/zero-id", new string('a', 64),
+            "LEGACY_ZERO_ID", DateTimeOffset.UtcNow);
+
+        var failure = await Assert.ThrowsAsync<PostgresException>(
+            () => PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None));
+        Assert.Equal(PostgresErrorCodes.CheckViolation, failure.SqlState);
+
+        await using (var rollback = source.CreateCommand("""
+            SELECT (SELECT COUNT(*) FROM pitchmind.schema_versions WHERE version = 10),
+                   (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'pitchmind'
+                     AND table_name = 'quarantine' AND column_name = 'quarantine_id'),
+                   (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'pitchmind'
+                     AND table_name = 'quarantine' AND column_name = 'record_id'),
+                   (SELECT COUNT(*) FROM pitchmind.quarantine WHERE quarantine_id = $1)
+            """))
+        {
+            rollback.Parameters.AddWithValue(Guid.Empty);
+            await using var reader = await rollback.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(0L, reader.GetInt64(0));
+            Assert.Equal(1L, reader.GetInt64(1));
+            Assert.Equal(0L, reader.GetInt64(2));
+            Assert.Equal(1L, reader.GetInt64(3));
+        }
+
+        await RecreateV9QuarantineAsync(source, null, null, null, null, null, null);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task SourcedIngestionPersistsOnlyClassifiedRejectionsAndKeepsCanonicalLedgerUnchanged()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var eventStore = new PostgresMatchEventStore(source);
+        var quarantineStore = new PostgresQuarantineRecordStore(source);
+        var ingestion = new SourcedMatchEventIngestionService(eventStore, quarantineStore);
+        var matchId = MatchId.New();
+        var original = Event(matchId);
+        await eventStore.AppendAsync(original, CancellationToken.None);
+
+        await ingestion.AppendAsync(original,
+            new IngestionSourceReference($"fixture://{matchId}/source-record/exact-retry", null), CancellationToken.None);
+        await Assert.ThrowsAsync<MatchEventIngestionException>(() => ingestion.AppendAsync(
+            original with { ClockSeconds = original.ClockSeconds + 1 },
+            new IngestionSourceReference($"fixture://{matchId}/source-record/conflicting-retry", new string('b', 64)),
+            CancellationToken.None));
+        await Assert.ThrowsAsync<MatchEventIngestionException>(() => ingestion.AppendAsync(
+            Event(matchId, 3), new IngestionSourceReference($"fixture://{matchId}/source-record/sequence-3", null),
+            CancellationToken.None));
+
+        await using var evidence = source.CreateCommand("""
+            SELECT source_ptr, match_id, payload_hash, reason, retry_status
+            FROM pitchmind.quarantine WHERE source_ptr LIKE $1 ORDER BY source_ptr
+            """);
+        evidence.Parameters.AddWithValue($"fixture://{matchId}/source-record/%");
+        await using var reader = await evidence.ExecuteReaderAsync();
+        var rows = new List<(string Pointer, Guid? MatchId, string? Hash, string Reason, bool RetryNull)>();
+        while (await reader.ReadAsync())
+            rows.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2).TrimEnd(), reader.GetString(3), reader.IsDBNull(4)));
+
+        Assert.Collection(rows,
+            row => { Assert.EndsWith("conflicting-retry", row.Pointer, StringComparison.Ordinal); Assert.Equal(matchId.Value, row.MatchId); Assert.Equal(new string('b', 64), row.Hash); Assert.Equal("EVENT_ID_PAYLOAD_CONFLICT", row.Reason); Assert.True(row.RetryNull); },
+            row => { Assert.EndsWith("sequence-3", row.Pointer, StringComparison.Ordinal); Assert.Equal(matchId.Value, row.MatchId); Assert.Null(row.Hash); Assert.Equal("SEQUENCE_GAP", row.Reason); Assert.True(row.RetryNull); });
+        Assert.Equal(new[] { original }, await Read(eventStore, matchId));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task QuarantineIsAppendOnlyForRoleGrantedUpdateDeleteAndTruncate()
+    {
+        await using var migrationSource = Source();
+        await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
+        var role = "quarantine_test_" + Guid.NewGuid().ToString("N");
+        var password = Guid.NewGuid().ToString("N");
+        await using (var setup = migrationSource.CreateCommand(
+            $"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON pitchmind.quarantine TO {role};"))
+            await setup.ExecuteNonQueryAsync();
+
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")!)
+            { Username = role, Password = password };
+            await using var runtimeSource = NpgsqlDataSource.Create(builder.ConnectionString);
+            var store = new PostgresQuarantineRecordStore(runtimeSource);
+            var record = new QuarantineRecord(Guid.NewGuid(), null, "source/item/runtime-role", null,
+                "INVALID_EVENT_PAYLOAD", DateTimeOffset.UtcNow);
+            await store.AppendAsync(record, CancellationToken.None);
+            var expected = record with { ObservedAt = record.ObservedAt.ToUniversalTime() };
+            Assert.Equal(expected, await store.ReadAsync(record.RecordId, CancellationToken.None));
+
+            foreach (var sql in new[]
+            {
+                "UPDATE pitchmind.quarantine SET reason = 'REPAIRED' WHERE record_id = $1",
+                "DELETE FROM pitchmind.quarantine WHERE record_id = $1"
+            })
+            {
+                await using var mutation = runtimeSource.CreateCommand(sql);
+                mutation.Parameters.AddWithValue(record.RecordId);
+                var exception = await Assert.ThrowsAsync<PostgresException>(() => mutation.ExecuteNonQueryAsync());
+                Assert.Equal("55000", exception.SqlState);
+            }
+
+            await using (var truncate = runtimeSource.CreateCommand("TRUNCATE pitchmind.quarantine"))
+            {
+                var exception = await Assert.ThrowsAsync<PostgresException>(() => truncate.ExecuteNonQueryAsync());
+                Assert.Equal("55000", exception.SqlState);
+            }
+            Assert.Equal(expected, await store.ReadAsync(record.RecordId, CancellationToken.None));
+        }
+        finally
+        {
+            await using var cleanup = migrationSource.CreateCommand(
+                $"REVOKE ALL PRIVILEGES ON TABLE pitchmind.quarantine FROM {role}; REVOKE USAGE ON SCHEMA pitchmind FROM {role}; DROP ROLE IF EXISTS {role}");
+            await cleanup.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task RecreateV9QuarantineAsync(NpgsqlDataSource source, Guid? recordId, Guid? matchId,
+        string? sourcePointer, string? payloadHash, string? reason, DateTimeOffset? observedAt)
+    {
+        await using (var reset = source.CreateCommand("""
+            DROP TABLE IF EXISTS pitchmind.quarantine CASCADE;
+            DROP FUNCTION IF EXISTS pitchmind.reject_quarantine_mutation();
+            DELETE FROM pitchmind.schema_versions WHERE version = 10;
+            CREATE TABLE pitchmind.quarantine (
+                quarantine_id uuid PRIMARY KEY,
+                match_id uuid,
+                source_pointer text,
+                payload_sha256 char(64) NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
+                reason_code text NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 128),
+                observed_at timestamptz NOT NULL DEFAULT now(),
+                retry_status text NOT NULL DEFAULT 'pending' CHECK (retry_status IN ('pending', 'released', 'rejected'))
+            );
+            """))
+            await reset.ExecuteNonQueryAsync();
+
+        if (recordId is null) return;
+        await using var insert = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(quarantine_id, match_id, source_pointer, payload_sha256, reason_code, observed_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """);
+        insert.Parameters.AddWithValue(recordId.Value);
+        insert.Parameters.AddWithValue((object?)matchId ?? DBNull.Value);
+        insert.Parameters.AddWithValue((object?)sourcePointer ?? DBNull.Value);
+        insert.Parameters.AddWithValue(payloadHash!);
+        insert.Parameters.AddWithValue(reason!);
+        insert.Parameters.AddWithValue(observedAt!.Value.ToUniversalTime());
+        await insert.ExecuteNonQueryAsync();
     }
 
     private static (CanonicalUpdate Update, MatchAggregate Aggregate) BuildUpdate(MatchId matchId, int revision = 1)
