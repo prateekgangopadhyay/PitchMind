@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, request } from './api';
 import type { CanonicalEvidence, CanonicalEvidencePayload, CanonicalInsight } from './api';
 import { contextHref } from './routes';
+import { CanonicalEvidenceReplay } from './CanonicalEvidenceReplay';
 
 type EvidenceState =
   | { key: string; status: 'loading' }
@@ -81,6 +82,7 @@ function EvidenceDetails({ evidence }: { evidence: CanonicalEvidence }) {
         <ul className="evidence-list" aria-label="Source evidence">
           {evidence.items.map(item => <EvidenceRow key={`${item.kind}:${item.id}:${item.sequence}`} item={item} insight={insight} />)}
         </ul>
+        <CanonicalEvidenceReplay evidence={evidence} />
       </>}
   </div>;
 }

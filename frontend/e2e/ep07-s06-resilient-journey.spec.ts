@@ -9,7 +9,43 @@ const throughSequence = 19;
 const sourceSha256 = 'c'.repeat(64);
 const insightSummary = 'Recorded sequence is available for review.';
 
-type StubOptions = { unavailable?: string[]; withEvidence?: boolean };
+type StubOptions = { unavailable?: string[]; withEvidence?: boolean; withReplay?: boolean };
+
+function replayEvidenceItems(selectedTimeSeconds: number) {
+  const references = [
+    { kind: 'event', id: 'test-event-17', relation: 'supports' },
+    { kind: 'frame', id: 'test-frame-18', relation: 'illustrates' },
+    { kind: 'frame', id: 'test-frame-19', relation: 'illustrates' }
+  ];
+  const event = {
+    kind: 'event', id: 'test-event-17', relation: 'supports', sourceCanonicalRevision: canonicalRevision,
+    sequence: 17, clockSeconds: 3295, period: 2,
+    payload: { schemaVersion: 1, matchId, canonicalRevision, eventId: 'test-event-17', sequence: 17,
+      matchTime: { period: 2, elapsedSeconds: 3295 },
+      source: { sourceSha256, provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'reviewed' },
+      playerId: 'test-player-home', relatedPlayerId: null }
+  };
+  const frames = [18, 19].map((sequence, index) => {
+    const clockSeconds = 3300 + index;
+    const frameId = `test-frame-${sequence}`;
+    return { kind: 'frame', id: frameId, relation: 'illustrates', sourceCanonicalRevision: canonicalRevision,
+      sequence, clockSeconds, period: 2,
+      payload: { schemaVersion: 1, matchId, frameId, sequence, canonicalRevision,
+        matchTime: { period: 2, elapsedSeconds: clockSeconds, sourceClockValue: clockSeconds, sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed' },
+        coordinateSystem: { lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left',
+          teamDirections: [{ teamId: 'test-home', direction: 'right' }, { teamId: 'test-away', direction: 'left' }] },
+        ball: { x: 52 + index, y: 34 },
+        players: [
+          { playerId: 'test-player-home', teamId: 'test-home', position: { x: 30 + index, y: 20 } },
+          { playerId: 'test-player-away', teamId: 'test-away', position: { x: 71, y: 42 } }
+        ],
+        source: { providerId: 'synthetic-test', sourceMatchId: 'test-source-match', sourceRecordId: frameId,
+          sourceSequence: sequence, sourceSchemaVersion: 'tracking-test-v1', sourceSha256,
+          provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'reviewed' } }
+    };
+  });
+  return { references, items: [event, ...frames].filter(item => item.clockSeconds <= selectedTimeSeconds) };
+}
 
 async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
   await page.route('**/api/v1/canonical/matches/**', async (route: Route) => {
@@ -26,15 +62,16 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
     }
 
     if (url.pathname.includes('/evidence/')) {
+      const replay = options.withReplay ? replayEvidenceItems(selectedTimeSeconds) : null;
       const evidenceInsight = {
         insightId: 'test-insight-1', ...context, sourceVersion: 'test-source-v1', provenance: 'synthetic-test-only',
         sourceSha256, detectorVersion: 'test-detector-v1', truthClass: 'observed', summary: insightSummary,
         conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'],
-        evidence: [{ kind: 'event', id: 'test-event-18', relation: 'supports' }]
+        evidence: replay?.references ?? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }]
       };
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
         insight: evidenceInsight,
-        items: [{ kind: 'event', id: 'test-event-18', relation: 'supports', sourceCanonicalRevision: 4,
+        items: replay?.items ?? [{ kind: 'event', id: 'test-event-18', relation: 'supports', sourceCanonicalRevision: 4,
           sequence: 18, clockSeconds: Math.min(selectedTimeSeconds, 3300), period: 2,
           payload: { eventId: 'test-event-18' } }]
       }) });
@@ -57,7 +94,8 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
         items: [{ insightId: 'test-insight-1', ...context, sourceVersion: 'test-source-v1', provenance: 'synthetic-test-only',
           sourceSha256, detectorVersion: 'test-detector-v1', truthClass: 'observed', summary: insightSummary,
           conditions: { sampleSize: 2, testOnly: true }, limitations: ['Test fixture only'],
-          evidence: options.withEvidence ? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }] : [] }]
+          evidence: options.withReplay ? replayEvidenceItems(selectedTimeSeconds).references
+            : options.withEvidence ? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }] : [] }]
       },
       frames: { ...context, items: [], nextCursor: null, hasMore: false },
       'key-moments': { ...context, items: [], hasMore: false }
@@ -65,6 +103,41 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bodyByResource[resource ?? ''] ?? {}) });
   });
 }
+
+test('steps through source-bound observed frames with keyboard controls at three widths', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await stubCanonicalMatch(page, { withReplay: true });
+  await openSelectedMatch(page);
+  const disclosure = page.locator('details.canonical-evidence-disclosure > summary');
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+
+  const replay = page.getByRole('region', { name: 'Observed sequence replay' });
+  await expect(replay).toBeVisible();
+  await expect(replay.getByText('Frame 1 of 2 · 55:00')).toBeVisible();
+  await expect(replay).toContainText('Team test-home · attacks toward right');
+  await expect(replay).toContainText('Team test-away · attacks toward left');
+  await expect(replay.getByRole('img', { name: 'Observed tracking frame at 55:00, period 2, sequence 18' })).toBeVisible();
+  await expect(replay.getByRole('table', { name: 'Observed positions · frame test-frame-18 · sequence 18' })).toBeVisible();
+
+  const next = replay.getByRole('button', { name: 'Next observed frame' });
+  await next.focus();
+  await page.keyboard.press('Enter');
+  await expect(replay.getByText('Frame 2 of 2 · 55:01')).toBeVisible();
+  await expect(replay.getByRole('img', { name: 'Observed tracking frame at 55:01, period 2, sequence 19' })).toBeVisible();
+  await expect(next).toBeDisabled();
+  await expect(page.getByRole('slider', { name: 'Selected match time' })).toHaveAttribute('aria-valuetext', '55:09');
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 1000 },
+    { name: 'tablet', width: 768, height: 1024 },
+    { name: 'mobile', width: 375, height: 812 }
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow, `${viewport.name} replay should not require horizontal page scrolling`).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath(`ep07-s05-replay-${viewport.name}.png`), fullPage: true });
+  }
+});
 
 async function openSelectedMatch(page: Page) {
   await page.goto(`/matches/${matchId}?matchId=${matchId}&atSeconds=${selectedSeconds}&revision=${canonicalRevision}`);
