@@ -84,9 +84,9 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
 
   if (route.kind === 'welcome') return <section className="content-page">
-    <PageHeading eyebrow="Football intelligence, grounded in evidence" title="Welcome to PitchMind" question="Explore a simulated match and inspect the evidence behind each view." />
+    <PageHeading eyebrow="Football intelligence, grounded in evidence" title="Welcome to PitchMind" question="Find a match and inspect the evidence behind each view." />
     <p className="page-state">Sign-in is not configured in this local preview.</p>
-    <a className="primary-link" href="/home">Explore available matches</a>
+    <a className="primary-link" href="/home">Check match availability</a>
   </section>;
 
   if (route.kind === 'home') return <HomePage search={search} selectedSeconds={hasSelectedTime ? selectedSeconds : undefined} />;
