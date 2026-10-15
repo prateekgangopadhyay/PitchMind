@@ -86,10 +86,13 @@ test('audience mode changes disclosure while preserving selected-time facts', as
 });
 
 test('keyboard timeline selection retains the chosen event focus and time', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
   await stubCanonicalMatch(page);
   await openSelectedMatch(page);
 
   const time = page.getByRole('slider', { name: 'Selected match time' });
+  const sliderBounds = await time.boundingBox();
+  expect(sliderBounds?.height).toBeGreaterThanOrEqual(44);
   await time.focus();
   await expect(time).toHaveAttribute('aria-valuetext', '55:09');
   await time.press('ArrowRight');
