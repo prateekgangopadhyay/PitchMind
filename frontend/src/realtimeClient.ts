@@ -221,8 +221,12 @@ export class MatchRealtimeClient {
     if (!validCursor(value, this.options.matchId)) return;
     this.applyCursorWakeup(value);
     // The payload is never treated as a match fact; it only wakes the durable reader.
-    void this.refreshFromCanonicalStore(generation).catch(() => {
-      if (this.isActive(generation)) this.setStatus('disconnected');
+    void this.refreshFromCanonicalStore(generation).then(() => {
+      if (!this.isActive(generation) || this.connection !== connection) return;
+      const state = this.options.getState();
+      if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
+    }).catch(() => {
+      if (this.isActive(generation) && this.connection === connection) this.setStatus('disconnected');
     });
   }
 
