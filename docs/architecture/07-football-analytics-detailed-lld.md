@@ -94,7 +94,7 @@ Use staged immutable condition evaluations:
 Every stage records `{name,passed,observed,threshold,coverage,evidenceRefs,exclusionReason}`. Scenarios and thresholds come from versioned football policy JSON reviewed by Product Owner and analyst (not unversioned C# literals). Detector output is `evidence-supported-pattern` unless stronger proof is reviewed; never label inferred coach intention as observed fact.
 
 The local simulated v3 implementation also treats an intervening turnover or completed pass as a continuity break while seeking the pressured response and the subsequent regain. It preserves event sequence ordering and the selected-time prefix. This guards a single ordered candidate chain; it does not establish that pressure caused the opponent action, and the policy remains `unapproved-demo` / non-publishable pending football review.
-**Current `press-sequence-v1`** requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. It is a **demonstration-specific policy**, not league-calibrated universal football truth.
+**Earlier `press-sequence-v1`** required seven action events, the same period, arrival within 3 metres, and a goal within 15 seconds of regain. It was a **demonstration-specific policy**, not league-calibrated universal football truth; the current simulated policy is v3 and remains unapproved.
 
 ```mermaid
 flowchart TD

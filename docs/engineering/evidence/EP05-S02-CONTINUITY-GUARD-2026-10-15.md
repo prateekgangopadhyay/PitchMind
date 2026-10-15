@@ -16,4 +16,4 @@ Restore assets were reused from the local current-main audit worktree; this comm
 
 ## Remaining gates
 
-This is local evidence for this working tree only; the feature commit, remote PR update, independent review of the final head, and merge have not yet occurred. PostgreSQL runtime integration, EP05-S01/EP04-S04 dependency verification, football-domain/Product Owner approval, source-feed semantic certification, and story acceptance remain pending. This evidence does not authorize deployment.
+The test command ran on the local source tree later committed as `76d97fc9840ab1e4a0797cfd5863ef3fae9db0e3` and published on draft PR #252. Independent review of that head found no code findings and two documentation corrections; this follow-up updates those documents, so the resulting PR head still needs a documentation recheck. PostgreSQL runtime integration, EP05-S01/EP04-S04 dependency verification, football-domain/Product Owner approval, source-feed semantic certification, and story acceptance remain pending. This evidence does not authorize deployment.
