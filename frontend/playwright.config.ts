@@ -1,7 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// The live PostgreSQL/API journey is orchestrated by its dedicated Python
+// runner. Keep it out of the ordinary stubbed browser suite unless that
+// runner explicitly opts in and has provisioned the isolated fixture/API.
+const includeLiveApiJourney = process.env.PITCHMIND_LIVE_API_E2E === '1';
+
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: includeLiveApiJourney ? undefined : ['**/ep07-s05-live-postgres-journey.spec.ts'],
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,

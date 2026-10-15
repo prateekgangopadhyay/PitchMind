@@ -29,11 +29,13 @@ The first live journey exposed a response-contract defect: the API returned an i
 
 ## Independent review follow-up
 
-The first exact-head review found that terminating only the `dotnet run` parent could leave the API child running. The runner now starts the API in a dedicated process group, terminates and escalates against the entire group, and checks the loopback port before database cleanup. The live PostgreSQL/API/browser journey was rerun after this change and passed; the required port-release check passed. Follow-up independent review of the updated head is pending.
+The first exact-head review found that terminating only the `dotnet run` parent could leave the API child running. The runner now starts the API in a dedicated process group, terminates and escalates against the entire group, and checks the loopback port before database cleanup. A follow-up independent read-only review found no remaining findings in that process cleanup change.
+
+PR #273 is merged to `main` at `bad13b3f4dc618841f1f541474aaf4d7f2ee5d55`. Post-merge verification against that integrated code passed the fixture/migration seed (1/1), API Release build (0 warnings/errors), and live PostgreSQL → API → Playwright journey (1/1). The final runner cleanup-scope review found no actionable findings; the reviewer did not run tests. The ordinary Playwright suite then exposed that the live-only spec was included without the isolated runner; on this local follow-up branch the spec is excluded by default and opted into by the dedicated runner after provisioning succeeds. After this change, ordinary Playwright passed 5/5 and the dedicated live journey passed 1/1 again.
 
 ## Remaining gates
 
-The change is implementation and local verification only. Follow-up independent exact-head review, hosted CI, manual keyboard/screen-reader review, axe/WCAG review, comparison with approved football evidence, and Product Owner acceptance are **pending**. The source feed's coordinate, clock, metric and canonical-mapping semantics remain unresolved. This evidence does not mark EP07-S05 verified or accepted and does not authorize deployment.
+The follow-up test-scope change is implementation and local verification only. Exact-head review of its current diff found no actionable findings; hosted CI, manual keyboard/screen-reader review, axe/WCAG review, comparison with approved football evidence, and Product Owner acceptance are **pending**. The source feed's coordinate, clock, metric and canonical-mapping semantics remain unresolved. This evidence does not mark EP07-S05 verified or accepted and does not authorize deployment.
 
 ## Local environment recovery
 
