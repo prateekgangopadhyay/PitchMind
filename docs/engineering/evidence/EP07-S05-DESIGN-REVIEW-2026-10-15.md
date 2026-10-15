@@ -88,3 +88,38 @@ No axe run, manual keyboard session, screen-reader session, measured contrast, h
 - UI/UX reviewer: pending.
 - Product Owner acceptance: pending.
 - Evidence and checks are recorded from the local feature branch; the compact-width and keyboard test changes are committed on PR #265. EP07-S05 remains unaccepted pending the listed accessibility, hosted CI, and Product Owner gates.
+
+## Current-main integration revalidation — 2026-10-15
+
+The integrated review target is now local `main` commit `5690d17fe6ccaa25950eae6f0080057100f417a0`, which includes the merged canonical tracking-frame API slice from PR #260 (PR head `c2840a4869a72024fc35d1ee2a1f7bbb3c5a24e5`, squash merge `052dd6976c4c65cf535a70b10b236d393fdd2e77`). The decision remains Pending; no PO review or human accessibility approval is claimed.
+
+The current-main test run adds integration evidence for the merged chain:
+
+- `dotnet test PitchMind.slnx --configuration Release --no-restore --maxcpucount:1 --disable-build-servers` — 469 passed, 27 skipped, 0 failed. The skips are opt-in PostgreSQL integration facts; they did not execute in this generic full-solution run.
+- `./scripts/test-postgres.sh` — 50 passed, 0 skipped, 0 failed against the healthy local Docker PostgreSQL service; its uniquely named temporary database was removed by the harness.
+- `npm test -- --reporter=dot` — 83 passed, 0 failed. The first attempt found the local dependency tree incomplete; `npm ci --offline` restored the lockfile dependencies before this successful run.
+- `npm run build` and `npm run lint` — passed. Vite emitted only third-party Rollup annotation warnings for `@microsoft/signalr`; the build completed.
+- `npm run test:e2e` — 5 passed, 0 failed after the sandbox denied its loopback bind and the same command ran with local loopback permission. This Playwright suite uses test-only stubbed canonical API responses, not the live PostgreSQL-backed API. The fixtures identify themselves as synthetic test data; they are not source-feed or football acceptance evidence.
+- `node scripts/test_design_skills.mjs`, `node scripts/design-slop-scan.mjs frontend/src/CanonicalEvidenceDisclosure.tsx`, and `node scripts/validate_operating_model.mjs` — passed. No current changes were made to the UI copy or runtime UI code.
+
+Fresh official Vercel Web Interface Guidelines were retrieved on 2026-10-15. The desktop, tablet, mobile, and compact screenshots below come from the current-main Playwright run, at configured viewport widths 1440, 768, 375, and 320 pixels. They show that the evidence disclosure is inspectable and source-revision metadata remains visible. At the selected time with no tracking frame, the UI truthfully shows that positions are unavailable and not estimated. The selected test fixture has no pitch frame, leaving visible unused space below the compact empty-state panel; this is a layout follow-up, not a data-correctness defect. The screen remains substantially simpler than the conceptual mockup because the stubbed response contains no verified spatial tracking and key moments are unavailable; adding illustrative positions or tactical decoration would violate the truth contract.
+
+- [Desktop screenshot](ep07-s05-current-main/desktop.png)
+- [Tablet screenshot](ep07-s05-current-main/tablet.png)
+- [Mobile screenshot](ep07-s05-current-main/mobile.png)
+- [Compact screenshot](ep07-s05-current-main/compact.png)
+
+### Current render critique and gate
+
+| Anti-slop area | Current observation |
+|---|---|
+| Identity | Strong — navy/emerald tokens are consistent with the existing PitchMind system. |
+| Hierarchy | Strong — score and selected clock precede events and evidence; truth class and source lineage are visible. |
+| Typography | Strong — score and clock use tabular numerals; evidence values wrap at compact width. |
+| Spacing/layout | Weak in this empty-frame test — a large desktop lower-left area remains unused; mobile panels reflow without horizontal overflow. |
+| Color/contrast | Visual-only pass — no contrast measurement was run. Team/event labels do not depend only on color. |
+| Interaction | Automated pass for disclosure and keyboard citation/replay; manual assistive-technology checks remain unverified. |
+| System | Strong — panels, disclosure, buttons, and status use the same token system. |
+| Product specificity | Strong — synthetic labeling, observed truth class, selected time, sequence and source revision are surfaced. |
+
+The seven-dimensional process-quality heuristic remains 26/35 on this unchanged design. Premium gate remains **77/100**: Taste 31/40, Tech 23/30, Process 15/20, Output 8/10. The score is not a pass. The local design review remains **UNVERIFIED** because axe, measured contrast, manual screen-reader/keyboard testing, hosted CI, a live API-to-browser journey, and PO acceptance were not performed. The existing five-skill registry/self-test passed, but this evidence refresh did not constitute a new implementation/refinement iteration by Taste or a separate independent human UI/Accessibility review. No UI code fix was warranted from the current empty-frame screenshot; the unused-space finding remains visible for PO/design follow-up.
