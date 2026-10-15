@@ -34,6 +34,11 @@ public sealed class PostgresLedgerTests
         var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
             LocalApiRoleProvisioner.ProvisionAsync(source, new string('a', 48), CancellationToken.None));
         Assert.Contains("12 unique hex digits", exception.Message, StringComparison.Ordinal);
+
+        var trailingNewlinePassword = "0123456789abcdef0123456789abcdef0123456789abcdef\n";
+        var formatException = await Assert.ThrowsAsync<ArgumentException>(() =>
+            LocalApiRoleProvisioner.ProvisionAsync(source, trailingNewlinePassword, CancellationToken.None));
+        Assert.Contains("48 lowercase hexadecimal characters", formatException.Message, StringComparison.Ordinal);
     }
 
     [PostgresIntegrationFact]
