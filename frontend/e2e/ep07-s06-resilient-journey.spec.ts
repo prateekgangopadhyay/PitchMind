@@ -9,7 +9,28 @@ const throughSequence = 19;
 const sourceSha256 = 'c'.repeat(64);
 const insightSummary = 'Recorded sequence is available for review.';
 
-type StubOptions = { unavailable?: string[]; withEvidence?: boolean; withReplay?: boolean };
+type StubOptions = { unavailable?: string[]; withEvidence?: boolean; withReplay?: boolean; withTracking?: boolean };
+
+function trackingFrame(selectedTimeSeconds: number) {
+  return {
+    frameId: 'test-tracking-frame', sequence: 18, canonicalRevision, projectionRevision: 4, period: 2,
+    clockSeconds: selectedTimeSeconds, coordinateVersion: 'coordinates-test-v1', sourceSha256, quality: null,
+    frame: {
+      schemaVersion: 1, matchId, frameId: 'test-tracking-frame', sequence: 18, canonicalRevision,
+      matchTime: { period: 2, elapsedSeconds: selectedTimeSeconds, sourceClockValue: selectedTimeSeconds,
+        sourceClockUnit: 'seconds', sourceClockBasis: 'match_elapsed' },
+      coordinateSystem: { lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left',
+        teamDirections: [{ teamId: 'test-home', direction: 'right' }, { teamId: 'test-away', direction: 'left' }] },
+      ball: { x: 52, y: 34 }, players: [
+        { playerId: 'test-player-home', teamId: 'test-home', position: { x: 30, y: 20 } },
+        { playerId: 'test-player-away', teamId: 'test-away', position: { x: 71, y: 42 } }
+      ],
+      source: { providerId: 'synthetic-test', sourceMatchId: 'test-source-match', sourceRecordId: 'test-tracking-frame',
+        sourceSequence: 18, sourceSchemaVersion: 'tracking-test-v1', sourceSha256,
+        provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'approved_for_use' }
+    }
+  };
+}
 
 function replayEvidenceItems(selectedTimeSeconds: number) {
   const references = [
@@ -97,7 +118,7 @@ async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
           evidence: options.withReplay ? replayEvidenceItems(selectedTimeSeconds).references
             : options.withEvidence ? [{ kind: 'event', id: 'test-event-18', relation: 'supports' }] : [] }]
       },
-      frames: { ...context, items: [], nextCursor: null, hasMore: false },
+      frames: { ...context, items: options.withTracking ? [trackingFrame(selectedTimeSeconds)] : [], nextCursor: null, hasMore: false },
       'key-moments': { ...context, items: [], hasMore: false }
     };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bodyByResource[resource ?? ''] ?? {}) });
@@ -137,6 +158,30 @@ test('steps through source-bound observed frames with keyboard controls at three
     expect(overflow, `${viewport.name} replay should not require horizontal page scrolling`).toBe(false);
     await page.screenshot({ path: testInfo.outputPath(`ep07-s05-replay-${viewport.name}.png`), fullPage: true });
   }
+});
+
+test('keeps observed position columns readable in a keyboard-scrollable mobile table', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await stubCanonicalMatch(page, { withTracking: true });
+  await openSelectedMatch(page);
+
+  const positions = page.getByRole('region', { name: 'Observed pitch coordinates' });
+  const table = positions.getByRole('table', { name: /Pitch view coordinates at/ });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Player ID' })).toBeVisible();
+  await expect(table.getByRole('cell', { name: 'test-player-away' })).toBeVisible();
+  await expect(positions).toHaveAttribute('tabindex', '0');
+  const dimensions = await positions.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth,
+    rect: element.getBoundingClientRect().toJSON(), parent: element.parentElement?.getBoundingClientRect().toJSON(),
+    page: document.documentElement.scrollWidth, viewport: window.innerWidth }));
+  expect(dimensions.scroll, JSON.stringify(dimensions)).toBeGreaterThan(dimensions.client);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await positions.screenshot({ path: '../docs/engineering/evidence/ep07-s05-replay/mobile-position-table-start-375x812.png' });
+  await positions.focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await positions.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  await positions.screenshot({ path: '../docs/engineering/evidence/ep07-s05-replay/mobile-position-table-scrolled-375x812.png' });
 });
 
 async function openSelectedMatch(page: Page) {

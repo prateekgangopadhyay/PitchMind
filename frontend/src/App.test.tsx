@@ -265,7 +265,7 @@ it('exposes observed positions as a screen-reader table and keeps event and time
       coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
       ball: {x: 52.5, y: 34}, players: [{playerId: 'player-a', teamId: 'team-a', position: {x: 10, y: 20}}],
       source: {providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: 'observed-frame', sourceSequence: 1,
-        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
+        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved_for_use'}
     }
   };
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -329,7 +329,7 @@ it('opens a frame evidence deep link on the exact observed frame when sequences 
       coordinateSystem: { lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{ teamId: 'team-a', direction: 'right' }] },
       ball: { x: 52.5, y: 34 }, players: [{ playerId: `player-${sequence}`, teamId: 'team-a', position: { x: sequence, y: 20 } }],
       source: { providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: frameId, sourceSequence: sequence,
-        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test' }
+        sourceSchemaVersion: 'test-v1', sourceSha256: 'a'.repeat(64), provenanceStatus: 'approved-test', rightsReviewStatus: 'approved_for_use' }
     }
   });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -493,7 +493,7 @@ it.each(['frame-page-projection-revision', 'frame-item-projection-revision', 'ne
         coordinateSystem: {lengthMetres: 105, widthMetres: 68, unit: 'metres', axisOrigin: 'bottom_left', teamDirections: [{teamId: 'team-a', direction: 'right'}]},
         ball: {x: 52.5, y: 34}, players: [],
         source: {providerId: 'test', sourceMatchId: 'test-match', sourceRecordId: 'frame-1', sourceSequence: 1,
-          sourceSchemaVersion: 'test-v1', sourceSha256, provenanceStatus: 'approved-test', rightsReviewStatus: 'approved-test'}
+          sourceSchemaVersion: 'test-v1', sourceSha256, provenanceStatus: 'approved-test', rightsReviewStatus: 'approved_for_use'}
       }
     };
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);

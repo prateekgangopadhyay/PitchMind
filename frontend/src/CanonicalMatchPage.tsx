@@ -328,7 +328,15 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     Observed frame {selectedFrame.frameId} at {clock(selectedSeconds)} · period {selectedFrame.period} · {pitch.length} × {pitch.width} m. Numbered player positions are listed below.
                   </p>
                 </div>
-                <div className="position-table-details">
+                <div className="position-table-details" role="region" aria-label="Observed pitch coordinates"
+                  aria-description="Use the left and right arrow keys to scroll the coordinate table on narrow screens."
+                  tabIndex={0} onKeyDown={event => {
+                    const direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                    if (direction) {
+                      event.preventDefault();
+                      event.currentTarget.scrollBy({ left: direction * 64 });
+                    }
+                  }}>
                   <table>
                     <caption>Pitch view coordinates at {clock(selectedSeconds)} · {pitch.attackTeamId} attacks right · sequence {selectedFrame.sequence}</caption>
                     <thead><tr><th scope="col">Marker</th><th scope="col">Team ID</th><th scope="col">Player ID</th><th scope="col">View X (m)</th><th scope="col">View Y (m)</th></tr></thead>
