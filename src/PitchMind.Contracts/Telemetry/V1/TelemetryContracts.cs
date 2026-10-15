@@ -74,8 +74,9 @@ public sealed record SourceReferenceV1
     public required string SourceSha256 { get; init; }
     /// <summary>Optional source wall-clock timestamp; distinct from match time.</summary>
     public DateTimeOffset? SourceTimestampUtc { get; init; }
-    /// <summary>Owner declaration is distinct from independent rights/privacy review.</summary>
+    /// <summary>Owner provenance declaration; does not replace independent source review.</summary>
     public required string ProvenanceStatus { get; init; }
+    /// <summary>Must be approved_for_use before canonical telemetry can be admitted or displayed.</summary>
     public required string RightsReviewStatus { get; init; }
 }
 

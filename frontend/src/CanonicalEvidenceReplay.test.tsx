@@ -28,7 +28,7 @@ function frame(frameId: string, sequence: number, elapsedSeconds: number): Canon
       ],
       source: { providerId: 'synthetic-test', sourceMatchId: 'source-match', sourceRecordId: frameId,
         sourceSequence: sequence, sourceSchemaVersion: 'tracking-v1', sourceSha256: sourceHash,
-        provenanceStatus: 'synthetic-owner-declared', rightsReviewStatus: 'reviewed' }
+        provenanceStatus: 'synthetic-owner-declared', rightsReviewStatus: 'approved_for_use' }
     }
   };
 }
@@ -39,7 +39,7 @@ function event(): CanonicalEvidencePayload {
     sequence: 3, clockSeconds: 50, period: 1,
     payload: { schemaVersion: 1, matchId: insight.matchId, canonicalRevision: 4, eventId: 'event-1', sequence: 3,
       matchTime: { period: 1, elapsedSeconds: 50 },
-      source: { sourceSha256: sourceHash, provenanceStatus: 'synthetic-owner-declared', rightsReviewStatus: 'reviewed' },
+      source: { sourceSha256: sourceHash, provenanceStatus: 'synthetic-owner-declared', rightsReviewStatus: 'approved_for_use' },
       playerId: 'player-a', relatedPlayerId: null }
   };
 }
@@ -83,7 +83,7 @@ describe('canonical evidence sequence replay', () => {
     }
   });
 
-  it('does not render a frame while rights review is pending', () => {
+  it('does not render a frame until rights are approved for use', () => {
     viActEnvironment();
     const pending = frame('frame-pending', 5, 70);
     (pending.payload.source as { rightsReviewStatus: string }).rightsReviewStatus = 'pending';
@@ -91,7 +91,7 @@ describe('canonical evidence sequence replay', () => {
     document.body.appendChild(container);
     const root = mount(container, makeEvidence([pending]));
     try {
-      expect(container.textContent).toContain('Tracking replay is unavailable until the source rights review is complete.');
+      expect(container.textContent).toContain('Tracking replay is unavailable until the source is approved for canonical use.');
       expect(container.querySelector('svg')).toBeNull();
     } finally {
       act(() => root.unmount());
@@ -122,6 +122,38 @@ describe('canonical evidence sequence replay', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = mount(container, makeEvidence([invalid]));
+    try {
+      expect(container.textContent).toContain('Linked tracking data does not match the selected evidence or has unsupported coordinates. The overlay is hidden.');
+      expect(container.querySelector('svg')).toBeNull();
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
+  it('rejects pitch dimensions outside the telemetry contract bounds', () => {
+    viActEnvironment();
+    const invalid = frame('frame-small-pitch', 5, 70);
+    (invalid.payload.coordinateSystem as { lengthMetres: number }).lengthMetres = 80;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = mount(container, makeEvidence([invalid]));
+    try {
+      expect(container.textContent).toContain('Linked tracking data does not match the selected evidence or has unsupported coordinates. The overlay is hidden.');
+      expect(container.querySelector('svg')).toBeNull();
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
+  it('hides malformed player and direction entries without throwing', () => {
+    viActEnvironment();
+    const malformedPlayer = frame('frame-null-player', 5, 70);
+    (malformedPlayer.payload.players as unknown[]).push(null);
+    const malformedDirection = frame('frame-null-direction', 6, 80);
+    (malformedDirection.payload.coordinateSystem as { teamDirections: unknown[] }).teamDirections.push(null);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = mount(container, makeEvidence([malformedPlayer, malformedDirection]));
     try {
       expect(container.textContent).toContain('Linked tracking data does not match the selected evidence or has unsupported coordinates. The overlay is hidden.');
       expect(container.querySelector('svg')).toBeNull();

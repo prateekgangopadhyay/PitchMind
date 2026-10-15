@@ -360,7 +360,7 @@ public sealed class CanonicalBackfillTests
                 {
                     ProviderId = "synthetic-test", SourceMatchId = MatchGuid.ToString("D"), SourceRecordId = id,
                     SourceSequence = sequence, SourceSchemaVersion = "v1", SourceSha256 = SourceHash,
-                    ProvenanceStatus = "synthetic", RightsReviewStatus = "reviewed"
+                    ProvenanceStatus = "synthetic", RightsReviewStatus = TelemetryContractValidatorV1.ApprovedRightsReviewStatus
                 }
             };
             return new PersistedTrackingFrame(id, sequence, 100, 1, 120, "pitch-v1", "{}", SourceHash,

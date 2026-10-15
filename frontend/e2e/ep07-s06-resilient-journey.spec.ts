@@ -22,7 +22,7 @@ function replayEvidenceItems(selectedTimeSeconds: number) {
     sequence: 17, clockSeconds: 3295, period: 2,
     payload: { schemaVersion: 1, matchId, canonicalRevision, eventId: 'test-event-17', sequence: 17,
       matchTime: { period: 2, elapsedSeconds: 3295 },
-      source: { sourceSha256, provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'reviewed' },
+      source: { sourceSha256, provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'approved_for_use' },
       playerId: 'test-player-home', relatedPlayerId: null }
   };
   const frames = [18, 19].map((sequence, index) => {
@@ -41,7 +41,7 @@ function replayEvidenceItems(selectedTimeSeconds: number) {
         ],
         source: { providerId: 'synthetic-test', sourceMatchId: 'test-source-match', sourceRecordId: frameId,
           sourceSequence: sequence, sourceSchemaVersion: 'tracking-test-v1', sourceSha256,
-          provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'reviewed' } }
+          provenanceStatus: 'synthetic-test-only', rightsReviewStatus: 'approved_for_use' } }
     };
   });
   return { references, items: [event, ...frames].filter(item => item.clockSeconds <= selectedTimeSeconds) };

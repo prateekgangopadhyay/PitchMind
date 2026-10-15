@@ -37,13 +37,13 @@ export function CanonicalEvidenceReplay({ evidence }: { evidence: CanonicalEvide
   const selected = frames[selectedIndex];
   const headingId = `evidence-replay-${insight.insightId}`;
   const frameDescriptionId = `evidence-frame-description-${insight.insightId}`;
-  const invalidRights = evidence.items.some(item => item.kind === 'frame' && frameRightsReviewPending(item));
+  const unapprovedRights = evidence.items.some(item => item.kind === 'frame' && frameRightsNotApproved(item));
 
   return <section className="canonical-evidence-replay" aria-labelledby={headingId}>
     <h3 id={headingId}>Observed sequence replay</h3>
     <p>Step through only the observed tracking frames linked to this insight. Positions are not interpolated, and the source pitch orientation is preserved.</p>
-    {!selected ? <p role="status">{invalidRights
-      ? 'Tracking replay is unavailable until the source rights review is complete.'
+    {!selected ? <p role="status">{unapprovedRights
+      ? 'Tracking replay is unavailable until the source is approved for canonical use.'
       : evidence.items.some(item => item.kind === 'frame')
         ? 'Linked tracking data does not match the selected evidence or has unsupported coordinates. The overlay is hidden.'
         : 'No observed tracking frame is linked to this insight. A tactical overlay is unavailable.'}</p> : <>
@@ -119,8 +119,12 @@ function parseFrame(item: CanonicalEvidencePayload, evidence: CanonicalEvidence)
   if (!frame || typeof frame !== 'object' || frame.schemaVersion !== 1 || frame.matchId !== evidence.insight.matchId ||
       frame.frameId !== item.id || frame.sequence !== item.sequence || frame.canonicalRevision !== item.sourceCanonicalRevision ||
       frame.matchTime?.elapsedSeconds !== item.clockSeconds || frame.matchTime?.period !== item.period ||
-      frame.source?.sourceSha256 !== evidence.insight.sourceSha256 || !hasCompletedRightsReview(frame.source?.rightsReviewStatus) ||
-      !Array.isArray(frame.players) || !frame.coordinateSystem || !Array.isArray(frame.coordinateSystem.teamDirections)) return null;
+      frame.source?.sourceSha256 !== evidence.insight.sourceSha256 || !hasApprovedRightsForUse(frame.source?.rightsReviewStatus) ||
+      !Array.isArray(frame.players) || !frame.coordinateSystem || !Array.isArray(frame.coordinateSystem.teamDirections) ||
+      frame.players.some(player => !player || typeof player !== 'object' || typeof player.playerId !== 'string' ||
+        !player.playerId || typeof player.teamId !== 'string' || !player.teamId) ||
+      frame.coordinateSystem.teamDirections.some(entry => !entry || typeof entry !== 'object' ||
+        typeof entry.teamId !== 'string' || !entry.teamId || !['left', 'right'].includes(entry.direction))) return null;
 
   const system = frame.coordinateSystem;
   const projected = projectCoordinates(frame);
@@ -143,7 +147,7 @@ function parseEventParticipants(item: CanonicalEvidencePayload, evidence: Canoni
   if (!event || typeof event !== 'object' || event.schemaVersion !== 1 || event.matchId !== evidence.insight.matchId ||
       event.eventId !== item.id || event.sequence !== item.sequence || event.canonicalRevision !== item.sourceCanonicalRevision ||
       event.matchTime?.elapsedSeconds !== item.clockSeconds || event.matchTime?.period !== item.period ||
-      event.source?.sourceSha256 !== evidence.insight.sourceSha256 || !hasCompletedRightsReview(event.source?.rightsReviewStatus)) return null;
+      event.source?.sourceSha256 !== evidence.insight.sourceSha256 || !hasApprovedRightsForUse(event.source?.rightsReviewStatus)) return null;
   return [event.playerId, event.relatedPlayerId].filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
@@ -159,13 +163,13 @@ function itemIsInSelectedPrefix(item: CanonicalEvidencePayload, evidence: Canoni
     item.sourceCanonicalRevision <= evidence.insight.canonicalRevision;
 }
 
-function frameRightsReviewPending(item: CanonicalEvidencePayload): boolean {
+function frameRightsNotApproved(item: CanonicalEvidencePayload): boolean {
   const frame = item.payload as Partial<TelemetryTrackingFrameV1> | null;
-  return !hasCompletedRightsReview(frame?.source?.rightsReviewStatus);
+  return !hasApprovedRightsForUse(frame?.source?.rightsReviewStatus);
 }
 
-function hasCompletedRightsReview(status: unknown): boolean {
-  return typeof status === 'string' && status.trim().toLowerCase() === 'reviewed';
+function hasApprovedRightsForUse(status: unknown): boolean {
+  return status === 'approved_for_use';
 }
 
 function projectCoordinates(frame: Partial<TelemetryTrackingFrameV1>): {
@@ -173,8 +177,8 @@ function projectCoordinates(frame: Partial<TelemetryTrackingFrameV1>): {
 } | null {
   const system = frame.coordinateSystem;
   if (!system || !Array.isArray(frame.players) || !frame.ball ||
-      !Number.isFinite(system.lengthMetres) || system.lengthMetres <= 0 || system.lengthMetres > 120 ||
-      !Number.isFinite(system.widthMetres) || system.widthMetres <= 0 || system.widthMetres > 90 ||
+      !Number.isFinite(system.lengthMetres) || system.lengthMetres < 90 || system.lengthMetres > 120 ||
+      !Number.isFinite(system.widthMetres) || system.widthMetres < 45 || system.widthMetres > 90 ||
       !['metres', 'normalized_0_1', 'percent_0_100'].includes(system.unit) ||
       !['bottom_left', 'top_left'].includes(system.axisOrigin)) return null;
   const scaleX = system.unit === 'metres' ? 1 : system.unit === 'normalized_0_1' ? system.lengthMetres : system.lengthMetres / 100;
@@ -190,8 +194,10 @@ function projectCoordinates(frame: Partial<TelemetryTrackingFrameV1>): {
   };
   const ball = point(frame.ball);
   const players = frame.players.map(player => {
+    if (!player || typeof player !== 'object' || !player.position || typeof player.position !== 'object') return null;
     const position = point(player.position);
-    return position && player.playerId && player.teamId ? { playerId: player.playerId, teamId: player.teamId, position } : null;
+    return position && typeof player.playerId === 'string' && player.playerId &&
+      typeof player.teamId === 'string' && player.teamId ? { playerId: player.playerId, teamId: player.teamId, position } : null;
   });
   if (!ball || players.some(player => player === null)) return null;
   return { length: system.lengthMetres, width: system.widthMetres, ball,
