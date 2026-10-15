@@ -40,6 +40,19 @@ public sealed class SyntheticFixtureTests
         });
     }
 
+    [Fact] public void VersionedEmbeddedFixtureIsAvailableOnlyToTestSupport()
+    {
+        using var stream = EmbeddedSyntheticFixture.OpenRead();
+        using var fixture = JsonDocument.Parse(stream);
+
+        Assert.Equal("synthetic-v2", fixture.RootElement.GetProperty("version").GetString());
+        Assert.Equal("synthetic", fixture.RootElement.GetProperty("provenance").GetString());
+        Assert.Contains(EmbeddedSyntheticFixture.ResourceName,
+            typeof(EmbeddedSyntheticFixture).Assembly.GetManifestResourceNames());
+        Assert.DoesNotContain(EmbeddedSyntheticFixture.ResourceName,
+            typeof(SyntheticFixture).Assembly.GetManifestResourceNames());
+    }
+
     [Fact] public void ArtifactHashIsStableForTheSameSeedAndChangesWithTheSeed()
     {
         var first = SyntheticFixtureArtifact.Create(SyntheticFixtureGenerator.GenerateScenario(seed: 42));

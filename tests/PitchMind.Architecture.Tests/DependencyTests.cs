@@ -61,6 +61,48 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void ProductionProjects_DoNotEmbedTestOrScenarioFixtures()
+    {
+        var root = FindRepositoryRoot();
+        var projects = ReadEvaluatedProjectDocuments(root);
+
+        var violations = ArchitectureDependencyPolicy.ValidateProductionFixtureResources(projects, root);
+        Xunit.Assert.Empty(violations);
+    }
+
+    [Xunit.Fact]
+    public void ProductionFixtureResourceGuard_RejectsFixtureResourcesButAllowsSchemas()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-production-resource-guard-");
+        try
+        {
+            XDocument Project(string projectName, string resourcePath) => new(
+                new XElement("Project",
+                    new XAttribute("ProjectPath", Path.Combine(root.FullName, "src", projectName, $"{projectName}.csproj")),
+                    new XElement("EmbeddedResource", new XAttribute("Include", resourcePath))));
+
+            var projects = new Dictionary<string, XDocument>(StringComparer.Ordinal)
+            {
+                ["PitchMind.Domain"] = Project("PitchMind.Domain", "../../data/simulations/synthetic-fixture-v2.json"),
+                ["PitchMind.Api"] = Project("PitchMind.Api", "../../tests/sample-data.json"),
+                ["PitchMind.Contracts"] = Project("PitchMind.Contracts", "../../schemas/match-contract-v1.schema.json")
+            };
+
+            var violations = ArchitectureDependencyPolicy.ValidateProductionFixtureResources(projects, root.FullName);
+
+            Xunit.Assert.Equal(2, violations.Count);
+            Xunit.Assert.Contains(violations, violation => violation.Contains("PitchMind.Domain", StringComparison.Ordinal) &&
+                violation.Contains("synthetic-fixture-v2.json", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, violation => violation.Contains("PitchMind.Api", StringComparison.Ordinal) &&
+                violation.Contains("tests/sample-data.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionSource_DoesNotGenerateMatchSpecificFixtures()
     {
         var root = FindRepositoryRoot();
@@ -1215,7 +1257,7 @@ public sealed class DependencyTests
         };
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(projectPath);
-        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,EmbeddedResource,PackageReference,FrameworkReference,COMReference,NativeReference");
         startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
@@ -1244,7 +1286,7 @@ public sealed class DependencyTests
             new XAttribute("ProjectPath", Path.GetFullPath(projectPath)),
             new XAttribute("MSBuildSDKsPath", sdkPath ?? string.Empty)));
         var itemRoot = json.RootElement.GetProperty("Items");
-        foreach (var itemType in new[] { "ProjectReference", "Reference", "PackageReference", "FrameworkReference", "COMReference", "NativeReference" })
+        foreach (var itemType in new[] { "ProjectReference", "Reference", "EmbeddedResource", "PackageReference", "FrameworkReference", "COMReference", "NativeReference" })
         {
             if (!itemRoot.TryGetProperty(itemType, out var items))
             {
@@ -1692,6 +1734,64 @@ public sealed class DependencyTests
 
 internal static class ArchitectureDependencyPolicy
 {
+    public static IReadOnlyList<string> ValidateProductionFixtureResources(
+        IReadOnlyDictionary<string, XDocument> projects,
+        string repositoryRoot)
+    {
+        var violations = new List<string>();
+        var fullRepositoryRoot = Path.GetFullPath(repositoryRoot);
+
+        foreach (var (projectName, project) in projects)
+        {
+            var projectPath = project.Root?.Attribute("ProjectPath")?.Value;
+            if (string.IsNullOrWhiteSpace(projectPath))
+            {
+                violations.Add($"Production project '{projectName}' has no evaluated project path.");
+                continue;
+            }
+
+            var projectDirectory = Path.GetDirectoryName(projectPath)!;
+            foreach (var resource in project.Descendants().Where(item =>
+                         item.Name.LocalName is "EmbeddedResource" or "TargetEmbeddedResource"))
+            {
+                var include = resource.Attribute("FullPath")?.Value ?? resource.Attribute("Include")?.Value;
+                if (string.IsNullOrWhiteSpace(include))
+                {
+                    violations.Add($"Production project '{projectName}' has an embedded resource without a path.");
+                    continue;
+                }
+
+                var fullPath = Path.GetFullPath(include, projectDirectory);
+                var pathFromRoot = Path.GetRelativePath(fullRepositoryRoot, fullPath).Replace('\\', '/');
+                var metadata = string.Join(' ', resource.Attributes()
+                    .Where(attribute => attribute.Name.LocalName is "LogicalName" or "Link" or "TargetPath" or "ManifestResourceName")
+                    .Select(attribute => attribute.Value));
+                if (IsFixtureOrScenarioResource(pathFromRoot) || IsFixtureOrScenarioResource(metadata))
+                {
+                    violations.Add($"Production project '{projectName}' embeds test/fixture/scenario resource '{pathFromRoot}'.");
+                }
+            }
+        }
+
+        return violations;
+    }
+
+    private static bool IsFixtureOrScenarioResource(string value)
+    {
+        var normalized = value.Replace('\\', '/');
+        if (normalized.StartsWith("tests/", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("/tests/", StringComparison.OrdinalIgnoreCase) ||
+            normalized.StartsWith("data/simulations/", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("/data/simulations/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return Regex.IsMatch(normalized,
+            @"(^|[/._-])(fixture|fixtures|testfixture|testfixtures|scenario|scenarios|golden|goldens|testdata|test-data)([/._-]|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
     public static IReadOnlyList<string> ValidateDomainReferences(XDocument domain)
     {
         var violations = new List<string>();
