@@ -1,9 +1,9 @@
 # EP08-S03 bounded explanation orchestration — 2026-10-15
 
-**Story:** EP08-S03 — Meaningful multi-agent handoffs (P0).  
-**Accountable skill:** `ai-agentic-systems-architect`.  
-**Consult skills:** `football-analytics-engineer`, `application-security-engineer`, `finops-engineer`.  
-**Pull request:** [#266](https://github.com/prateekgangopadhyay/PitchMind/pull/266), merged to main by squash commit `5faf2d4f1a3ae28c45ed61a5c2089f0721376892`.  
+**Story:** EP08-S03 — Meaningful multi-agent handoffs (P0).
+**Accountable skill:** `ai-agentic-systems-architect`.
+**Consult skills:** `football-analytics-engineer`, `application-security-engineer`, `finops-engineer`.
+**Pull request:** [#266](https://github.com/prateekgangopadhyay/PitchMind/pull/266), merged to main by squash commit `5faf2d4f1a3ae28c45ed61a5c2089f0721376892`.
 **Code head:** `b7fd3c05d1fb091ffb100c0be7dc0c2ac3a83fc9`; base `1492d661e1327275cae652f7bd2e9fea201c21f2`; tree `712526752f0533b8fde1cf7b6bc510d2ffec90e0`.
 
 ## Scope implemented
@@ -28,4 +28,3 @@ Independent review of the preceding head found that the verifier accepted every 
 ## Remaining acceptance work
 
 This merged code slice does not complete or accept EP08-S03. Routing remains `unverified`; Product Owner acceptance remains pending. The story still needs authenticated host/request composition, exercise with live Foundry dependencies, integration/security and football-domain review as applicable, cost/latency evaluation and the broader acceptance evidence, including hosted checks where configured. The deterministic single-generator comparison proves verifier gating, not measured multi-model accuracy uplift. The selected-time request limit remains 0..5400 seconds. No Azure resources or deployments were changed.
-
