@@ -84,11 +84,12 @@ internal static class CanonicalMatchEndpoints
             // The reconnect cursor identifies the client's prior revision; read the current durable
             // selected-time projection so correction revisions can force an idempotent full replay.
             var selectedTime = atSeconds ?? 5400;
-            var projection = await projections.GetAtAsync(new MatchId(canonicalMatchId), selectedTime, null, cancellationToken);
+            var projection = await projections.GetForApiAtAsync(new MatchId(canonicalMatchId), selectedTime,
+                null, null, cancellationToken);
             if (projection is null)
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
 
-            var revisionChanged = revision is not null && revision != projection.Revision;
+            var revisionChanged = revision is not null && revision != projection.ProjectionRevision;
             var replayRequired = revisionChanged || afterSequence > projection.AsOfSequence;
             var effectiveAfterSequence = replayRequired ? -1 : afterSequence;
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, effectiveAfterSequence, pageSize, cancellationToken);

@@ -4,7 +4,7 @@ import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, 
 import type { RealtimeTimelineState } from './realtime';
 
 const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds): CanonicalMatchSnapshot => ({
-  matchId: 'match-a', canonicalRevision: revision, selectedTimeSeconds, asOfSeconds, throughSequence,
+  matchId: 'match-a', canonicalRevision: revision, projectionRevision: 1, selectedTimeSeconds, asOfSeconds, throughSequence,
   algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64), provenance: 'synthetic',
   period: 1, phase: 'firsthalf', homeScore: 0, awayScore: 0, possessionTeamId: null,
   homeActivePlayers: 11, awayActivePlayers: 11, players: [],
@@ -25,7 +25,8 @@ const state = (): RealtimeTimelineState => ({
 const backfill = (items: CanonicalLedgerEvent[], options: Partial<CanonicalTimelineBackfill> = {}): CanonicalTimelineBackfill => {
   const current = snapshot(2, 2, 120, 5400);
   const page: CanonicalEventPage = {
-    matchId: 'match-a', canonicalRevision: current.canonicalRevision, selectedTimeSeconds: current.selectedTimeSeconds,
+    matchId: 'match-a', canonicalRevision: current.canonicalRevision, projectionRevision: current.projectionRevision,
+    selectedTimeSeconds: current.selectedTimeSeconds,
     throughSequence: current.throughSequence, items, nextCursor: null, hasMore: false,
   };
   return { snapshot: current, events: page, revisionChanged: false, replayRequired: false, requestedAfterSequence: 0, ...options };
