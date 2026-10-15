@@ -58,23 +58,29 @@ try:
         Path(retained_results).mkdir(parents=True, exist_ok=True)
     result_context = contextlib.nullcontext(retained_results) if retained_results else tempfile.TemporaryDirectory(prefix='pitchmind-postgres-tests-')
     with result_context as results:
-        command = ['dotnet', 'test', 'tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj',
-                   '--nologo', '-m:1', '-p:UseSharedCompilation=false',
-                   '--logger', 'trx;LogFileName=postgres.trx', '--results-directory', results]
-        exit_code = subprocess.run(command, env=test_environment).returncode
-        if exit_code == 0:
-            report = Path(results) / 'postgres.trx'
+        projects = [
+            ('tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj', 'postgres.trx'),
+            ('tests/PitchMind.Contracts.Tests/PitchMind.Contracts.Tests.csproj', 'api-postgres-readiness.trx'),
+        ]
+        ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+        for project, report_name in projects:
+            command = ['dotnet', 'test', project, '--nologo', '-m:1', '-p:UseSharedCompilation=false',
+                       '--logger', 'trx;LogFileName=' + report_name, '--results-directory', results]
+            exit_code = subprocess.run(command, env=test_environment).returncode
+            if exit_code != 0:
+                break
+            report = Path(results) / report_name
             if not report.exists():
-                print('FAIL: integration test result evidence missing', file=sys.stderr)
+                print('FAIL: integration test result evidence missing for ' + project, file=sys.stderr)
                 exit_code = 1
-            else:
-                ns = {'t': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
-                counters = ET.parse(report).find('t:ResultSummary/t:Counters', ns)
-                if counters is None or int(counters.get('executed', '0')) == 0 or int(counters.get('notExecuted', '0')) != 0:
-                    print('FAIL: PostgreSQL integration tests must execute without skips', file=sys.stderr)
-                    exit_code = 1
-                else:
-                    print('PASS: real PostgreSQL integration tests executed without skips')
+                break
+            counters = ET.parse(report).find('t:ResultSummary/t:Counters', ns)
+            if counters is None or int(counters.get('executed', '0')) == 0 or int(counters.get('notExecuted', '0')) != 0:
+                print('FAIL: PostgreSQL integration tests must execute without skips for ' + project, file=sys.stderr)
+                exit_code = 1
+                break
+        if exit_code == 0:
+            print('PASS: infrastructure and API PostgreSQL integration tests executed without skips')
 finally:
     cleaned = postgres_command(['dropdb', '-U', username, '--if-exists', '--force', database])
     if cleaned.returncode:

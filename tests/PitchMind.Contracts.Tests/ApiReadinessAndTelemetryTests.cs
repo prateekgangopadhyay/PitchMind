@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
+using Npgsql;
 using PitchMind.Api;
+using PitchMind.Infrastructure.Storage;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
@@ -76,6 +78,30 @@ public sealed class ApiReadinessAndTelemetryTests
         var body = await ready.Content.ReadAsStringAsync();
         Assert.DoesNotContain("127.0.0.1", body, StringComparison.Ordinal);
         Assert.DoesNotContain("secret", body, StringComparison.Ordinal);
+    }
+
+    [PostgresReadinessFact]
+    public async Task Current_postgres_schema_is_ready_through_the_health_endpoint()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES");
+        Assert.False(string.IsNullOrWhiteSpace(connectionString));
+
+        await using (var migrationDataSource = NpgsqlDataSource.Create(connectionString!))
+        {
+            await PostgresSchemaMigrator.ApplyAsync(migrationDataSource, CancellationToken.None);
+        }
+
+        using var factory = CreateFactory("Development", new Dictionary<string, string?>
+        {
+            ["Runtime:Profile"] = "local",
+            ["ConnectionStrings:PitchMind"] = connectionString
+        });
+        using var client = factory.CreateClient();
+
+        using var ready = await client.GetAsync("/health/ready");
+
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        Assert.Empty(await ready.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -217,3 +243,12 @@ public sealed class ApiReadinessAndTelemetryTests
 
 [CollectionDefinition("Api telemetry listeners", DisableParallelization = true)]
 public sealed class ApiTelemetryListenerCollection { }
+
+public sealed class PostgresReadinessFactAttribute : FactAttribute
+{
+    public PostgresReadinessFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")))
+            Skip = "Set PITCHMIND_TEST_POSTGRES to an isolated local PostgreSQL test database.";
+    }
+}
