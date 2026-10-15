@@ -1757,18 +1757,20 @@ public sealed class PostgresLedgerTests
         var first = Event(MatchId.New()) with { EventId = eventId };
         var second = Event(MatchId.New()) with { EventId = eventId };
 
-        async Task<MatchEventIngestionException?> TryAppend(MatchEvent matchEvent)
+        async Task<(MatchEvent? Appended, MatchEventIngestionException? Rejected)> TryAppend(MatchEvent matchEvent)
         {
-            try { await store.AppendAsync(matchEvent, CancellationToken.None); return null; }
-            catch (MatchEventIngestionException exception) { return exception; }
+            try { await store.AppendAsync(matchEvent, CancellationToken.None); return (matchEvent, null); }
+            catch (MatchEventIngestionException exception) { return (null, exception); }
         }
 
         var results = await Task.WhenAll(TryAppend(first), TryAppend(second));
-        var rejected = Assert.Single(results, result => result is not null)!;
+        var rejected = Assert.Single(results, result => result.Rejected is not null).Rejected!;
+        var winner = Assert.Single(results, result => result.Appended is not null).Appended!;
         Assert.Equal("EVENT_ID_PAYLOAD_CONFLICT", rejected.Code);
         Assert.Equal(MatchEventIngestionDisposition.Quarantine, rejected.Disposition);
-        Assert.Single(await Read(store, first.MatchId));
-        Assert.Empty(await Read(store, second.MatchId));
+        Assert.Single(await Read(store, winner.MatchId));
+        var loser = winner.MatchId == first.MatchId ? second : first;
+        Assert.Empty(await Read(store, loser.MatchId));
     }
 
     [PostgresIntegrationFact]

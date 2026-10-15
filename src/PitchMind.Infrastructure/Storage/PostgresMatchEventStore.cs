@@ -17,10 +17,10 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
         ValidateForIngestion(matchEvent);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        // Lock event ID first, then match. This serializes a global ID retry across matches
-        // and a match sequence across event IDs without creating a lock-order cycle.
-        await AcquireLockAsync(connection, transaction, $"event:{matchEvent.EventId:N}", cancellationToken);
-        await AcquireLockAsync(connection, transaction, $"match:{matchEvent.MatchId}", cancellationToken);
+        // Both resource families share PostgreSQL's 64-bit advisory-lock namespace. Sort
+        // the hashed keys (not the source strings) so even a hash collision has one lock order.
+        await AcquireLocksAsync(connection, transaction,
+            $"event:{matchEvent.EventId:N}", $"match:{matchEvent.MatchId}", cancellationToken);
         await using (var command = new NpgsqlCommand("SELECT payload::text FROM pitchmind.match_events WHERE event_id = $1", connection, transaction))
         {
             command.Parameters.AddWithValue(matchEvent.EventId);
@@ -123,12 +123,24 @@ public sealed class PostgresMatchEventStore(NpgsqlDataSource dataSource) : IMatc
         }
     }
 
-    private static async Task AcquireLockAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
-        string lockKey, CancellationToken cancellationToken)
+    private static async Task AcquireLocksAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        string eventKey, string matchKey, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", connection, transaction);
-        command.Parameters.AddWithValue(lockKey);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var hashCommand = new NpgsqlCommand(
+            "SELECT hashtextextended($1, 0), hashtextextended($2, 0)", connection, transaction);
+        hashCommand.Parameters.AddWithValue(eventKey);
+        hashCommand.Parameters.AddWithValue(matchKey);
+        await using var reader = await hashCommand.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) throw new InvalidOperationException("Advisory lock keys were not returned.");
+        var lockKeys = new[] { reader.GetInt64(0), reader.GetInt64(1) }.Distinct().Order().ToArray();
+        await reader.CloseAsync();
+
+        foreach (var lockKey in lockKeys)
+        {
+            await using var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock($1)", connection, transaction);
+            lockCommand.Parameters.AddWithValue(lockKey);
+            await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task<long> GetExpectedSequenceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
