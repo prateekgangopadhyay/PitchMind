@@ -103,6 +103,40 @@ public sealed class DependencyTests
     }
 
     [Xunit.Fact]
+    public void TargetCreatedProductionFixtureResources_AreRejected()
+    {
+        var root = Directory.CreateTempSubdirectory("pitchmind-target-resource-");
+        try
+        {
+            var projectPath = Path.Combine(root.FullName, "Fixture.csproj");
+            Directory.CreateDirectory(Path.Combine(root.FullName, "tests"));
+            File.WriteAllText(Path.Combine(root.FullName, "tests", "fictional-match.json"), "{}");
+            File.WriteAllText(projectPath,
+                "<Project Sdk='Microsoft.NET.Sdk'><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>" +
+                "<Target Name='InjectFixtureResource' BeforeTargets='CreateManifestResourceNames'>" +
+                "<ItemGroup><EmbeddedResource Include='tests/fictional-match.json' /></ItemGroup>" +
+                "</Target></Project>");
+            RestoreFixture(projectPath);
+
+            var evaluated = EvaluateProjectItems(projectPath, includeTargetReferences: true);
+            var violations = ArchitectureDependencyPolicy.ValidateProductionFixtureResources(
+                new Dictionary<string, XDocument>(StringComparer.Ordinal) { ["PitchMind.Api"] = evaluated },
+                root.FullName);
+
+            Xunit.Assert.Contains(evaluated.Descendants(), item =>
+                item.Name.LocalName == "TargetEmbeddedResource" &&
+                item.Attribute("Include")?.Value == "tests/fictional-match.json");
+            Xunit.Assert.Contains(violations, violation =>
+                violation.Contains("PitchMind.Api", StringComparison.Ordinal) &&
+                violation.Contains("tests/fictional-match.json", StringComparison.Ordinal));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Xunit.Fact]
     public void ProductionSource_DoesNotGenerateMatchSpecificFixtures()
     {
         var root = FindRepositoryRoot();
@@ -1313,6 +1347,7 @@ public sealed class DependencyTests
         if (includeTargetReferences)
         {
             AddTargetCreatedReferences(evaluated);
+            AddTargetCreatedResources(evaluated);
         }
 
         return evaluated;
@@ -1333,7 +1368,7 @@ public sealed class DependencyTests
         startInfo.ArgumentList.Add(projectPath);
         startInfo.ArgumentList.Add("-getTargetResult:FindReferenceAssembliesForReferences");
         startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
-        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,ReferencePathWithRefAssemblies,PackageReference,FrameworkReference,COMReference,NativeReference");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,Reference,ReferencePath,ReferencePathWithRefAssemblies,EmbeddedResource,PackageReference,FrameworkReference,COMReference,NativeReference");
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-property:NuGetAudit=false");
         startInfo.ArgumentList.Add("-maxcpucount:1");
@@ -1359,7 +1394,7 @@ public sealed class DependencyTests
         var sdkPath = json.RootElement.GetProperty("Properties").GetProperty("MSBuildSDKsPath").GetString();
         var restoredProjectReferences = ReadRestoredProjectReferences(projectPath);
         var existingItems = project.Descendants()
-            .Where(item => item.Name.LocalName is "ProjectReference" or "Reference" or "PackageReference" or
+            .Where(item => item.Name.LocalName is "ProjectReference" or "Reference" or "EmbeddedResource" or "PackageReference" or
                 "FrameworkReference" or "COMReference" or "NativeReference")
             .Select(item => TargetItemSignature(item.Name.LocalName, item))
             .ToHashSet(StringComparer.Ordinal);
@@ -1369,6 +1404,7 @@ public sealed class DependencyTests
         AddTargetItems("Reference", "TargetReference");
         AddTargetItems("ReferencePath", "TargetResolvedReference");
         AddTargetItems("ReferencePathWithRefAssemblies", "TargetCompilerReference");
+        AddTargetItems("EmbeddedResource", "TargetEmbeddedResource");
         AddTargetItems("PackageReference", "TargetPackageReference");
         AddTargetItems("FrameworkReference", "TargetFrameworkReference");
         AddTargetItems("COMReference", "TargetCOMReference");
@@ -1524,6 +1560,78 @@ public sealed class DependencyTests
         finally
         {
             captureDirectory.Delete(recursive: true);
+        }
+    }
+
+    private static void AddTargetCreatedResources(XDocument project)
+    {
+        var projectPath = project.Root?.Attribute("ProjectPath")?.Value ??
+            throw new InvalidOperationException("Evaluated project is missing its path.");
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = Path.GetDirectoryName(projectPath)!,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add(projectPath);
+        startInfo.ArgumentList.Add("-getTargetResult:PrepareResources");
+        startInfo.ArgumentList.Add("-getProperty:MSBuildSDKsPath");
+        startInfo.ArgumentList.Add("-getItem:EmbeddedResource");
+        startInfo.ArgumentList.Add("-nologo");
+        startInfo.ArgumentList.Add("-property:NuGetAudit=false");
+        startInfo.ArgumentList.Add("-maxcpucount:1");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start target-time resource evaluation.");
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"Target-time resource evaluation timed out for '{projectPath}'.");
+        }
+
+        var output = outputTask.GetAwaiter().GetResult();
+        var error = errorTask.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Target-time resource evaluation failed for '{projectPath}': {error}");
+        }
+
+        using var json = JsonDocument.Parse(output);
+        var items = json.RootElement.GetProperty("Items");
+        if (!items.TryGetProperty("EmbeddedResource", out var resources))
+        {
+            return;
+        }
+
+        var existingItems = project.Descendants()
+            .Where(item => item.Name.LocalName is "EmbeddedResource" or "TargetEmbeddedResource")
+            .Select(item => TargetItemSignature("EmbeddedResource", item))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var resource in resources.EnumerateArray())
+        {
+            if (!resource.TryGetProperty("Identity", out var identity))
+            {
+                continue;
+            }
+
+            var item = new XElement("EmbeddedResource", new XAttribute("Include", identity.GetString() ?? string.Empty));
+            foreach (var metadata in resource.EnumerateObject().Where(property =>
+                         property.Name != "Identity" && property.Value.ValueKind == JsonValueKind.String))
+            {
+                item.SetAttributeValue(metadata.Name, metadata.Value.GetString());
+            }
+
+            if (existingItems.Contains(TargetItemSignature("EmbeddedResource", item)))
+            {
+                continue;
+            }
+
+            item.Name = "TargetEmbeddedResource";
+            project.Root!.Add(item);
         }
     }
 
