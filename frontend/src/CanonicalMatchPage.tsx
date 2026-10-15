@@ -100,7 +100,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             frame.projectionRevision === snapshot.projectionRevision && frame.sourceSha256 === snapshot.sourceSha256 &&
             frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
             frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
-            frame.frame.sequence === frame.sequence && frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&
+            frame.frame.sequence === frame.sequence && frame.frame.canonicalRevision === frame.canonicalRevision &&
+            frame.frame.matchTime.elapsedSeconds === frame.clockSeconds &&
             frame.frame.matchTime.period === frame.period && frame.frame.source.sourceSha256 === frame.sourceSha256));
         if (!exactContext || !eventsSafe || !insightsSafe || !framesSafe) {
           setView(null);

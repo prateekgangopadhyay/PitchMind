@@ -104,6 +104,76 @@ public sealed class PostgresLedgerTests
         Assert.False(second.HasMore);
     }
 
+    [PostgresIntegrationFact]
+    public Task TrackingFrameReaderRejectsOversizePayloadBeforeReturningIt() =>
+        AssertTrackingFrameReaderRejectsOversizeJsonAsync("payload");
+
+    [PostgresIntegrationFact]
+    public Task TrackingFrameReaderRejectsOversizeQualityBeforeReturningIt() =>
+        AssertTrackingFrameReaderRejectsOversizeJsonAsync("quality");
+
+    private static async Task AssertTrackingFrameReaderRejectsOversizeJsonAsync(string oversizedField)
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        var matchGuid = Guid.NewGuid();
+        const string sourceHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        await using (var metadata = source.CreateCommand("""
+            INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance,
+                pitch_length_metres, pitch_width_metres)
+            VALUES ($1, 'fixture-v1', 'source-v1', $2, 'synthetic', 105, 68)
+            """))
+        {
+            metadata.Parameters.AddWithValue(matchGuid);
+            metadata.Parameters.AddWithValue(sourceHash);
+            await metadata.ExecuteNonQueryAsync();
+        }
+        await using (var projection = source.CreateCommand("""
+            INSERT INTO pitchmind.match_projections(match_id, canonical_revision, revision, as_of_sequence,
+                as_of_clock_seconds, algorithm_version, source_sha256, state_json, state_sha256)
+            VALUES ($1, 9, 3, 5, 120, 'aggregate-v1', $2, '{}'::jsonb, $3)
+            """))
+        {
+            projection.Parameters.AddWithValue(matchGuid);
+            projection.Parameters.AddWithValue(sourceHash);
+            projection.Parameters.AddWithValue(new string('b', 64));
+            await projection.ExecuteNonQueryAsync();
+        }
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            matchId = matchGuid.ToString("D"), frameId = "oversize-frame", sequence = 3L, canonicalRevision = 9L,
+            matchTime = new { elapsedSeconds = 120, period = 2 },
+            source = new { sourceSha256 = sourceHash },
+            padding = new string('x', oversizedField == "payload" ? 40_000 : 8)
+        });
+        var quality = JsonSerializer.Serialize(new
+        {
+            padding = new string('x', oversizedField == "quality" ? 5_000 : 8)
+        });
+        await using (var insertFrame = source.CreateCommand("""
+            INSERT INTO pitchmind.tracking_frames(match_id, frame_id, canonical_revision, sequence, period,
+                clock_seconds, coordinate_version, quality, source_sha256, payload)
+            VALUES ($1, 'oversize-frame', 9, 3, 2, 120, 'pitch-v1', $4::jsonb, $2, $3::jsonb)
+            """))
+        {
+            insertFrame.Parameters.AddWithValue(matchGuid);
+            insertFrame.Parameters.AddWithValue(sourceHash);
+            insertFrame.Parameters.AddWithValue(payload);
+            insertFrame.Parameters.AddWithValue(quality);
+            await insertFrame.ExecuteNonQueryAsync();
+        }
+
+        var selectedProjection = new SelectedMatchProjection(
+            new MatchState(matchGuid.ToString("D"), 120, 2, MatchPhase.SecondHalf, 0, 0, null,
+                11, 11, Array.Empty<MatchPlayerState>(), 6, "synthetic-test"),
+            9, 3, 5, 120, "rules-v1", sourceHash, new string('b', 64));
+        var reader = new PostgresMatchTrackingReader(source);
+        await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadAtAsync(
+            selectedProjection, 120, null, null, 1, CancellationToken.None));
+    }
+
     private static async Task<List<MatchEvent>> Read(PostgresMatchEventStore store, MatchId matchId)
     {
         var results = new List<MatchEvent>();

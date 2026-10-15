@@ -30,7 +30,10 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
 
         await using var command = dataSource.CreateCommand("""
             SELECT frame_id, sequence, canonical_revision, period, clock_seconds, coordinate_version,
-                   quality::text, source_sha256, payload::text, octet_length(payload::text), octet_length(quality::text)
+                   CASE WHEN octet_length(quality::text) <= 4096 THEN quality::text ELSE NULL END,
+                   source_sha256,
+                   CASE WHEN octet_length(payload::text) <= 32768 THEN payload::text ELSE NULL END,
+                   octet_length(payload::text), octet_length(quality::text)
             FROM pitchmind.tracking_frames
             WHERE match_id = $1 AND sequence <= $2 AND clock_seconds = $3
               AND canonical_revision IS NOT NULL AND canonical_revision <= $4 AND source_sha256 = $5
