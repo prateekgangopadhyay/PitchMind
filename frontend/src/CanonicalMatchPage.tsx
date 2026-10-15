@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, clock, provenanceLabel, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
 import { CanonicalEvidenceDisclosure } from './CanonicalEvidenceDisclosure';
+import { RealtimeMatchUpdates } from './RealtimeMatchUpdates';
+import { selectHistoricalTime, type RealtimeTimelineState } from './realtime';
 import { contextHref, replaceCurrentMatchContext } from './routes';
 
 type MatchView = {
@@ -16,11 +18,12 @@ type MatchView = {
 };
 type FocusRequest = { kind: 'event'; eventId: string } | { kind: 'retry' };
 
-export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay }: {
+export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay, initialMode }: {
   matchId: string;
   selectedSeconds: number;
   requestedRevision?: number;
   replay: boolean;
+  initialMode: 'LIVE' | 'HISTORICAL';
 }) {
   const [view, setView] = useState<MatchView | null>(null);
   const [error, setError] = useState('');
@@ -29,6 +32,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [audience, setAudience] = useState<'fan' | 'analyst'>('fan');
   const [retryCounter, setRetryCounter] = useState(0);
   const [focusAfterLoad, setFocusAfterLoad] = useState<FocusRequest | null>(null);
+  const [realtimeMode, setRealtimeMode] = useState<'LIVE' | 'HISTORICAL'>(initialMode);
+  const [realtimeState, setRealtimeState] = useState<RealtimeTimelineState | null>(null);
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const projectionRevision = view?.snapshot.projectionRevision;
@@ -61,10 +66,25 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    const summaryQuery = new URLSearchParams({ atSeconds: String(selectedSeconds) });
-    if (requestedRevision) summaryQuery.set('revision', String(requestedRevision));
-    request<CanonicalMatchSnapshot>(`canonical/matches/${encodeURIComponent(matchId)}/summary?${summaryQuery}`, controller.signal)
+    const summaryPath = `canonical/matches/${encodeURIComponent(matchId)}/summary`;
+    const exactSummaryQuery = new URLSearchParams({ atSeconds: String(selectedSeconds) });
+    if (requestedRevision && realtimeMode === 'HISTORICAL') exactSummaryQuery.set('revision', String(requestedRevision));
+    const loadSummary = async (): Promise<CanonicalMatchSnapshot | null> => {
+      if (realtimeMode === 'HISTORICAL') return request<CanonicalMatchSnapshot>(`${summaryPath}?${exactSummaryQuery}`, controller.signal);
+
+      const headQuery = new URLSearchParams({ atSeconds: '5400' });
+      const head = await request<CanonicalMatchSnapshot>(`${summaryPath}?${headQuery}`, controller.signal);
+      if (controller.signal.aborted) return null;
+      const currentUrl = new URLSearchParams(window.location.search);
+      if (head.asOfSeconds !== selectedSeconds || currentUrl.get('mode') !== 'live' || currentUrl.has('revision')) {
+        replaceCurrentMatchContext(matchId, head.asOfSeconds, undefined, 'live');
+        return null;
+      }
+      return request<CanonicalMatchSnapshot>(`${summaryPath}?${exactSummaryQuery}`, controller.signal);
+    };
+    loadSummary()
       .then(async snapshot => {
+        if (!snapshot) return;
         const revision = snapshot.projectionRevision;
         const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50' });
         const frameQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '12' });
@@ -136,7 +156,28 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Canonical match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [matchId, requestedRevision, requestedFrameId, requestedSourceRevision, selectedSeconds, retryCounter]);
+  }, [matchId, requestedRevision, requestedFrameId, requestedSourceRevision, selectedSeconds, retryCounter, realtimeMode]);
+
+  useEffect(() => {
+    if (!view || view.snapshot.matchId !== matchId || view.snapshot.selectedTimeSeconds !== selectedSeconds) return;
+    setRealtimeState({
+      matchId,
+      mode: realtimeMode,
+      selectedTimeSeconds: realtimeMode === 'LIVE' ? view.snapshot.asOfSeconds : selectedSeconds,
+      liveAsOfSeconds: view.snapshot.asOfSeconds,
+      observedLiveRevision: view.snapshot.canonicalRevision,
+      observedLiveSequence: view.snapshot.throughSequence,
+      canonicalRevision: view.snapshot.canonicalRevision,
+      throughSequence: view.snapshot.throughSequence,
+      snapshot: view.snapshot,
+      events: view.events.items,
+      nextCursor: view.events.nextCursor,
+      hasMore: view.events.hasMore,
+      needsBackfill: false,
+      hasNewMatchUpdate: false,
+      reconnecting: false,
+    });
+  }, [view, matchId, selectedSeconds, realtimeMode]);
 
   useEffect(() => {
     if (reducedMotion) setPlaying(false);
@@ -195,12 +236,34 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
       : 'The recorded coordinate convention cannot be displayed safely; no player positions are drawn.'
     : `No observed tracking frame is recorded at ${clock(selectedSeconds)}. Positions are not estimated.`);
 
+  const onRealtimeStateChange = (next: RealtimeTimelineState) => {
+    setRealtimeState(next);
+    if (next.mode !== realtimeMode) setRealtimeMode(next.mode);
+    if (next.mode === 'LIVE' && typeof window !== 'undefined') {
+      const currentUrl = new URLSearchParams(window.location.search);
+      if (next.selectedTimeSeconds !== selectedSeconds || currentUrl.get('mode') !== 'live' || currentUrl.has('revision')) {
+        replaceCurrentMatchContext(matchId, next.selectedTimeSeconds, undefined, 'live');
+      } else if (view && (next.snapshot.canonicalRevision !== view.snapshot.canonicalRevision ||
+          next.snapshot.throughSequence !== view.snapshot.throughSequence)) {
+        setRetryCounter(value => value + 1);
+      }
+    }
+  };
+
+  const chooseHistoricalTime = (seconds: number, revision: number) => {
+    setPlaying(false);
+    setRealtimeMode('HISTORICAL');
+    setRealtimeState(current => current ? selectHistoricalTime(current, seconds) : current);
+    replaceCurrentMatchContext(matchId, seconds, revision);
+  };
+
   return <section className="content-page" aria-busy={loading}>
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
       <h1>{replay ? 'Selected-time replay' : 'Match overview'}</h1>
       <p>How did the recorded match stand at {clock(selectedSeconds)}?</p>
     </div>
+    {realtimeState && <RealtimeMatchUpdates state={realtimeState} onStateChange={onRealtimeStateChange} />}
     {loading ? <p className="page-state" role="status">Loading the selected match revision…</p>
       : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button id="canonical-match-retry" type="button" onClick={() => { setFocusAfterLoad({ kind: 'retry' }); setLoading(true); setRetryCounter(value => value + 1); }}>Retry Match Data</button></div>
         : snapshot && view ? <>
@@ -218,7 +281,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
               aria-valuetext={clock(selectedSeconds)}
-              onChange={event => { setPlaying(false); replaceCurrentMatchContext(matchId, Number(event.target.value), snapshot.projectionRevision); }} />
+              onChange={event => chooseHistoricalTime(Number(event.target.value), snapshot.projectionRevision)} />
             <span>{clock(selectedSeconds)}</span>
             {reducedMotion
               ? <span className="reduced-motion-note" role="status">Automatic replay is off under reduced motion. Use the selected-time slider to inspect the match.</span>
@@ -272,7 +335,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
               {view.events.items.length === 0 ? <p className="empty" role="status">{view.eventsStatus || 'No recorded events are visible at this time.'}</p>
                 : <ol className="canonical-events">{view.events.items.map(event => <li id={`canonical-event-${event.sequence}`} tabIndex={-1} key={`${event.sequence}:${event.eventId}`}>
                   <button type="button" className="canonical-event" aria-label={`Select ${eventLabel(event.type)} at ${clock(event.clockSeconds)}, sequence ${event.sequence}`}
-                    onClick={() => { setFocusAfterLoad({ kind: 'event', eventId: event.eventId }); setPlaying(false); replaceCurrentMatchContext(matchId, event.clockSeconds, snapshot.projectionRevision); }} data-event-id={event.eventId}>
+                    onClick={() => { setFocusAfterLoad({ kind: 'event', eventId: event.eventId }); chooseHistoricalTime(event.clockSeconds, snapshot.projectionRevision); }} data-event-id={event.eventId}>
                     <time dateTime={event.occurredAt}>{clock(event.clockSeconds)}</time>
                     <span>{eventLabel(event.type)}</span>
                     {eventMarker(event.type) && <span className="event-marker">{eventMarker(event.type)}</span>}

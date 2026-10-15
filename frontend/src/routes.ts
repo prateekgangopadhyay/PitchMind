@@ -37,11 +37,12 @@ export function selectedTimeFromSearch(search: string): number {
   return Number.isInteger(seconds) && seconds >= 0 && seconds <= 5_400 ? seconds : 0;
 }
 
-export function contextHref(path: string, matchId?: string, selectedSeconds?: number, revision?: number): string {
+export function contextHref(path: string, matchId?: string, selectedSeconds?: number, revision?: number, mode?: 'live'): string {
   const params = new URLSearchParams();
   if (matchId) params.set('matchId', matchId);
   if (selectedSeconds !== undefined) params.set('atSeconds', String(selectedTimeFromSearch(`?atSeconds=${selectedSeconds}`)));
   if (revision && Number.isInteger(revision) && revision > 0) params.set('revision', String(revision));
+  if (mode === 'live') params.set('mode', mode);
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }
@@ -62,14 +63,14 @@ export function subscribeLocation(onChange: () => void): () => void {
   };
 }
 
-export function replaceCurrentMatchContext(matchId: string, selectedSeconds: number, revision?: number): void {
+export function replaceCurrentMatchContext(matchId: string, selectedSeconds: number, revision?: number, mode?: 'live'): void {
   if (typeof window === 'undefined') return;
   const pathname = window.location.pathname.startsWith('/demo')
     ? `/demo/matches/${encodeURIComponent(matchId)}`
     : window.location.pathname.startsWith('/replay/')
       ? `/replay/${encodeURIComponent(matchId)}`
       : `/matches/${encodeURIComponent(matchId)}`;
-  window.history.replaceState(null, '', contextHref(pathname, matchId, selectedSeconds, revision));
+  window.history.replaceState(null, '', contextHref(pathname, matchId, selectedSeconds, revision, mode));
   window.dispatchEvent(new Event(LOCATION_EVENT));
 }
 
