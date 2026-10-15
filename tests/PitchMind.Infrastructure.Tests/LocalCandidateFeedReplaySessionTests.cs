@@ -222,6 +222,17 @@ public sealed class LocalCandidateFeedReplaySessionTests
     }
 
     [Fact]
+    public async Task Checkpoint_store_rejects_dangling_symbolic_link_instead_of_restarting_from_zero()
+    {
+        var root = CreateTemporaryDirectory();
+        var checkpointPath = Path.Combine(root, "candidate-feed-replay-checkpoint.json");
+        File.CreateSymbolicLink(checkpointPath, Path.Combine(root, "missing-target.json"));
+        var store = new FileCandidateFeedReplayCheckpointStore(root);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => store.LoadAsync());
+    }
+
+    [Fact]
     public async Task Checkpoint_store_enforces_read_size_limit()
     {
         var root = CreateTemporaryDirectory();

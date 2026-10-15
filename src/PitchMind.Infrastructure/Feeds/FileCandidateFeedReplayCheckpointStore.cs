@@ -153,7 +153,15 @@ public sealed class FileCandidateFeedReplayCheckpointStore :
 
     private static void RejectReparsePointIfPresent(string path)
     {
-        if (!File.Exists(path) && !Directory.Exists(path)) return;
+        // Exists follows the link target and reports false for dangling symlinks. Inspect
+        // LinkTarget first so a broken link cannot be mistaken for an absent checkpoint.
+        var file = new FileInfo(path);
+        var directory = new DirectoryInfo(path);
+        file.Refresh();
+        directory.Refresh();
+        if (file.LinkTarget is not null || directory.LinkTarget is not null)
+            throw new UnauthorizedAccessException("Candidate replay checkpoint paths cannot contain symbolic links or reparse points.");
+        if (!file.Exists && !directory.Exists) return;
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
             throw new UnauthorizedAccessException("Candidate replay checkpoint paths cannot contain symbolic links or reparse points.");
     }
