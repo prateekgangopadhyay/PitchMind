@@ -1,12 +1,12 @@
 # EP08-S02 local verification evidence
 
-**State:** Implementation slice locally verified on a current-main feature branch. Independent exact-head review, hosted CI and Product Owner acceptance remain pending; routing status is still `unverified`.
+**State:** Implementation slice locally verified on a current-main feature branch. The first independent exact-head review found two P2 items; corrections and a fresh local suite run are recorded below. Independent re-review, hosted CI and Product Owner acceptance remain pending; routing status is still `unverified`.
 
 ## Delivered behavior
 
 - Application exposes `IExplanationCandidateGenerator` and an explicitly untrusted candidate result type, separate from the public `ValidatedExplanation` contract.
 - AgentWorker uses the Foundry OpenAI-compatible chat-completions v1 endpoint with `ManagedIdentityCredential` only in the Azure runtime profile. Endpoint validation restricts HTTPS hosts to known Azure AI suffixes, and the HTTP handler disables redirects before credentials are attached.
-- Requests, responses, output tokens, wall time, concurrency, context packet and individual payloads are bounded. The adapter requests strict structured JSON and rejects malformed candidates or evidence IDs absent from the selected context packet.
+- Requests, responses, output tokens, wall time, concurrency, context packet and individual payloads are bounded. Fan prompts request everyday language and brief definitions for necessary tactical terms; analyst prompts request concise tactical terminology limited to evidenced sequence or structure. Both use a two-short-sentence limit, with an explicit instruction that audience changes wording only, not facts. Focused tests assert the audience-specific policy is present in each system prompt. The adapter requests strict structured JSON and rejects malformed candidates or evidence IDs absent from the selected context packet.
 - Packet validation rejects invalid source/state hashes (including uppercase or non-hex values), invalid selected-time bounds, non-positive projection revisions, evidence source revisions newer than the packet revision, negative projection watermarks and evidence sequences above `ThroughSequence`. EP08-S01 must bound evidence by the persisted insight's own as-of sequence before packet construction.
 - Telemetry contains configured deployment, duration, token usage and trace ID only. It excludes question, evidence, model response and token content.
 - Candidate output is not public, persisted or accepted as truth. AgentWorker has no request/message consumer, and EP08-S04 semantic claim verification remains required.
@@ -24,15 +24,15 @@ Base revision: `4216d9c1af8a87530b6853e300e04c79b01ff667`; implementation code h
 | `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 93 passed, 0 failed, 0 skipped. |
 | `dotnet build PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | Passed, 0 warnings, 0 errors. |
 | `dotnet test tests/PitchMind.Architecture.Tests/PitchMind.Architecture.Tests.csproj -c Release --no-build --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 24 passed, 0 failed, 0 skipped. |
-| `dotnet test PitchMind.slnx -c Release --no-build --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 339 passed, 0 failed, 24 skipped. Skips are opt-in PostgreSQL integration tests; no test connection was configured. |
+| `dotnet test PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 339 passed, 0 failed, 24 skipped. Skips are opt-in PostgreSQL integration tests; no test connection was configured. |
 | `node scripts/validate_operating_model.mjs --self-test` | Passed; DAG and safety-gate self-tests. |
 | `git diff --check` | Passed. |
 
-The first focused AgentWorker test execution found stale test fixture arguments after the current EP08-S01 packet added source-revision fields; those were corrected. A follow-up added a negative test for invalid projection/source revision lineage and uppercase hashes before token acquisition; all 11 adapter tests passed. The first architecture/full-suite run then found copied ignored restore assets had overwritten the AgentWorker assets in this disposable clone. After re-restoring the exact locked AgentWorker graph, the Architecture suite passed 24/24 and the complete solution suite passed 338/0/24 skipped. The test runner required local socket permission to bind its VSTest channel. NuGet audit was disabled and is not evidenced.
+The first focused AgentWorker test execution found stale test fixture arguments after the current EP08-S01 packet added source-revision fields; those were corrected. A follow-up added a negative test for invalid projection/source revision lineage and uppercase hashes before token acquisition; all 11 adapter tests passed. The first architecture/full-suite run then found copied ignored restore assets had overwritten the AgentWorker assets in this disposable clone. After re-restoring the exact locked AgentWorker graph, the initial Architecture suite passed 24/24. The independent review identified an inconsistent historical narrative total; after reconciling it, the complete Release solution suite was rerun on code head `f8300eba82afdb821ca8bdb20f7e399fda26efe4` and passed 339/0/24 skipped. The 24 skips are opt-in PostgreSQL integration tests with no connection configured. The test runner required local socket permission to bind its VSTest channel. NuGet audit was disabled and is not evidenced.
 
 ## Review and remaining gates
 
-- No independent reviewer has reviewed the current-main restack. Existing review notes for earlier stacked heads are historical only and do not count as approval of this head.
+- The independent exact-head review at `821655d749c0f98832480c387cd209d618c3c1e0` found two P2 findings: audience style was only passed as a value without bounded fan/analyst guidance, and this evidence file contained conflicting suite totals. Both were corrected in implementation commit `f8300eba82afdb821ca8bdb20f7e399fda26efe4`; the focused AgentWorker suite passed 11/11 and the full Release suite passed 339/0/24 skipped on that code head. Independent re-review of the corrected head remains pending. No formal GitHub review was submitted.
 - The Foundry adapter has not been invoked against a live deployment; model correctness, refusal behavior, latency and cost remain unmeasured.
 - Managed identity authentication and RBAC are not verified against Azure.
 - AgentWorker remains idle without a consumer; no user-facing API/UI integration or deterministic outage fallback is supplied by this story alone.
