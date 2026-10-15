@@ -4,5 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/PitchMind.Domain/PitchMind.Domain.csproj" />
+    <EmbeddedResource Include="Fixtures/synthetic-fixture-v2.json"
+                      LogicalName="PitchMind.TestFixtures.Simulation.synthetic-fixture-v2.json" />
   </ItemGroup>
 </Project>
