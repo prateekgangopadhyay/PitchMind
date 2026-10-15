@@ -1,7 +1,7 @@
 {
   "catalogVersion": "press-sequence-goldens-v1",
   "sourceFixtureVersion": "synthetic-v3",
-  "detectorVersion": "press-sequence-v2",
+  "detectorVersion": "press-sequence-v3",
   "provenance": "synthetic",
   "cases": [
     { "id": "baseline-positive", "mutation": "none", "expectedInsightCount": 1, "rationale": "Demo policy emits a candidate only when the ordered pressure, forced response and regain events resolve in one period with enough sampled frame coverage." },

@@ -82,7 +82,7 @@ Canonical pitch coordinate system = metres, configured length/width (demo 105 ×
 Event taxonomy includes kickoff, period transition, pass (attempt/complete/incomplete/blocked), carry, reception, pressure attempt, tackle, interception, turnover, ball recovery, shot, goal, foul, card, substitution, offside, set piece and full time where available in feed. Preserve unknown provider event type, quarantine unsupported semantics; never infer it from string fragments.
 Per event require participants valid at that time, same match and period, supported outcome, coordinates within pitch and possession transition evidence. Goal must reconcile score: shots do not imply goals, own goal attributed under explicit rules, disallowed/VAR correction append new revision.
 
-## E. Tactical mechanism engine: `press-sequence-v2` design
+## E. Tactical mechanism engine: `press-sequence-v3` design
 A **press** is observable pressure that constrains ball carrier space/options; a **trap** requires credible channeling/containment and response; high regain/shot can follow press without proving causality.
 Use staged immutable condition evaluations:
 1. **Eligibility / trigger:** opponent controlled build-up from goalkeeper/CB, phase classified, source IDs and time; a back-pass is eligibility only, not press.
@@ -92,6 +92,8 @@ Use staged immutable condition evaluations:
 5. **Exploitation:** same possession, ordered progression/cutback, optional shot and goal, within `maxOutcomeMs`; a goal can strengthen outcome but cannot establish strategy.
 6. **Counterexamples and limitations:** press outside exposure window, wrong participant, opponent wins possession, missing frame, incomplete tracking, cross-half boundary, event gap, mislabeled pass, simple turnover without coordinated pressure.
 Every stage records `{name,passed,observed,threshold,coverage,evidenceRefs,exclusionReason}`. Scenarios and thresholds come from versioned football policy JSON reviewed by Product Owner and analyst (not unversioned C# literals). Detector output is `evidence-supported-pattern` unless stronger proof is reviewed; never label inferred coach intention as observed fact.
+
+The local simulated v3 implementation also treats an intervening turnover or completed pass as a continuity break while seeking the pressured response and the subsequent regain. It preserves event sequence ordering and the selected-time prefix. This guards a single ordered candidate chain; it does not establish that pressure caused the opponent action, and the policy remains `unapproved-demo` / non-publishable pending football review.
 **Current `press-sequence-v1`** requires seven action events, same period, arrival within 3 metres and goal within 15 seconds of regain. It is a **demonstration-specific policy**, not league-calibrated universal football truth.
 
 ```mermaid

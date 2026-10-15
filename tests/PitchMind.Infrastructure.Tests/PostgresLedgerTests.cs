@@ -958,7 +958,7 @@ public sealed class PostgresLedgerTests
         Assert.DoesNotContain(secondPage.Events, e => e.Type == MatchEventType.Goal);
 
         var applicationResult = await new GetMatchAtQueryService(reader).ExecuteAsync(
-            new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None);
+            new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None);
         Assert.NotNull(applicationResult);
         Assert.Equal(0, applicationResult.Projection.State.HomeScore);
         Assert.Equal(applicationResult.Projection.StateSha256, applicationResult.ReplaySha256);
@@ -971,7 +971,7 @@ public sealed class PostgresLedgerTests
         for (var replay = 0; replay < 5; replay++)
         {
             var rerun = await new GetMatchAtQueryService(reader).ExecuteAsync(
-                new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None);
+                new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None);
             Assert.Equal(applicationResult.ReplaySha256, rerun!.ReplaySha256);
             Assert.Equal(applicationResult.ReplayInputSha256, rerun.ReplayInputSha256);
             Assert.Equal(applicationResult.DerivedOutputSha256, rerun.DerivedOutputSha256);
@@ -1060,7 +1060,7 @@ public sealed class PostgresLedgerTests
         }
 
         var result = await new GetMatchAtQueryService(new PostgresMatchProjectionReader(source)).ExecuteAsync(
-            new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None);
+            new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None);
 
         Assert.NotNull(result);
         var insight = Assert.Single(result.DerivedInsights);
@@ -1080,7 +1080,7 @@ public sealed class PostgresLedgerTests
             Assert.Equal(1, await corruptContext.ExecuteNonQueryAsync());
         }
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
-            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
         await using (var restoreContext = source.CreateCommand("UPDATE pitchmind.matches SET replay_context_json = $2 WHERE match_id = $1"))
         {
             restoreContext.Parameters.AddWithValue(matchId.Value);
@@ -1099,7 +1099,7 @@ public sealed class PostgresLedgerTests
             Assert.Equal(1, await corruptFrame.ExecuteNonQueryAsync());
         }
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(new PostgresMatchProjectionReader(source))
-            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            .ExecuteAsync(new(matchId, 3309, goalRevision, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     [PostgresIntegrationFact]
