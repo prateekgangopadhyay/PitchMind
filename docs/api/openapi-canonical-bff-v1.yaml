@@ -78,8 +78,8 @@ paths:
       summary: Refresh one canonical snapshot and catch up from the client's last sequence.
       description: >-
         Reads only the durable PostgreSQL event ledger and projection. The response
-        binds snapshot and events to one selected time and canonical revision. If
-        the client's revision changed or its sequence is ahead of the durable head,
+        binds snapshot and events to one selected time and projection revision. If
+        the client's projection revision changed or its sequence is ahead of the durable head,
         replayRequired is true and events restart from sequence -1. A cursor message
         is only a wake-up; clients use this endpoint to recover canonical facts.
       parameters:
@@ -95,7 +95,7 @@ paths:
           schema: { type: integer, minimum: 0, maximum: 5400, default: 5400 }
         - name: revision
           in: query
-          description: Client's prior canonical revision; a mismatch forces replay.
+          description: Client's prior projectionRevision; a mismatch forces replay. This is distinct from canonicalRevision.
           schema: { type: integer, minimum: 1 }
         - $ref: '#/components/parameters/Limit'
       responses:
