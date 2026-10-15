@@ -740,18 +740,32 @@ public sealed class PostgresLedgerTests
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         var recordId = Guid.NewGuid();
+        var legacyNullPointerRecordId = Guid.NewGuid();
         const string sourcePointer = "legacy/source/record-17";
         const string payloadHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         var matchId = Guid.NewGuid();
         var observedAt = new DateTimeOffset(2026, 10, 15, 12, 30, 0, TimeSpan.FromHours(5.5));
 
         await RecreateV9QuarantineAsync(source, recordId, matchId, sourcePointer, payloadHash, "LEGACY_REASON", observedAt);
+        await using (var legacyNullPointer = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(quarantine_id, match_id, source_pointer, payload_sha256, reason_code, observed_at)
+            VALUES ($1, NULL, NULL, $2, 'LEGACY_NO_SOURCE_POINTER', $3)
+            """))
+        {
+            legacyNullPointer.Parameters.AddWithValue(legacyNullPointerRecordId);
+            legacyNullPointer.Parameters.AddWithValue(payloadHash);
+            legacyNullPointer.Parameters.AddWithValue(observedAt.ToUniversalTime());
+            await legacyNullPointer.ExecuteNonQueryAsync();
+        }
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         var store = new PostgresQuarantineRecordStore(source);
         var migrated = await store.ReadAsync(recordId, CancellationToken.None);
         Assert.Equal(new QuarantineRecord(recordId, matchId, sourcePointer, payloadHash, "LEGACY_REASON", observedAt.ToUniversalTime()), migrated);
+        Assert.Equal(new QuarantineRecord(legacyNullPointerRecordId, null, null, payloadHash,
+            "LEGACY_NO_SOURCE_POINTER", observedAt.ToUniversalTime()),
+            await store.ReadAsync(legacyNullPointerRecordId, CancellationToken.None));
 
         var newEvidence = new QuarantineRecord(Guid.NewGuid(), null, "fixture://source/record/18", null,
             "SEQUENCE_GAP", DateTimeOffset.UtcNow);
@@ -778,6 +792,15 @@ public sealed class PostgresLedgerTests
         zeroId.Parameters.AddWithValue(DateTimeOffset.UtcNow);
         var rejection = await Assert.ThrowsAsync<PostgresException>(() => zeroId.ExecuteNonQueryAsync());
         Assert.Equal(PostgresErrorCodes.CheckViolation, rejection.SqlState);
+
+        await using var nullSourcePointer = source.CreateCommand("""
+            INSERT INTO pitchmind.quarantine(record_id, source_ptr, payload_hash, reason, observed_at)
+            VALUES ($1, NULL, NULL, 'MISSING_SOURCE_POINTER', $2)
+            """);
+        nullSourcePointer.Parameters.AddWithValue(Guid.NewGuid());
+        nullSourcePointer.Parameters.AddWithValue(DateTimeOffset.UtcNow);
+        var missingPointer = await Assert.ThrowsAsync<PostgresException>(() => nullSourcePointer.ExecuteNonQueryAsync());
+        Assert.Equal(PostgresErrorCodes.CheckViolation, missingPointer.SqlState);
     }
 
     [PostgresIntegrationFact]

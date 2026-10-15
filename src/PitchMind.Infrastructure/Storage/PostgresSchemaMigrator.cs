@@ -407,7 +407,7 @@ public static class PostgresSchemaMigrator
                 ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_match_id_nonzero
                     CHECK (match_id IS NULL OR match_id <> '00000000-0000-0000-0000-000000000000') NOT VALID;
                 ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_source_ptr_length
-                    CHECK (source_ptr IS NULL OR length(source_ptr) BETWEEN 1 AND 2048) NOT VALID;
+                    CHECK (source_ptr IS NOT NULL AND length(source_ptr) BETWEEN 1 AND 2048) NOT VALID;
                 ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_reason_code_format
                     CHECK (reason ~ '^[A-Z][A-Z0-9_]{0,99}$') NOT VALID;
 
