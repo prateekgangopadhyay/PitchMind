@@ -42,7 +42,9 @@ describe('Information architecture routes', () => {
     expect(contextHref('/matches/match-1', 'match-1', 3309)).toBe('/matches/match-1?matchId=match-1&atSeconds=3309');
     expect(contextHref('/home')).toBe('/home');
     expect(contextHref('/home', 'match-1', 0, 2)).toBe('/home?matchId=match-1&atSeconds=0&revision=2');
-    expect(selectedTimeFromSearch('?atSeconds=5761')).toBe(0);
+    expect(selectedTimeFromSearch('?atSeconds=5761')).toBe(5761);
+    expect(selectedTimeFromSearch('?atSeconds=6309')).toBe(6309);
+    expect(selectedTimeFromSearch('?atSeconds=9007199254740992')).toBe(0);
   });
 });
 
@@ -155,6 +157,14 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Goal');
     expect(container.textContent).toContain('Score event');
     expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
+    const selectedTime = container.querySelector<HTMLInputElement>('#selected-time')!;
+    const goButton = container.querySelector<HTMLButtonElement>('.match-context-controls button')!;
+    expect(selectedTime.required).toBe(true);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(selectedTime, '');
+      selectedTime.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(goButton.disabled).toBe(true);
     expect(observedRequests).toHaveLength(4);
     for (const url of observedRequests) {
       const parsed = new URL(url, 'http://localhost');
@@ -227,6 +237,123 @@ it('rejects events and insights that cross the selected-time sequence', async ()
     expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
     expect(container.textContent).not.toContain('future-event');
     expect(container.textContent).not.toContain('A future insight');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it.each([
+  ['future snapshot time', { asOfSeconds: 3310, canonicalRevision: 4 }],
+  ['future snapshot revision', { asOfSeconds: 3309, canonicalRevision: 5 }]
+] as const)('rejects a summary with a newer %s than the requested context', async (_caseName, override) => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: override.canonicalRevision, selectedTimeSeconds: 3309,
+    asOfSeconds: override.asOfSeconds, throughSequence: 19,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  const fetchMock = vi.fn(async () => ({ ok: true, json: async () => snapshot }));
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Canonical match data is unavailable');
+    expect(container.textContent).not.toContain('Canonical match score');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('follows canonical event cursors before presenting the complete selected-time timeline', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 50,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const event = (sequence: number) => ({ eventId: `event-${sequence}`, matchId, sequence,
+    type: sequence === 50 ? 'goal' : 'pass', clockSeconds: Math.min(sequence, 3309), period: 2,
+    occurredAt: '2026-01-01T00:55:09Z' });
+  const eventUrls: URL[] = [];
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503,
+      json: async () => ({ status: 503, code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE' }) };
+    if (parsed.pathname.endsWith('/summary')) return { ok: true, json: async () => snapshot };
+    if (parsed.pathname.endsWith('/events')) {
+      eventUrls.push(parsed);
+      const secondPage = parsed.searchParams.has('cursor');
+      return { ok: true, json: async () => ({ matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+        throughSequence: 50, items: secondPage ? [event(50)] : Array.from({ length: 50 }, (_, index) => event(index)),
+        nextCursor: secondPage ? null : 'event-cursor-1', hasMore: !secondPage }) };
+    }
+    return { ok: true, json: async () => ({ matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+      throughSequence: 50, items: [], nextCursor: null, hasMore: false }) };
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(eventUrls).toHaveLength(2);
+    expect(eventUrls[0]?.searchParams.get('limit')).toBe('50');
+    expect(eventUrls[1]?.searchParams.get('cursor')).toBe('event-cursor-1');
+    expect(container.querySelectorAll('.canonical-events li')).toHaveLength(51);
+    expect(container.textContent).toContain('Goal');
+    expect(container.textContent).not.toContain('More canonical events exist');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+it('labels the timeline incomplete when canonical pagination exceeds the safe page bound', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const snapshot = {
+    matchId, canonicalRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 1000,
+    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
+  };
+  const eventUrls: URL[] = [];
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments')) return { ok: false, status: 503,
+      json: async () => ({ status: 503, code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE' }) };
+    if (parsed.pathname.endsWith('/summary')) return { ok: true, json: async () => snapshot };
+    if (parsed.pathname.endsWith('/events')) {
+      eventUrls.push(parsed);
+      const page = eventUrls.length;
+      return { ok: true, json: async () => ({ matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+        throughSequence: 1000, items: Array.from({ length: 50 }, (_, index) => ({ eventId: `event-${(page - 1) * 50 + index + 1}`,
+          matchId, sequence: (page - 1) * 50 + index + 1, type: 'pass', clockSeconds: 3309,
+          period: 2, occurredAt: '2026-01-01T00:55:09Z' })), nextCursor: `cursor-${page}`, hasMore: true }) };
+    }
+    return { ok: true, json: async () => ({ matchId, canonicalRevision: 4, selectedTimeSeconds: 3309,
+      throughSequence: 1000, items: [], nextCursor: null, hasMore: false }) };
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(eventUrls).toHaveLength(20);
+    expect(container.querySelectorAll('.canonical-events li')).toHaveLength(1000);
+    expect(container.textContent).toContain('More canonical events exist, but this view reached its 1,000-event page bound.');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

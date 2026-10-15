@@ -34,7 +34,7 @@ export function resolveRoute(pathname: string): AppRoute {
 export function selectedTimeFromSearch(search: string): number {
   const raw = new URLSearchParams(search).get('atSeconds');
   const seconds = raw === null ? 0 : Number(raw);
-  return Number.isInteger(seconds) && seconds >= 0 && seconds <= 5_400 ? seconds : 0;
+  return Number.isSafeInteger(seconds) && seconds >= 0 ? seconds : 0;
 }
 
 export function contextHref(path: string, matchId?: string, selectedSeconds?: number, revision?: number): string {
