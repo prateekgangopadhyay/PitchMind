@@ -26,7 +26,7 @@ The local canonical BFF reads persisted projections, ledger events, insights, ev
 
 ```mermaid
 flowchart LR
-  Browser["React browser client (authentication pending)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  Browser["React browser client (host token provider required)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
   BFF -->|read selected revision| PG["Docker PostgreSQL"]
   PG --> Outbox["Committed projection outbox"]
   Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]
@@ -35,7 +35,7 @@ flowchart LR
   Browser -. "gap, reconnect or revision change" .-> BFF
 ```
 
-The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, `Realtime:Provider=local` is explicit, and PostgreSQL uses a single approved loopback host. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The new canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch, a client sequence ahead of the durable head, or a nonnegative resume sequence without a projection revision forces replay from sequence -1. This slice does not certify a connected browser journey: the current application has no production authentication scheme or integrated SignalR browser client, and the canonical event producer/feed adapter remains separately gated.
+The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, `Realtime:Provider=local` is explicit, and PostgreSQL uses a single approved loopback host. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch, a client sequence ahead of the durable head, or a nonnegative resume sequence without a projection revision forces replay from sequence -1. The React client obtains short-lived bearer credentials from a host-injected token provider, joins one match group, and refreshes canonical state after connect, reconnect and cursor notifications. A historical selection remains fixed while a polite status region reports new updates and offers a return-to-live action. The local browser bearer adapter is unsigned and opt-in for Development only. This candidate slice still lacks connected-browser verification, a production host identity provider, and the canonical event producer/feed adapter; story acceptance remains open.
 
 ## TARGET — canonical Azure platform
 

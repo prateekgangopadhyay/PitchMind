@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { clock, request } from './api';
+import { clock, getHostAccessToken, request } from './api';
 import type { Evidence, Explanation, Fixture, Insight, MatchEvent, Snapshot } from './api';
 import { RoutePage } from './ShellPages';
 import { CanonicalMatchPage } from './CanonicalMatchPage';
+import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
 import { contextHref, currentLocation, replaceCurrentMatchContext, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
 
 function MatchExperience({ expectedMatchId, initialSeconds, replay }: { expectedMatchId?: string; initialSeconds: number; replay: boolean }) {
@@ -98,7 +99,8 @@ export function App() {
   const params = new URLSearchParams(search);
   const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined : params.get('matchId') ?? undefined;
   const selectedSeconds = params.has('atSeconds') ? selectedTimeFromSearch(search) : undefined;
-  const selectedAtSeconds = selectedSeconds ?? 0;
+  const selectedAtSeconds = selectedSeconds ?? (route.kind === 'matches' ? 5400 : 0);
+  const realtimeMode = params.get('mode') === 'live' || selectedSeconds === undefined ? 'LIVE' : 'HISTORICAL';
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
   const matchPath = matchId ? `/matches/${encodeURIComponent(matchId)}` : '/home';
@@ -110,18 +112,23 @@ export function App() {
     { label: 'Insights', path: '/insights', active: route.kind === 'insights' },
     { label: 'AI Analyst', path: '/analyst', active: route.kind === 'analyst' }
   ];
+  const contextMode = realtimeMode === 'LIVE' ? 'live' : undefined;
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <header className="site-header">
-      <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision)} aria-label="PitchMind home"><span aria-hidden="true">◈</span> PitchMind</a>
+      <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home"><span aria-hidden="true">◈</span> PitchMind</a>
       <span className="tag">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Canonical match data · Source labelled'}</span>
     </header>
     <nav className="main-navigation" aria-label="Main navigation">
-      {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
+      {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
     </nav>
     <main id="main-content" tabIndex={-1}>
       {route.kind === 'matches' && matchId
-        ? <CanonicalMatchPage key={`${matchId}:${revision ?? ''}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds} requestedRevision={revision} replay={route.replay} />
+        ? <RealtimeAuthProvider getAccessToken={getHostAccessToken}>
+          {/* Preserve replay state as the selected revision changes between seconds. */}
+          <CanonicalMatchPage key={`${matchId}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
+            requestedRevision={revision} replay={route.replay} initialMode={realtimeMode} />
+        </RealtimeAuthProvider>
         : route.kind === 'demo-match'
           ? <MatchExperience key={`${route.matchId ?? ''}:${route.replay}`} expectedMatchId={route.matchId} initialSeconds={selectedAtSeconds} replay={route.replay} />
         : route.kind === 'matches'

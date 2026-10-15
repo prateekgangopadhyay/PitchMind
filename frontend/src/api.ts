@@ -106,8 +106,28 @@ export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
 }
 export function clock(seconds: number) { return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`; }
+
+declare global {
+  interface Window {
+    pitchMindAuth?: { getAccessToken(): Promise<string | null> };
+  }
+}
+
+/** The host owns sign-in and token storage; PitchMind only requests short-lived access tokens. */
+export async function getHostAccessToken(): Promise<string | null> {
+  if (typeof window === 'undefined' || typeof window.pitchMindAuth?.getAccessToken !== 'function') return null;
+  return window.pitchMindAuth.getAccessToken();
+}
+
 export async function request<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/v1/${path}`, { signal, ...(body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {}) });
+  const token = await getHostAccessToken();
+  const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(`/api/v1/${path}`, {
+    signal,
+    headers,
+    ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
+  });
   if (!response.ok) {
     const problem = await response.json().catch(() => null) as ApiProblem | null;
     throw new ApiRequestError(response.status, problem?.code ?? 'REQUEST_FAILED', problem?.correlationId ?? response.headers.get('X-Correlation-ID') ?? '', problem?.title ?? `Match service returned ${response.status}. Please retry.`);

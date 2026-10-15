@@ -173,6 +173,49 @@ it('loads a canonical match using one exact selected time and revision without d
   }
 });
 
+it('starts replay from live mode and keeps advancing on one historical revision', async () => {
+  const matchId = '11111111-1111-1111-1111-111111111111';
+  const observedUrls: string[] = [];
+  vi.useFakeTimers();
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&mode=live`);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    observedUrls.push(url);
+    const parsed = new URL(url, 'http://localhost');
+    if (parsed.pathname.endsWith('/key-moments'))
+      return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
+    const atSeconds = Number(parsed.searchParams.get('atSeconds'));
+    const snapshot = {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: atSeconds === 5400 ? 5400 : atSeconds,
+      asOfSeconds: 3309, throughSequence: 19, algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
+      provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
+      possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []};
+    const body = parsed.pathname.endsWith('/summary') ? snapshot
+      : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: atSeconds, throughSequence: 19,
+        items: [], nextCursor: null, hasMore: false};
+    return {ok: true, json: async () => body};
+  }));
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.querySelector<HTMLInputElement>('#selected-time')?.value).toBe('3309');
+    const play = container.querySelector<HTMLButtonElement>('.match-context-controls button')!;
+    await act(async () => { play.click(); });
+    for (let tick = 0; tick < 8; tick++)
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(Number(container.querySelector<HTMLInputElement>('#selected-time')?.value)).toBeGreaterThanOrEqual(3311);
+    expect(container.querySelector<HTMLButtonElement>('.match-context-controls button')?.getAttribute('aria-pressed')).toBe('true');
+    expect(new URL(window.location.href).searchParams.get('mode')).toBeNull();
+    expect(new URL(window.location.href).searchParams.get('revision')).toBe('4');
+    expect(observedUrls.some(url => url.includes('/summary?atSeconds=3311&revision=4'))).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('does not describe an unrelated key-moments 503 as an empty canonical projection', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
