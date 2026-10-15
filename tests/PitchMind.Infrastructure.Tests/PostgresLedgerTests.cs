@@ -148,6 +148,16 @@ public sealed class PostgresLedgerTests
             await using (var dropOutboxConstraint = source.CreateCommand(
                 "ALTER TABLE pitchmind.outbox DROP CONSTRAINT IF EXISTS outbox_event_admission_revision_fk"))
                 await dropOutboxConstraint.ExecuteNonQueryAsync();
+            // Model the pre-v9 schema before rewinding schema_versions. The evidence
+            // source-revision constraint is not part of the legacy schema and would otherwise
+            // make the repeated migration fail with duplicate_object, masking the v4 behavior.
+            await using (var dropV9EvidenceConstraints = source.CreateCommand("""
+                ALTER TABLE pitchmind.insight_evidence DROP CONSTRAINT IF EXISTS insight_evidence_source_revision_check;
+                ALTER TABLE pitchmind.insight_evidence DROP CONSTRAINT IF EXISTS insight_evidence_event_source_revision_fk;
+                ALTER TABLE pitchmind.insight_evidence DROP CONSTRAINT IF EXISTS insight_evidence_frame_source_revision_fk;
+                ALTER TABLE pitchmind.insight_evidence DROP COLUMN IF EXISTS evidence_canonical_revision;
+                """))
+                await dropV9EvidenceConstraints.ExecuteNonQueryAsync();
             await using (var legacyMatch = source.CreateCommand("""
                 INSERT INTO pitchmind.matches(match_id, fixture_version, source_version, source_sha256, provenance,
                     pitch_length_metres, pitch_width_metres, replay_seed_json, replay_context_json)
@@ -559,7 +569,7 @@ public sealed class PostgresLedgerTests
         var sourceHash = new string('a', 64);
         var metadata = new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", sourceHash,
             "approved-synthetic-test", 105m, 68m, competitionRules.CompetitionId, competitionRules.Version,
-            competitionRules.MaximumSubstituteReentriesPerPlayer);
+            competitionRules.MaximumSubstituteReentriesPerPlayer, aggregate.ReplaySeed);
         await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(metadata, CancellationToken.None);
         var writer = new CanonicalMatchEventWriter(new PostgresCanonicalUpdateStore(source));
 
@@ -897,14 +907,14 @@ public sealed class PostgresLedgerTests
         var matchId = MatchId.New();
         var players = Enumerable.Range(1, 11).SelectMany(i => new[] { ($"home-{i}", "home"), ($"away-{i}", "away") }).ToArray();
         var aggregate = new MatchAggregate(matchId, "home", "away", players,
-            players.Select(p => p.Item1), "approved-synthetic-test");
+            players.Select(p => p.Item1), "synthetic");
         var updates = new PostgresCanonicalUpdateStore(source);
         var sourceHash = new string('c', 64);
         var replayContext = new MatchReplayContext("fixture-v1", "Home", "Away", 5400, 2700, 105, 68,
-            "metres-v1", "metre coordinates, x=0..105, y=0..68; attacking direction changes at 2700 seconds", "approved-synthetic-test");
+            "metres-v1", "metre coordinates, x=0..105, y=0..68; attacking direction changes at 2700 seconds", "synthetic");
         await new PostgresMatchProjectionStore(source).SaveMatchMetadataAsync(
             new MatchSourceMetadata(matchId.Value, "fixture-v1", "source-v1", sourceHash,
-                "approved-synthetic-test", 105m, 68m, null, null, null, aggregate.ReplaySeed, replayContext), CancellationToken.None);
+                "synthetic", 105m, 68m, null, null, null, aggregate.ReplaySeed, replayContext), CancellationToken.None);
 
         async Task Apply(long sequence, int clock, MatchEventType type, string playerId, int revision)
         {
@@ -1207,7 +1217,7 @@ public sealed class PostgresLedgerTests
         var visible = Assert.Single(page.Insights, i => i.InsightId == validInsightId);
         Assert.Equal(update.Event.EventId.ToString(), Assert.Single(visible.Evidence).Id);
         Assert.Equal("source-v1", visible.SourceVersion);
-        Assert.Equal("synthetic-test", visible.Provenance);
+        Assert.Equal("approved-synthetic-test", visible.Provenance);
         Assert.Equal(update.SourceSha256, visible.SourceSha256);
         Assert.Null(await insightReader.GetAtAsync(matchId, futureEventInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
             projection.AsOfSequence, CancellationToken.None));
