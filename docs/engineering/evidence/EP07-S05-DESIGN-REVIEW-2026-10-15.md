@@ -54,7 +54,7 @@ Scores are a heuristic review of this rendered state, not a score of the design-
 |---|---:|---|
 | Taste | 31/40 | Product-specific context, readable evidence hierarchy, and existing brand tokens; desktop whitespace remains. |
 | Tech | 23/30 | Production build, lint, unit and browser tests pass; contrast, axe and manual assistive-tech checks remain unverified. |
-| Process | 15/20 | Five-design-skill review and screenshot iteration completed; independent review and manual accessibility review are pending. |
+| Process | 15/20 | Five-design-skill review and screenshot iteration completed; latest independent exact-diff review found no actionable findings, while manual accessibility review remains pending. |
 | Output | 8/10 | Inspectable screenshots and regression coverage; full accessibility and responsive range are not verified. |
 | **Total** | **77/100** | Below the 95 target; score does not waive the outstanding accessibility blocker. |
 
@@ -87,4 +87,4 @@ No axe run, manual keyboard session, screen-reader session, measured contrast, h
 - Accessibility reviewer: pending.
 - UI/UX reviewer: pending.
 - Product Owner acceptance: pending.
-- Evidence captured against an uncommitted local diff; current diff remains uncommitted; final commit/tree identity will be recorded after the sandbox permits a local commit.
+- Evidence and checks are recorded from the local feature branch; the compact-width and keyboard test changes are committed on PR #265. EP07-S05 remains unaccepted pending the listed accessibility, hosted CI, and Product Owner gates.
