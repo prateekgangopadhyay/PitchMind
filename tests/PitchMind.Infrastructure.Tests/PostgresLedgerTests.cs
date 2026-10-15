@@ -1445,11 +1445,13 @@ public sealed class PostgresLedgerTests
         var futureFrameInsightId = $"future-frame-{Guid.NewGuid():N}";
         var pendingEventInsightId = $"pending-event-{Guid.NewGuid():N}";
         var pendingFrameInsightId = $"pending-frame-{Guid.NewGuid():N}";
+        var missingRightsFrameInsightId = $"missing-rights-frame-{Guid.NewGuid():N}";
         var earlierEventInsightId = $"earlier-event-{Guid.NewGuid():N}";
         var earlierFrameInsightId = $"earlier-frame-{Guid.NewGuid():N}";
         var validFrameId = $"frame-{Guid.NewGuid():N}";
         var futureFrameId = $"future-frame-{Guid.NewGuid():N}";
         var pendingFrameId = $"pending-frame-{Guid.NewGuid():N}";
+        var missingRightsFrameId = $"missing-rights-frame-{Guid.NewGuid():N}";
         foreach (var (frameId, sequence, rightsStatus) in new[]
                  {
                      (validFrameId, 0L, "approved_for_use"),
@@ -1476,6 +1478,17 @@ public sealed class PostgresLedgerTests
         await AddInsight(futureFrameInsightId, "derived", "frame", futureFrameId, 1, 1, 0, 1);
         await AddInsight(pendingFrameInsightId, "derived", "frame", pendingFrameId, 1, 1, 0, 1);
         await AddInsight(pendingEventInsightId, "derived", "event", futureEvent.EventId.ToString(), 2, 2, 1, 2);
+        await using (var missingRightsFrame = source.CreateCommand("""
+            INSERT INTO pitchmind.tracking_frames(match_id, frame_id, sequence, period, clock_seconds, coordinate_version, quality, source_sha256, payload, canonical_revision)
+            VALUES ($1, $2, 0, 1, 0, 'pitch-v1', '{}'::jsonb, $3, '{}'::jsonb, 1)
+            """))
+        {
+            missingRightsFrame.Parameters.AddWithValue(matchId.Value);
+            missingRightsFrame.Parameters.AddWithValue(missingRightsFrameId);
+            missingRightsFrame.Parameters.AddWithValue(update.SourceSha256);
+            await missingRightsFrame.ExecuteNonQueryAsync();
+        }
+        await AddInsight(missingRightsFrameInsightId, "derived", "frame", missingRightsFrameId, 1, 1, 0, 1);
         await AddInsight(earlierEventInsightId, "derived", "event", update.Event.EventId.ToString(), 2, 2, 0, 1);
         await AddInsight(earlierFrameInsightId, "derived", "frame", validFrameId, 2, 2, 0, 1);
 
@@ -1501,6 +1514,8 @@ public sealed class PostgresLedgerTests
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.GetAtAsync(matchId, pendingFrameInsightId, projection.CanonicalRevision, projection.ProjectionRevision, 0,
             projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.GetAtAsync(matchId, missingRightsFrameInsightId, projection.CanonicalRevision,
+            projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None));
         var validFrameEvidence = await insightReader.ReadEvidenceAtAsync(matchId, validFrameInsightId,
             projection.CanonicalRevision, projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None);
         var framePayload = Assert.Single(validFrameEvidence!);
@@ -1516,6 +1531,8 @@ public sealed class PostgresLedgerTests
             projection.ProjectionRevision, 0,
             projection.AsOfSequence, CancellationToken.None));
         Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, pendingFrameInsightId, projection.CanonicalRevision,
+            projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None));
+        Assert.Null(await insightReader.ReadEvidenceAtAsync(matchId, missingRightsFrameInsightId, projection.CanonicalRevision,
             projection.ProjectionRevision, 0, projection.AsOfSequence, CancellationToken.None));
 
         // Evidence visible to the later projection still cannot support an insight persisted earlier.
@@ -1537,6 +1554,7 @@ public sealed class PostgresLedgerTests
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureEventInsightId);
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == futureFrameInsightId);
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == pendingFrameInsightId);
+        Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == missingRightsFrameInsightId);
         Assert.DoesNotContain(laterPage.Insights, insight => insight.InsightId == pendingEventInsightId);
         Assert.Null(await insightReader.GetAtAsync(matchId, pendingEventInsightId, laterProjection.CanonicalRevision,
             laterProjection.ProjectionRevision, 10, laterProjection.AsOfSequence, CancellationToken.None));
