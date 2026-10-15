@@ -192,8 +192,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         if (maximumCanonicalRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumCanonicalRevision));
         if (maximumProjectionRevision is <= 0) throw new ArgumentOutOfRangeException(nameof(maximumProjectionRevision));
         await using var command = dataSource.CreateCommand("""
-            SELECT canonical_revision, revision, as_of_sequence, as_of_clock_seconds, algorithm_version,
-                   source_sha256, state_sha256, state_json::text
+            SELECT p.canonical_revision, p.revision, p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version,
+                   p.source_sha256, p.state_sha256, p.state_json::text
             FROM pitchmind.match_projections p
             JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
             WHERE p.match_id = $1 AND p.canonical_revision IS NOT NULL AND p.as_of_clock_seconds <= $2
@@ -471,8 +471,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand("""
-            SELECT as_of_sequence, as_of_clock_seconds, algorithm_version, source_sha256, state_sha256,
-                   state_json::text
+            SELECT p.as_of_sequence, p.as_of_clock_seconds, p.algorithm_version, p.source_sha256, p.state_sha256,
+                   p.state_json::text
             FROM pitchmind.match_projections p
             JOIN pitchmind.matches m ON m.match_id = p.match_id AND m.source_sha256 = p.source_sha256
             WHERE p.match_id = $1 AND p.canonical_revision = $2 AND p.revision = $3
