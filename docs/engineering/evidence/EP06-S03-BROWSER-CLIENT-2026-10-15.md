@@ -3,8 +3,9 @@
 **Story:** EP06-S03 — Reconnect, backfill and historical context (P0).
 **Accountable skill:** `lead-frontend-engineer`.
 **Consult skills:** `real-time-streaming-engineer`, `accessibility-engineer`, `application-security-engineer`, `qa-architect`.
-**Pull request:** [#268](https://github.com/prateekgangopadhyay/PitchMind/pull/268), draft and stacked on parent PR #267 (`codex/ep06-s03-hub-auth`).
-**Base revision:** parent implementation head `acfa8d328fe9572afb3e8ccd87738a79d1a222eb`.
+**Pull request:** [#268](https://github.com/prateekgangopadhyay/PitchMind/pull/268), draft, restacked after parent PR #267 merged.
+**Base revision:** `main` at `f000e561fe32a0b26f34b09ffe6b6cea98e75cc4`.
+**Code revision after restack:** `170c629bc6e2da43ad216b6eca2bf87500bda5af`.
 
 ## Scope
 
@@ -14,7 +15,7 @@ This is a local implementation slice. It does not provide a production sign-in i
 
 ## Verification on the implementation tree
 
-- `npm test`: 5 files passed, 76 tests passed, 0 failed.
+- `npm test` after the parent merge/restack: 5 files passed, 81 tests passed, 0 failed.
 - `npm run build`: passed; Vite emitted two vendor annotation warnings from SignalR's `Utils.js`, which Rollup removed.
 - `npm run lint`: passed.
 - `npm ls --package-lock-only --depth=0`: passed; lock resolves SignalR 9.0.19 and existing project dependencies.
@@ -22,10 +23,10 @@ This is a local implementation slice. It does not provide a production sign-in i
 - `node scripts/test_design_skills.mjs`: passed.
 - `node scripts/design-slop-scan.mjs frontend/src/RealtimeMatchUpdates.tsx`: passed with no warnings.
 - `git diff --check`: passed.
-- `npm run test:e2e -- --list`: could not start because the available linked `node_modules` has no `playwright` executable (`command not found`). Browser automation was not run.
+- `npm run test:e2e`: could not start because the available linked `node_modules` has no `playwright` executable (`command not found`). Browser automation was not run.
 
-Commands ran in the local worktree, with its available linked dependencies. A clean `npm ci` was not available offline in this environment. No API/PostgreSQL integration, connected-client reconnect, real Entra tenant, manual screen-reader test, hosted checks, independent review or Product Owner/football acceptance was performed for this slice. No Azure resources or deployments changed.
+Commands ran in the local worktree, with its available linked dependencies. A clean `npm ci` was not available offline in this environment. No API/PostgreSQL integration, connected-client reconnect, real Entra tenant, manual screen-reader test, hosted checks, or Product Owner/football acceptance was performed for this slice. The original head was independently reviewed; exact-head review of the restacked child is pending. No Azure resources or deployments changed.
 
 ## Status and remaining risks
 
-PR #267's backend browser-auth implementation is the parent of this stack and remains draft. PR #268 is submitted as a draft against that feature branch. Exact-head independent review and hosted checks are pending. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
+PR #267's backend browser-auth implementation was merged to main at `f000e561fe32a0b26f34b09ffe6b6cea98e75cc4`. PR #268 now targets main. Exact-head independent review and hosted checks are pending. The host must supply a real signed-in identity provider before the client can connect in an integrated deployment; the opt-in local unsigned token remains Development-only. The API currently caps selected time at 5400 seconds while the candidate source reaches 5761 seconds. EP06-S03 remains unaccepted.
