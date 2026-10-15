@@ -32,13 +32,88 @@ public static partial class LocalApiRoleProvisioner
         }
 
         await using (var alterRoleSql = new NpgsqlCommand(
-                         "SELECT format('ALTER ROLE pitchmind_api WITH LOGIN PASSWORD %L', $1)", connection))
+                         "SELECT format('ALTER ROLE pitchmind_api WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB " +
+                         "NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS', $1)", connection))
         {
             alterRoleSql.Parameters.AddWithValue(password);
             var sql = (string)(await alterRoleSql.ExecuteScalarAsync(cancellationToken)
                                ?? throw new InvalidOperationException("Could not prepare LOCAL API role credential update."));
             await using var alterRole = new NpgsqlCommand(sql, connection);
             await alterRole.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        List<string> inheritedRoles = [];
+        await using (var membershipQuery = new NpgsqlCommand("""
+            SELECT parent.rolname
+            FROM pg_auth_members membership
+            JOIN pg_roles parent ON parent.oid = membership.roleid
+            WHERE membership.member = 'pitchmind_api'::regrole
+            ORDER BY parent.rolname
+            """, connection))
+        await using (var reader = await membershipQuery.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                inheritedRoles.Add(reader.GetString(0));
+        }
+
+        foreach (var inheritedRole in inheritedRoles)
+        {
+            await using var revokeMembershipSql = new NpgsqlCommand(
+                "SELECT format('REVOKE %I FROM pitchmind_api', $1)", connection);
+            revokeMembershipSql.Parameters.AddWithValue(inheritedRole);
+            var sql = (string)(await revokeMembershipSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException("Could not prepare LOCAL API role-membership reset."));
+            await using var revokeMembership = new NpgsqlCommand(sql, connection);
+            await revokeMembership.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var reassignOwnedSql = new NpgsqlCommand(
+                         "SELECT format('REASSIGN OWNED BY %I TO %I', 'pitchmind_api', current_user)", connection))
+        {
+            var sql = (string)(await reassignOwnedSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException("Could not prepare LOCAL API ownership reset."));
+            await using var reassignOwned = new NpgsqlCommand(sql, connection);
+            await reassignOwned.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var revokeDatabasePrivilegesSql = new NpgsqlCommand(
+                         "SELECT format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM pitchmind_api', current_database())",
+                         connection))
+        {
+            var sql = (string)(await revokeDatabasePrivilegesSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException("Could not prepare LOCAL API database-grant reset."));
+            await using var revokeDatabasePrivileges = new NpgsqlCommand(sql, connection);
+            await revokeDatabasePrivileges.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        List<string> applicationSchemas = [];
+        await using (var schemaQuery = new NpgsqlCommand("""
+            SELECT nspname
+            FROM pg_namespace
+            WHERE nspname <> 'information_schema' AND left(nspname, 3) <> 'pg_'
+            ORDER BY nspname
+            """, connection))
+        await using (var reader = await schemaQuery.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                applicationSchemas.Add(reader.GetString(0));
+        }
+
+        foreach (var schemaName in applicationSchemas)
+        {
+            await using var revokeSchemaPrivilegesSql = new NpgsqlCommand("""
+                SELECT format(
+                    'REVOKE ALL PRIVILEGES ON SCHEMA %1$I FROM pitchmind_api; ' ||
+                    'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %1$I FROM pitchmind_api; ' ||
+                    'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %1$I FROM pitchmind_api; ' ||
+                    'REVOKE ALL PRIVILEGES ON ALL ROUTINES IN SCHEMA %1$I FROM pitchmind_api',
+                    $1)
+                """, connection);
+            revokeSchemaPrivilegesSql.Parameters.AddWithValue(schemaName);
+            var sql = (string)(await revokeSchemaPrivilegesSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException("Could not prepare LOCAL API schema-grant reset."));
+            await using var revokeSchemaPrivileges = new NpgsqlCommand(sql, connection);
+            await revokeSchemaPrivileges.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using (var grantConnectSql = new NpgsqlCommand(
