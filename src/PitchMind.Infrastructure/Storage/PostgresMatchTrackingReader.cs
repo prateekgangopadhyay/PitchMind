@@ -37,6 +37,7 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
             FROM pitchmind.tracking_frames
             WHERE match_id = $1 AND sequence <= $2 AND clock_seconds = $3
               AND canonical_revision IS NOT NULL AND canonical_revision <= $4 AND source_sha256 = $5
+              AND payload #>> '{source,rightsReviewStatus}' = 'approved_for_use'
               AND ($6 IS NULL OR sequence > $6 OR (sequence = $6 AND frame_id > $7))
             ORDER BY sequence, frame_id
             LIMIT $8
@@ -95,6 +96,7 @@ public sealed class PostgresMatchTrackingReader(NpgsqlDataSource dataSource) : I
             FROM pitchmind.tracking_frames
             WHERE match_id = $1 AND frame_id = $2 AND sequence <= $3 AND clock_seconds = $4
               AND canonical_revision IS NOT NULL AND canonical_revision <= $5 AND source_sha256 = $6
+              AND payload #>> '{source,rightsReviewStatus}' = 'approved_for_use'
               AND ($7 IS NULL OR canonical_revision = $7)
             ORDER BY canonical_revision DESC
             LIMIT 1

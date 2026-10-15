@@ -4,6 +4,7 @@ using PitchMind.Api;
 using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Contracts.V1;
+using PitchMind.Contracts.Telemetry.V1;
 using PitchMind.Domain.Simulation;
 using PitchMind.Infrastructure.Storage;
 using PitchMind.TestFixtures;
@@ -273,7 +274,7 @@ public sealed class V1ContractCompatibilityTests
                 {
                     ProviderId = "provider", SourceMatchId = "source-match", SourceRecordId = "source-frame",
                     SourceSequence = 43, SourceSchemaVersion = "v1", SourceSha256 = new string('a', 64),
-                    ProvenanceStatus = "synthetic", RightsReviewStatus = "reviewed"
+                    ProvenanceStatus = "synthetic", RightsReviewStatus = TelemetryContractValidatorV1.ApprovedRightsReviewStatus
                 }
             });
         var trackingPage = new CanonicalTrackingFramePageResponse(Guid.NewGuid().ToString("D"), 7, 4, 3300,

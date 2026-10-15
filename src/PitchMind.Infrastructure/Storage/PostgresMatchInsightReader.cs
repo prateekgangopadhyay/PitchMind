@@ -47,7 +47,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND me.canonical_revision = e_invalid.evidence_canonical_revision
                                AND e_invalid.evidence_canonical_revision <= i.canonical_revision
                                AND e_invalid.evidence_canonical_revision <= $2
-                               AND me.sequence <= $4 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $7)) OR
+                               AND me.sequence <= $4 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $7
+                               AND me.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use')) OR
                          (e_invalid.evidence_kind = 'frame' AND NOT EXISTS (
                              SELECT 1 FROM pitchmind.tracking_frames tf WHERE tf.match_id = i.match_id
                                AND tf.frame_id = e_invalid.frame_id
@@ -55,7 +56,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND e_invalid.evidence_canonical_revision <= i.canonical_revision
                                AND e_invalid.evidence_canonical_revision <= $2
                                AND tf.source_sha256 = p.source_sha256
-                               AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $7)))
+                               AND tf.sequence <= $4 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $7
+                               AND tf.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use')))
               )
             GROUP BY i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
                      i.detector_version, i.truth_class, i.summary, i.conditions_json, m.source_version, m.provenance, p.source_sha256
@@ -121,7 +123,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND me.canonical_revision = e_invalid.evidence_canonical_revision
                                AND e_invalid.evidence_canonical_revision <= i.canonical_revision
                                AND e_invalid.evidence_canonical_revision <= $3
-                               AND me.sequence <= $5 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $6)) OR
+                               AND me.sequence <= $5 AND me.sequence <= i.as_of_sequence AND me.clock_seconds <= $6
+                               AND me.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use')) OR
                          (e_invalid.evidence_kind = 'frame' AND NOT EXISTS (
                              SELECT 1 FROM pitchmind.tracking_frames tf WHERE tf.match_id = i.match_id
                                AND tf.frame_id = e_invalid.frame_id
@@ -129,7 +132,8 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
                                AND e_invalid.evidence_canonical_revision <= i.canonical_revision
                                AND e_invalid.evidence_canonical_revision <= $3
                                AND tf.source_sha256 = p.source_sha256
-                               AND tf.sequence <= $5 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $6)))
+                               AND tf.sequence <= $5 AND tf.sequence <= i.as_of_sequence AND tf.clock_seconds <= $6
+                               AND tf.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use')))
               )
             GROUP BY i.canonical_revision, i.insight_id, i.match_id, i.revision, i.as_of_sequence,
                      i.detector_version, i.truth_class, i.summary, i.conditions_json, m.source_version, m.provenance, p.source_sha256
@@ -187,9 +191,11 @@ public sealed class PostgresMatchInsightReader(NpgsqlDataSource dataSource) : IM
             LEFT JOIN pitchmind.match_events me ON refs.evidence_kind = 'event'
                 AND me.match_id = refs.match_id AND me.event_id::text = refs.evidence_id
                 AND me.canonical_revision = refs.evidence_canonical_revision
+                AND me.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use'
             LEFT JOIN pitchmind.tracking_frames tf ON refs.evidence_kind = 'frame'
                 AND tf.match_id = refs.match_id AND tf.frame_id = refs.evidence_id
                 AND tf.canonical_revision = refs.evidence_canonical_revision AND tf.source_sha256 = refs.source_sha256
+                AND tf.payload #>> '{source,rightsReviewStatus}' = 'approved_for_use'
             WHERE (refs.evidence_kind = 'event' AND me.event_id IS NOT NULL
                        AND refs.evidence_canonical_revision <= refs.canonical_revision
                        AND refs.evidence_canonical_revision <= $3

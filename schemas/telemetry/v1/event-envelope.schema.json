@@ -150,7 +150,7 @@
         "sourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
         "sourceTimestampUtc": { "type": ["string", "null"], "maxLength": 64, "format": "date-time", "pattern": "(?:Z|[+-]00:00)$" },
         "provenanceStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" },
-        "rightsReviewStatus": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]" }
+        "rightsReviewStatus": { "const": "approved_for_use", "description": "Independent review approved this source for canonical telemetry use." }
       }
     }
   }

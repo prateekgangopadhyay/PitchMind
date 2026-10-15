@@ -9,6 +9,7 @@ public static class TelemetryContractValidatorV1
     public const int MaximumPlayersPerFrame = 64;
     public const int MaximumIdentifierLength = 128;
     public const int MaximumTextLength = 256;
+    public const string ApprovedRightsReviewStatus = "approved_for_use";
     public const decimal MinimumPitchLengthMetres = 90m;
     public const decimal MaximumPitchLengthMetres = 120m;
     public const decimal MinimumPitchWidthMetres = 45m;
@@ -294,6 +295,8 @@ public static class TelemetryContractValidatorV1
         MaximumLength(source.ProvenanceStatus, "source.provenanceStatus", MaximumTextLength, errors);
         Required(source.RightsReviewStatus, "source.rightsReviewStatus", errors);
         MaximumLength(source.RightsReviewStatus, "source.rightsReviewStatus", MaximumTextLength, errors);
+        if (!string.Equals(source.RightsReviewStatus, ApprovedRightsReviewStatus, StringComparison.Ordinal))
+            Add(errors, "RIGHTS_REVIEW_NOT_APPROVED", "source.rightsReviewStatus", "Canonical telemetry requires explicit rights approval for use.");
         if (source.SourceSequence < 0) Add(errors, "INVALID_SOURCE_SEQUENCE", "source.sourceSequence", "Original sequence must be non-negative.");
         if (source.SourceSha256 is null || source.SourceSha256.Length != 64 || source.SourceSha256.Any(c => !Uri.IsHexDigit(c)) || source.SourceSha256.Any(char.IsUpper))
             Add(errors, "INVALID_SOURCE_HASH", "source.sourceSha256", "Source hash must be lowercase SHA-256 hexadecimal.");

@@ -514,7 +514,7 @@ components:
             sourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
             sourceTimestampUtc: { type: [string, 'null'], format: date-time }
             provenanceStatus: { type: string }
-            rightsReviewStatus: { type: string }
+            rightsReviewStatus: { type: string, enum: [approved_for_use], description: Independent review approved this source for canonical telemetry use. }
     CanonicalTrackingFramePage:
       type: object
       required: [matchId, canonicalRevision, projectionRevision, selectedTimeSeconds, throughSequence, items, nextCursor, hasMore]

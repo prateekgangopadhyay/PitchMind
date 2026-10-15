@@ -107,6 +107,18 @@ public sealed class TelemetryContractTests
         Assert.True(periodElapsedUsesReviewedOffsetElsewhere.IsValid);
     }
 
+    [Theory]
+    [InlineData("pending")]
+    [InlineData("reviewed")]
+    [InlineData("rejected")]
+    [InlineData("")]
+    public void Canonical_telemetry_requires_explicit_rights_approval_for_use(string rightsReviewStatus)
+    {
+        var frame = Frame() with { Source = Source() with { RightsReviewStatus = rightsReviewStatus } };
+        var errors = TelemetryContractValidatorV1.Validate(frame).Errors;
+        Assert.Contains(errors, error => error.Code == "RIGHTS_REVIEW_NOT_APPROVED" && error.Path == "source.rightsReviewStatus");
+    }
+
     [Fact]
     public void Decimal_contract_numbers_reject_values_not_exactly_representable_by_dotnet_decimal()
     {
@@ -262,6 +274,8 @@ public sealed class TelemetryContractTests
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
         Assert.Equal("(?:Z|[+-]00:00)$", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceTimestampUtc").GetProperty("pattern").GetString());
         Assert.Equal(nonWhitespacePattern, frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
+        Assert.Equal("approved_for_use", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties")
+            .GetProperty("rightsReviewStatus").GetProperty("const").GetString());
         Assert.Contains(frameSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
         Assert.Equal(1, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
         Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
@@ -661,7 +675,7 @@ public sealed class TelemetryContractTests
         SourceSchemaVersion = "source-v1",
         SourceSha256 = new string('a', 64),
         ProvenanceStatus = "owner_declared_synthetic",
-        RightsReviewStatus = "pending"
+        RightsReviewStatus = TelemetryContractValidatorV1.ApprovedRightsReviewStatus
     };
 
     private static string FindRepositoryRoot()

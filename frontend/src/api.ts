@@ -92,7 +92,7 @@ export interface TelemetryTrackingFrameV1 {
   };
   ball: { x: number; y: number };
   players: Array<{playerId: string; teamId: string; position: {x: number; y: number}}>;
-  source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: string };
+  source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: 'approved_for_use' };
 }
 export interface CanonicalTrackingFrame {
   frameId: string; sequence: number; canonicalRevision: number; projectionRevision: number; period: number; clockSeconds: number;
