@@ -30,7 +30,7 @@ flowchart TB
   Candidate["Candidate JSON"] -. "raw schema only" .-> RawReader["ManuLivCandidateFeedReader"]
   RawReader -. "not connected to canonical admission" .-> Boundary["Mapping blocked: source semantics unverified"]
   EventWorker["EventWorker scaffold (idle)"]
-  AgentWorker["AgentWorker scaffold (idle)"]
+  AgentWorker["AgentWorker Foundry candidate adapter (no consumer; candidate remains untrusted)"]
   MatchContext["Application MatchIntelligenceContextBuilder (not host-composed)"]
   MatchContext -. "read-only ports" .-> ReadPorts
 ```
@@ -41,7 +41,7 @@ The profile guard rejects selecting local-only adapters outside Development whil
 
 For EP05-S06, `MechanismReplayBuilder` exports only graph-referenced source events and sampled frames at the selected time, with stable participant identities, separate `eventIds` and `mechanismEventIds`, source metadata, the fixture coordinate convention and explicit limitations. The API contract carries the source hash and coordinate convention on the replay and each frame. It preserves original event identity/sequence/clock/period and does not interpolate movement. EP06-S01 composes the replay response from the canonical selected-time projection and event read port; the route is protected in local and Azure profiles and returns unavailable until an authorized canonical reader is configured. Key moments remain unavailable until a persisted projection exists.
 
-EP08-S01 adds an Application-only `MatchIntelligenceContextBuilder` over the existing projection and insight read ports. Its packet pins both `canonicalRevision` and `projectionRevision`, selected time and as-of sequence, plus score, insight source lineage, evidence references, limits and explicit unknowns. The builder is not registered by the API or AgentWorker; no public route or model call exposes it yet. The dashed diagram edge describes a code dependency only, not runtime composition.
+EP08-S01 adds an Application-only `MatchIntelligenceContextBuilder` over the existing projection and insight read ports. Its packet pins both `canonicalRevision` and `projectionRevision`, selected time and as-of sequence, plus score, insight source lineage, evidence references, limits and explicit unknowns. The builder is not registered by the API or AgentWorker; no public route or model call exposes it yet. The dashed diagram edge describes a code dependency only, not runtime composition. The AgentWorker Foundry adapter and Azure-profile managed-identity composition exist as code, but the worker has no request/message consumer and no live Foundry call has been performed. Candidate output is untrusted and cannot be displayed or persisted as a validated explanation; EP08-S04 verification remains required.
 
 ## Target Ports and Adapters
 
@@ -59,6 +59,7 @@ flowchart TB
     Detect["Detect mechanism / key moment"]
     Query["SelectedTime / ReplayAt"]
     Explain["Grounded explanation policy"]
+    Candidate["Untrusted explanation candidate port"]
     Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
     CanonicalPorts["ICanonicalUpdateStore / IOutboxPublisher / consumer inbox"]
   end
@@ -68,12 +69,14 @@ flowchart TB
     EventHubs["Event Hubs publisher/consumer"]
     Bus["Service Bus + DLQ"]
     Hub["Azure SignalR"]
-    Model["Microsoft Foundry client"]
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
   EventWorker2["EventWorker host"] --> Validate
-  AgentWorker2["AgentWorker host"] --> Explain
+  subgraph AgentWorker["PitchMind.AgentWorker — host and Foundry adapter"]
+    AgentWorker2["Worker host (no request/message consumer)"] --> FoundryAdapter["Bounded Foundry candidate adapter"]
+  end
+  AgentWorker2 --> Explain
   Feed -. "raw candidate only; never canonical publication" .-> MapSource["Reviewed source mapper"]
   MapSource --> Validate
   Validate --> Admission["PostgreSQL canonical admission + revision + outbox in one transaction"]
@@ -84,7 +87,8 @@ flowchart TB
   Project --> Detect --> Rules
   Detect --> Evidence
   Query --> Ports
-  Explain --> Ports
+  Explain --> Candidate --> Ports
+  FoundryAdapter --> Candidate
   Pg -. "implements" .-> Ports
   Pg -. "implements canonical update ports" .-> CanonicalPorts
   Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
@@ -92,7 +96,8 @@ flowchart TB
   Pg -. "implements consumer inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
-  Model -. "implements" .-> Ports
+  FoundryAdapter -. "HTTPS with managed identity; no live call verified" .-> FoundryService
+  FoundryService["Azure AI Foundry endpoint (configured target only)"]
   Cache -. "optional" .-> Ports
 ```
 
