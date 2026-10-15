@@ -126,29 +126,31 @@ def main() -> int:
     if created.returncode:
         fail("Could not create a uniquely named isolated PostgreSQL database.")
 
-    connection = ";".join([
-        f"Host=127.0.0.1", f"Port={host_port}", f"Username={quote_connection_value(username)}",
-        f"Password={quote_connection_value(password)}", f"Database={quote_connection_value(database)}",
-        "Include Error Detail=false"
-    ])
-    test_env = os.environ.copy()
-    test_env["PITCHMIND_TEST_POSTGRES"] = connection
-    api_env = os.environ.copy()
-    api_env.update({
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "ASPNETCORE_URLS": f"http://127.0.0.1:{API_PORT}",
-        "Runtime__Profile": "local",
-        "ConnectionStrings__PitchMind": connection,
-        "Identity__DevelopmentHeaderAuthEnabled": "true",
-        "Realtime__Provider": "disabled",
-    })
-    browser_env = os.environ.copy()
-    browser_env["CI"] = "1"  # Playwright starts a fresh Vite server instead of reusing an unrelated one.
-
     api = None
-    api_log = tempfile.TemporaryFile(mode="w+t")
+    api_log = None
     exit_code = 1
     try:
+        connection = ";".join([
+            f"Host=127.0.0.1", f"Port={host_port}", f"Username={quote_connection_value(username)}",
+            f"Password={quote_connection_value(password)}", f"Database={quote_connection_value(database)}",
+            "Include Error Detail=false"
+        ])
+        test_env = os.environ.copy()
+        test_env["PITCHMIND_TEST_POSTGRES"] = connection
+        api_env = os.environ.copy()
+        api_env.update({
+            "ASPNETCORE_ENVIRONMENT": "Development",
+            "ASPNETCORE_URLS": f"http://127.0.0.1:{API_PORT}",
+            "Runtime__Profile": "local",
+            "ConnectionStrings__PitchMind": connection,
+            "Identity__DevelopmentHeaderAuthEnabled": "true",
+            "Realtime__Provider": "disabled",
+        })
+        browser_env = os.environ.copy()
+        browser_env["CI"] = "1"  # Playwright starts a fresh Vite server instead of reusing an unrelated one.
+        browser_env["PITCHMIND_LIVE_API_E2E"] = "1"  # Opt in to the API-dependent spec only after its fixture/API are ready.
+        api_log = tempfile.TemporaryFile(mode="w+t")
+
         seeded = run([
             "dotnet", "test", "tests/PitchMind.Infrastructure.Tests/PitchMind.Infrastructure.Tests.csproj",
             "--configuration", "Release", "--no-restore", "--nologo", "--verbosity", "minimal",
@@ -198,7 +200,8 @@ def main() -> int:
             if not wait_for_api_port_release():
                 print(f"FAIL: API process group left port {API_PORT} bound after cleanup.", file=sys.stderr)
                 exit_code = 1
-        api_log.close()
+        if api_log is not None:
+            api_log.close()
         dropped = pg(["dropdb", "-U", str(username), "--if-exists", "--force", database])
         if dropped.returncode:
             print(f"FAIL: isolated database cleanup failed for {database}.", file=sys.stderr)

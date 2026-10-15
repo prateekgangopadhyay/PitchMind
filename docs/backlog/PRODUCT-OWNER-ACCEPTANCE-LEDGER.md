@@ -82,6 +82,19 @@
 | EP12-S02 — Historical tracking and spatial data exploration (M15) | P2 | Pending | — | — | — |  |  |
 | EP12-S03 — Model and partner expansion (M16) | P2 | Pending | — | — | — |  |  |
 
+## Current integrated review candidate — EP07-S05 (prepared 2026-10-15)
+
+**Product Owner decision: Pending.** This section prepares an integrated review target and evidence links; it does not record a PO review, pass, fail, or acceptance.
+
+- **Target `main` revision:** `bad13b3f4dc618841f1f541474aaf4d7f2ee5d55`.
+- **Relevant merged API slice:** PR [#260](https://github.com/prateekgangopadhyay/PitchMind/pull/260), head `c2840a4869a72024fc35d1ee2a1f7bbb3c5a24e5`, merged to `main` at `052dd6976c4c65cf535a70b10b236d393fdd2e77`. The slice provides protected, source/revision-bound tracking-frame reads and exact selected-time pagination. Its merge does not accept EP07-S05.
+- **Integrated implementation slice:** PR [#273](https://github.com/prateekgangopadhyay/PitchMind/pull/273), reviewed code head `17b4dd69e750544885ca1162707ee881c8615192`, merged to `main` at `bad13b3f4dc618841f1f541474aaf4d7f2ee5d55`. It supplies persisted insight conditions and a local PostgreSQL/API/browser citation journey; this merge does not accept EP07-S05.
+- **Current-main verification:** Release solution — 469 passed, 28 skipped opt-in PostgreSQL cases, 0 failed; isolated local PostgreSQL suite — 51 passed, 0 skipped, 0 failed; frontend Vitest — 83 passed; production build and lint — passed; ordinary Playwright — 5 passed using stubbed test-only canonical API responses; dedicated live PostgreSQL/API/browser journey — 1 passed, with fixture/migration seed 1/1 and API Release build 0 warnings/errors. A local follow-up change now scopes the live spec to its dedicated runner; no production UI code changed. Full command output and limitations are in the [EP07-S05 design/integration report](../engineering/evidence/EP07-S05-DESIGN-REVIEW-2026-10-15.md) and [live journey report](../engineering/evidence/EP07-S05-LIVE-POSTGRES-API-JOURNEY-2026-10-15.md).
+- **Screenshots:** [desktop](../engineering/evidence/ep07-s05-current-main/desktop.png), [tablet](../engineering/evidence/ep07-s05-current-main/tablet.png), [mobile](../engineering/evidence/ep07-s05-current-main/mobile.png), [compact](../engineering/evidence/ep07-s05-current-main/compact.png). They were captured with stubbed test-only responses before PR #273; production UI code is unchanged. They are not candidate-feed or canonical football acceptance.
+- **Unresolved review requirements:** measured contrast, axe and manual keyboard/screen-reader review; independent human UI/Accessibility review; source evidence/football review where claims are involved; hosted CI; Product Owner decision against the original story acceptance criteria. No Azure resources or deployment were changed.
+
+The Product Owner can record a pass or fail only after reviewing this exact integrated `main` revision and deciding whether the evidence covers the original EP07-S05 acceptance criteria. Until then, leave the decision and comment fields unchanged.
+
 ## Review entry history
 
 When a decision is revised or its target changes, keep the earlier row intact and append the superseding review here with the story ID, exact commit SHA, decision, date, and Product Owner comments. Initial state: no Product Owner decisions or comments are pre-populated.
@@ -90,4 +103,4 @@ When a decision is revised or its target changes, keep the earlier row intact an
 
 | Story | Current implementation slice | Evidence and observed status | Product Owner decision |
 |---|---|---|---|
-| EP07-S05 — 'Why?' evidence drawer and tactical replay | [PR #273](https://github.com/prateekgangopadhyay/PitchMind/pull/273), reviewed code head `17b4dd69e750544885ca1162707ee881c8615192` (draft; base `main`) | [Local PostgreSQL/API/browser journey evidence](../engineering/evidence/EP07-S05-LIVE-POSTGRES-API-JOURNEY-2026-10-15.md). The live fixture and Playwright journey passed; independent read-only review of the process-group cleanup found no actionable findings and did not run tests. Hosted CI, manual accessibility review, approved-source comparison, and an integrated `main` journey remain pending. This slice is not the complete story acceptance target. | Pending; no PO review or acceptance recorded. |
+| EP07-S05 — 'Why?' evidence drawer and tactical replay | [PR #273](https://github.com/prateekgangopadhyay/PitchMind/pull/273), merged to `main` at `bad13b3f4dc618841f1f541474aaf4d7f2ee5d55` from reviewed code head `17b4dd69e750544885ca1162707ee881c8615192` | [Local PostgreSQL/API/browser journey evidence](../engineering/evidence/EP07-S05-LIVE-POSTGRES-API-JOURNEY-2026-10-15.md). Post-merge live fixture/build/journey passed; a local follow-up test-scope fix passed ordinary E2E 5/5 and live E2E 1/1. Independent read-only review found no actionable findings in the runner/config diff and did not run tests. Hosted CI, manual accessibility review, approved-source comparison, and Product Owner review remain pending. This slice is not the complete story acceptance target. | Pending; no PO review or acceptance recorded. |
