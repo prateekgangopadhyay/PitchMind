@@ -6,10 +6,14 @@
 
 ## Realized application components (source verified, not new test evidence)
 
+`ApiRequestTelemetry` records bounded HTTP request/error/duration instruments and trace tags without high-cardinality metric dimensions; unrecognized HTTP methods map to `_OTHER`. SignalR hub and negotiate requests are excluded from HTTP duration metrics because they can remain open for a connection lifetime; realtime lag/reconnect instruments are not implemented in this increment. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` requires configured PostgreSQL and a bounded probe of the current canonical schema version. Local without PostgreSQL is unready. There is no metrics exporter or operator-visible live-update lag signal in this increment.
+
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Profile["RuntimeProfileGuard: local in Development; azure in supported hosts"]
   API --> Security["ApiSecurity: Entra JWT / role policies / rate limits / security headers"]
+  API --> Telemetry["ApiRequestTelemetry: low-cardinality counters + duration histogram"]
+  API --> Health["Liveness + bounded LOCAL PostgreSQL readiness"]
   API --> Guard["Fixture/demo routes fail closed; malformed requests → typed 4xx; body capped at 4 KiB including chunked input"]
   API --> BFF["Canonical BFF routes: protected in local and Azure profiles"]
   BFF --> ReadPorts["IMatchProjectionReader / IMatchInsightReader / IMatchTrackingReader"]

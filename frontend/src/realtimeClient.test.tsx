@@ -162,8 +162,10 @@ describe('MatchRealtimeClient', () => {
 
     await client.start();
     connection.handlers.get('MatchUpdated')?.(cursor(1));
-    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('disconnected'));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('refresh-failed'));
     expect(state.throughSequence).toBe(0);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
 
     connection.handlers.get('MatchUpdated')?.(cursor(1));
     await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('connected'));
@@ -589,6 +591,90 @@ describe('MatchRealtimeClient', () => {
     expect(pageCalls).toBe(3);
     expect(state.throughSequence).toBe(1);
   });
+
+  it('falls back to explicit canonical refresh when SignalR negotiation is unavailable and keeps selected time', async () => {
+    let state = selectHistoricalTime(initialState(), 45);
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const status = vi.fn();
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate')) return new Response(null, { status: 503 });
+      const at = Number(new URL(String(input), 'https://app.example').searchParams.get('atSeconds'));
+      return Response.json(backfill(at));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher });
+
+    await client.start();
+    expect(status).toHaveBeenLastCalledWith('fallback');
+    const beforeManualRefresh = fetcher.mock.calls.length;
+    await client.refreshFallback();
+
+    expect(fetcher.mock.calls.length).toBe(beforeManualRefresh + 1);
+    expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain('atSeconds=45');
+    expect(state.mode).toBe('HISTORICAL');
+    expect(state.selectedTimeSeconds).toBe(45);
+    expect(state.snapshot.selectedTimeSeconds).toBe(45);
+    expect(status).toHaveBeenLastCalledWith('fallback');
+    await client.stop();
+  });
+
+  it('marks the canonical view stale when explicit fallback refresh fails', async () => {
+    let state = selectHistoricalTime(initialState(), 45);
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const status = vi.fn();
+    let refreshCount = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate')) return new Response(null, { status: 503 });
+      refreshCount++;
+      if (refreshCount > 1) return new Response(null, { status: 503 });
+      const at = Number(new URL(String(input), 'https://app.example').searchParams.get('atSeconds'));
+      return Response.json(backfill(at));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher });
+
+    await client.start();
+    await expect(client.refreshFallback()).rejects.toThrow('Canonical backfill failed with 503.');
+
+    expect(state.mode).toBe('HISTORICAL');
+    expect(state.selectedTimeSeconds).toBe(45);
+    expect(state.needsBackfill).toBe(true);
+    expect(state.reconnecting).toBe(true);
+    expect(status).toHaveBeenLastCalledWith('refresh-failed');
+    await client.stop();
+  });
+
+  it('clears a stale reconnect status after explicit refresh catches up', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let backfillCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(), revisionChanged: false });
+      backfillCalls++;
+      if (backfillCalls === 3) return new Response(null, { status: 503 });
+      if (backfillCalls > 3) return Response.json(backfillPage(5400, 1, [event(1)], false, null));
+      return Response.json(backfill(5400));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+    connection.handlers.get('MatchUpdated')?.(cursor(1));
+    await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith('refresh-failed'));
+    expect(state.needsBackfill).toBe(true);
+
+    await client.refreshFallback();
+
+    expect(state.throughSequence).toBe(1);
+    expect(state.needsBackfill).toBe(false);
+    expect(status).toHaveBeenLastCalledWith('connected');
+    await client.stop();
+  });
 });
 
 it('renders an accessible fail-closed host state and keeps the historical update notice stable', () => {
@@ -599,6 +685,49 @@ it('renders an accessible fail-closed host state and keeps the historical update
   expect(markup).toContain('Your selected time remains unchanged.');
   expect(markup).not.toContain('Historical view at 00:45.');
   expect(markup).toContain('Return to live');
+});
+
+it('announces stale data after the manual canonical refresh fails', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const retryLive = vi.spyOn(MatchRealtimeClient.prototype, 'retry').mockResolvedValue();
+  let refreshRequests = 0;
+  const fetcher = vi.fn<typeof fetch>(async input => {
+    if (String(input).endsWith('/realtime/negotiate')) return new Response(null, { status: 503 });
+    refreshRequests++;
+    if (refreshRequests > 1) return new Response(null, { status: 503 });
+    const at = Number(new URL(String(input), 'https://app.example').searchParams.get('atSeconds'));
+    return Response.json(backfill(at));
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const state = { ...selectHistoricalTime(initialState(), 45), hasNewMatchUpdate: true };
+
+  try {
+    await act(async () => root.render(createElement(RealtimeAuthProvider, {
+      getAccessToken: async () => 'host-token',
+      children: createElement(RealtimeMatchUpdates, { state, onStateChange: vi.fn() }),
+    })));
+    await vi.waitFor(() => expect(container.textContent).toContain('Match data can be refreshed manually'));
+    const retryButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Retry live connection');
+    expect(retryButton).toBeDefined();
+    await act(async () => retryButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(retryLive).toHaveBeenCalledTimes(1);
+    const requestsBeforeClick = refreshRequests;
+    const refreshButton = Array.from(container.querySelectorAll('button')).find(button => button.textContent === 'Refresh match data');
+    expect(refreshButton).toBeDefined();
+    await act(async () => refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(refreshRequests).toBe(requestsBeforeClick + 1);
+    expect(String(fetcher.mock.calls.at(-1)?.[0])).toContain('atSeconds=45');
+    expect(container.querySelector('[role="status"]')?.textContent)
+      .toBe('Canonical refresh failed. Match data may be out of date.');
+    expect(container.querySelector('button')?.textContent).toBe('Retry live connection');
+    expect(container.textContent).toContain('Your selected time remains unchanged.');
+  } finally {
+    await act(async () => root.unmount());
+    retryLive.mockRestore();
+    vi.unstubAllGlobals();
+  }
 });
 
 it('does not restart SignalR when host state rerenders with a fresh token callback', async () => {
@@ -642,7 +771,7 @@ it('shows disconnected retry state when selected-time refresh fails', async () =
     await act(async () => root.render(render()));
     state = selectHistoricalTime(state, 45);
     await act(async () => root.render(render()));
-    await vi.waitFor(() => expect(container.textContent).toContain('Match updates disconnected'));
+    await vi.waitFor(() => expect(container.textContent).toContain('Canonical refresh failed. Match data may be out of date.'));
     expect(container.textContent).toContain('Retry live connection');
     expect(onStateChange).toHaveBeenCalledWith(expect.objectContaining({ needsBackfill: true, reconnecting: true }));
     expect(refresh).toHaveBeenCalledTimes(1);

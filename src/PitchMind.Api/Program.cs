@@ -68,7 +68,7 @@ else
     builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
     builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
 }
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks().AddCheck<ReadinessHealthCheck>("readiness", tags: ["ready"]);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>
 {
@@ -89,6 +89,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 var app = builder.Build();
 app.UseRouting();
+app.Use(ApiRequestTelemetry.RecordRequestAsync);
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Correlation-ID"] = context.TraceIdentifier;
@@ -190,7 +191,21 @@ app.Use(async (context, next) =>
     }
 });
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api"))).AllowAnonymous();
-app.MapHealthChecks("/health").AllowAnonymous();
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = static (_, _) => Task.CompletedTask
+}).AllowAnonymous();
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = static (_, _) => Task.CompletedTask
+}).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = static (_, _) => Task.CompletedTask
+}).AllowAnonymous();
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
 if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
