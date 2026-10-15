@@ -69,6 +69,54 @@ public sealed class LocalCandidateFeedReplaySessionTests
     }
 
     [Fact]
+    public async Task Pause_does_not_report_success_when_consumer_faults_before_pause_boundary()
+    {
+        var document = await ReadFixtureAsync();
+        var store = new FileCandidateFeedReplayCheckpointStore(CreateTemporaryDirectory());
+        var entered = NewSignal();
+        var release = NewSignal();
+        await using var session = await LocalCandidateFeedReplaySession.CreateAsync(document, store,
+            async (_, cancellationToken) =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken);
+                throw new IOException("Simulated consumer failure.");
+            }, recordsPerSecond: 500);
+
+        var completion = session.Start();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var pause = session.PauseAsync();
+        release.TrySetResult();
+
+        await Assert.ThrowsAsync<IOException>(() => completion);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pause);
+        Assert.Equal(CandidateFeedReplaySessionState.Faulted, session.State);
+    }
+
+    [Fact]
+    public async Task Pause_does_not_report_success_when_session_is_canceled()
+    {
+        var document = await ReadFixtureAsync();
+        var store = new FileCandidateFeedReplayCheckpointStore(CreateTemporaryDirectory());
+        var entered = NewSignal();
+        await using var session = await LocalCandidateFeedReplaySession.CreateAsync(document, store,
+            async (_, cancellationToken) =>
+            {
+                entered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }, recordsPerSecond: 500);
+
+        var completion = session.Start();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var pause = session.PauseAsync();
+        await session.CancelAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pause);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => completion);
+        Assert.Equal(CandidateFeedReplaySessionState.Canceled, session.State);
+    }
+
+    [Fact]
     public async Task Session_rejects_checkpoint_from_different_source_before_consuming()
     {
         var document = await ReadFixtureAsync();
@@ -158,6 +206,45 @@ public sealed class LocalCandidateFeedReplaySessionTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => store.SaveAsync(cursor));
     }
 
+    [Fact]
+    public async Task Checkpoint_store_rejects_symbolic_link_in_ancestor_path()
+    {
+        var root = CreateTemporaryDirectory();
+        var outside = CreateTemporaryDirectory();
+        var link = Path.Combine(root, "ancestor-link");
+        Directory.CreateSymbolicLink(link, outside);
+        var store = new FileCandidateFeedReplayCheckpointStore(Path.Combine(link, "checkpoint-directory"));
+        var cursor = new CandidateFeedReplayCursor(ManuLivCandidateFeedReader.ContractVersion,
+            new string('b', 64), 0, null);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => store.SaveAsync(cursor));
+        Assert.False(Directory.Exists(Path.Combine(outside, "checkpoint-directory")));
+    }
+
+    [Fact]
+    public async Task Checkpoint_store_enforces_read_size_limit()
+    {
+        var root = CreateTemporaryDirectory();
+        var checkpointPath = Path.Combine(root, "candidate-feed-replay-checkpoint.json");
+        await File.WriteAllTextAsync(checkpointPath, new string(' ', 16 * 1024 + 1));
+        var store = new FileCandidateFeedReplayCheckpointStore(root);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.LoadAsync());
+    }
+
+    [Fact]
+    public async Task File_checkpoint_store_allows_only_one_active_session()
+    {
+        var document = await ReadFixtureAsync();
+        var store = new FileCandidateFeedReplayCheckpointStore(CreateTemporaryDirectory());
+        await using var first = await LocalCandidateFeedReplaySession.CreateAsync(document, store,
+            (_, _) => ValueTask.CompletedTask, recordsPerSecond: 500);
+
+        await Assert.ThrowsAsync<IOException>(async () =>
+            await LocalCandidateFeedReplaySession.CreateAsync(document, store,
+                (_, _) => ValueTask.CompletedTask, recordsPerSecond: 500));
+    }
+
     private static async Task<CandidateFeedDocument> ReadFixtureAsync()
     {
         const string json = "[{\"eventId\":\"raw-a\",\"matchId\":\"candidate-match\",\"sequence\":0,\"clockSeconds\":0,\"period\":1,\"eventType\":\"ProviderRestart\"},{\"eventId\":\"raw-b\",\"matchId\":\"candidate-match\",\"sequence\":8,\"clockSeconds\":2700.5,\"period\":1,\"eventType\":\"ProviderPass\"},{\"eventId\":\"raw-c\",\"matchId\":\"candidate-match\",\"sequence\":41,\"clockSeconds\":5761,\"period\":2,\"eventType\":\"ProviderShot\"}]";
@@ -165,7 +252,12 @@ public sealed class LocalCandidateFeedReplaySessionTests
         return await ManuLivCandidateFeedReader.ReadAsync(input);
     }
 
-    private static string CreateTemporaryDirectory() => Directory.CreateTempSubdirectory("pitchmind-replay-").FullName;
+    private static string CreateTemporaryDirectory()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, $".pitchmind-replay-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
 
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 }

@@ -23,6 +23,7 @@ public sealed class LocalCandidateFeedReplaySession : IAsyncDisposable
     private readonly ICandidateFeedReplayCheckpointStore _checkpointStore;
     private readonly Func<CandidateReplayEnvelope, CancellationToken, ValueTask> _consumer;
     private readonly int _recordsPerSecond;
+    private IAsyncDisposable? _sessionLease;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _sync = new();
     private TaskCompletionSource _resumeSignal = CompletedSignal();
@@ -36,12 +37,14 @@ public sealed class LocalCandidateFeedReplaySession : IAsyncDisposable
         ICandidateFeedReplayCheckpointStore checkpointStore,
         Func<CandidateReplayEnvelope, CancellationToken, ValueTask> consumer,
         CandidateFeedReplayCursor? cursor,
+        IAsyncDisposable? sessionLease,
         int recordsPerSecond)
     {
         _document = document;
         _checkpointStore = checkpointStore;
         _consumer = consumer;
         _cursor = cursor;
+        _sessionLease = sessionLease;
         _recordsPerSecond = recordsPerSecond;
     }
 
@@ -68,8 +71,20 @@ public sealed class LocalCandidateFeedReplaySession : IAsyncDisposable
         if (recordsPerSecond is < 1 or > LocalCandidateFeedReplayProducer.MaximumRecordsPerSecond)
             throw new ArgumentOutOfRangeException(nameof(recordsPerSecond));
 
-        var cursor = await checkpointStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return new LocalCandidateFeedReplaySession(document, checkpointStore, consumer, cursor, recordsPerSecond);
+        IAsyncDisposable? sessionLease = null;
+        try
+        {
+            if (checkpointStore is ICandidateFeedReplaySessionLeaseProvider leaseProvider)
+                sessionLease = await leaseProvider.AcquireSessionLeaseAsync(cancellationToken).ConfigureAwait(false);
+            var cursor = await checkpointStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            return new LocalCandidateFeedReplaySession(document, checkpointStore, consumer, cursor,
+                sessionLease, recordsPerSecond);
+        }
+        catch
+        {
+            if (sessionLease is not null) await sessionLease.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>Starts the session and returns its completion task.</summary>
@@ -105,6 +120,12 @@ public sealed class LocalCandidateFeedReplaySession : IAsyncDisposable
         }
 
         await wait.WaitAsync(cancellationToken).ConfigureAwait(false);
+        lock (_sync)
+        {
+            if (_state is CandidateFeedReplaySessionState.Completed or CandidateFeedReplaySessionState.Canceled or
+                CandidateFeedReplaySessionState.Faulted)
+                throw new InvalidOperationException($"Replay session ended in state {_state} before it could pause.");
+        }
     }
 
     public Task ResumeAsync()
@@ -146,6 +167,8 @@ public sealed class LocalCandidateFeedReplaySession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await CancelAsync().ConfigureAwait(false);
+        var lease = Interlocked.Exchange(ref _sessionLease, null);
+        if (lease is not null) await lease.DisposeAsync().ConfigureAwait(false);
         _shutdown.Dispose();
     }
 
