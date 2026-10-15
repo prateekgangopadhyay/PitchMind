@@ -1,0 +1,638 @@
+{
+  "auditVersion": "1.2.0",
+  "canonicalizationStatus": "blocked_pending_source_semantics_and_football_review",
+  "chronology": {
+    "adjacentEqualClockPairs": 11,
+    "clockEnd": 5761,
+    "clockRegressions": 0,
+    "clockStart": 0,
+    "clockUnitDeclaredByManifest": "unverified",
+    "eventCount": 2199,
+    "interpretation": "Source-order and clock observations only; provider clock policy, tie semantics, and period meaning are not established.",
+    "markers": [
+      {
+        "clockSeconds": 0,
+        "eventType": "KickOff",
+        "period": 1,
+        "sequence": 1,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 889,
+        "eventType": "KickOff",
+        "period": 1,
+        "sequence": 335,
+        "teamName": "Liverpool"
+      },
+      {
+        "clockSeconds": 1688,
+        "eventType": "KickOff",
+        "period": 1,
+        "sequence": 643,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 2499,
+        "eventType": "KickOff",
+        "period": 1,
+        "sequence": 953,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 2700,
+        "eventType": "HalfTime",
+        "period": 2,
+        "sequence": 1037,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 2715,
+        "eventType": "KickOff",
+        "period": 2,
+        "sequence": 1038,
+        "teamName": "Liverpool"
+      },
+      {
+        "clockSeconds": 3540,
+        "eventType": "KickOff",
+        "period": 2,
+        "sequence": 1358,
+        "teamName": "Liverpool"
+      },
+      {
+        "clockSeconds": 4102,
+        "eventType": "Substitution",
+        "period": 2,
+        "sequence": 1585,
+        "teamName": "Liverpool"
+      },
+      {
+        "clockSeconds": 4222,
+        "eventType": "Substitution",
+        "period": 2,
+        "sequence": 1628,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 4517,
+        "eventType": "KickOff",
+        "period": 2,
+        "sequence": 1729,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 4866,
+        "eventType": "RedCard",
+        "period": 2,
+        "sequence": 1869,
+        "teamName": "Manchester United"
+      },
+      {
+        "clockSeconds": 5375,
+        "eventType": "KickOff",
+        "period": 2,
+        "sequence": 2048,
+        "teamName": "Liverpool"
+      },
+      {
+        "clockSeconds": 5761,
+        "eventType": "FullTime",
+        "period": 2,
+        "sequence": 2199,
+        "teamName": "Manchester United"
+      }
+    ],
+    "medianAdjacentClockDelta": 2.0,
+    "metadataPeriodFieldComparison": {
+      "exactValueAndJsonTypeMatches": 0,
+      "interpretation": "Exact source-value and JSON-type comparison only; neither field is treated as authoritative and no period meaning is inferred.",
+      "mismatchCount": 3,
+      "mismatchExamples": [
+        {
+          "eventType": "KickOff",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "1",
+            "valueTruncated": false
+          },
+          "sequence": 1,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 1
+          }
+        },
+        {
+          "eventType": "HalfTime",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "1",
+            "valueTruncated": false
+          },
+          "sequence": 1037,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 2
+          }
+        },
+        {
+          "eventType": "KickOff",
+          "metadataPeriod": {
+            "jsonType": "string",
+            "value": "2",
+            "valueTruncated": false
+          },
+          "sequence": 1038,
+          "topLevelPeriod": {
+            "jsonType": "integer",
+            "value": 2
+          }
+        }
+      ],
+      "recordsWithMetadataPeriod": 3
+    },
+    "periodCounts": {
+      "1": 1035,
+      "2": 1164
+    },
+    "rawClockValueRange": {
+      "difference": 5761,
+      "maximum": 5761,
+      "minimum": 0,
+      "unit": "unverified"
+    },
+    "sequenceContiguousFromManifestStart": true,
+    "sequenceEnd": 2199,
+    "sequenceStart": 1
+  },
+  "coordinateAudit": {
+    "interpretation": "Numeric ranges only. The literal 0-100 comparison is descriptive and is not a verified validity bound; units, axis, origin, orientation, and pitch dimensions are unverified.",
+    "manifestAxisConvention": null,
+    "manifestPitchDimensionsMetres": null,
+    "manifestStatus": "unverified",
+    "manifestUnit": null,
+    "rawFieldRanges": {
+      "ballX": {
+        "distinctNumericValueCount": 750,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 2199,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "ballY": {
+        "distinctNumericValueCount": 676,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 2199,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "endX": {
+        "distinctNumericValueCount": 426,
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "nonNumericOrMissingCount": 1232,
+        "numericCount": 967,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "endY": {
+        "distinctNumericValueCount": 489,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 1232,
+        "numericCount": 967,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "pitchX": {
+        "distinctNumericValueCount": 750,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 2199,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "pitchY": {
+        "distinctNumericValueCount": 676,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 2199,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "playerX": {
+        "distinctNumericValueCount": 961,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      },
+      "playerY": {
+        "distinctNumericValueCount": 940,
+        "maximum": 98.0,
+        "minimum": 2.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "outsideZeroToHundredCount": 0,
+        "unit": "unverified"
+      }
+    }
+  },
+  "eventTypeComparison": {
+    "currentDomainEnumTypes": [
+      "KickOff",
+      "HalfTime",
+      "Pass",
+      "Shot",
+      "Goal",
+      "Foul",
+      "YellowCard",
+      "Substitution",
+      "Turnover",
+      "FullTime",
+      "Pressure",
+      "RedCard"
+    ],
+    "domainTypesWithoutExactSourceName": [
+      "Pressure",
+      "Turnover",
+      "YellowCard"
+    ],
+    "exactNameOverlapOnly": [
+      "Foul",
+      "FullTime",
+      "Goal",
+      "HalfTime",
+      "KickOff",
+      "Pass",
+      "RedCard",
+      "Shot",
+      "Substitution"
+    ],
+    "interpretation": "No semantic event mappings are inferred by this audit.",
+    "manifestMappingStatus": "not_approved",
+    "sourceTypes": [
+      "BallRecovery",
+      "Carry",
+      "Clearance",
+      "Foul",
+      "FullTime",
+      "Goal",
+      "HalfTime",
+      "Interception",
+      "KickOff",
+      "LineBreakingPass",
+      "Pass",
+      "PossessionLost",
+      "PressureApplied",
+      "ProgressiveCarry",
+      "ProgressivePass",
+      "RedCard",
+      "Shot",
+      "Substitution",
+      "Tackle"
+    ],
+    "sourceTypesWithoutExactNameMatch": [
+      "BallRecovery",
+      "Carry",
+      "Clearance",
+      "Interception",
+      "LineBreakingPass",
+      "PossessionLost",
+      "PressureApplied",
+      "ProgressiveCarry",
+      "ProgressivePass",
+      "Tackle"
+    ]
+  },
+  "footballEventAudit": {
+    "adjacentGoalScoreTransitionsWithExactlyOneNondecreasingComponentIncrement": 5,
+    "frameSizeCounts": {
+      "21": 330,
+      "22": 1869
+    },
+    "fullTimeMetadataResult": "Draw",
+    "fullTimeMetadataScore": "3-3",
+    "goalRows": [
+      {
+        "clockSeconds": 854,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "1-0",
+        "sequence": 334
+      },
+      {
+        "clockSeconds": 1653,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "1-1",
+        "sequence": 642
+      },
+      {
+        "clockSeconds": 2464,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "1-2",
+        "sequence": 952
+      },
+      {
+        "clockSeconds": 3505,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "2-2",
+        "sequence": 1357
+      },
+      {
+        "clockSeconds": 4482,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "2-3",
+        "sequence": 1728
+      },
+      {
+        "clockSeconds": 5335,
+        "eventOutcomeMatchesMetadataOutcome": true,
+        "eventPlayerMatchesMetadataPlayer": true,
+        "eventTeamMatchesMetadataTeam": true,
+        "metadataScore": "3-3",
+        "sequence": 2047
+      }
+    ],
+    "goalScoreSnapshotsParseable": 6,
+    "goalScoreSnapshotsUnparseable": 0,
+    "interpretation": "Counts and cross-field comparisons only; event definitions, score-side order, adjudication, and football realism require source documentation and football review.",
+    "redCardFrameSnapshots": [
+      {
+        "sequence": 1869,
+        "snapshots": {
+          "after": {
+            "eventParticipantLabelPresent": false,
+            "teamPositionCount": 10
+          },
+          "atEvent": {
+            "eventParticipantLabelPresent": true,
+            "teamPositionCount": 11
+          },
+          "before": {
+            "eventParticipantLabelPresent": true,
+            "teamPositionCount": 11
+          }
+        },
+        "teamName": "Manchester United"
+      }
+    ],
+    "sourceEventCounts": {
+      "BallRecovery": 128,
+      "Carry": 97,
+      "Clearance": 95,
+      "Foul": 254,
+      "FullTime": 1,
+      "Goal": 6,
+      "HalfTime": 1,
+      "Interception": 134,
+      "KickOff": 8,
+      "LineBreakingPass": 143,
+      "Pass": 350,
+      "PossessionLost": 117,
+      "PressureApplied": 252,
+      "ProgressiveCarry": 134,
+      "ProgressivePass": 105,
+      "RedCard": 1,
+      "Shot": 124,
+      "Substitution": 2,
+      "Tackle": 247
+    },
+    "substitutionFrameSnapshots": [
+      {
+        "sequence": 1585,
+        "snapshots": {
+          "after": {
+            "incomingLabelPresent": true,
+            "outgoingLabelPresent": false,
+            "teamPositionCount": 11
+          },
+          "atEvent": {
+            "incomingLabelPresent": true,
+            "outgoingLabelPresent": false,
+            "teamPositionCount": 11
+          },
+          "before": {
+            "incomingLabelPresent": false,
+            "outgoingLabelPresent": true,
+            "teamPositionCount": 11
+          }
+        },
+        "teamName": "Liverpool"
+      },
+      {
+        "sequence": 1628,
+        "snapshots": {
+          "after": {
+            "incomingLabelPresent": true,
+            "outgoingLabelPresent": false,
+            "teamPositionCount": 11
+          },
+          "atEvent": {
+            "incomingLabelPresent": true,
+            "outgoingLabelPresent": false,
+            "teamPositionCount": 11
+          },
+          "before": {
+            "incomingLabelPresent": false,
+            "outgoingLabelPresent": true,
+            "teamPositionCount": 11
+          }
+        },
+        "teamName": "Manchester United"
+      }
+    ],
+    "teamEventCounts": {
+      "Liverpool|BallRecovery": 69,
+      "Liverpool|Carry": 44,
+      "Liverpool|Clearance": 58,
+      "Liverpool|Foul": 122,
+      "Liverpool|Goal": 3,
+      "Liverpool|Interception": 64,
+      "Liverpool|KickOff": 4,
+      "Liverpool|LineBreakingPass": 63,
+      "Liverpool|Pass": 174,
+      "Liverpool|PossessionLost": 43,
+      "Liverpool|PressureApplied": 112,
+      "Liverpool|ProgressiveCarry": 70,
+      "Liverpool|ProgressivePass": 56,
+      "Liverpool|Shot": 67,
+      "Liverpool|Substitution": 1,
+      "Liverpool|Tackle": 126,
+      "Manchester United|BallRecovery": 59,
+      "Manchester United|Carry": 53,
+      "Manchester United|Clearance": 37,
+      "Manchester United|Foul": 132,
+      "Manchester United|FullTime": 1,
+      "Manchester United|Goal": 3,
+      "Manchester United|HalfTime": 1,
+      "Manchester United|Interception": 70,
+      "Manchester United|KickOff": 4,
+      "Manchester United|LineBreakingPass": 80,
+      "Manchester United|Pass": 176,
+      "Manchester United|PossessionLost": 74,
+      "Manchester United|PressureApplied": 140,
+      "Manchester United|ProgressiveCarry": 64,
+      "Manchester United|ProgressivePass": 49,
+      "Manchester United|RedCard": 1,
+      "Manchester United|Shot": 57,
+      "Manchester United|Substitution": 1,
+      "Manchester United|Tackle": 121
+    },
+    "teamPositionCountsPerFrame": {
+      "Liverpool": {
+        "11": 2199
+      },
+      "Manchester United": {
+        "10": 330,
+        "11": 1869
+      }
+    }
+  },
+  "playerMetricAudit": {
+    "fields": {
+      "distanceCovered": {
+        "adjacentDecreasesInSourceOrder": 0,
+        "distinctNumericValueCount": 1182,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 11.81,
+        "minimum": 0.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "heartRate": {
+        "adjacentDecreasesInSourceOrder": 23204,
+        "distinctNumericValueCount": 72,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 196,
+        "minimum": 125,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "heatIndex": {
+        "adjacentDecreasesInSourceOrder": 23212,
+        "distinctNumericValueCount": 82,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 1.0,
+        "minimum": 0.19,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "passAccuracy": {
+        "adjacentDecreasesInSourceOrder": 93,
+        "distinctNumericValueCount": 24,
+        "identitiesWithChangingValues": 23,
+        "identitiesWithConstantValues": 1,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 95.0,
+        "minimum": 72.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "speed": {
+        "adjacentDecreasesInSourceOrder": 23419,
+        "distinctNumericValueCount": 325,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 33.0,
+        "minimum": 0.6,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "stamina": {
+        "adjacentDecreasesInSourceOrder": 656,
+        "distinctNumericValueCount": 38,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 100.0,
+        "minimum": 63.0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      },
+      "touches": {
+        "adjacentDecreasesInSourceOrder": 0,
+        "distinctNumericValueCount": 289,
+        "identitiesWithChangingValues": 24,
+        "identitiesWithConstantValues": 0,
+        "identitiesWithNonNumericObservations": 0,
+        "maximum": 289,
+        "minimum": 0,
+        "nonNumericOrMissingCount": 0,
+        "numericCount": 48048,
+        "sourceCompositeIdentityCount": 24,
+        "unit": "unverified"
+      }
+    },
+    "interpretation": "Per-source-key variation and source-order changes are descriptive only; metric meaning, units, window, sampling, and validity are unknown.",
+    "manifestStatus": "unvalidated",
+    "manifestUnitsAndValidity": "unverified",
+    "mayBePresentedAsObservedPerformance": false,
+    "positionObservationCount": 48048,
+    "sourceCompositeIdentitiesByTeam": {
+      "Liverpool": 12,
+      "Manchester United": 12
+    },
+    "sourcePlayerLabelAudit": {
+      "distinctTeamJerseyNumberLabelCount": 24,
+      "distinctTeamPlayerNameLabelCount": 24,
+      "extraRowsInRepeatedTeamJerseySlotsWithinFrames": 0,
+      "interpretation": "Source-label consistency across observed rows only; names and jersey numbers are not canonical roster identities or a football-rules verdict.",
+      "repeatedTeamJerseySlotsWithinFrames": 0,
+      "teamJerseyNumberLabelsWithMultiplePlayerNames": 0,
+      "teamPlayerNameLabelsWithMultipleJerseyNumbers": 0
+    }
+  },
+  "source": {
+    "byteSize": 28601013,
+    "manifestVersion": "1.0.0",
+    "path": "data/simulations/manu-liv-match-dataset.json",
+    "sha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "status": "candidate_not_canonical"
+  },
+  "unresolvedQuestions": [
+    "Which physical unit, pitch dimensions, coordinate origin, axis direction, and attack orientation apply to every coordinate field? Does orientation change by period?",
+    "Are coordinates positions at event time, event start/end locations, or another sample? What are frame cadence and missing-value semantics?",
+    "What are the units, formulas, observation windows, and valid ranges for speed, distanceCovered, heatIndex, passAccuracy, touches, stamina, and heartRate? Which are cumulative, per-event, or simulated labels?",
+    "What does clockSeconds represent across periods, added time, repeated timestamps, half-time, and the 5761-second full-time marker?",
+    "What are the provider definitions and qualifiers for each of the 19 event types, including shot, foul, pressure, progressive/line-breaking actions, recovery, loss, cards, and substitutions?",
+    "How are score components ordered by team, and how are own goals, disallowed goals, corrections, or scorer changes represented?",
+    "Are the source name/jersey pairs stable player identities, and what roster/substitution/card rules produced the 12 source labels per team?",
+    "Which source event types, if any, have approved versioned mappings to the current domain enum?"
+  ]
+}

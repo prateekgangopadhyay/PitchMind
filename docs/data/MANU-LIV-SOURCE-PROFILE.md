@@ -1,6 +1,6 @@
 # Manchester United–Liverpool candidate source profile
 
-**Source:** `data/simulations/manu-liv-match-dataset.json`, pinned by [candidate manifest](../../data/simulations/manu-liv-candidate-manifest.json) v1.0.0. **Inspection:** 2026-10-12.
+**Source:** `data/simulations/manu-liv-match-dataset.json`, pinned by [candidate manifest](../../data/simulations/manu-liv-candidate-manifest.json) v1.0.0. **Inspection:** 2026-10-16.
 **Status:** structural inspection of a candidate synthetic JSON feed. The repository owner confirmed synthetic provenance and redistribution permission on 2026-10-10. Independent rights/privacy review is pending. This is not canonical football data, a football-approved simulation, or a verified Azure feed.
 
 ## Observed structure
@@ -20,6 +20,8 @@
 These measurements describe the pinned file only. The [observed data dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) lists field types, missing and null counts, numeric ranges, cardinalities, event/outcome counts, and source-order checks. The [candidate football-data quality audit](../engineering/evidence/EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-12.md) records aggregate metric, score, event-type, and substitution/card-frame observations while keeping their meaning explicitly unverified.
 
 `metadata.period` appears on three records and is a JSON string on each, while top-level `period` is an integer. At sequences 1 and 1038, the string text is `"1"` and `"2"` respectively, matching the decimal rendering of the top-level values; at sequence 1037 (`HalfTime`, raw `clockSeconds` 2700) metadata is `"1"` while top-level `period` is `2`. Quality-audit version 1.1.0 now reports all three exact JSON type/value differences and bounded examples. It does not choose which field is authoritative or interpret period semantics. Preserve both raw fields and source records until source definitions and football review resolve the discrepancy.
+
+Quality-audit version 1.2.0 also reports source player-label consistency from exact team/player-name and team/jersey-number pairs. The current aggregate observes 24 labels for each pairing, with no conflicting name/number associations or repeated team/jersey slots inside a frame. These values are descriptive source labels only; they do not establish player identities, roster legality, or football realism. See the [2026-10-16 label audit](../engineering/evidence/EP03-S01-PLAYER-LABEL-CONSISTENCY-2026-10-16.md) and [current machine report](../engineering/evidence/EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-16.json).
 
 ## Semantics and football review
 
