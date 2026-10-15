@@ -17,8 +17,8 @@ Re-provisioning also resets role attributes to `NOSUPERUSER`, `NOCREATEDB`, `NOC
 
 ## Independent static review
 
-The exact-head review found that .NET regex `$` could match before a final newline. The guard was changed to `\A...\z`, and the focused regression now covers the newline case. The reviewer reported no other actionable P0–P2 issues in the reviewed role-reset slice. Review was static only; the reviewer did not run tests or submit a GitHub review.
+The exact-head review found that .NET regex `$` could match before a final newline. The guard was changed to `\A...\z`, and the focused regression now covers the newline case. The corrected GitHub head `f4938db45c343dbf3f26189be561e4f2d4857ed2` was statically re-reviewed: the newline issue is closed and no actionable P0–P2 findings remain in scope. The reviewer did not run tests or submit a GitHub review.
 
 ## Limits
 
-This is LOCAL credential validation and PostgreSQL role-grant/reset evidence only. No Azure resources, cloud identities, deployment, or Product Owner acceptance were involved. EP04-S02 remains unaccepted pending independent re-review of the corrected exact head, broader provenance/backup-restore evidence, and PO acceptance.
+This is LOCAL credential validation and PostgreSQL role-grant/reset evidence only. No Azure resources, cloud identities, deployment, or Product Owner acceptance were involved. EP04-S02 remains unaccepted pending formal GitHub review, broader provenance/backup-restore evidence, and PO acceptance.
