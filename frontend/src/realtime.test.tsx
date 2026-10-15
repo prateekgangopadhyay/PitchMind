@@ -3,8 +3,8 @@ import { applyBackfillPage, buildTimelineBackfillPath, markRealtimeDisconnected,
 import type { CanonicalEventPage, CanonicalLedgerEvent, CanonicalMatchSnapshot, CanonicalTimelineBackfill } from './api';
 import type { RealtimeTimelineState } from './realtime';
 
-const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds): CanonicalMatchSnapshot => ({
-  matchId: 'match-a', canonicalRevision: revision, projectionRevision: 1, selectedTimeSeconds, asOfSeconds, throughSequence,
+const snapshot = (revision = 2, throughSequence = 2, asOfSeconds = 120, selectedTimeSeconds = asOfSeconds, projectionRevision = 1): CanonicalMatchSnapshot => ({
+  matchId: 'match-a', canonicalRevision: revision, projectionRevision, selectedTimeSeconds, asOfSeconds, throughSequence,
   algorithmVersion: 'rules-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64), provenance: 'synthetic',
   period: 1, phase: 'firsthalf', homeScore: 0, awayScore: 0, possessionTeamId: null,
   homeActivePlayers: 11, awayActivePlayers: 11, players: [],
@@ -103,7 +103,20 @@ describe('realtime reconnect state', () => {
     expect(buildTimelineBackfillPath(historical)).toContain('atSeconds=45');
     expect(buildTimelineBackfillPath(returnToLive(historical))).toContain('atSeconds=5400');
     expect(buildTimelineBackfillPath(historical)).toContain('afterSequence=-1');
-    expect(buildTimelineBackfillPath(historical)).toContain('revision=2');
+    expect(buildTimelineBackfillPath(historical)).toContain('revision=1');
+  });
+
+  it('sends the projection revision guard independently of the canonical revision', () => {
+    const diverged = {
+      ...state(),
+      canonicalRevision: 100,
+      snapshot: snapshot(100, 0, 60, 5400, 5),
+    };
+
+    const query = new URLSearchParams(buildTimelineBackfillPath(diverged).split('?')[1]);
+
+    expect(query.get('revision')).toBe('5');
+    expect(diverged.canonicalRevision).toBe(100);
   });
 
   it('replaces live events and snapshot with the selected historical context', () => {

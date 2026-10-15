@@ -162,7 +162,7 @@ export function buildTimelineBackfillPath(state: RealtimeTimelineState): string 
   const query = new URLSearchParams({
     afterSequence: String(selectedContextChanged ? -1 : state.throughSequence),
     atSeconds: String(atSeconds),
-    revision: String(state.canonicalRevision),
+    revision: String(state.snapshot.projectionRevision),
     limit: '100',
   });
   return `canonical/matches/${encodeURIComponent(state.matchId)}/timeline/backfill?${query.toString()}`;
