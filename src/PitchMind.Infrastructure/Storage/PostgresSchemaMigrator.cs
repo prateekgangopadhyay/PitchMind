@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -41,6 +41,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, Version8Sql, cancellationToken);
         if (currentVersion < 9)
             await ExecuteAsync(connection, transaction, Version9Sql, cancellationToken);
+        if (currentVersion < 10)
+            await ExecuteAsync(connection, transaction, QuarantineV10Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -356,5 +358,77 @@ public static class PostgresSchemaMigrator
             FOREIGN KEY (match_id, frame_id, evidence_canonical_revision)
             REFERENCES pitchmind.tracking_frames(match_id, frame_id, canonical_revision);
         INSERT INTO pitchmind.schema_versions(version) VALUES (9) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Upgrades the legacy quarantine table to immutable source-rejection evidence.</summary>
+    public const string QuarantineV10Sql = """
+        DO $migration$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pitchmind.schema_versions WHERE version = 10) THEN
+                IF to_regclass('pitchmind.quarantine') IS NULL THEN
+                    RAISE EXCEPTION 'schema v10 requires pitchmind.quarantine from schema v2';
+                END IF;
+
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'quarantine_id')
+                   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'record_id') THEN
+                    ALTER TABLE pitchmind.quarantine RENAME COLUMN quarantine_id TO record_id;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'source_pointer')
+                   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'source_ptr') THEN
+                    ALTER TABLE pitchmind.quarantine RENAME COLUMN source_pointer TO source_ptr;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'payload_sha256')
+                   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'payload_hash') THEN
+                    ALTER TABLE pitchmind.quarantine RENAME COLUMN payload_sha256 TO payload_hash;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'reason_code')
+                   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'pitchmind' AND table_name = 'quarantine' AND column_name = 'reason') THEN
+                    ALTER TABLE pitchmind.quarantine RENAME COLUMN reason_code TO reason;
+                END IF;
+
+                -- The previous schema required hashes and assigned retry state before source
+                -- bytes or a retry workflow necessarily existed. Preserve legacy values while
+                -- allowing new records to represent unavailable data honestly.
+                ALTER TABLE pitchmind.quarantine ALTER COLUMN payload_hash DROP NOT NULL;
+                ALTER TABLE pitchmind.quarantine ALTER COLUMN retry_status DROP NOT NULL;
+                ALTER TABLE pitchmind.quarantine ALTER COLUMN retry_status DROP DEFAULT;
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_payload_sha256_check;
+                -- Test/repair tooling may rewind only the version marker. Rebuilding our named
+                -- constraints keeps the migration safe to replay against the already-upgraded table.
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_payload_hash_format;
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_record_id_nonzero;
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_match_id_nonzero;
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_source_ptr_length;
+                ALTER TABLE pitchmind.quarantine DROP CONSTRAINT IF EXISTS quarantine_reason_code_format;
+                ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_payload_hash_format
+                    CHECK (payload_hash IS NULL OR payload_hash ~ '^[0-9A-Fa-f]{64}$') NOT VALID;
+                ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_record_id_nonzero
+                    CHECK (record_id <> '00000000-0000-0000-0000-000000000000');
+                ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_match_id_nonzero
+                    CHECK (match_id IS NULL OR match_id <> '00000000-0000-0000-0000-000000000000') NOT VALID;
+                ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_source_ptr_length
+                    CHECK (source_ptr IS NOT NULL AND length(source_ptr) BETWEEN 1 AND 2048) NOT VALID;
+                ALTER TABLE pitchmind.quarantine ADD CONSTRAINT quarantine_reason_code_format
+                    CHECK (reason ~ '^[A-Z][A-Z0-9_]{0,99}$') NOT VALID;
+
+                CREATE OR REPLACE FUNCTION pitchmind.reject_quarantine_mutation()
+                RETURNS trigger LANGUAGE plpgsql AS $function$
+                BEGIN
+                    RAISE EXCEPTION 'quarantine evidence records are immutable'
+                        USING ERRCODE = '55000';
+                END;
+                $function$;
+                DROP TRIGGER IF EXISTS quarantine_immutable ON pitchmind.quarantine;
+                CREATE TRIGGER quarantine_immutable
+                    BEFORE UPDATE OR DELETE ON pitchmind.quarantine
+                    FOR EACH ROW EXECUTE FUNCTION pitchmind.reject_quarantine_mutation();
+                DROP TRIGGER IF EXISTS quarantine_no_truncate ON pitchmind.quarantine;
+                CREATE TRIGGER quarantine_no_truncate
+                    BEFORE TRUNCATE ON pitchmind.quarantine
+                    FOR EACH STATEMENT EXECUTE FUNCTION pitchmind.reject_quarantine_mutation();
+                INSERT INTO pitchmind.schema_versions(version) VALUES (10);
+            END IF;
+        END
+        $migration$;
         """;
 }
