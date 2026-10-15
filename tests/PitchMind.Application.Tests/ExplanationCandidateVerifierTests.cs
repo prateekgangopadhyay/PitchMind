@@ -31,6 +31,24 @@ public sealed class ExplanationCandidateVerifierTests
         Assert.Contains("causation", explanation.Limitations[1], StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(MatchIntelligenceClaimCategory.ObservedFact, "an observed fact")]
+    [InlineData(MatchIntelligenceClaimCategory.DerivedFact, "a derived fact")]
+    [InlineData(MatchIntelligenceClaimCategory.EvidenceSupportedPattern, "an evidence-supported pattern")]
+    [InlineData(MatchIntelligenceClaimCategory.SupportedInterpretation, "a supported interpretation")]
+    [InlineData(MatchIntelligenceClaimCategory.Hypothesis, "a hypothesis")]
+    [InlineData(MatchIntelligenceClaimCategory.Simulated, "a simulated claim")]
+    public void Verify_ReformulatesEveryCanonicalClaimCategory(MatchIntelligenceClaimCategory category, string label)
+    {
+        var packet = Context() with { Claim = Context().Claim with { Category = category } };
+
+        var result = new ExplanationCandidateVerifier().Verify(Candidate(packet, "untrusted candidate"), packet,
+            ExplanationAudience.Fan);
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(label, result.Explanation!.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Verify_RejectsCitationNotPresentInSelectedContext()
     {
