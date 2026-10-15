@@ -1,8 +1,19 @@
 # Local infrastructure (macOS ARM64 supported)
 
-PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Compose uses the stable `pitchmind` project name and explicitly named `pitchmind_postgres_data` / `pitchmind_redis_data` volumes, so the configured defaults use the same project and data-volume identities as the existing local PitchMind services. **These are development-only containers**; Azure environments use managed Azure services.
+PostgreSQL 17 and Redis 7.4 run in Docker Desktop. The ports bind only to 127.0.0.1. Compose uses the stable `pitchmind` project name and explicitly named `pitchmind_postgres_data` / `pitchmind_redis_data` volumes by default, so normal local starts reuse the existing PitchMind data. Set `POSTGRES_DATA_VOLUME` and `REDIS_DATA_VOLUME` to choose distinct volumes. **These are development-only containers**; Azure environments use managed Azure services.
 
-The explicit volume names are shared across Compose project names. For an isolated runtime check, override both volume names as well as the project name; changing only the project name still uses the PitchMind data volumes.
+The explicit volume names are shared across Compose project names. For an isolated runtime check, export unique project and volume names before starting services, and keep them set for health, stop, and reset commands. Changing only the project name still uses the PitchMind data volumes.
+
+```bash
+export COMPOSE_PROJECT_NAME=pitchmind-isolated
+export POSTGRES_DATA_VOLUME=pitchmind_isolated_postgres_data
+export REDIS_DATA_VOLUME=pitchmind_isolated_redis_data
+./scripts/dev-up.sh
+./scripts/dev-health.sh
+./scripts/dev-down.sh
+```
+
+The PostgreSQL version guard resolves the effective Compose configuration before startup and probes the exact configured data volume. When changing volume names, preserve the same environment variables for `./scripts/dev-reset.sh --force` so reset targets only the isolated stack.
 
 From the repository root:
 

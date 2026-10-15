@@ -90,12 +90,26 @@ read_local_postgres_image() {
 }
 
 ensure_existing_postgres_volume_compatible() {
-  local configured_image="$1" postgres_volume existing_volumes volume_name volume_exists=0 configured_major data_version data_major
-  postgres_volume="$(awk '
-    /^  postgres-data:$/ { in_volume = 1; next }
-    /^  [^ ]/ { in_volume = 0 }
-    in_volume && /^    name:/ { print $2; exit }
-  ' docker/compose.yml)"
+  local configured_image="$1" compose_config postgres_volume existing_volumes volume_name volume_exists=0 configured_major data_version data_major
+  if ! compose_config="$(env -u POSTGRES_PASSWORD -u REDIS_PASSWORD \
+    docker compose --env-file docker/.env -f docker/compose.yml config --format json)"; then
+    echo "Cannot resolve the local Compose configuration; refusing startup to protect local data." >&2
+    return 1
+  fi
+  if ! postgres_volume="$(printf '%s' "$compose_config" | python3 -c '
+import json, re, sys
+try:
+    config = json.load(sys.stdin)
+    name = config["volumes"]["postgres-data"]["name"]
+except (KeyError, TypeError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}", name):
+    raise SystemExit(1)
+print(name)
+')"; then
+    echo "Cannot determine a valid resolved PostgreSQL data volume; refusing Compose startup to protect local data." >&2
+    return 1
+  fi
   [[ -n "$postgres_volume" ]] || {
     echo "Cannot determine the configured PostgreSQL data volume; refusing Compose startup to protect local data." >&2
     return 1

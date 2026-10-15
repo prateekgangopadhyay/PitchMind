@@ -42,9 +42,14 @@ class DevBootstrapTests(unittest.TestCase):
 set -eu
 printf '%s\\n' \"$*\" >> \"$PITCHMIND_FAKE_DOCKER_LOG\"
 if [ "${1:-}" = volume ] && [ "${2:-}" = ls ]; then
-  if [ "${PITCHMIND_FAKE_VOLUME_EXISTS:-1}" = 1 ]; then printf 'pitchmind_postgres_data\n'; fi
+  if [ "${PITCHMIND_FAKE_VOLUME_EXISTS:-1}" = 1 ]; then printf '%s\n' "${PITCHMIND_FAKE_POSTGRES_VOLUME:-pitchmind_postgres_data}"; fi
   exit 0
 fi
+case " $* " in
+  *" compose --env-file docker/.env -f docker/compose.yml config --format json "*)
+    printf '{"volumes":{"postgres-data":{"name":"%s"}}}\n' "${PITCHMIND_FAKE_POSTGRES_VOLUME:-pitchmind_postgres_data}"
+    exit 0 ;;
+esac
 if [ "${1:-}" = run ]; then
   if [ "${PITCHMIND_FAKE_PG_VERSION_STATUS:-0}" != 0 ]; then exit 1; fi
   printf '%s\n' "${PITCHMIND_FAKE_PG_VERSION:-17}"
@@ -166,6 +171,7 @@ printf '\\n'
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
                 "volume ls -q --filter name=pitchmind_postgres_data",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
             ],
@@ -235,6 +241,21 @@ printf '\\n'
         self.assertIn("POSTGRES_IMAGE requests 16", result.stderr)
         self.assertIn("data volume was not changed", result.stderr)
         self.assertNotIn("up -d --wait", self.docker_log.read_text())
+
+    def test_custom_resolved_postgres_volume_is_checked_before_compose_start(self) -> None:
+        self._write_valid_env("postgres:17-alpine")
+        self.env["PITCHMIND_FAKE_POSTGRES_VOLUME"] = "pitchmind_isolated_postgres_data"
+        self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
+        self.env["PITCHMIND_FAKE_PG_VERSION"] = "16"
+
+        result = self._run("dev-up.sh")
+
+        log = self.docker_log.read_text()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("volume pitchmind_isolated_postgres_data contains PostgreSQL major version 16", result.stderr)
+        self.assertIn("volume ls -q --filter name=pitchmind_isolated_postgres_data", log)
+        self.assertIn("source=pitchmind_isolated_postgres_data,target=/pgdata,readonly", log)
+        self.assertNotIn("up -d --wait", log)
 
     def test_orphaned_postgres_volume_major_mismatch_fails_before_compose_up(self) -> None:
         self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "1"
@@ -323,6 +344,7 @@ printf '\\n'
             [
                 "context inspect desktop-local --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
                 "volume ls -q --filter name=pitchmind_postgres_data",
                 "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
@@ -449,6 +471,7 @@ printf '\\n'
                 "context show",
                 "context inspect desktop-linux --format {{(index .Endpoints \"docker\").Host}}",
                 "info",
+                "compose --env-file docker/.env -f docker/compose.yml config --format json",
                 "volume ls -q --filter name=pitchmind_postgres_data",
                 "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
@@ -583,10 +606,31 @@ printf '\\n'
         self.assertIn("down --volumes --remove-orphans", self.docker_log.read_text())
         self.assertTrue((self.root / "docker" / ".env").is_file())
 
-    def _resolved_compose_config(self, compose_file: Path) -> dict[str, object]:
+    def _resolved_compose_config(
+        self,
+        compose_file: Path,
+        environment_overrides: dict[str, str] | None = None,
+    ) -> dict[str, object]:
         docker = shutil.which("docker")
         if docker is None:
             self.skipTest("Docker Compose CLI is unavailable for resolved-port validation")
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            not in {
+                "POSTGRES_USER",
+                "POSTGRES_DB",
+                "POSTGRES_PASSWORD",
+                "POSTGRES_PORT",
+                "REDIS_PASSWORD",
+                "REDIS_PORT",
+                "POSTGRES_DATA_VOLUME",
+                "REDIS_DATA_VOLUME",
+                "COMPOSE_PROJECT_NAME",
+            }
+        }
+        environment.update(environment_overrides or {})
         result = subprocess.run(
             [
                 docker,
@@ -600,19 +644,7 @@ printf '\\n'
                 "json",
             ],
             cwd=REPOSITORY,
-            env={
-                key: value
-                for key, value in os.environ.items()
-                if key
-                not in {
-                    "POSTGRES_USER",
-                    "POSTGRES_DB",
-                    "POSTGRES_PASSWORD",
-                    "POSTGRES_PORT",
-                    "REDIS_PASSWORD",
-                    "REDIS_PORT",
-                }
-            },
+            env=environment,
             capture_output=True,
             text=True,
             check=False,
@@ -672,6 +704,21 @@ printf '\\n'
                 "redis-data": "pitchmind_redis_data",
             },
         )
+
+    def test_compose_allows_isolated_project_and_volume_identities(self) -> None:
+        config = self._resolved_compose_config(
+            REPOSITORY / "docker" / "compose.yml",
+            {
+                "COMPOSE_PROJECT_NAME": "pitchmind-isolated",
+                "POSTGRES_DATA_VOLUME": "pitchmind_isolated_postgres_data",
+                "REDIS_DATA_VOLUME": "pitchmind_isolated_redis_data",
+            },
+        )
+
+        self.assertEqual(config.get("name"), "pitchmind-isolated")
+        volumes = config.get("volumes", {})
+        self.assertEqual(volumes["postgres-data"]["name"], "pitchmind_isolated_postgres_data")
+        self.assertEqual(volumes["redis-data"]["name"], "pitchmind_isolated_redis_data")
 
     def test_compose_services_bind_only_to_loopback(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
