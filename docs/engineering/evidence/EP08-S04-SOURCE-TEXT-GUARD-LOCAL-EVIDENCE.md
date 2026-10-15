@@ -12,7 +12,7 @@
 - Added claims containing an invented score, player, causal attribution, manager intent or future timestamp are rejected.
 - Omitting any source evidence citation is rejected.
 - Prompt-injection text inside evidence JSON remains data; echoing it into a claim is rejected.
-- More than one candidate claim is rejected by the lineage gate before source-text matching.
+- A well-formed two-claim candidate narrative passes lineage checking but is rejected by the source-text guard.
 - Even a successful source-text result has `CanBePublished == false`.
 
 ## Verification

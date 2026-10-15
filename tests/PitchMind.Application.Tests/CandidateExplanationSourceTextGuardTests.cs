@@ -64,11 +64,12 @@ public sealed class CandidateExplanationSourceTextGuardTests
         var candidate = Candidate(context, context.Claim.PermittedInterpretation, ["event-1"]);
         var result = guard.Check(candidate with
         {
+            Text = $"{candidate.Text} {candidate.Text}",
             Claims = Array.AsReadOnly(new[] { candidate.Claims[0], candidate.Claims[0] })
         }, context);
 
         Assert.False(result.IsSupportedBySelectedInsight);
-        Assert.Equal(CandidateExplanationSourceTextFailure.LineageRejected, result.Failure);
+        Assert.Equal(CandidateExplanationSourceTextFailure.UnsupportedCandidateText, result.Failure);
         Assert.False(result.CanBePublished);
     }
 
