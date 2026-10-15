@@ -14,7 +14,7 @@
 
 ## Local commands executed
 
-Base revision: `0ac1891131a273d3d33759a21c148e94382cfedd`; feature branch: `codex/ep08-s02-foundry-main-restack`; SDK: .NET 10.0.401. All results below were executed in the isolated local clone against the implementation tree before this evidence-only documentation edit.
+Base revision: `4216d9c1af8a87530b6853e300e04c79b01ff667`; implementation code head: `d278f2be4043b6253023c7fecd3aa3b82968f187`; feature branch: `codex/ep08-s02-foundry-main-restack`; SDK: .NET 10.0.401. All results below were executed in the isolated local clone after rebasing to this exact main head. Later edits in the evidence/register changed documentation only.
 
 | Command | Result |
 |---|---|
