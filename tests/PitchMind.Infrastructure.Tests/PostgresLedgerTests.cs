@@ -44,6 +44,76 @@ public sealed class PostgresLedgerTests
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
         await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
 
+        await using (var overprivilege = migrationSource.CreateCommand("""
+            ALTER ROLE pitchmind_api WITH SUPERUSER CREATEDB CREATEROLE INHERIT REPLICATION BYPASSRLS;
+            CREATE ROLE pitchmind_api_privileged;
+            GRANT pitchmind_api_privileged TO pitchmind_api;
+            CREATE SEQUENCE pitchmind.api_privilege_probe;
+            CREATE TABLE pitchmind.api_owned_probe (id integer);
+            ALTER TABLE pitchmind.api_owned_probe OWNER TO pitchmind_api;
+            CREATE SCHEMA api_schema_probe;
+            CREATE TABLE api_schema_probe.probe (id integer);
+            GRANT ALL PRIVILEGES ON SCHEMA pitchmind TO pitchmind_api;
+            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA pitchmind TO pitchmind_api;
+            GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA pitchmind TO pitchmind_api;
+            GRANT ALL PRIVILEGES ON SCHEMA api_schema_probe TO pitchmind_api;
+            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA api_schema_probe TO pitchmind_api;
+            """))
+            await overprivilege.ExecuteNonQueryAsync();
+
+        await using (var grantDatabasePrivilegesSql = migrationSource.CreateCommand(
+                         "SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO pitchmind_api', current_database())"))
+        {
+            var sql = (string)(await grantDatabasePrivilegesSql.ExecuteScalarAsync())!;
+            await using var grantDatabasePrivileges = migrationSource.CreateCommand(sql);
+            await grantDatabasePrivileges.ExecuteNonQueryAsync();
+        }
+
+        await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
+
+        await using (var roleFlags = migrationSource.CreateCommand("""
+            SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolreplication, rolbypassrls
+            FROM pg_roles WHERE rolname = 'pitchmind_api'
+            """))
+        await using (var reader = await roleFlags.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            Assert.False(reader.GetBoolean(0));
+            Assert.False(reader.GetBoolean(1));
+            Assert.False(reader.GetBoolean(2));
+            Assert.False(reader.GetBoolean(3));
+            Assert.False(reader.GetBoolean(4));
+            Assert.False(reader.GetBoolean(5));
+        }
+
+        await using (var membershipCount = migrationSource.CreateCommand(
+                         "SELECT COUNT(*) FROM pg_auth_members WHERE member = 'pitchmind_api'::regrole"))
+            Assert.Equal(0L, (long)(await membershipCount.ExecuteScalarAsync())!);
+
+        await using (var privilegeCheck = migrationSource.CreateCommand("""
+            SELECT has_database_privilege('pitchmind_api', current_database(), 'CREATE'),
+                   has_schema_privilege('pitchmind_api', 'pitchmind', 'CREATE'),
+                   has_table_privilege('pitchmind_api', 'pitchmind.match_events', 'UPDATE'),
+                   has_sequence_privilege('pitchmind_api', 'pitchmind.api_privilege_probe', 'USAGE'),
+                   has_table_privilege('pitchmind_api', 'pitchmind.api_owned_probe', 'UPDATE'),
+                   has_schema_privilege('pitchmind_api', 'api_schema_probe', 'CREATE'),
+                   has_table_privilege('pitchmind_api', 'api_schema_probe.probe', 'SELECT'),
+                   pg_get_userbyid((SELECT relowner FROM pg_class WHERE oid = 'pitchmind.api_owned_probe'::regclass))
+                       = 'pitchmind_api'
+            """))
+        await using (var reader = await privilegeCheck.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            Assert.False(reader.GetBoolean(0));
+            Assert.False(reader.GetBoolean(1));
+            Assert.False(reader.GetBoolean(2));
+            Assert.False(reader.GetBoolean(3));
+            Assert.False(reader.GetBoolean(4));
+            Assert.False(reader.GetBoolean(5));
+            Assert.False(reader.GetBoolean(6));
+            Assert.False(reader.GetBoolean(7));
+        }
+
         var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
         { Username = "pitchmind_api", Password = password };
         try
@@ -72,7 +142,14 @@ public sealed class PostgresLedgerTests
         }
         finally
         {
-            await using var cleanup = migrationSource.CreateCommand("DROP OWNED BY pitchmind_api; DROP ROLE IF EXISTS pitchmind_api");
+            await using var cleanup = migrationSource.CreateCommand("""
+                DROP OWNED BY pitchmind_api;
+                DROP ROLE IF EXISTS pitchmind_api;
+                DROP ROLE IF EXISTS pitchmind_api_privileged;
+                DROP SEQUENCE IF EXISTS pitchmind.api_privilege_probe;
+                DROP TABLE IF EXISTS pitchmind.api_owned_probe;
+                DROP SCHEMA IF EXISTS api_schema_probe CASCADE;
+                """);
             await cleanup.ExecuteNonQueryAsync();
         }
     }
