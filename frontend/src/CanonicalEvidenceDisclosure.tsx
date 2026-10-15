@@ -11,28 +11,28 @@ type EvidenceState =
 type ExpectedContext = {
   matchId: string;
   selectedSeconds: number;
-  revision: number;
+  projectionRevision: number;
   throughSequence: number;
   insight: CanonicalInsight;
 };
 
-export function CanonicalEvidenceDisclosure({ matchId, selectedSeconds, revision, throughSequence, insight }: ExpectedContext) {
+export function CanonicalEvidenceDisclosure({ matchId, selectedSeconds, projectionRevision, throughSequence, insight }: ExpectedContext) {
   const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<EvidenceState | null>(null);
-  const key = `${matchId}:${selectedSeconds}:${revision}:${throughSequence}:${insight.insightId}`;
+  const key = `${matchId}:${selectedSeconds}:${projectionRevision}:${throughSequence}:${insight.insightId}`;
   const current = state?.key === key ? state : null;
 
   useEffect(() => {
     if (!expanded) return;
     const controller = new AbortController();
     setState({ key, status: 'loading' });
-    const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
+    const query = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(projectionRevision) });
     request<CanonicalEvidence>(
       `canonical/matches/${encodeURIComponent(matchId)}/evidence/${encodeURIComponent(insight.insightId)}?${query}`,
       controller.signal)
       .then(evidence => {
         if (controller.signal.aborted) return;
-        if (!canonicalEvidenceMatches(evidence, { matchId, selectedSeconds, revision, throughSequence, insight })) {
+        if (!canonicalEvidenceMatches(evidence, { matchId, selectedSeconds, projectionRevision, throughSequence, insight })) {
           setState({ key, status: 'unavailable', message: 'No complete evidence matching this match, time and revision is available.' });
           return;
         }
@@ -45,7 +45,7 @@ export function CanonicalEvidenceDisclosure({ matchId, selectedSeconds, revision
           : { key, status: 'error', message: 'Evidence could not be loaded. The match view remains available.' });
       });
     return () => controller.abort();
-  }, [expanded, key, matchId, selectedSeconds, revision, throughSequence, insight]);
+  }, [expanded, key, matchId, selectedSeconds, projectionRevision, throughSequence, insight]);
 
   return <details className="canonical-evidence-disclosure" onToggle={event => setExpanded(event.currentTarget.open)}>
     <summary>Why? Inspect evidence for {clock(insight.selectedTimeSeconds)}</summary>
@@ -88,7 +88,7 @@ function EvidenceDetails({ evidence }: { evidence: CanonicalEvidence }) {
 function EvidenceRow({ item, insight }: { item: CanonicalEvidencePayload; insight: CanonicalInsight }) {
   const target = item.kind === 'event' ? `canonical-event-${item.sequence}` : `canonical-frame-${item.sequence}`;
   const replayHref = contextHref(`/replay/${encodeURIComponent(insight.matchId)}`, insight.matchId,
-    item.clockSeconds, insight.canonicalRevision);
+    item.clockSeconds, insight.projectionRevision);
   return <li>
     <a href={`${replayHref}#${target}`} aria-label={`Open ${item.kind} ${item.id} at ${clock(item.clockSeconds)}, sequence ${item.sequence}`}>
       {item.kind} {item.id}
@@ -100,7 +100,8 @@ function EvidenceRow({ item, insight }: { item: CanonicalEvidencePayload; insigh
 function canonicalEvidenceMatches(evidence: CanonicalEvidence, expected: ExpectedContext): boolean {
   const returned = evidence?.insight;
   if (!returned || returned.insightId !== expected.insight.insightId || returned.matchId !== expected.matchId ||
-      returned.canonicalRevision !== expected.revision || returned.selectedTimeSeconds !== expected.selectedSeconds ||
+      returned.canonicalRevision !== expected.insight.canonicalRevision ||
+      returned.projectionRevision !== expected.projectionRevision || returned.selectedTimeSeconds !== expected.selectedSeconds ||
       returned.throughSequence !== expected.insight.throughSequence || returned.throughSequence > expected.throughSequence ||
       returned.sourceVersion !== expected.insight.sourceVersion || returned.provenance !== expected.insight.provenance ||
       returned.sourceSha256 !== expected.insight.sourceSha256 || returned.detectorVersion !== expected.insight.detectorVersion ||

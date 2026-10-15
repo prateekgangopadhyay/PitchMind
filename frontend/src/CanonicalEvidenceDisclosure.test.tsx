@@ -6,7 +6,7 @@ import type { CanonicalEvidence, CanonicalInsight } from './api';
 
 const matchId = '11111111-1111-1111-1111-111111111111';
 const insight: CanonicalInsight = {
-  insightId: 'insight-press-1', matchId, canonicalRevision: 4, selectedTimeSeconds: 3308,
+  insightId: 'insight-press-1', matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3308,
   throughSequence: 19, sourceVersion: 'synthetic-v1', provenance: 'synthetic-approved',
   sourceSha256: 'a'.repeat(64), detectorVersion: 'press-detector-v2', truthClass: 'pattern',
   summary: 'A recorded pressing sequence is available for inspection.',
@@ -17,7 +17,7 @@ const insight: CanonicalInsight = {
 function evidenceAt(selectedTimeSeconds: number, currentInsight: CanonicalInsight = insight): CanonicalEvidence {
   return {
     insight: { ...currentInsight, selectedTimeSeconds },
-    items: [{ kind: 'event', id: 'event-source-1', relation: 'supports', sequence: 19,
+    items: [{ kind: 'event', id: 'event-source-1', relation: 'supports', sourceCanonicalRevision: 4, sequence: 19,
       clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } }]
   };
 }
@@ -25,7 +25,7 @@ function evidenceAt(selectedTimeSeconds: number, currentInsight: CanonicalInsigh
 function renderEvidence(container: HTMLElement, selectedSeconds = 3308, selectedInsight = insight) {
   const root = createRoot(container);
   const renderRaw = (time: number) => root.render(createElement(CanonicalEvidenceDisclosure, {
-    matchId, selectedSeconds: time, revision: 4, throughSequence: 20,
+    matchId, selectedSeconds: time, projectionRevision: selectedInsight.projectionRevision, throughSequence: 20,
     insight: { ...selectedInsight, selectedTimeSeconds: time }
   }));
   act(() => renderRaw(selectedSeconds));
@@ -112,9 +112,9 @@ describe('Canonical evidence disclosure', () => {
     const sourcedEvidence: CanonicalEvidence = {
       insight: sourcedInsight,
       items: [
-        { kind: 'event', id: 'event-source-1', relation: 'supports', sequence: 19,
+        { kind: 'event', id: 'event-source-1', relation: 'supports', sourceCanonicalRevision: 4, sequence: 19,
           clockSeconds: 3308, period: 2, payload: { eventId: 'event-source-1' } },
-        { kind: 'frame', id: 'frame-source-2', relation: 'supports', sequence: 18,
+        { kind: 'frame', id: 'frame-source-2', relation: 'supports', sourceCanonicalRevision: 4, sequence: 18,
           clockSeconds: 3308, period: 2, payload: { frameId: 'frame-source-2' } }
       ]
     };
@@ -136,11 +136,38 @@ describe('Canonical evidence disclosure', () => {
     }
   });
 
-  it.each(['match', 'revision', 'time', 'sequence', 'source lineage'])('rejects mismatched %s context without showing evidence', async mismatch => {
+  it('uses projection revision for evidence requests while checking canonical revision independently', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const divergentInsight = { ...insight, canonicalRevision: 100, projectionRevision: 5 };
+    let requestedAddress = '';
+    const fetchMock = vi.fn(async (url: string) => {
+      requestedAddress = url;
+      return response(evidenceAt(3308, divergentInsight));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const { root } = renderEvidence(container, 3308, divergentInsight);
+    try {
+      await openDisclosure(container);
+      await settle();
+      const requestedUrl = new URL(requestedAddress, 'http://localhost');
+      expect(requestedUrl.searchParams.get('revision')).toBe('5');
+      expect(container.textContent).toContain('event event-source-1');
+      const citation = container.querySelector<HTMLAnchorElement>('.canonical-evidence-content a');
+      expect(citation?.getAttribute('href')).toContain('revision=5#canonical-event-19');
+    } finally {
+      await act(async () => root.unmount());
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(['match', 'canonical revision', 'projection revision', 'time', 'sequence', 'source lineage'])('rejects mismatched %s context without showing evidence', async mismatch => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const mismatchedInsight = { ...insight };
     if (mismatch === 'match') mismatchedInsight.matchId = '22222222-2222-2222-2222-222222222222';
-    if (mismatch === 'revision') mismatchedInsight.canonicalRevision = 3;
+    if (mismatch === 'canonical revision') mismatchedInsight.canonicalRevision = 3;
+    if (mismatch === 'projection revision') mismatchedInsight.projectionRevision = 3;
     if (mismatch === 'time') mismatchedInsight.selectedTimeSeconds = 3307;
     if (mismatch === 'sequence') mismatchedInsight.throughSequence = 21;
     if (mismatch === 'source lineage') mismatchedInsight.sourceSha256 = 'b'.repeat(64);
@@ -171,7 +198,7 @@ describe('Canonical evidence disclosure', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     const render = (time: number) => root.render(createElement(CanonicalEvidenceDisclosure, {
-      matchId, selectedSeconds: time, revision: 4, throughSequence: 20,
+      matchId, selectedSeconds: time, projectionRevision: insight.projectionRevision, throughSequence: 20,
       insight: { ...insight, selectedTimeSeconds: time }
     }));
     try {
@@ -203,7 +230,7 @@ describe('Canonical evidence disclosure', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     const render = (watermark: number) => root.render(createElement(CanonicalEvidenceDisclosure, {
-      matchId, selectedSeconds: 3308, revision: 4, throughSequence: watermark, insight
+      matchId, selectedSeconds: 3308, projectionRevision: insight.projectionRevision, throughSequence: watermark, insight
     }));
     try {
       await act(async () => render(20));
