@@ -116,6 +116,8 @@ public static partial class LocalApiRoleProvisioner
             await revokeSchemaPrivileges.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await RevokeDefaultPrivilegesAsync(connection, cancellationToken);
+
         await using (var grantConnectSql = new NpgsqlCommand(
                          "SELECT format('GRANT CONNECT ON DATABASE %I TO pitchmind_api', current_database())",
                          connection))
@@ -137,6 +139,60 @@ public static partial class LocalApiRoleProvisioner
             """, connection);
         await grants.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    private static async Task RevokeDefaultPrivilegesAsync(NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        List<(string Owner, string? Schema, char ObjectType)> defaults = [];
+        await using (var query = new NpgsqlCommand("""
+            SELECT owner.rolname, schema.nspname, defaults.defaclobjtype
+            FROM pg_default_acl defaults
+            JOIN pg_roles owner ON owner.oid = defaults.defaclrole
+            LEFT JOIN pg_namespace schema ON schema.oid = defaults.defaclnamespace
+            WHERE EXISTS (
+                SELECT 1
+                FROM aclexplode(defaults.defaclacl) acl
+                WHERE acl.grantee = 'pitchmind_api'::regrole
+            )
+            ORDER BY owner.rolname, schema.nspname NULLS FIRST, defaults.defaclobjtype
+            """, connection))
+        await using (var reader = await query.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                defaults.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1),
+                    reader.GetChar(2)));
+        }
+
+        foreach (var (owner, schema, objectType) in defaults)
+        {
+            var objectClass = objectType switch
+            {
+                'r' => "TABLES",
+                'S' => "SEQUENCES",
+                'f' => "FUNCTIONS",
+                'T' => "TYPES",
+                'n' => "SCHEMAS",
+                // PostgreSQL added large-object default privileges in version 17.
+                'L' when connection.PostgreSqlVersion.Major >= 17 => "LARGE OBJECTS",
+                'L' => throw new InvalidOperationException(
+                    "The server reports unsupported large-object default privileges."),
+                _ => throw new InvalidOperationException(
+                    $"Unsupported PostgreSQL default privilege object type '{objectType}'.")
+            };
+
+            var scope = schema is null ? string.Empty : " IN SCHEMA " + QuoteIdentifier(schema);
+            await using var revokeSql = new NpgsqlCommand(
+                "SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I" + scope +
+                " REVOKE ALL PRIVILEGES ON " + objectClass + " FROM pitchmind_api', $1)", connection);
+            revokeSql.Parameters.AddWithValue(owner);
+            var sql = (string)(await revokeSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException("Could not prepare LOCAL API default-ACL reset."));
+            await using var revoke = new NpgsqlCommand(sql, connection);
+            await revoke.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private static string QuoteIdentifier(string identifier) => "\"" + identifier.Replace("\"", "\"\"") + "\"";
 
     [GeneratedRegex(@"\A[0-9a-f]{48}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ApiPasswordPattern();
