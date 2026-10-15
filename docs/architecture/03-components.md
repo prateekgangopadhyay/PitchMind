@@ -6,9 +6,13 @@
 
 ## Realized application components (source verified, not new test evidence)
 
+The API instruments completed HTTP requests with low-cardinality .NET counters and duration histograms using route templates and a fixed HTTP-method set; unrecognized methods map to `_OTHER`, and IDs and query strings are excluded from metric dimensions. When an ASP.NET activity is active, it receives the generated correlation ID, route template and relevant route IDs. This app does not install an ActivityListener, metrics exporter, or Azure Monitor collector, so telemetry is not yet surfaced to operators. `/health/live` and the compatibility `/health` endpoint only report process liveness. `/health/ready` reports the local synthetic profile when no PostgreSQL is configured, or performs a bounded PostgreSQL connection/query probe when it is configured. Probe failures return only 503 with an empty body.
+
 ```mermaid
 flowchart TB
   API["PitchMind.Api Program.cs / HTTP routes"] --> Match["SyntheticMatchService"]
+  API --> Telemetry["Request metrics + trace correlation"]
+  API --> Readiness["Liveness / bounded readiness check"]
   Match --> Aggregate["MatchAggregate deterministic ordered-event reducer"]
   Aggregate --> State["score, phase, possession, active roster, cautions"]
   Match --> Fixture["SyntheticFixtureGenerator, embedded synthetic-v2 JSON"]

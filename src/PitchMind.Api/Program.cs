@@ -16,7 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 // hub query string. Hosting request-start diagnostics include that full URL.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting", LogLevel.Warning);
 builder.Services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks().AddCheck<ReadinessHealthCheck>("readiness", tags: ["ready"]);
 var issuer = builder.Configuration["Authentication:Authority"];
 var audience = builder.Configuration["Authentication:Audience"];
 var roleClaimType = builder.Configuration["Authentication:RoleClaimType"];
@@ -224,13 +224,29 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.UseRouting();
+app.Use((context, next) => ApiRequestTelemetry.RecordRequestAsync(context, next));
 app.UseCors("browser");
 app.UseAuthentication();
 // Endpoint rate-limit partitions use the validated subject when present.
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api")));
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResultStatusCodes = { [Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy] = StatusCodes.Status200OK },
+    ResponseWriter = static (_, _) => Task.CompletedTask
+});
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = static (_, _) => Task.CompletedTask
+});
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = static (_, _) => Task.CompletedTask
+});
 var canonical = app.MapGroup("/api/v1/canonical").RequireAuthorization("CanonicalRead").RequireRateLimiting("canonical-read")
     .AddEndpointFilter<CanonicalMatchAuthorizationFilter>();
 canonical.MapCanonicalMatchEndpoints();
