@@ -119,6 +119,30 @@ public sealed class ManuLivCandidateFeedReaderTests
         Assert.Equal("source_too_large", sizeError.Code);
     }
 
+    [Fact]
+    public async Task ReadAsync_rejects_sources_over_the_record_count_limit()
+    {
+        var records = new StringBuilder(ManuLivCandidateFeedReader.MaximumSourceRecords * 64);
+        records.Append('[');
+        for (var index = 0; index <= ManuLivCandidateFeedReader.MaximumSourceRecords; index++)
+        {
+            if (index > 0) records.Append(',');
+            records.Append("{\"eventId\":\"event-")
+                .Append(index)
+                .Append("\",\"matchId\":\"match\",\"sequence\":")
+                .Append(index)
+                .Append(",\"clockSeconds\":0,\"period\":1,\"eventType\":\"event\"}");
+        }
+        records.Append(']');
+        await using var input = new MemoryStream(Encoding.UTF8.GetBytes(records.ToString()));
+
+        var error = await Assert.ThrowsAsync<CandidateFeedParseException>(
+            () => ManuLivCandidateFeedReader.ReadAsync(input));
+
+        Assert.Equal("too_many_source_records", error.Code);
+        Assert.Equal(ManuLivCandidateFeedReader.MaximumSourceRecords, error.SourceRecordIndex);
+    }
+
     [Theory]
     [InlineData("\"metadata\":{\"source\":{\"label\":\"first\",\"label\":\"second\"}}")]
     [InlineData("\"playerPositions\":[{\"x\":10,\"x\":20}]")]
