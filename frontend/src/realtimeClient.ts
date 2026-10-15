@@ -158,8 +158,12 @@ export class MatchRealtimeClient {
   }
 
   /** Called when the host explicitly changes selected time or returns to LIVE. */
-  refresh(): Promise<void> {
-    return this.refreshFromCanonicalStore();
+  async refresh(): Promise<void> {
+    const generation = this.lifecycleGeneration;
+    await this.refreshFromCanonicalStore(generation);
+    if (!this.isActive(generation) || !this.transportConnected || !this.subscriptionReady) return;
+    const state = this.options.getState();
+    if (!state.needsBackfill && !state.reconnecting) this.setStatus('connected');
   }
 
   private async requireAccessToken(): Promise<string> {

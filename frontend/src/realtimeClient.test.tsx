@@ -159,6 +159,40 @@ describe('MatchRealtimeClient', () => {
     await client.stop();
   });
 
+  it('restores connected status when a later selected-time refresh succeeds', async () => {
+    let state = initialState();
+    const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
+    const connection = new FakeConnection();
+    const status = vi.fn();
+    let backfillCalls = 0;
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      if (String(input).endsWith('/realtime/negotiate'))
+        return Response.json({ transport: 'aspnetcore-signalr', url: '/hubs/matches', accessToken: null,
+          cursor: cursor(), revisionChanged: false });
+      backfillCalls++;
+      if (backfillCalls === 3) return Response.json({}, { status: 503 });
+      const at = Number(new URL(String(input), 'https://app.example').searchParams.get('atSeconds'));
+      return Response.json(backfillCalls > 3
+        ? backfillPage(at, 0, [event(0)], false, null)
+        : backfill(at));
+    });
+    const client = new MatchRealtimeClient({ matchId, authProvider: { getAccessToken: async () => 'token' },
+      getState: () => state, onStateChange: setState, onStatusChange: status, fetcher,
+      connectionFactory: () => connection });
+
+    await client.start();
+    state = selectHistoricalTime(state, 45);
+    await expect(client.refresh()).rejects.toThrow('Canonical backfill failed with 503.');
+    status('disconnected');
+    state = selectHistoricalTime(state, 90);
+    await client.refresh();
+
+    expect(state.snapshot.selectedTimeSeconds).toBe(90);
+    expect(state.needsBackfill).toBe(false);
+    expect(status).toHaveBeenLastCalledWith('connected');
+    await client.stop();
+  });
+
   it('keeps disconnected status when an in-flight backfill succeeds after the transport closes', async () => {
     let state = initialState();
     const setState = vi.fn((next: RealtimeTimelineState) => { state = next; });
