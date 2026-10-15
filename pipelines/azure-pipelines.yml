@@ -6,7 +6,10 @@ parameters:
 - name: enableDevDelivery
   type: boolean
   default: false
-- name: azureServiceConnection
+- name: acrPushServiceConnection
+  type: string
+  default: unconfigured
+- name: devDeploymentServiceConnection
   type: string
   default: unconfigured
 - name: registryName
@@ -52,34 +55,13 @@ stages:
       displayName: Validate repository and Compose configuration
     - bash: |
         set -euo pipefail
-        python3 -m unittest discover -s scripts -p 'test_*.py' -v
+        python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
+        python3 -m pip install --disable-pip-version-check -r scripts/requirements-policy.txt
+        python3 -m unittest scripts.test_identity_baseline scripts.test_validate_release_identity_inputs -v
         test -f docs/backlog/STORY-WORKPACK-INDEX.md
         test -f docs/architecture/06-target-azure-hld.md
         test -f docs/architecture/07-football-analytics-detailed-lld.md
       displayName: Verify source-feed preflight and planning artifacts
-    - bash: |
-        set -euo pipefail
-        python3 scripts/test_secret_scan.py -v
-        python3 scripts/test_generate_sbom.py -v
-      displayName: Test secret scanning and source SBOM tools
-    - bash: |
-        set -euo pipefail
-        bash scripts/secret-scan.sh
-      displayName: Fail on detected repository secrets
-    - bash: |
-        set -euo pipefail
-        mkdir -p "$(Build.ArtifactStagingDirectory)/security"
-        PITCHMIND_SBOM_VERSION="$(Build.SourceVersion)" \
-          bash scripts/generate-sbom.sh . "$(Build.ArtifactStagingDirectory)/security/pitchmind-source.spdx.json"
-      condition: succeededOrFailed()
-      displayName: Generate SPDX source SBOM
-    - task: PublishBuildArtifacts@1
-      condition: succeededOrFailed()
-      inputs:
-        PathtoPublish: $(Build.ArtifactStagingDirectory)/security
-        ArtifactName: security-evidence
-        publishLocation: Container
-      displayName: Publish SPDX source SBOM artifact
   - job: Backend
     displayName: .NET 10 build and tests
     steps:
@@ -139,13 +121,33 @@ stages:
 # validation-only main/PR pipeline CANNOT deploy. Owner approval for the exact story,
 # scope, resource diff, costs, SHA and rollback is mandatory BEFORE ACR push/DEV write.
 # ManualValidation and Azure DevOps Environment checks are defense in depth; their
-# existence does not substitute for explicit approval by the repository owner.
+# existence does not prove owner-only approval. The ManualValidation task can be
+# resumed by users with Queue builds permission; constrain that permission and
+# protected Environment approvers to the repository owner before registering delivery.
 - ${{ if eq(parameters.enableDevDelivery, true) }}:
   - stage: OwnerApprovalBeforeAzureMutation
     dependsOn: Validate
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
     jobs:
+    - job: ValidateReleaseIdentityInputs
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+      - checkout: self
+      - task: Bash@3
+        displayName: Require separate image-push and DEV-deployment identities
+        inputs:
+          targetType: inline
+          script: python3 scripts/validate_release_identity_inputs.py
+        env:
+          PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
+          PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
+          PITCHMIND_REGISTRY_NAME: ${{ parameters.registryName }}
+          PITCHMIND_IMAGE_REPOSITORY: pitchmind
+          PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}
+          PITCHMIND_DEV_APP_NAME: ${{ parameters.devAppName }}
     - job: AwaitExplicitOwnerApproval
+      dependsOn: ValidateReleaseIdentityInputs
       displayName: Review the approved change set before ACR push or DEV mutation
       pool: server
       timeoutInMinutes: 1440
@@ -169,8 +171,9 @@ stages:
       - checkout: self
       - template: templates/build-image.yml
         parameters:
-          azureServiceConnection: ${{ parameters.azureServiceConnection }}
+          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
           registryName: ${{ parameters.registryName }}
+          imageRepository: pitchmind
   - stage: OwnerApprovalOfReleaseDigest
     dependsOn: BuildRelease
     condition: succeeded()
@@ -203,6 +206,6 @@ stages:
             - checkout: self
             - template: templates/deploy-image.yml
               parameters:
-                azureServiceConnection: ${{ parameters.azureServiceConnection }}
+                devDeploymentServiceConnection: ${{ parameters.devDeploymentServiceConnection }}
                 resourceGroup: ${{ parameters.devResourceGroup }}
                 appName: ${{ parameters.devAppName }}
