@@ -108,6 +108,10 @@ PR #96's dispatcher slice was rebased locally onto main commit `95dabde2169601c8
 
 Independent static review of PR #96 found two P2 issues: the documented local API command omitted `Realtime:Provider` and the database connection; and runtime profile matching was case-sensitive although the profile guard is case-insensitive. Commit `41aa12535f239a527901ec7d01395f9e3c607bdb` updates the command to load the private `docker/.env`, supply the local provider and loopback connection, compares profiles case-insensitively, and tests uppercase/mixed-case profile and provider values. Corrected code tests passed 110/110; Council validation, OpenAPI YAML parsing, and `git diff --check` passed. Independent static review confirmed both issues fixed and found no new P0–P2; its check was static and it did not run tests. Commit `4c417dcbcdb4f608fa15afa522dde0e6f311ec9d` updates only this execution-register evidence. Hosted checks remain pending. This partial slice does not accept EP06-S02; no Azure operation occurred.
 
+## EP01-S01 target-time embedded-resource guard — 2026-10-15
+
+Independent review found that the prior fixture-resource architecture guard sampled target-created items before later resource preparation targets could add resources. The implementation now captures resources after `PrepareResources`, and a negative MSBuild fixture injects `tests/fictional-match.json` before `CreateManifestResourceNames`. Focused regression passed 1/1 and the full architecture suite passed 25/25. Full Release solution tests passed 489, failed 0, skipped 28 opt-in PostgreSQL tests because no test connection was configured; Council validator and `git diff --check` passed. Independent static re-review found no actionable issue; it did not run tests. NuGet audit, hosted CI, live PostgreSQL integration, human technical review and Product Owner acceptance remain pending. EP01-S01 remains unaccepted. No Azure operation or deployment occurred. See [target-resource guard evidence](../engineering/evidence/EP01-S01-TARGET-RESOURCE-GUARD-2026-10-15.md).
+
 
 ## EP08-S03 bounded explanation orchestration — 2026-10-15
 
