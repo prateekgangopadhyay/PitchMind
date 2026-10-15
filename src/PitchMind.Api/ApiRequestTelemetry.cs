@@ -40,31 +40,30 @@ public static class ApiRequestTelemetry
                     activity.SetTag("pitchmind.insight.id", insightId?.ToString());
             }
 
-            // SignalR hub requests may remain open for the life of a connection. Exclude the
-            // hub route (including negotiate/long-poll requests) from HTTP request durations.
-            // Connection lag/reconnect instruments belong to the realtime telemetry workstream.
-            if (!context.Request.Path.StartsWithSegments("/hubs/matches", StringComparison.OrdinalIgnoreCase))
+            // SignalR hub requests may remain open for the life of a connection, so count their
+            // completed requests/errors but exclude their duration. Negotiation is a short HTTP
+            // request and keeps the regular duration measurement.
+            var isHubRequest = context.Request.Path.StartsWithSegments("/hubs/matches", StringComparison.OrdinalIgnoreCase);
+            var isHubNegotiation = string.Equals(context.Request.Path.Value, "/hubs/matches/negotiate",
+                StringComparison.OrdinalIgnoreCase);
+            context.Response.OnCompleted(() =>
             {
-                // OnCompleted observes the final status after the outer exception boundary has
-                // converted dependency failures into sanitized ProblemDetails responses.
-                context.Response.OnCompleted(() =>
+                var tags = new TagList
                 {
-                    var tags = new TagList
-                    {
-                        { "http.request.method", BoundedMethodName(context.Request.Method) },
-                        { "http.route", route },
-                        { "http.response.status_class", $"{context.Response.StatusCode / 100}xx" }
-                    };
-                    Requests.Add(1, tags);
+                    { "http.request.method", BoundedMethodName(context.Request.Method) },
+                    { "http.route", route },
+                    { "http.response.status_class", $"{context.Response.StatusCode / 100}xx" }
+                };
+                Requests.Add(1, tags);
+                if (!isHubRequest || isHubNegotiation)
                     RequestDuration.Record(Stopwatch.GetElapsedTime(started).TotalSeconds, tags);
-                    if (context.Response.StatusCode >= StatusCodes.Status400BadRequest)
-                    {
-                        Errors.Add(1, tags);
-                        activity?.SetStatus(ActivityStatusCode.Error);
-                    }
-                    return Task.CompletedTask;
-                });
-            }
+                if (context.Response.StatusCode >= StatusCodes.Status400BadRequest)
+                {
+                    Errors.Add(1, tags);
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                }
+                return Task.CompletedTask;
+            });
         }
     }
 

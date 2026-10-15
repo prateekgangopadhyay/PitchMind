@@ -122,26 +122,48 @@ public sealed class ApiReadinessAndTelemetryTests
     }
 
     [Fact]
-    public async Task SignalR_hub_requests_are_excluded_from_http_duration_metrics()
+    public async Task SignalR_negotiation_is_measured_but_long_lived_hub_duration_is_excluded()
     {
-        var observations = new List<string>();
+        var observations = new List<(string Name, KeyValuePair<string, object?>[] Tags)>();
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, activeListener) =>
         {
             if (instrument.Meter.Name == ApiRequestTelemetry.InstrumentationName)
                 activeListener.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<long>((instrument, _, _, _) => observations.Add(instrument.Name));
-        listener.SetMeasurementEventCallback<double>((instrument, _, _, _) => observations.Add(instrument.Name));
+        listener.SetMeasurementEventCallback<long>((instrument, _, tags, _) =>
+            observations.Add((instrument.Name, tags.ToArray())));
+        listener.SetMeasurementEventCallback<double>((instrument, _, tags, _) =>
+            observations.Add((instrument.Name, tags.ToArray())));
         listener.Start();
 
-        var context = new DefaultHttpContext();
-        context.Request.Method = "GET";
-        context.Request.Path = "/hubs/matches/negotiate";
-        await ApiRequestTelemetry.RecordRequestAsync(context, _ => Task.CompletedTask);
-        await context.Response.CompleteAsync();
+        using var factory = CreateFactory("Development", new Dictionary<string, string?>
+        {
+            ["Runtime:Profile"] = "local",
+            ["Realtime:Provider"] = "local"
+        });
+        using var client = factory.CreateClient();
+        using var negotiate = await client.PostAsync("/hubs/matches/negotiate?negotiateVersion=1", content: null);
+        using var hub = await client.GetAsync("/hubs/matches");
 
-        Assert.Empty(observations);
+        Assert.NotEqual(HttpStatusCode.NotFound, negotiate.StatusCode);
+        Assert.NotEqual(HttpStatusCode.NotFound, hub.StatusCode);
+
+        var requests = observations.Where(x => x.Name == "pitchmind.api.requests").ToArray();
+        Assert.Equal(2, requests.Length);
+        Assert.Contains(requests, x => x.Tags.Any(tag => tag.Key == "http.request.method" && tag.Value?.ToString() == "POST") &&
+            x.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/hubs/matches/negotiate") &&
+            x.Tags.Any(tag => tag.Key == "http.response.status_class" &&
+                tag.Value?.ToString() == $"{(int)negotiate.StatusCode / 100}xx"));
+        Assert.Contains(requests, x => x.Tags.Any(tag => tag.Key == "http.request.method" && tag.Value?.ToString() == "GET") &&
+            x.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/hubs/matches") &&
+            x.Tags.Any(tag => tag.Key == "http.response.status_class" &&
+                tag.Value?.ToString() == $"{(int)hub.StatusCode / 100}xx"));
+        var errors = observations.Where(x => x.Name == "pitchmind.api.errors").ToArray();
+        Assert.Equal(2, errors.Length);
+        var durations = observations.Where(x => x.Name == "pitchmind.api.request.duration").ToArray();
+        Assert.Single(durations);
+        Assert.Contains(durations[0].Tags, tag => tag.Key == "http.request.method" && tag.Value?.ToString() == "POST");
     }
 
     [Fact]
