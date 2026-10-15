@@ -23,7 +23,7 @@ The isolated Application test-project restore did not complete. Its existing NuG
 
 ## Review finding and correction
 
-Independent review of the preceding head found that the verifier accepted every defined claim category in context but formatted only three, allowing valid observed, derived or simulated claims to throw. The implementation now formats all six categories in both the verifier and deterministic fallback, with a regression for each category. Exact-head independent re-review found no actionable findings. The synchronous verifier call has no broad exception wrapper; review found no reachable category-related exception after packet validation and the category mapping fix.
+An independent read-only static review of the implementation identified that the verifier accepted every defined claim category in context but formatted only three, allowing valid observed, derived or simulated claims to throw. The implementation now formats all six categories in both the verifier and deterministic fallback, with a regression for each category. A subsequent independent read-only static review of the exact code head found no actionable findings. These reviews were not submitted as GitHub reviews, and reviewers did not run tests. The synchronous verifier call has no broad exception wrapper; the static review found no reachable category-related exception after packet validation and the category mapping fix.
 
 ## Remaining acceptance work
 
