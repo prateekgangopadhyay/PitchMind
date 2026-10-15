@@ -149,10 +149,13 @@ test('native links, buttons, and form controls have a detectable name', async ({
   expect(unnamed).toEqual([]);
 });
 
-test('discloses exact evidence lineage at desktop, tablet, and mobile widths', async ({ page }, testInfo) => {
+test('discloses exact evidence lineage at four widths and supports keyboard citation replay', async ({ page }, testInfo) => {
   await stubCanonicalMatch(page, { withEvidence: true });
   await openSelectedMatch(page);
-  await page.locator('details.canonical-evidence-disclosure > summary').click();
+  const disclosureSummary = page.locator('details.canonical-evidence-disclosure > summary');
+  await disclosureSummary.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('details.canonical-evidence-disclosure')).toHaveJSProperty('open', true);
 
   const citation = page.getByRole('link', {
     name: 'Open event test-event-18 at 55:00, sequence 18, source revision 4'
@@ -164,12 +167,13 @@ test('discloses exact evidence lineage at desktop, tablet, and mobile widths', a
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 1000 },
     { name: 'tablet', width: 768, height: 1024 },
-    { name: 'mobile', width: 375, height: 812 }
+    { name: 'mobile', width: 375, height: 812 },
+    { name: 'compact', width: 320, height: 800 }
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const overflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(overflows, `${viewport.name} evidence disclosure should not cause horizontal page scrolling`).toBe(false);
-    if (viewport.name === 'mobile') {
+    if (viewport.name === 'mobile' || viewport.name === 'compact') {
       const navigationLinks = await page.locator('.main-navigation a').evaluateAll(links => links.map(link => {
         const bounds = link.getBoundingClientRect();
         return { name: link.textContent?.trim(), left: bounds.left, right: bounds.right };
@@ -182,4 +186,13 @@ test('discloses exact evidence lineage at desktop, tablet, and mobile widths', a
     }
     await page.screenshot({ path: testInfo.outputPath(`ep07-s05-evidence-${viewport.name}.png`), fullPage: true });
   }
+
+  await citation.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/replay/${matchId}`);
+  const replayUrl = new URL(page.url());
+  expect(replayUrl.searchParams.get('atSeconds')).toBe('3300');
+  expect(replayUrl.searchParams.get('revision')).toBe('4');
+  expect(replayUrl.hash).toBe('#canonical-event-18');
+  await expect(page.locator('#canonical-event-18')).toBeFocused();
 });
