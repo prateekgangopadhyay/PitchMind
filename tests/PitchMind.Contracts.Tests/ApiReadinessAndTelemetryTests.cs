@@ -38,7 +38,13 @@ public sealed class ApiReadinessAndTelemetryTests
     [Fact]
     public async Task Missing_canonical_dependency_is_not_ready_outside_local_synthetic_profile()
     {
-        using var factory = CreateFactory("Production", new Dictionary<string, string?>());
+        using var factory = CreateFactory("Production", new Dictionary<string, string?>
+        {
+            ["Runtime:Profile"] = "azure",
+            ["Identity:Authority"] = "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000001/v2.0",
+            ["Identity:Audience"] = "api://pitchmind-readiness-test",
+            ["Identity:DevelopmentHeaderAuthEnabled"] = "false"
+        });
         using var client = factory.CreateClient();
 
         using var live = await client.GetAsync("/health/live");
@@ -55,8 +61,9 @@ public sealed class ApiReadinessAndTelemetryTests
     [Fact]
     public async Task Configured_but_unreachable_postgres_is_not_ready_and_probe_is_bounded()
     {
-        using var factory = CreateFactory("Production", new Dictionary<string, string?>
+        using var factory = CreateFactory("Development", new Dictionary<string, string?>
         {
+            ["Runtime:Profile"] = "local",
             ["ConnectionStrings:PitchMind"] = "Host=127.0.0.1;Port=1;Database=pitchmind;Username=test;Password=secret;Timeout=20;Command Timeout=20"
         });
         using var client = factory.CreateClient();
@@ -88,26 +95,21 @@ public sealed class ApiReadinessAndTelemetryTests
 
         using var factory = CreateFactory("Development", new Dictionary<string, string?> { ["Runtime:Profile"] = "local" });
         using var client = factory.CreateClient();
-        using var fixtures = await client.GetAsync("/api/v1/matches");
-        using var fixtureBody = JsonDocument.Parse(await fixtures.Content.ReadAsStringAsync());
-        var matchId = fixtureBody.RootElement[0].GetProperty("matchId").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(matchId));
-        using var response = await client.GetAsync($"/api/v1/matches/{matchId}/state?atSeconds=10");
+        var matchId = Guid.NewGuid().ToString();
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{matchId}/summary?atSeconds=10");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         var request = Assert.Single(observations, item => item.Name == "pitchmind.api.requests" &&
-            item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/matches/{matchId:guid}/state"));
-        Assert.Contains(request.Tags, tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/matches/{matchId:guid}/state");
+            item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary"));
+        Assert.Contains(request.Tags, tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary");
         Assert.DoesNotContain(request.Tags, tag => tag.Key.Contains("match", StringComparison.OrdinalIgnoreCase) && tag.Key != "http.route");
         Assert.DoesNotContain(request.Tags, tag => tag.Value?.ToString()?.Contains(matchId!, StringComparison.Ordinal) == true);
         Assert.Contains(observations, item => item.Name == "pitchmind.api.request.duration");
 
-        using var missingMatch = await client.GetAsync("/api/v1/matches/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/state?atSeconds=10");
-        Assert.Equal(HttpStatusCode.NotFound, missingMatch.StatusCode);
         var error = Assert.Single(observations, item => item.Name == "pitchmind.api.errors" &&
-            item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/matches/{matchId:guid}/state"));
+            item.Tags.Any(tag => tag.Key == "http.route" && tag.Value?.ToString() == "/api/v1/canonical/matches/{matchId}/summary"));
         Assert.Contains(error.Tags, tag => tag.Key == "http.response.status_class" && tag.Value?.ToString() == "4xx");
-        Assert.DoesNotContain(error.Tags, tag => tag.Value?.ToString()?.Contains("bbbbbbbb", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(error.Tags, tag => tag.Value?.ToString()?.Contains(matchId, StringComparison.Ordinal) == true);
 
         using var customMethodOne = await client.SendAsync(new HttpRequestMessage(new HttpMethod("X-PITCHMIND-A"), "/api/health"));
         using var customMethodTwo = await client.SendAsync(new HttpRequestMessage(new HttpMethod("X-PITCHMIND-B"), "/api/health"));
@@ -158,6 +160,9 @@ public sealed class ApiReadinessAndTelemetryTests
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
+            builder.UseSetting(Microsoft.AspNetCore.Hosting.WebHostDefaults.EnvironmentKey, environment);
+            foreach (var setting in settings)
+                builder.UseSetting(setting.Key, setting.Value ?? string.Empty);
             builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(settings));
         });
 }

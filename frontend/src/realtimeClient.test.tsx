@@ -685,7 +685,7 @@ it('announces stale data after the manual canonical refresh fails', async () => 
     expect(container.querySelector('[role="status"]')?.textContent)
       .toBe('Canonical refresh failed. Match data may be out of date.');
     expect(container.querySelector('button')?.textContent).toBe('Retry live connection');
-    expect(container.textContent).toContain('Your selected time stays at 00:45.');
+    expect(container.textContent).toContain('Your selected time remains unchanged.');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
