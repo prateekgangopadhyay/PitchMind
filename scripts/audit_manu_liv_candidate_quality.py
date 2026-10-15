@@ -73,6 +73,9 @@ def _period_value_observation(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         observation["value"] = value[:128]
         observation["valueTruncated"] = len(value) > 128
+    elif isinstance(value, float) and not math.isfinite(value):
+        observation["value"] = "NaN" if math.isnan(value) else "Infinity" if value > 0 else "-Infinity"
+        observation["valueEncoding"] = "nonFiniteNumberToken"
     elif value is None or isinstance(value, (bool, int, float)):
         observation["value"] = value
     return observation

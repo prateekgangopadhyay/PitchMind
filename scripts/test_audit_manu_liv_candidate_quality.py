@@ -101,6 +101,18 @@ class CandidateQualityAuditTests(unittest.TestCase):
         }])
         self.assertIn("neither field is treated as authoritative", comparison["interpretation"])
 
+    def test_nonfinite_metadata_period_is_reported_as_valid_json(self):
+        report = report_for([event(1, metadata={"period": float("nan")})])
+        observation = report["chronology"]["metadataPeriodFieldComparison"]["mismatchExamples"][0]["metadataPeriod"]
+
+        self.assertEqual(observation, {
+            "jsonType": "number",
+            "value": "NaN",
+            "valueEncoding": "nonFiniteNumberToken",
+        })
+        rendered = json.dumps(report, allow_nan=False)
+        self.assertEqual(json.loads(rendered), report)
+
     def test_pinned_candidate_reports_known_metadata_period_conflict(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "data/simulations/manu-liv-match-dataset.json").read_bytes()
