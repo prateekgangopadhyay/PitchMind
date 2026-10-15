@@ -31,5 +31,5 @@ Commands were executed locally on this candidate; no Azure resources or deployme
 - The 24 PostgreSQL integration tests were skipped because no `PITCHMIND_TEST_POSTGRES` connection was configured. Canonical database behavior is not proven by this run.
 - No real Entra tenant, issuer metadata, tenant role assignment, or production token was used. The signed JWT test uses a local test signing key and substituted test metadata.
 - CORS was checked with ASP.NET TestServer preflight requests; no real browser, ingress, or Azure proxy was exercised. Per-IP partitioning behind the production proxy remains unverified.
-- Hosted CI and Product Owner acceptance are pending. A new GitHub PR has not yet been created for this restack. This evidence does not accept EP06-S04 or its dependencies.
+- PR #249 was created against `main` at head `71fb2e3701d1c8aab5ebcfe04dcc8b6e04e46770`; it is open and ready for review. At last observation its GitHub review list and commit statuses were empty. Hosted CI/formal PR review and Product Owner acceptance are pending. This evidence does not accept EP06-S04 or its dependencies.
 - No Azure resource change, infrastructure apply, or deployment occurred.
