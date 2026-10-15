@@ -179,6 +179,59 @@ paths:
         '401': { $ref: '#/components/responses/Problem' }
         '403': { $ref: '#/components/responses/Problem' }
         '429': { $ref: '#/components/responses/Problem' }
+  /api/v1/realtime/negotiate:
+    post:
+      operationId: negotiateMatchRealtime
+      summary: Negotiate an authorized match-scoped live cursor subscription.
+      description: >-
+        Returns only the committed canonical revision and sequence cursor. It does not return
+        score, events, tracking, or any other canonical football fact. The local ASP.NET Core
+        SignalR adapter is available only in Development with the local runtime/provider profile.
+        A connection can hold at most 10 active match groups and make at most 20 unique
+        subscription attempts during its lifetime. Repeating an active subscription is idempotent.
+      x-required-roles: [fan, analyst, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [matchId]
+              properties:
+                matchId: { type: string, format: uuid }
+                clientRevision: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200':
+          description: Local SignalR transport details and canonical head cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [transport, url, accessToken, cursor, revisionChanged]
+                properties:
+                  transport: { type: string, const: aspnetcore-signalr }
+                  url: { type: string, const: /hubs/matches }
+                  accessToken: { type: [string, 'null'] }
+                  revisionChanged: { type: boolean }
+                  cursor:
+                    type: object
+                    additionalProperties: false
+                    required: [kind, matchId, canonicalRevision, lastSequence, serverUtc, schemaVersion]
+                    properties:
+                      kind: { type: string, const: matchUpdated }
+                      matchId: { type: string, format: uuid }
+                      canonicalRevision: { type: integer, format: int64, minimum: 1 }
+                      lastSequence: { type: integer, format: int64, minimum: 0 }
+                      serverUtc: { type: string, format: date-time }
+                      schemaVersion: { type: integer, const: 1 }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
 components:
   securitySchemes:
     entraBearer:

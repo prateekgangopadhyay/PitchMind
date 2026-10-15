@@ -21,6 +21,21 @@ if (corsOrigins.Length > 0)
     builder.Services.AddCors(options => options.AddPolicy("ApiCors", policy =>
         policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 }
+var localRealtimeEnabled = builder.Environment.IsDevelopment() &&
+    string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) &&
+    string.Equals(builder.Configuration["Realtime:Provider"] ?? "local", "local", StringComparison.OrdinalIgnoreCase);
+builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
+if (localRealtimeEnabled)
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
+    builder.Services.AddSingleton<IOutboxPublisher, SignalRRealtimeCursorPublisher>();
+}
+else
+{
+    // Azure SignalR is a target adapter only; this build has no Azure provider registered.
+    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, UnavailableRealtimeConnectionNegotiator>();
+}
 if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
 {
     var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
@@ -160,6 +175,8 @@ app.Use(async (context, next) =>
 app.MapGet("/api/health", () => Results.Ok(new HealthResponse("ok", "pitchmind-api"))).AllowAnonymous();
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapCanonicalMatchEndpoints();
+app.MapRealtimeEndpoints();
+if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")
     .RequireRateLimiting("api");
