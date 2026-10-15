@@ -5,40 +5,52 @@ export interface Frame { id: string; clockSeconds: number; ballX: number; ballY:
 export interface MatchEvent { event: {eventId: string; matchId: string; sequence: number; type: string; clockSeconds: number; period: number; occurredAt: string}; teamId: string; playerId: string; action: string; outcome: string; relatedPlayerId: string | null }
 export interface Fixture { matchId: string; version: string; seed: number; provenance: string; durationSeconds: number; halfTimeSeconds: number; pitchLengthMetres: number; pitchWidthMetres: number; home: Team; away: Team; events: MatchEvent[]; frames: Frame[] }
 export interface MatchPlayerState { playerId: string; teamId: string; active: boolean; dismissed: boolean; yellowCards: number }
-export interface Snapshot { matchId: string; clockSeconds: number; period: number; status: 'replay' | 'full-time'; phase: 'notstarted' | 'firsthalf' | 'halftime' | 'secondhalf' | 'fulltime'; homeScore: number; awayScore: number; provenance: string; frame: Frame; lastSequence: number; possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number; players: MatchPlayerState[]; competitionId: string | null; competitionRulesVersion: string | null; maximumSubstituteReentriesPerPlayer: number | null }
-export interface TacticalContext { schemaVersion: 'tactical-context-v1'; scoreline: string; teamRole: string; numericalAdvantage: number; opponentPhase: string; matchPhase: string }
+export interface Snapshot { matchId: string; clockSeconds: number; period: number; status: 'replay' | 'full-time'; phase: 'notstarted' | 'firsthalf' | 'halftime' | 'secondhalf' | 'fulltime'; homeScore: number; awayScore: number; provenance: string; frame: Frame; lastSequence: number; possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number; players: MatchPlayerState[] }
+export interface TacticalContext { scoreline: string; teamRole: 'home' | 'away'; numericalAdvantage: number; opponentPhase: string; matchPhase: string }
 export interface EvidenceNode { id: string; kind: 'claim' | 'event' | 'frame' | 'metric'; truthClass: 'fact' | 'derivation' | 'pattern' | 'interpretation' | 'hypothesis'; description: string; eventId: string | null; frameId: string | null; clockSeconds: number | null; sequence: number | null; sourceVersion: string; sourceSha256: string; canonicalRevision: number | null; numericValue: number | null; unit: string | null }
 export interface EvidenceEdge { fromNodeId: string; toNodeId: string; relation: 'precedes' | 'derived_from' }
 export interface EvidenceCondition { id: string; passed: boolean; observed: string; threshold: string | null; sourceNodeIds: string[]; exclusionReason: string | null }
 export interface EvidenceGraph { matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; detectorVersion: string; policyStatus: string; publishable: boolean; claimNodeId: string; nodes: EvidenceNode[]; edges: EvidenceEdge[]; uncertainty: string; conditions: EvidenceCondition[] }
-export interface KeyMoment { id: string; matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; clockSeconds: number; sequence: number; kind: string; truthClass: string; title: string; summary: string; relevance: number; policyVersion: string; policyStatus: string; publishable: boolean; eventIds: string[]; frameIds: string[]; evidenceClaimNodeIds: string[] }
+export interface KeyMoment {
+  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
+  selectedTimeSeconds: number; throughSequence: number; clockSeconds: number; sequence: number;
+  kind: string; truthClass: string; title: string; summary: string; relevance: number;
+  policyVersion: string; policyStatus: string; publishable: boolean;
+  eventIds: string[]; frameIds: string[]; evidenceClaimNodeIds: string[];
+}
 export interface MechanismReplay {
-  id: string; matchId: string; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null;
+  id: string; matchId: string; sourceVersion: string; provenance: string; canonicalRevision: number | null;
   selectedTimeSeconds: number; throughSequence: number; startSeconds: number; endSeconds: number;
   detectorVersion: string; policyStatus: string; publishable: boolean; eventIds: string[]; mechanismEventIds: string[]; frameIds: string[];
   participantIds: string[]; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; evidenceGraph: EvidenceGraph; limitations: string[];
 }
-export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; sourceSha256: string; provenance: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
+export interface Insight { id: string; matchId: string; clockSeconds: number; title: string; summary: string; classification: string; detectorVersion: string; eventIds: string[]; frameIds: string[]; sourceVersion: string; canonicalRevision: number | null; selectedTimeSeconds: number; throughSequence: number; policyStatus: string; publishable: boolean; conditions: string[]; context: TacticalContext | null; evidenceGraph: EvidenceGraph | null }
 export interface Evidence { insight: Insight; events: MatchEvent[]; frames: Frame[]; coordinateConvention: string; conditions: string[]; limitations: string[] }
 export interface Explanation { insightId: string; clockSeconds: number; audience: string; source: string; text: string; eventIds: string[]; limitations: string[] }
 export interface ApiProblem { type: string; title: string; status: number; code: string; correlationId: string; detail?: string; instance?: string }
 // PostgreSQL-backed BFF contracts. Kept separate from fixture/demo contracts above;
 // canonical requests never fall back to the local synthetic fixture.
 export interface CanonicalMatchCard {
-  matchId: string; canonicalRevision: number; projectionRevision: number; asOfSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; asOfSeconds: number; throughSequence: number;
   phase: string; homeScore: number; awayScore: number; provenance: string;
   algorithmVersion: string; sourceSha256: string;
 }
+export function provenanceLabel(provenance: string): string {
+  const normalized = provenance.trim().toLowerCase();
+  return normalized.includes('synthetic') || normalized.includes('simulat')
+    ? 'Simulated EPL-context match'
+    : provenance;
+}
 export interface CanonicalMatchPage { items: CanonicalMatchCard[]; nextMatchId: string | null; hasMore: boolean }
 export interface CanonicalMatchSnapshot {
-  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
+  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
   throughSequence: number; algorithmVersion: string; sourceSha256: string; stateSha256: string;
   provenance: string; period: number; phase: string; homeScore: number; awayScore: number;
   possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number;
   players: MatchPlayerState[];
 }
 export interface CanonicalEventPage {
-  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalLedgerEvent[]; nextCursor: string | null; hasMore: boolean;
 }
 export interface CanonicalLedgerEvent {
@@ -47,21 +59,41 @@ export interface CanonicalLedgerEvent {
 }
 export interface CanonicalEvidenceReference { kind: string; id: string; relation: string }
 export interface CanonicalInsight {
-  insightId: string; matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number;
+  insightId: string; matchId: string; canonicalRevision: number; selectedTimeSeconds: number;
   throughSequence: number; sourceVersion: string; provenance: string; sourceSha256: string;
   detectorVersion: string; truthClass: string; summary: string;
+  conditions: Record<string, unknown>; limitations: string[] | null;
   evidence: CanonicalEvidenceReference[];
 }
 export interface CanonicalInsightPage {
-  matchId: string; canonicalRevision: number; projectionRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalInsight[]; nextCursor: string | null; hasMore: boolean;
 }
 export interface CanonicalEvidencePayload {
-  kind: 'event' | 'frame'; id: string; relation: string; sourceCanonicalRevision: number; sequence: number;
+  kind: 'event' | 'frame'; id: string; relation: string; sequence: number;
   clockSeconds: number; period: number; payload: Record<string, unknown>;
 }
 export interface CanonicalEvidence { insight: CanonicalInsight; items: CanonicalEvidencePayload[] }
 export interface CanonicalReplay { snapshot: CanonicalMatchSnapshot; events: CanonicalEventPage }
+export interface TelemetryTrackingFrameV1 {
+  schemaVersion: number; matchId: string; frameId: string; sequence: number;
+  matchTime: { period: number; elapsedSeconds: number; sourceClockValue: number; sourceClockUnit: string; sourceClockBasis: string };
+  coordinateSystem: {
+    lengthMetres: number; widthMetres: number; unit: 'metres' | 'normalized_0_1' | 'percent_0_100';
+    axisOrigin: 'bottom_left' | 'top_left'; teamDirections: Array<{teamId: string; direction: 'left' | 'right'}>;
+  };
+  ball: { x: number; y: number };
+  players: Array<{playerId: string; teamId: string; position: {x: number; y: number}}>;
+  source: { providerId: string; sourceMatchId: string; sourceRecordId: string; sourceSequence: number; sourceSchemaVersion: string; sourceSha256: string; provenanceStatus: string; rightsReviewStatus: string };
+}
+export interface CanonicalTrackingFrame {
+  frameId: string; sequence: number; canonicalRevision: number; period: number; clockSeconds: number;
+  coordinateVersion: string; sourceSha256: string; quality: unknown; frame: TelemetryTrackingFrameV1;
+}
+export interface CanonicalTrackingFramePage {
+  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  items: CanonicalTrackingFrame[]; hasMore: boolean;
+}
 export class ApiRequestError extends Error {
   constructor(readonly status: number, readonly code: string, readonly correlationId: string, message: string) { super(message); this.name = 'ApiRequestError'; }
 }
