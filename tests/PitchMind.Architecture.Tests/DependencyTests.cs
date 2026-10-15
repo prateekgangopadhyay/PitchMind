@@ -370,6 +370,69 @@ public sealed class DependencyTests
         }
     }
 
+    [Xunit.Fact]
+    public void ProductionFixtureGuard_FailsClosedWhenCandidateNumericAliasesAreShadowedOrMutated()
+    {
+        var root = FindRepositoryRoot();
+        var feedPath = Path.Combine(root, "data", "simulations", "manu-liv-match-dataset.json");
+        using var feedStream = File.OpenRead(feedPath);
+        using var feed = JsonDocument.Parse(feedStream);
+        var candidateClock = feed.RootElement[0].GetProperty("clockSeconds").GetInt32();
+
+        var sourceRoot = Directory.CreateTempSubdirectory("pitchmind-feed-numeric-alias-guard-");
+        try
+        {
+            var typescriptSource = Path.Combine(sourceRoot.FullName, "Alias.tsx");
+            var csharpSource = Path.Combine(sourceRoot.FullName, "Alias.cs");
+            var unrelatedSource = Path.Combine(sourceRoot.FullName, "Layout.tsx");
+            File.WriteAllText(typescriptSource,
+                $"const originalClock = {candidateClock};\n" +
+                "const forwardedClock = originalClock;\n" +
+                "const directAlias = { clockSeconds: originalClock };\n" +
+                "const chainedAlias = { clockSeconds: forwardedClock };\n" +
+                $"let reassignedClock = {candidateClock};\n" +
+                "reassignedClock += 1;\n" +
+                "const mutatedAlias = { clockSeconds: reassignedClock };\n" +
+                $"const shadowedClock = {candidateClock};\n" +
+                "{ const shadowedClock = 999999; }\n" +
+                "const shadowedAlias = { clockSeconds: shadowedClock };\n");
+            File.AppendAllText(typescriptSource,
+                "const reverseShadow = 999999;\n" +
+                $"{{ const reverseShadow = {candidateClock}; }}\n" +
+                "const reverseShadowAlias = { clockSeconds: reverseShadow };\n" +
+                $"const typedClock: number = {candidateClock};\n" +
+                "const typedAlias = { clockSeconds: typedClock };\n");
+            File.WriteAllText(csharpSource,
+                $"var sourceClock = {candidateClock};\n" +
+                "var payload = new { clockSeconds = sourceClock };\n");
+            File.WriteAllText(unrelatedSource,
+                $"const layoutWidth = {candidateClock};\n" +
+                "const layout = { width: layoutWidth };\n" +
+                "const match = {};\n" +
+                "match.clockSeconds = 7;\n");
+
+            var markers = ReadFixtureNumericMarkers(root);
+            var violations = FindFixtureDataMarkers(
+                [typescriptSource, csharpSource, unrelatedSource],
+                new HashSet<string>(StringComparer.Ordinal),
+                markers);
+
+            Xunit.Assert.Equal(7, violations.Count);
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: originalClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: forwardedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: reassignedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: shadowedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: reverseShadow", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == typescriptSource && item.Line.Contains("clockSeconds: typedClock", StringComparison.Ordinal));
+            Xunit.Assert.Contains(violations, item => item.Path == csharpSource && item.Line.Contains("clockSeconds = sourceClock", StringComparison.Ordinal));
+            Xunit.Assert.DoesNotContain(violations, item => item.Path == unrelatedSource);
+        }
+        finally
+        {
+            sourceRoot.Delete(recursive: true);
+        }
+    }
+
     private static IEnumerable<string> EnumerateProductionSourceFiles(string root)
     {
         var sourceRoots = new[]
@@ -606,10 +669,172 @@ public sealed class DependencyTests
             if (numericMarkers is not null)
             {
                 violations.AddRange(FindMultilinePlayerCoordinateMarkers(path, source, numericMarkers));
+                violations.AddRange(FindNumericAliasMarkers(path, source, numericMarkers));
             }
         }
 
         return violations.DistinctBy(item => (item.Path, item.LineNumber)).ToArray();
+    }
+
+    private static IEnumerable<(string Path, string Line, int LineNumber)> FindNumericAliasMarkers(
+        string path,
+        string source,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> numericMarkers)
+    {
+        const string identifier = @"@?[A-Za-z_$][A-Za-z0-9_$]*";
+        const string number = @"[+-]?(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*(?:\.(?:[0-9](?:_?[0-9])*)?)?|\.[0-9](?:_?[0-9])*)(?:[eE][+-]?[0-9](?:_?[0-9])*)?(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)?";
+        var declarations = Regex.Matches(source,
+            $@"(?<![A-Za-z0-9_$?.#])(?:const|let|var|(?:sbyte|byte|short|ushort|int|uint|long|ulong|float|double|decimal))\s+(?<name>{identifier})(?:\s*:\s*(?:number|sbyte|byte|short|ushort|int|uint|long|ulong|float|double|decimal))?\s*=\s*(?<initializer>{number}|{identifier})(?![A-Za-z0-9_$])",
+            RegexOptions.CultureInvariant);
+        if (declarations.Count == 0)
+        {
+            return Array.Empty<(string Path, string Line, int LineNumber)>();
+        }
+
+        var declarationIndexes = declarations.Cast<Match>()
+            .Select(match => match.Groups["name"].Index)
+            .ToHashSet();
+        var declarationsByName = declarations.Cast<Match>()
+            .GroupBy(match => match.Groups["name"].Value.TrimStart('@'), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        var candidateValues = numericMarkers.Values.SelectMany(values => values).ToHashSet(StringComparer.Ordinal);
+        var knownValues = new Dictionary<string, string>(StringComparer.Ordinal);
+        var aliasSources = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var candidateNames = new HashSet<string>(StringComparer.Ordinal);
+        var ambiguousNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var (name, matches) in declarationsByName)
+        {
+            if (matches.Length > 1)
+            {
+                ambiguousNames.Add(name);
+            }
+
+            foreach (var declaration in matches)
+            {
+                var initializer = declaration.Groups["initializer"].Value;
+                if (Regex.IsMatch(initializer, $@"\A{number}\z", RegexOptions.CultureInvariant))
+                {
+                    var normalized = NormalizeNumericLiteral(Regex.Replace(initializer, @"(?:[fFdDmM]|[uU][lL]?|[lL][uU]?|n)\z", string.Empty));
+                    knownValues.TryAdd(name, normalized);
+                    if (candidateValues.Contains(normalized))
+                    {
+                        candidateNames.Add(name);
+                    }
+                }
+                else
+                {
+                    if (!aliasSources.TryGetValue(name, out var sources))
+                    {
+                        sources = new HashSet<string>(StringComparer.Ordinal);
+                        aliasSources.Add(name, sources);
+                    }
+
+                    sources.Add(initializer.TrimStart('@'));
+                }
+            }
+        }
+
+        var writes = new Regex(
+            $@"(?<![A-Za-z0-9_$?.#])(?<name>{identifier})\s*(?:>>>=|<<=|>>=|\*\*=|&&=|\|\|=|\?\?=|\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|=(?!=|>))",
+            RegexOptions.CultureInvariant);
+        foreach (Match write in writes.Matches(source))
+        {
+            var name = write.Groups["name"].Value.TrimStart('@');
+            if (!declarationIndexes.Contains(write.Groups["name"].Index) && declarationsByName.ContainsKey(name))
+            {
+                ambiguousNames.Add(name);
+            }
+        }
+
+        var prefixWrites = new Regex(
+            $@"(?<![A-Za-z0-9_$?.#])(?:\+\+|--)\s*(?<name>{identifier})",
+            RegexOptions.CultureInvariant);
+        foreach (Match write in prefixWrites.Matches(source))
+        {
+            var name = write.Groups["name"].Value.TrimStart('@');
+            if (declarationsByName.ContainsKey(name))
+            {
+                ambiguousNames.Add(name);
+            }
+        }
+
+        foreach (Match write in Regex.Matches(source,
+            $@"(?<![A-Za-z0-9_$?.#])(?<name>{identifier})\s*(?:\+\+|--)",
+            RegexOptions.CultureInvariant))
+        {
+            var name = write.Groups["name"].Value.TrimStart('@');
+            if (declarationsByName.ContainsKey(name))
+            {
+                ambiguousNames.Add(name);
+            }
+        }
+
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var (name, sourceNames) in aliasSources)
+            {
+                foreach (var sourceName in sourceNames)
+                {
+                    if (candidateNames.Contains(sourceName) && candidateNames.Add(name))
+                    {
+                        changed = true;
+                    }
+
+                    if (!ambiguousNames.Contains(name) &&
+                        !ambiguousNames.Contains(sourceName) &&
+                        knownValues.TryGetValue(sourceName, out var sourceValue) &&
+                        !knownValues.ContainsKey(name))
+                    {
+                        knownValues[name] = sourceValue;
+                        changed = true;
+                    }
+
+                    if (ambiguousNames.Contains(sourceName) && candidateNames.Contains(name) && ambiguousNames.Add(name))
+                    {
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        foreach (var name in declarationsByName.Keys)
+        {
+            if (ambiguousNames.Contains(name) && candidateNames.Contains(name))
+            {
+                knownValues.Remove(name);
+            }
+        }
+
+        var propertyNames = string.Join("|", FootballNumericProperties.Select(Regex.Escape));
+        var propertyAlias = new Regex(
+            $@"\b(?<property>{propertyNames})\s*(?::|=)\s*(?<alias>{identifier})\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var lines = source.Split('\n');
+        var results = new List<(string Path, string Line, int LineNumber)>();
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index].TrimEnd('\r');
+            foreach (Match use in propertyAlias.Matches(line))
+            {
+                var property = use.Groups["property"].Value;
+                var alias = use.Groups["alias"].Value.TrimStart('@');
+                if (!candidateNames.Contains(alias) || !numericMarkers.TryGetValue(property, out var propertyValues))
+                {
+                    continue;
+                }
+
+                if (ambiguousNames.Contains(alias) ||
+                    (knownValues.TryGetValue(alias, out var value) && propertyValues.Contains(value)))
+                {
+                    results.Add((path, line, index + 1));
+                }
+            }
+        }
+
+        return results;
     }
 
     private static IEnumerable<(string Path, string Line, int LineNumber)> FindMultilinePlayerCoordinateMarkers(
