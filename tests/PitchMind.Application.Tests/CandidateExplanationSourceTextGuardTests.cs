@@ -58,6 +58,21 @@ public sealed class CandidateExplanationSourceTextGuardTests
     }
 
     [Fact]
+    public void Check_RejectsCandidatesWithMoreThanOneClaim()
+    {
+        var context = Context();
+        var candidate = Candidate(context, context.Claim.PermittedInterpretation, ["event-1"]);
+        var result = guard.Check(candidate with
+        {
+            Claims = Array.AsReadOnly(new[] { candidate.Claims[0], candidate.Claims[0] })
+        }, context);
+
+        Assert.False(result.IsSupportedBySelectedInsight);
+        Assert.Equal(CandidateExplanationSourceTextFailure.LineageRejected, result.Failure);
+        Assert.False(result.CanBePublished);
+    }
+
+    [Fact]
     public void Check_TreatsEvidencePromptInjectionAsDataAndRejectsEchoedInstructions()
     {
         var context = WithRecalculatedSize(Context() with

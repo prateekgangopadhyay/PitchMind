@@ -12,22 +12,23 @@
 - Added claims containing an invented score, player, causal attribution, manager intent or future timestamp are rejected.
 - Omitting any source evidence citation is rejected.
 - Prompt-injection text inside evidence JSON remains data; echoing it into a claim is rejected.
+- More than one candidate claim is rejected by the lineage gate before source-text matching.
 - Even a successful source-text result has `CanBePublished == false`.
 
 ## Verification
 
 | Command | Result |
 |---|---|
-| `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 119 passed, 0 failed, 0 skipped. |
-| `dotnet test PitchMind.slnx -c Release --no-build --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | 366 passed, 0 failed, 24 skipped. All skips are opt-in PostgreSQL integration tests; no test connection was configured. Exit code 0. |
+| `dotnet test tests/PitchMind.Application.Tests/PitchMind.Application.Tests.csproj -c Release --filter FullyQualifiedName~CandidateExplanationSourceTextGuardTests --no-restore --disable-build-servers -m:1` | 10 passed, 0 failed, 0 skipped. Includes the multi-claim regression. Exit code 0. |
+| `dotnet test PitchMind.slnx -c Release --no-restore --disable-build-servers -m:1` | 367 passed, 0 failed, 24 skipped. All skips are opt-in PostgreSQL integration tests; no test connection was configured. Exit code 0. |
 | `dotnet build PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` | Succeeded, 0 warnings, 0 errors. |
 | `node scripts/validate_operating_model.mjs --self-test` | Passed. |
 | `git diff --check` | Passed. |
 
-NuGet audit was disabled for this offline run. VSTest used local execution permission for its loopback socket. The test suite does not establish a live PostgreSQL path, hosted CI, Foundry behavior, or cloud integration.
+VSTest used local execution permission for its loopback socket. The full suite built all projects in Release. The test suite does not establish a live PostgreSQL path, hosted CI, Foundry behavior, or cloud integration.
 
 ## Remaining blockers
 
 - This guard is exact-source-text binding, not semantic entailment. It trusts the selected persisted insight and does not independently prove that insight is factually/football-valid.
 - The guard is not wired to API, UI or persistence; no user-facing candidate is publishable.
-- Broader number/player/team/event extraction, approved source semantics, complete false-claim red-team evaluation, independent follow-up review and Product Owner acceptance remain open. EP08-S04 routing status remains `unverified`.
+- Broader number/player/team/event extraction, approved source semantics, complete false-claim red-team evaluation, independent review of the updated head and Product Owner acceptance remain open. EP08-S04 routing status remains `unverified`.
