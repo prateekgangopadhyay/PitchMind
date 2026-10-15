@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using PitchMind.Contracts.Telemetry.V1;
 using Xunit;
 
@@ -49,6 +50,61 @@ public sealed class TelemetryContractTests
         Assert.Equal(5761, restored.MatchTime.ElapsedSeconds);
         Assert.Equal(5761, restored.MatchTime.SourceClockValue);
         Assert.True(TelemetryContractValidatorV1.Validate(restored).IsValid);
+    }
+
+    [Fact]
+    public void Match_elapsed_source_clock_must_equal_canonical_elapsed_time_after_unit_conversion()
+    {
+        var secondsMismatch = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with { ElapsedSeconds = 100, SourceClockValue = 50 }
+        });
+        Assert.Contains(secondsMismatch.Errors, error => error.Code == "SOURCE_MATCH_TIME_MISMATCH");
+
+        var millisecondsMatch = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with
+            {
+                ElapsedSeconds = 100,
+                SourceClockValue = 100_000,
+                SourceClockUnit = "milliseconds"
+            }
+        });
+        Assert.True(millisecondsMatch.IsValid);
+
+        var fractionalMillisecondMismatch = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with
+            {
+                ElapsedSeconds = 100,
+                SourceClockValue = 100_001,
+                SourceClockUnit = "milliseconds"
+            }
+        });
+        Assert.Contains(fractionalMillisecondMismatch.Errors, error => error.Code == "SOURCE_MATCH_TIME_MISMATCH");
+
+        var tinyMillisecondMismatch = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with
+            {
+                ElapsedSeconds = 0,
+                SourceClockValue = 0.0000000000000000000000000001m,
+                SourceClockUnit = "milliseconds"
+            }
+        });
+        Assert.Contains(tinyMillisecondMismatch.Errors, error => error.Code == "SOURCE_MATCH_TIME_MISMATCH");
+
+        var periodElapsedUsesReviewedOffsetElsewhere = TelemetryContractValidatorV1.Validate(Event("Pass") with
+        {
+            MatchTime = Event("Pass").MatchTime with
+            {
+                Period = 2,
+                ElapsedSeconds = 3_000,
+                SourceClockValue = 300,
+                SourceClockBasis = "period_elapsed"
+            }
+        });
+        Assert.True(periodElapsedUsesReviewedOffsetElsewhere.IsValid);
     }
 
     [Fact]
@@ -199,12 +255,13 @@ public sealed class TelemetryContractTests
         using var eventSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "event-envelope.schema.json")));
         using var frameSchema = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "schemas", "telemetry", "v1", "tracking-frame.schema.json")));
 
-        Assert.Equal(".*\\S.*", eventSchema.RootElement.GetProperty("properties").GetProperty("eventId").GetProperty("pattern").GetString());
+        var nonWhitespacePattern = eventSchema.RootElement.GetProperty("properties").GetProperty("eventId").GetProperty("pattern").GetString();
+        Assert.Equal("[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]", nonWhitespacePattern);
         Assert.Contains(eventSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
         Assert.Equal(1, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
         Assert.Equal(long.MaxValue, eventSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
         Assert.Equal("(?:Z|[+-]00:00)$", eventSchema.RootElement.GetProperty("$defs").GetProperty("source").GetProperty("properties").GetProperty("sourceTimestampUtc").GetProperty("pattern").GetString());
-        Assert.Equal(".*\\S.*", frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
+        Assert.Equal(nonWhitespacePattern, frameSchema.RootElement.GetProperty("properties").GetProperty("matchId").GetProperty("pattern").GetString());
         Assert.Contains(frameSchema.RootElement.GetProperty("required").EnumerateArray(), field => field.GetString() == "canonicalRevision");
         Assert.Equal(1, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("minimum").GetInt32());
         Assert.Equal(long.MaxValue, frameSchema.RootElement.GetProperty("properties").GetProperty("canonicalRevision").GetProperty("maximum").GetInt64());
@@ -245,6 +302,21 @@ public sealed class TelemetryContractTests
         Assert.True(eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").TryGetProperty("anyOf", out _));
         Assert.Equal(64, eventSchema.RootElement.GetProperty("$defs").GetProperty("coordinateSystem").GetProperty("properties").GetProperty("teamDirections").GetProperty("maxItems").GetInt32());
         Assert.Equal("null", eventSchema.RootElement.GetProperty("$defs").GetProperty("eventLocation").GetProperty("properties").GetProperty("end").GetProperty("anyOf")[1].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void Schema_non_whitespace_pattern_matches_dotnet_whitespace_semantics_for_unicode_separators()
+    {
+        const string schemaPattern = "[^\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]";
+        var expression = new Regex(schemaPattern, RegexOptions.ECMAScript);
+        var whitespaceOnly = new string(Enumerable.Range(char.MinValue, char.MaxValue + 1)
+            .Select(value => (char)value)
+            .Where(char.IsWhiteSpace)
+            .ToArray());
+
+        Assert.DoesNotMatch(expression, whitespaceOnly);
+        Assert.DoesNotMatch(expression, "\u0085");
+        Assert.Matches(expression, "x\u0085");
     }
 
     [Fact]

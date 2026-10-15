@@ -19,6 +19,8 @@
 
 These measurements describe the pinned file only. The [observed data dictionary](MANU-LIV-OBSERVED-DATA-DICTIONARY.md) lists field types, missing and null counts, numeric ranges, cardinalities, event/outcome counts, and source-order checks. The [candidate football-data quality audit](../engineering/evidence/EP03-S01-FOOTBALL-DATA-QUALITY-AUDIT-2026-10-12.md) records aggregate metric, score, event-type, and substitution/card-frame observations while keeping their meaning explicitly unverified.
 
+An additional structural inconsistency is present in `metadata.period`: it appears on only three records, and at source sequence 1037 (`HalfTime`, raw `clockSeconds` 2700) the metadata string is `"1"` while the top-level integer `period` is `2`. The two other records with `metadata.period` match the top-level value. This does not establish which field is authoritative; both raw values and their original records must be preserved until a source definition and football review resolve the conflict. The source profiler does not currently emit this cross-field discrepancy automatically.
+
 ## Semantics and football review
 
 No authoritative vendor data dictionary was supplied. Field names and observed values do not establish what clocks, coordinates, player metrics, score snapshots, event labels or identities mean. In particular:

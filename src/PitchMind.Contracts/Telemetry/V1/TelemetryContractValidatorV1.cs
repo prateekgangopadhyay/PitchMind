@@ -268,6 +268,15 @@ public static class TelemetryContractValidatorV1
             Add(errors, "UNKNOWN_SOURCE_CLOCK_UNIT", "matchTime.sourceClockUnit", "Source clock unit must be explicit.");
         if (time.SourceClockBasis is not ("match_elapsed" or "period_elapsed" or "provider_defined"))
             Add(errors, "UNKNOWN_SOURCE_CLOCK_BASIS", "matchTime.sourceClockBasis", "Source clock basis must be explicit.");
+
+        if (time.SourceClockBasis == "match_elapsed" && time.SourceClockUnit is ("seconds" or "milliseconds"))
+        {
+            var expectedSourceClock = time.SourceClockUnit == "seconds"
+                ? (decimal)time.ElapsedSeconds
+                : (decimal)time.ElapsedSeconds * 1000m;
+            if (time.SourceClockValue != expectedSourceClock)
+                Add(errors, "SOURCE_MATCH_TIME_MISMATCH", "matchTime.sourceClockValue", "A match-elapsed source clock must equal canonical elapsedSeconds after exact unit conversion.");
+        }
     }
 
     private static void Source(SourceReferenceV1? source, List<TelemetryValidationError> errors)
