@@ -1,10 +1,16 @@
 using System.Net;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using PitchMind.Application.Abstractions;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
@@ -83,6 +89,42 @@ public sealed class CanonicalBackfillTests
         Assert.Equal(-1, reader.LastAfterSequence);
     }
 
+    [Fact]
+    public async Task Resume_without_a_prior_revision_requests_full_replay()
+    {
+        var reader = new ProjectionReader(revision: 5);
+        using var factory = CreateFactory(reader);
+        using var client = CreateClient(factory);
+
+        using var response = await client.GetAsync($"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=1&atSeconds=120&limit=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+        Assert.False(root.GetProperty("revisionChanged").GetBoolean());
+        Assert.True(root.GetProperty("replayRequired").GetBoolean());
+        Assert.Equal(1, root.GetProperty("requestedAfterSequence").GetInt64());
+        Assert.Equal(0, root.GetProperty("events").GetProperty("items")[0].GetProperty("sequence").GetInt64());
+        Assert.Equal(-1, reader.LastAfterSequence);
+    }
+
+    [Fact]
+    public async Task Backfill_requires_match_read_authorization()
+    {
+        using var factory = CreateFactory(new ProjectionReader(revision: 5));
+
+        using var unauthenticated = factory.CreateClient();
+        using var unauthorizedResponse = await unauthenticated.GetAsync(
+            $"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=-1&atSeconds=120");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorizedResponse.StatusCode);
+
+        using var forbidden = factory.CreateClient();
+        forbidden.DefaultRequestHeaders.Add("X-Test-Role", "coach");
+        using var forbiddenResponse = await forbidden.GetAsync(
+            $"/api/v1/canonical/matches/{MatchGuid:D}/timeline/backfill?afterSequence=-1&atSeconds=120");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+    }
+
     [Theory]
     [InlineData(-2, 120, 5, 50)]
     [InlineData(0, 5401, 5, 50)]
@@ -118,6 +160,13 @@ public sealed class CanonicalBackfillTests
                 services.RemoveAll<IMatchProjectionReader>();
                 services.AddSingleton<IMatchProjectionReader>(reader);
             });
+            builder.ConfigureTestServices(services => services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "backfill-test";
+                    options.DefaultChallengeScheme = "backfill-test";
+                    options.DefaultForbidScheme = "backfill-test";
+                })
+                .AddScheme<AuthenticationSchemeOptions, BackfillTestAuthenticationHandler>("backfill-test", _ => { }));
         });
 
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
@@ -179,6 +228,24 @@ public sealed class CanonicalBackfillTests
         {
             await Task.Yield();
             yield break;
+        }
+    }
+
+    private sealed class BackfillTestAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var role = Request.Headers["X-Test-Role"].FirstOrDefault() ??
+                Request.Headers["X-Dev-Roles"].ToString().Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (role is null) return Task.FromResult(AuthenticateResult.NoResult());
+
+            var subject = Request.Headers["X-Dev-Subject"].FirstOrDefault() ?? "backfill-contract-test";
+            var identity = new ClaimsIdentity([new Claim("sub", subject), new Claim("roles", role)], Scheme.Name, "sub", "roles");
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
         }
     }
 }

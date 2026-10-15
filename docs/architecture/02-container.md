@@ -22,6 +22,21 @@ flowchart LR
 
 The local canonical BFF reads persisted projections, ledger events, insights and evidence through `PostgresMatchProjectionReader` and `PostgresMatchInsightReader`; the registration is conditional on `Runtime:Profile=local` and a PostgreSQL connection string. Without the adapter, canonical reads return sanitized `503 DEPENDENCY_UNAVAILABLE`. Canonical routes require the EP06-S04 role policies. Azure profiles require explicit Entra authority/audience configuration and map the protected routes with unavailable adapters until an Azure PostgreSQL read adapter is configured; no fixture fallback exists. Legacy match/demo routes remain fail-closed and protected; no synthetic demo is served by the runtime. No candidate-feed canonical admission path is implemented. `ManuLivCandidateFeedReader` parses raw candidate records and their source hash; `LocalCandidateFeedReplayProducer` emits those records in order at a bounded local rate and returns a source-bound resume cursor for the caller to persist after handling. Neither component maps or persists canonical football facts, and this local producer is not the target Event Hubs adapter. The candidate JSON has owner-confirmed synthetic provenance and redistribution permission, but its time policy, coordinate units/orientation, player metrics, canonical event mappings and football realism remain unverified; it is not yet imported.
 
+## LOCAL — reconnect and catch-up slice (EP06-S03 candidate)
+
+```mermaid
+flowchart LR
+  Browser["React browser client (authentication pending)"] -->|snapshot + bounded backfill| BFF["Canonical BFF"]
+  BFF -->|read selected revision| PG["Docker PostgreSQL"]
+  PG --> Outbox["Committed projection outbox"]
+  Dispatch["LOCAL API hosted outbox dispatcher"] -->|cursor-only notification| Hub["LOCAL ASP.NET Core SignalR"]
+  Outbox --> Dispatch
+  Hub -->|match/revision/sequence cursor| Browser
+  Browser -. "gap, reconnect or revision change" .-> BFF
+```
+
+The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the ASP.NET environment is Development, `Runtime:Profile=local`, `Realtime:Provider=local` is explicit, and PostgreSQL uses a single approved loopback host. It leases committed outbox messages through the existing bounded-retry dispatcher; SignalR carries only revision/sequence cursors. The new canonical backfill endpoint returns one selected-time snapshot and a bounded ordered event page from PostgreSQL. A revision mismatch, a client sequence ahead of the durable head, or a nonnegative resume sequence without a projection revision forces replay from sequence -1. This slice does not certify a connected browser journey: the current application has no production authentication scheme or integrated SignalR browser client, and the canonical event producer/feed adapter remains separately gated.
+
 ## TARGET — canonical Azure platform
 
 ```mermaid

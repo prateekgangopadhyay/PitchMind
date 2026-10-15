@@ -155,7 +155,7 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
                   <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p>
                   <p className="match-source">Source {match.provenance} · {match.algorithmVersion} · {match.sourceSha256.slice(0, 12)}</p>
                 </div>
-                <a className="primary-link" aria-label={`Open match ${match.matchId}`} href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.canonicalRevision)}>Open match</a>
+                <a className="primary-link" aria-label={`Open match ${match.matchId}`} href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
               </article>;
             })}</div>
             </>}
@@ -196,9 +196,10 @@ function InsightPage({ route, matchId, selectedSeconds, revision }: {
       .then(result => {
         if (controller.signal.aborted) return;
         if (result.matchId !== matchId || result.selectedTimeSeconds !== selectedSeconds ||
-          (revision && result.canonicalRevision !== revision) ||
+          (revision && result.projectionRevision !== revision) ||
           result.items.some(item => item.matchId !== matchId || item.canonicalRevision !== result.canonicalRevision ||
-            item.selectedTimeSeconds !== selectedSeconds || item.throughSequence > result.throughSequence)) {
+            item.projectionRevision !== result.projectionRevision || item.selectedTimeSeconds !== selectedSeconds ||
+            item.throughSequence > result.throughSequence)) {
           setError('The response does not match the selected match, time and revision.');
           setPage(null);
           return;
@@ -220,7 +221,7 @@ function InsightPage({ route, matchId, selectedSeconds, revision }: {
             <span className="badge">{insight.truthClass}</span><h2>{insight.summary}</h2>
             <p>Selected {clock(insight.selectedTimeSeconds)} · revision {insight.canonicalRevision} · {insight.evidence.length} evidence reference(s)</p>
             <ul className="evidence-list">{insight.evidence.map(item => <li key={`${item.kind}:${item.id}`}>{item.kind}: {item.id} · {item.relation}</li>)}</ul>
-            <a href={contextHref(`/matches/${encodeURIComponent(matchId)}`, matchId, selectedSeconds, insight.canonicalRevision)}>Open selected match</a>
+            <a href={contextHref(`/matches/${encodeURIComponent(matchId)}`, matchId, selectedSeconds, insight.projectionRevision)}>Open selected match</a>
           </article>)}</div>}
   </section>;
 }
