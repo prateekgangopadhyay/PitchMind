@@ -45,9 +45,10 @@ public sealed class FoundryExplanationAdapterTests
     }
 
     [Theory]
-    [InlineData(ExplanationAudience.Fan, "fan")]
-    [InlineData(ExplanationAudience.Analyst, "analyst")]
-    public async Task GenerateAsync_UsesAudienceOnlyAsPresentationContext(ExplanationAudience audience, string expectedAudience)
+    [InlineData(ExplanationAudience.Fan, "fan", "use everyday language", "briefly explain necessary tactical terms")]
+    [InlineData(ExplanationAudience.Analyst, "analyst", "use concise tactical terminology", "describe only the evidenced sequence or structure")]
+    public async Task GenerateAsync_AppliesBoundedAudiencePresentationPolicy(ExplanationAudience audience, string expectedAudience,
+        string expectedStyle, string expectedScope)
     {
         var handler = new StubHandler(_ => Task.FromResult(JsonResponse(Completion("The press led to a regain.", "event-1"))));
         using var http = new HttpClient(handler);
@@ -57,6 +58,10 @@ public sealed class FoundryExplanationAdapterTests
 
         Assert.True(result.Succeeded);
         using var body = JsonDocument.Parse(handler.RequestBody!);
+        var systemInstruction = body.RootElement.GetProperty("messages")[0].GetProperty("content").GetString();
+        Assert.Contains(expectedStyle, systemInstruction, StringComparison.Ordinal);
+        Assert.Contains(expectedScope, systemInstruction, StringComparison.Ordinal);
+        Assert.Contains("Audience may change wording and terminology only; it must never change the facts.", systemInstruction, StringComparison.Ordinal);
         var prompt = body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
         using var userContext = JsonDocument.Parse(prompt!);
         Assert.Equal(expectedAudience, userContext.RootElement.GetProperty("audience").GetString());
