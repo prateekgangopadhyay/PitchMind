@@ -1,0 +1,43 @@
+using Npgsql;
+
+namespace PitchMind.Api;
+
+/// <summary>Allows local outbox mutation only against the host-loopback endpoints used by Docker Compose.</summary>
+public static class LocalPostgresConnectionPolicy
+{
+    private static readonly HashSet<string> AllowedHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "127.0.0.1",
+        "localhost",
+        "::1"
+    };
+
+    public static bool IsLoopbackConnectionString(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return false;
+
+        try
+        {
+            var host = new NpgsqlConnectionStringBuilder(connectionString).Host?.Trim();
+            // Npgsql supports comma-separated failover hosts; reject the entire string unless there is one host.
+            return host is not null && !host.Contains(',', StringComparison.Ordinal) && AllowedHosts.Contains(host);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    public static bool IsLocalRealtimeProfile(string? environmentName, string? runtimeProfile, string? provider) =>
+        string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(provider, "local", StringComparison.OrdinalIgnoreCase);
+
+    public static bool ShouldRegisterOutboxWorker(
+        string? environmentName,
+        string? runtimeProfile,
+        string? provider,
+        string? postgresConnectionString) =>
+        IsLocalRealtimeProfile(environmentName, runtimeProfile, provider) &&
+        IsLoopbackConnectionString(postgresConnectionString);
+}

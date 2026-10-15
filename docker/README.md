@@ -14,7 +14,13 @@ From the repository root:
 In a second terminal, run the local API:
 
 ```bash
-Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+set -a
+source docker/.env
+set +a
+Runtime__Profile=local Realtime__Provider=local \
+  ConnectionStrings__PitchMind="Host=127.0.0.1;Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-pitchmind};Username=${POSTGRES_USER:-pitchmind};Password=${POSTGRES_PASSWORD}" \
+  DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development \
+  dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
 
 Back at the repository root, check readiness and later stop the services:
@@ -28,6 +34,6 @@ The first run creates `docker/.env` with independent random passwords and restri
 
 To stop the services and preserve data, run `./scripts/dev-down.sh`. To delete both data volumes, run `./scripts/dev-reset.sh` and type `RESET` at its prompt. For automation, `./scripts/dev-reset.sh --force` explicitly skips the prompt. Reset retains `docker/.env`; restarting reuses the local credentials.
 
-The local API requires the resolved .NET environment name to be `Development` and `Runtime:Profile=local`. EP06-S04 adds Entra authentication for the Azure profile, which requires `Production` plus `Runtime:Profile=azure` and Entra authority/audience. These local guards are not deployment identity validation. The API currently has no canonical match read adapter: its match routes return typed `503 MATCH_DATA_UNAVAILABLE` until validated source data and canonical PostgreSQL read composition are available. Starting PostgreSQL and Redis here does not configure those adapters. Azure credentials are not required to run the local API.
+The local API requires the resolved .NET environment name to be `Development` and `Runtime:Profile=local`. Local realtime and outbox dispatch additionally require `Realtime:Provider=local` and the loopback PostgreSQL connection shown above. The command loads credentials from the gitignored `docker/.env`; keep that file private. EP06-S04 adds Entra authentication for the Azure profile, which requires `Production` plus `Runtime:Profile=azure` and Entra authority/audience. These local guards are not deployment identity validation. The API currently has no canonical match read adapter: its match routes return typed `503 MATCH_DATA_UNAVAILABLE` until validated source data and canonical PostgreSQL read composition are available. Starting PostgreSQL and Redis here does not configure those adapters. Azure credentials are not required to run the local API.
 
 Troubleshooting: start Docker Desktop, run `docker info`, then `docker compose --env-file docker/.env -f docker/compose.yml ps`. If ports 5432 or 6379 are occupied, edit docker/.env to select free host ports.

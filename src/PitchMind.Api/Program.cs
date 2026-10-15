@@ -21,9 +21,8 @@ if (corsOrigins.Length > 0)
     builder.Services.AddCors(options => options.AddPolicy("ApiCors", policy =>
         policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 }
-var localRealtimeEnabled = builder.Environment.IsDevelopment() &&
-    string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) &&
-    string.Equals(builder.Configuration["Realtime:Provider"] ?? "local", "local", StringComparison.OrdinalIgnoreCase);
+var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
+    builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"]);
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
 if (localRealtimeEnabled)
 {
@@ -41,9 +40,18 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
     var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
     if (!string.IsNullOrWhiteSpace(postgresConnectionString))
     {
-        builder.Services.AddSingleton(NpgsqlDataSource.Create(postgresConnectionString));
+        var dataSource = NpgsqlDataSource.Create(postgresConnectionString);
+        builder.Services.AddSingleton(dataSource);
         builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
         builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+        if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
+                builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"], postgresConnectionString))
+        {
+            builder.Services.AddSingleton<PostgresOutboxDispatcher>();
+            builder.Services.AddHostedService<OutboxDispatchWorker>(services => new OutboxDispatchWorker(
+                cancellationToken => services.GetRequiredService<PostgresOutboxDispatcher>().DispatchOneAsync(cancellationToken),
+                services.GetRequiredService<ILogger<OutboxDispatchWorker>>()));
+        }
     }
     else
     {
