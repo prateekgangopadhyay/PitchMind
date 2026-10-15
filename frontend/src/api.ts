@@ -43,14 +43,14 @@ export function provenanceLabel(provenance: string): string {
 }
 export interface CanonicalMatchPage { items: CanonicalMatchCard[]; nextMatchId: string | null; hasMore: boolean }
 export interface CanonicalMatchSnapshot {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; asOfSeconds: number;
+  matchId: string; canonicalRevision: number; projectionRevision?: number; selectedTimeSeconds: number; asOfSeconds: number;
   throughSequence: number; algorithmVersion: string; sourceSha256: string; stateSha256: string;
   provenance: string; period: number; phase: string; homeScore: number; awayScore: number;
   possessionTeamId: string | null; homeActivePlayers: number; awayActivePlayers: number;
   players: MatchPlayerState[];
 }
 export interface CanonicalEventPage {
-  matchId: string; canonicalRevision: number; selectedTimeSeconds: number; throughSequence: number;
+  matchId: string; canonicalRevision: number; projectionRevision?: number; selectedTimeSeconds: number; throughSequence: number;
   items: CanonicalLedgerEvent[]; nextCursor: string | null; hasMore: boolean;
 }
 export interface CanonicalLedgerEvent {
@@ -105,4 +105,21 @@ export async function request<T>(path: string, signal?: AbortSignal, body?: unkn
     throw new ApiRequestError(response.status, problem?.code ?? 'REQUEST_FAILED', problem?.correlationId ?? response.headers.get('X-Correlation-ID') ?? '', problem?.title ?? `Match service returned ${response.status}. Please retry.`);
   }
   return response.json() as Promise<T>;
+}
+
+export interface CanonicalTimelineBackfill {
+  snapshot: CanonicalMatchSnapshot;
+  events: CanonicalEventPage;
+  revisionChanged: boolean;
+  replayRequired: boolean;
+  requestedAfterSequence: number;
+}
+export interface RealtimeCursorV1 {
+  kind: string;
+  schemaVersion: number;
+  matchId: string;
+  canonicalRevision: number;
+  lastSequence: number;
+  serverUtc?: string;
+  asOfSeconds?: number;
 }
