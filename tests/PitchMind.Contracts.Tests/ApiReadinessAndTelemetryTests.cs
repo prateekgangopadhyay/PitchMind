@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PitchMind.Api;
 using PitchMind.Infrastructure.Storage;
+using OpenTelemetry.Metrics;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
@@ -18,6 +20,51 @@ namespace PitchMind.Contracts.Tests;
 [Collection("Api telemetry listeners")]
 public sealed class ApiReadinessAndTelemetryTests
 {
+    [Fact]
+    public void Otlp_metrics_export_is_opt_in_and_includes_api_and_outbox_meters()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"] = "https://collector.example.test/v1/metrics"
+        }).Build();
+
+        var configured = MetricsExportConfiguration.AddConfiguredOtlpMetricsExporter(
+            services, configuration, "Production", "azure");
+
+        Assert.True(configured);
+        Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(MeterProvider));
+    }
+
+    [Fact]
+    public void Otlp_metrics_export_is_disabled_without_an_explicit_endpoint()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().Build();
+
+        var configured = MetricsExportConfiguration.AddConfiguredOtlpMetricsExporter(
+            services, configuration, "Production", "azure");
+
+        Assert.False(configured);
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(MeterProvider));
+    }
+
+    [Fact]
+    public void Otlp_metrics_export_rejects_insecure_nonlocal_endpoints()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://collector.example.test:4318"
+        }).Build();
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            MetricsExportConfiguration.AddConfiguredOtlpMetricsExporter(services, configuration, "Production", "azure"));
+
+        Assert.Contains("HTTPS", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(MeterProvider));
+    }
+
     [Fact]
     public async Task Local_profile_without_canonical_postgres_is_not_ready_and_liveness_is_independent()
     {

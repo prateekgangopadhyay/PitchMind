@@ -14,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 var runtimeProfile = builder.Configuration["Runtime:Profile"];
 RuntimeProfileGuard.Validate(builder.Environment.EnvironmentName, runtimeProfile);
 RuntimeProfileGuard.ConfigureLocalServices(builder.Services, runtimeProfile);
+MetricsExportConfiguration.AddConfiguredOtlpMetricsExporter(builder.Services, builder.Configuration,
+    builder.Environment.EnvironmentName, runtimeProfile);
 ApiSecurity.Configure(builder);
 var corsOrigins = ApiSecurity.GetConfiguredCorsOrigins(builder.Configuration, builder.Environment);
 if (corsOrigins.Length > 0)
