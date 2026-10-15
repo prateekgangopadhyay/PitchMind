@@ -17,7 +17,7 @@ public sealed class SyntheticMatchTests
         Assert.Equal(0, service.GetState(4679).AwayScore); Assert.Equal(1, service.GetState(4680).AwayScore);
         var insight = service.GetInsights(5400).Single();
         Assert.Equal("simulated", insight.Classification);
-        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("press-sequence-v3", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
         Assert.Equal("synthetic", insight.Provenance);
         Assert.Matches("^[0-9a-f]{64}$", insight.SourceSha256);
@@ -26,7 +26,7 @@ public sealed class SyntheticMatchTests
         Assert.Equal(5400, insight.SelectedTimeSeconds);
         Assert.Equal(service.GetEvents(5400)[^1].Event.Sequence, insight.ThroughSequence);
         Assert.Equal(service.Fixture.Version, insight.SourceVersion);
-        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v2", StringComparison.Ordinal));
+        Assert.Contains(insight.Conditions, condition => condition.Contains("policy: press-sequence-v3", StringComparison.Ordinal));
         var graph = insight.EvidenceGraph!;
         Assert.Equal(insight.MatchId, graph.MatchId);
         Assert.Equal(insight.SourceVersion, graph.SourceVersion);
@@ -148,7 +148,7 @@ public sealed class SyntheticMatchTests
         foreach (var expected in golden.Snapshots)
         {
             var replay = service.ReplayAt(expected.SelectedElapsedSeconds, golden.FixtureVersion, golden.FixtureSeed,
-                SyntheticMatchService.ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, golden.FixtureContentSha256);
+                SyntheticMatchService.ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV3.Version, golden.FixtureContentSha256);
             Assert.Equal(expected.ReplayOutputSha256, replay.ReplayOutputSha256);
             Assert.Equal(expected.LastSequence, replay.State.LastSequence);
             Assert.Equal(expected.Period, replay.State.Period);
@@ -416,7 +416,7 @@ public sealed class SyntheticMatchTests
         var root = catalog.RootElement;
         Assert.Equal("press-sequence-goldens-v1", root.GetProperty("catalogVersion").GetString());
         Assert.Equal(SyntheticFixtureGenerator.Version, root.GetProperty("sourceFixtureVersion").GetString());
-        Assert.Equal(PressSequencePolicy.UnapprovedDemoV2.Version, root.GetProperty("detectorVersion").GetString());
+        Assert.Equal(PressSequencePolicy.UnapprovedDemoV3.Version, root.GetProperty("detectorVersion").GetString());
         Assert.Equal("synthetic", root.GetProperty("provenance").GetString());
 
         var snapshot = new SyntheticMatchService(SyntheticFixtureGenerator.Generate()).GetState(5400);

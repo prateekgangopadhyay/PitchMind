@@ -30,7 +30,7 @@ public sealed class GetMatchAtQueryService(IMatchProjectionReader reader)
             throw new ArgumentException("Algorithm version is required.", nameof(query));
         if (string.IsNullOrWhiteSpace(query.DetectorVersion))
             throw new ArgumentException("Detector version is required.", nameof(query));
-        if (!string.Equals(query.DetectorVersion, PressSequencePolicy.UnapprovedDemoV2.Version, StringComparison.Ordinal))
+        if (!string.Equals(query.DetectorVersion, PressSequencePolicy.UnapprovedDemoV3.Version, StringComparison.Ordinal))
             throw new NotSupportedException($"Detector version '{query.DetectorVersion}' is not available for deterministic replay.");
 
         var snapshot = await reader.ReadReplaySnapshotAtAsync(query.MatchId, query.SelectedSeconds,

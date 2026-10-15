@@ -92,7 +92,7 @@ public sealed class SyntheticMatchService
         if (fixtureSeed is not null && fixtureSeed != Fixture.Seed)
             throw new ArgumentException("Requested fixture seed is not available.", nameof(fixtureSeed));
         RequirePin("replayAlgorithmVersion", replayAlgorithmVersion, ReplayAlgorithmVersion);
-        RequirePin("detectorVersion", detectorVersion, PressSequencePolicy.UnapprovedDemoV2.Version);
+        RequirePin("detectorVersion", detectorVersion, PressSequencePolicy.UnapprovedDemoV3.Version);
 
         var state = GetState(clockSeconds);
         var events = GetEvents(clockSeconds);
@@ -104,9 +104,9 @@ public sealed class SyntheticMatchService
         RequirePin("replayInputSha256", replayInputSha256, inputSha256);
 
         var outputSha256 = HashJson(new ReplayOutput(Fixture.MatchId, clockSeconds, Fixture.Version, Fixture.Seed,
-            ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, inputSha256, state, events, insights));
+            ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV3.Version, inputSha256, state, events, insights));
         return new MatchReplaySnapshot("offline-synthetic-fixture", Fixture.MatchId, clockSeconds, Fixture.Version,
-            Fixture.Seed, ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version, inputSha256, outputSha256,
+            Fixture.Seed, ReplayAlgorithmVersion, PressSequencePolicy.UnapprovedDemoV3.Version, inputSha256, outputSha256,
             CanonicalRevision: null, state, events, insights);
     }
     public IReadOnlyList<TacticalInsight> GetInsights(int clockSeconds)

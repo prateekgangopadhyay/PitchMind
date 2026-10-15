@@ -36,7 +36,7 @@ public sealed class GetMatchAtQueryServiceTests
         var frame = new MatchReplayFrame(new TrackingFrame("frame-0", 0, 52.5, 34, []), 0, 1,
             "metres-v1", projection.SourceSha256);
         var reader = new ProjectionReaderFake(projection, events, aggregate.ReplaySeed, [kickoff, pass], context, [frame]);
-        var query = new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version);
+        var query = new GetMatchAtQuery(matchId, 3308, 3, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version);
 
         var result = await new GetMatchAtQueryService(reader).ExecuteAsync(query, CancellationToken.None);
 
@@ -48,7 +48,7 @@ public sealed class GetMatchAtQueryServiceTests
         Assert.Equal(query, reader.LastQuery);
         Assert.Equal(stateHash, result.ReplaySha256);
         Assert.Empty(result.DerivedInsights);
-        Assert.Equal(PressSequencePolicy.UnapprovedDemoV2.Version, result.DetectorVersion);
+        Assert.Equal(PressSequencePolicy.UnapprovedDemoV3.Version, result.DetectorVersion);
         Assert.Matches("^[0-9a-f]{64}$", result.ReplayInputSha256);
         Assert.Matches("^[0-9a-f]{64}$", result.DerivedOutputSha256);
         Assert.Equal(stateJson, JsonSerializer.Serialize(result.ReplayedState, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
@@ -90,7 +90,7 @@ public sealed class GetMatchAtQueryServiceTests
             var reader = new ProjectionReaderFake(projection, events.Select(item => item.Event).ToArray(), replaySeed,
                 events, context, frames);
             return (await new GetMatchAtQueryService(reader).ExecuteAsync(new(matchId, selectedSeconds, 1,
-                "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None))!;
+                "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None))!;
         }
 
         var before = await Replay(3308);
@@ -103,7 +103,7 @@ public sealed class GetMatchAtQueryServiceTests
         var insight = Assert.Single(atGoal.DerivedInsights);
         Assert.Equal(7, insight.EventIds.Count);
         Assert.Equal("simulated", insight.Classification);
-        Assert.Equal("press-sequence-v2", insight.DetectorVersion);
+        Assert.Equal("press-sequence-v3", insight.DetectorVersion);
         Assert.Equal("unapproved-demo", insight.PolicyStatus);
         Assert.False(insight.Publishable);
         Assert.Equal("tactical-context-v1", insight.Context!.SchemaVersion);
@@ -131,7 +131,7 @@ public sealed class GetMatchAtQueryServiceTests
     {
         var reader = new ProjectionReaderFake(null, []);
         var result = await new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(MatchId.New(), 10, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None);
+            new(MatchId.New(), 10, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None);
 
         Assert.Null(result);
         Assert.Empty(reader.EventsRead);
@@ -147,7 +147,7 @@ public sealed class GetMatchAtQueryServiceTests
         }, [Event(matchId, 0, 0)]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 0, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 0, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
         Assert.Single(reader.EventsRead);
     }
 
@@ -159,7 +159,7 @@ public sealed class GetMatchAtQueryServiceTests
             [Event(matchId, 0, 0), Event(matchId, 1, 3309)]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public sealed class GetMatchAtQueryServiceTests
             [Event(matchId, 0, 3307), Event(matchId, 2, 3308)]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class GetMatchAtQueryServiceTests
             [Event(matchId, 0, 3308), Event(matchId, 1, 3307)]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 3308, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public sealed class GetMatchAtQueryServiceTests
         ProjectionReaderFake Reader(MatchReplayContext? replayContext, IReadOnlyList<MatchReplayFrame> frames,
             bool enforceFrameTimeFilter = true) => new(projection, [kickoff.Event], aggregate.ReplaySeed, [kickoff],
                 replayContext, frames, enforceFrameTimeFilter);
-        var query = new GetMatchAtQuery(matchId, 0, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version);
+        var query = new GetMatchAtQuery(matchId, 0, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(Reader(context, [])).ExecuteAsync(query, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(Reader(context with { CoordinateVersion = "unitless-v1" }, [validFrame])).ExecuteAsync(query, CancellationToken.None));
@@ -255,7 +255,7 @@ public sealed class GetMatchAtQueryServiceTests
         var reader = new ProjectionReaderFake(projection, [kickoff.Event], aggregate.ReplaySeed, [kickoff], context, [halftimeFrame]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 2700, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 2700, 1, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     [Fact]
@@ -284,7 +284,7 @@ public sealed class GetMatchAtQueryServiceTests
             [kickoff, substitution], context, [frame]);
 
         await Assert.ThrowsAsync<InvalidDataException>(() => new GetMatchAtQueryService(reader).ExecuteAsync(
-            new(matchId, 10, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV2.Version), CancellationToken.None));
+            new(matchId, 10, 2, "aggregate-v1", PressSequencePolicy.UnapprovedDemoV3.Version), CancellationToken.None));
     }
 
     private static SelectedMatchProjection Projection(MatchId matchId, long canonicalRevision,
@@ -318,7 +318,7 @@ public sealed class GetMatchAtQueryServiceTests
         public Task<SelectedMatchProjection?> GetAtAsync(MatchId matchId, int selectedSeconds,
             long upToCanonicalRevision, string algorithmVersion, CancellationToken cancellationToken)
         {
-            LastQuery = new(matchId, selectedSeconds, upToCanonicalRevision, algorithmVersion, PressSequencePolicy.UnapprovedDemoV2.Version);
+            LastQuery = new(matchId, selectedSeconds, upToCanonicalRevision, algorithmVersion, PressSequencePolicy.UnapprovedDemoV3.Version);
             return Task.FromResult(projection);
         }
 
