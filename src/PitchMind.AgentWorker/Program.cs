@@ -7,7 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
-if (string.Equals(builder.Configuration["Runtime:Profile"], "azure", StringComparison.OrdinalIgnoreCase))
+var runtimeProfile = builder.Configuration["Runtime:Profile"];
+AzureMonitorTelemetry.Configure(builder, runtimeProfile);
+if (string.Equals(runtimeProfile, "azure", StringComparison.OrdinalIgnoreCase))
 {
     var endpointValue = builder.Configuration["Foundry:Endpoint"];
     var deployment = builder.Configuration["Foundry:Deployment"];
@@ -22,7 +24,7 @@ if (string.Equals(builder.Configuration["Runtime:Profile"], "azure", StringCompa
         MaximumConcurrency: ReadLimit("Foundry:MaximumConcurrency", 4));
     options.Validate();
     builder.Services.AddSingleton(options);
-    builder.Services.AddSingleton<TokenCredential>(_ => new ManagedIdentityCredential());
+    builder.Services.AddSingleton<TokenCredential>(_ => new ManagedIdentityCredential(new ManagedIdentityCredentialOptions()));
     builder.Services.AddSingleton<IFoundryAccessTokenProvider, ManagedIdentityFoundryAccessTokenProvider>();
     builder.Services.AddSingleton(_ => new HttpClient(FoundryHttpClientFactory.CreateHandler()) { Timeout = Timeout.InfiniteTimeSpan });
     builder.Services.AddSingleton<FoundryExplanationAdapter>();

@@ -304,6 +304,14 @@ public sealed class ExplanationResiliencePolicy(
         string? question,
         CancellationToken cancellationToken = default)
     {
+        using var activity = ExplanationTelemetry.ActivitySource.StartActivity("explanation.execute");
+        activity?.SetTag("pitchmind.explanation.audience", audience.ToString());
+        if (context is not null)
+        {
+            activity?.SetTag("pitchmind.canonical.revision", context.CanonicalRevision);
+            activity?.SetTag("pitchmind.selected_time_seconds", context.SelectedTimeSeconds);
+        }
+
         options.Validate();
         cancellationToken.ThrowIfCancellationRequested();
         if (!DeterministicExplanationFallback.IsUsable(context, audience))
