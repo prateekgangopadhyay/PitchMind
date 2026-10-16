@@ -218,3 +218,6 @@ button, select { min-height: 44px; }
   .evidence-replay-controls { align-items:stretch; flex-direction:column; }
   .evidence-replay-controls output { order:-1; }
 }
+
+.selected-time-explanation { margin: 1rem 0; }
+.selected-time-explanation p { max-width: 70ch; }
