@@ -1569,7 +1569,7 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
-    public async Task EventHubProjectionHandlerUpdatesBrokerCheckpointOnlyAfterDatabaseCommit()
+    public async Task EventHubProjectionHandlerUpdatesBrokerCheckpointAfterCommitAndDuringStaleReplay()
     {
         await using var source = Source();
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
@@ -1601,6 +1601,32 @@ public sealed class PostgresLedgerTests
             checkpointUpdates++;
         }, CancellationToken.None);
         Assert.Equal(2, checkpointUpdates);
+
+        var nextMessageId = Guid.NewGuid();
+        var nextPayload = ProjectionPayload(nextMessageId, matchId, canonicalRevision: 2, projectionRevision: 2,
+            sequence: 1, stateJson: "{\"score\":1}");
+        var nextMessage = MakeProjectionEvent(nextPayload, nextMessageId, matchId, brokerSequence: 451,
+            offset: "1001", canonicalRevision: 2, projectionRevision: 2, canonicalSequence: 1);
+        await handler.HandleAsync(nextMessage, "0", _ =>
+        {
+            checkpointUpdates++;
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        // The durable PG cursor is ahead of the old message. Reprocessing the already
+        // inboxed event must not move PG backwards, but it should advance the lagging
+        // Blob checkpoint to this event so a restart does not replay the same prefix.
+        await handler.HandleAsync(message, "0", async _ =>
+        {
+            await using var cursor = source.CreateCommand("""
+                SELECT last_broker_sequence_number FROM pitchmind.consumer_checkpoints
+                WHERE consumer_id = $1 AND partition_id = '0'
+                """);
+            cursor.Parameters.AddWithValue(consumerId);
+            Assert.Equal(451L, (long)(await cursor.ExecuteScalarAsync())!);
+            checkpointUpdates++;
+        }, CancellationToken.None);
+        Assert.Equal(4, checkpointUpdates);
     }
 
     private static string ProjectionPayload(Guid messageId, Guid matchId, long canonicalRevision,
@@ -1632,14 +1658,15 @@ public sealed class PostgresLedgerTests
     }
 
     private static ProjectionEvent MakeProjectionEvent(string payload, Guid messageId, Guid matchId,
-        long brokerSequence, string offset) => new(messageId.ToString("D"), offset, brokerSequence,
+        long brokerSequence, string offset, long canonicalRevision = 1, int projectionRevision = 1,
+        long canonicalSequence = 0) => new(messageId.ToString("D"), offset, brokerSequence,
         Encoding.UTF8.GetBytes(payload), new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["schemaName"] = "ProjectionPublishedV1",
             ["matchId"] = matchId.ToString("D"),
-            ["canonicalRevision"] = "1",
-            ["projectionRevision"] = "1",
-            ["sequence"] = "0",
+            ["canonicalRevision"] = canonicalRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["projectionRevision"] = projectionRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["sequence"] = canonicalSequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["sourceSha256"] = new string('a', 64)
         });
 

@@ -59,13 +59,13 @@ public sealed class EventHubProjectionEventHandler(
         var projection = new ConsumerProjectionSnapshot(envelope.MessageId, envelope.MatchId,
             envelope.CanonicalRevision, envelope.ProjectionRevision, envelope.Sequence, envelope.ClockSeconds,
             envelope.AlgorithmVersion, envelope.SourceSha256, envelope.StateSha256, envelope.State.GetRawText());
-        var result = await consumer.ConsumeAsync(consumerId, partitionId, data.Offset,
+        await consumer.ConsumeAsync(consumerId, partitionId, data.Offset,
             data.SequenceNumber, messageId, projection, payloadBytes, cancellationToken);
 
-        // A stale Blob checkpoint can replay events already covered by the durable PG
-        // cursor. Let processing continue, but do not move the broker checkpoint back.
-        if (result.CheckpointResult != ConsumerCheckpointAdvanceResult.StaleReplay)
-            await updateBrokerCheckpoint(cancellationToken);
+        // EventProcessorClient processes each partition sequentially in source order.
+        // Advancing the Blob checkpoint for a safely deduplicated stale replay lets it
+        // catch up when it lagged behind the durable PostgreSQL cursor.
+        await updateBrokerCheckpoint(cancellationToken);
     }
 
     private static void ValidateProperties(ProjectionEvent data, ProjectionPublishedV1Envelope envelope)
