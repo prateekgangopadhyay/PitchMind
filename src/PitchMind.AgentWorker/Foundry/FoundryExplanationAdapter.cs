@@ -6,6 +6,7 @@ using Azure;
 using Azure.Core;
 using Azure.Identity;
 using Microsoft.Extensions.Logging;
+using PitchMind.AgentWorker.Agents;
 using PitchMind.Application.MatchIntelligence;
 
 namespace PitchMind.AgentWorker.Foundry;
@@ -87,11 +88,12 @@ public sealed class FoundryExplanationAdapter(
         options.Validate();
         if (request.Context is null || string.IsNullOrWhiteSpace(request.Question) || request.Question.Length > 1_000 ||
             request.Question.Any(char.IsControl) || !Enum.IsDefined(request.Audience) ||
+            !TacticalAgentCatalog.TryGet(request.AgentProfileId, out var agentProfile) ||
             request.MaximumOutputTokens is < 1 || request.MaximumOutputTokens > options.MaximumOutputTokens ||
             !IsBoundedContext(request.Context))
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.InvalidCandidate);
 
-        var body = BuildRequestBody(request);
+        var body = BuildRequestBody(request, agentProfile);
         var requestBytes = JsonSerializer.SerializeToUtf8Bytes(body, JsonOptions);
         if (requestBytes.Length > options.MaximumRequestBytes || request.Context.SerializedSizeBytes > 32_768)
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.RequestTooLarge);
@@ -176,12 +178,12 @@ public sealed class FoundryExplanationAdapter(
 
     public void Dispose() => _concurrency.Dispose();
 
-    private object BuildRequestBody(ExplanationGenerationRequest request) => new
+    private object BuildRequestBody(ExplanationGenerationRequest request, TacticalAgentProfile agentProfile) => new
     {
         model = options.Deployment,
         messages = new object[]
         {
-            new { role = "system", content = BuildSystemInstruction(request.Audience) },
+            new { role = "system", content = BuildSystemInstruction(request.Audience, agentProfile) },
             new
             {
                 role = "user",
@@ -207,7 +209,7 @@ public sealed class FoundryExplanationAdapter(
         }
     };
 
-    private static string BuildSystemInstruction(ExplanationAudience audience)
+    private static string BuildSystemInstruction(ExplanationAudience audience, TacticalAgentProfile profile)
     {
         var audienceGuidance = audience switch
         {
@@ -216,7 +218,7 @@ public sealed class FoundryExplanationAdapter(
             _ => throw new ArgumentOutOfRangeException(nameof(audience))
         };
 
-        return SystemInstruction + " " + audienceGuidance;
+        return SystemInstruction + " " + audienceGuidance + "\n" + profile.BuildPromptContext();
     }
 
     private const string SystemInstruction = "You produce a concise football explanation candidate from the supplied JSON evidence only. " +

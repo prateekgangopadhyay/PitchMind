@@ -11,7 +11,8 @@ public sealed record ExplanationGenerationRequest(
     ExplanationAudience Audience,
     string Question,
     int MaximumOutputTokens = 256,
-    int MaximumInputTokens = 16_384);
+    int MaximumInputTokens = 16_384,
+    string AgentProfileId = "evidence-coach");
 
 public sealed record CandidateExplanationClaim(string Text, IReadOnlyList<string> EvidenceIds);
 
