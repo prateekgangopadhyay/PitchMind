@@ -1,6 +1,6 @@
 # EP04-S02 LOCAL API password guard — 2026-10-16
 
-**Locally verified code commits:** `57a6406e`, `5fa9ab55`, and `be2bc499`. The corresponding changes are published in draft PR #301, stacked on PR #299.
+**Locally verified code commits:** `57a6406e`, `5fa9ab55`, and `be2bc499`. The original credential-reset changes were submitted in draft PR #301, stacked on PR #299; that slice was later merged into PR #299, and the combined PR #299 merged to main.
 
 ## Change
 
