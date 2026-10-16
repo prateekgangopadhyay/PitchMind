@@ -16,12 +16,22 @@ public sealed record ConsumerCheckpoint(
 public enum ConsumerCheckpointAdvanceResult
 {
     Advanced,
-    AlreadyCurrent
+    AlreadyCurrent,
+    StaleReplay
 }
 
 public interface IConsumerCheckpointStore
 {
     Task<ConsumerCheckpointAdvanceResult> AdvanceAsync(
         ConsumerCheckpoint checkpoint,
+        CancellationToken cancellationToken,
+        bool alreadyProcessed = false);
+
+    Task<ConsumerCheckpointAdvanceResult> AdvancePoisonAsync(
+        string consumerId,
+        string partitionId,
+        string offset,
+        long brokerSequenceNumber,
+        Guid poisonId,
         CancellationToken cancellationToken);
 }

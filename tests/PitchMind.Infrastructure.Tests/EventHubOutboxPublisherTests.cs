@@ -1,7 +1,12 @@
 using System.Text.Json;
 using Azure.Messaging.EventHubs;
 using Azure.Core;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using PitchMind.Application.Abstractions;
 using PitchMind.EventWorker;
+using PitchMind.Infrastructure.Storage;
 using Xunit;
 
 namespace PitchMind.Infrastructure.Tests;
@@ -72,6 +77,52 @@ public sealed class EventHubOutboxPublisherTests
         Assert.Equal("pitchmind.servicebus.windows.net",
             AzureEventWorkerConfiguration.ValidateEventHubNamespace("PITCHMIND.servicebus.windows.net"));
 
+    [Fact]
+    public void AcceptsAzureBlobServiceUriForProcessorCheckpointStorage() =>
+        Assert.Equal("https://pitchmind.blob.core.windows.net",
+            AzureEventWorkerConfiguration.ValidateBlobServiceUri("https://PITCHMIND.blob.core.windows.net"));
+
+    [Theory]
+    [InlineData("http://pitchmind.blob.core.windows.net")]
+    [InlineData("https://pitchmind.blob.core.windows.net.evil.example")]
+    [InlineData("https://pitchmind.blob.core.windows.net/other")]
+    [InlineData("https://pitchmind.blob.core.windows.net:444")]
+    public void RejectsNonAzureOrMalformedBlobServiceUri(string value) =>
+        Assert.Throws<InvalidOperationException>(() => AzureEventWorkerConfiguration.ValidateBlobServiceUri(value));
+
+    [Fact]
+    public async Task ConsumerDurablyIsolatesMismatchedTransportPropertiesBeforeBrokerCheckpoint()
+    {
+        var callbackReached = false;
+        var poison = new CapturingPoisonStore();
+        var checkpoints = new CapturingCheckpointStore();
+        var handler = new EventHubProjectionEventHandler(null!, poison, checkpoints, "projection-reader-v1");
+        var properties = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["schemaName"] = "ProjectionPublishedV2",
+            ["matchId"] = MatchId.ToString("D"),
+            ["canonicalRevision"] = "9",
+            ["projectionRevision"] = "4",
+            ["sequence"] = "42",
+            ["sourceSha256"] = Sha256
+        };
+        var message = new ProjectionEvent(MessageId.ToString("D"), "9000", 100,
+            System.Text.Encoding.UTF8.GetBytes(Payload(MessageId, MatchId)), properties);
+
+        await handler.HandleAsync(message, "0", _ =>
+        {
+            callbackReached = true;
+            return Task.CompletedTask;
+        }, CancellationToken.None);
+
+        Assert.True(callbackReached);
+        var storedPoison = Assert.Single(poison.Records);
+        Assert.Equal("TRANSPORT_METADATA_MISMATCH", storedPoison.ReasonCode);
+        Assert.Equal("9000", storedPoison.Offset);
+        Assert.Equal(100, storedPoison.BrokerSequenceNumber);
+        Assert.Equal(storedPoison.PoisonId, checkpoints.PoisonId);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("local")]
@@ -82,6 +133,31 @@ public sealed class EventHubOutboxPublisherTests
     [Fact]
     public void EventWorkerAcceptsAzureRuntimeProfile() =>
         AzureEventWorkerConfiguration.ValidateRuntimeProfile("azure");
+
+    [Fact]
+    public void ProjectionConsumerCompositionRegistersPostgresCheckpointStore()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["EventHubs:Namespace"] = "pitchmind.servicebus.windows.net",
+            ["EventHubs:HubName"] = "canonical-telemetry",
+            ["EventHubs:ConsumerGroup"] = "projection-reader",
+            ["EventHubs:ProjectionConsumerId"] = "projection-reader-v1",
+            ["Storage:BlobServiceUri"] = "https://pitchmind.blob.core.windows.net",
+            ["Storage:CheckpointContainer"] = "projection-checkpoints"
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<TokenCredential>(new NeverCalledCredential());
+        services.AddSingleton(NpgsqlDataSource.Create("Host=localhost;Database=pitchmind;Username=worker"));
+        AzureEventWorkerConfiguration.AddAzureProjectionConsumer(services, configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var handler = provider.GetRequiredService<EventHubProjectionEventHandler>();
+
+        Assert.NotNull(handler);
+        Assert.IsType<PostgresProjectionPublishedConsumer>(provider.GetRequiredService<PostgresProjectionPublishedConsumer>());
+        Assert.IsType<PostgresConsumerCheckpointStore>(provider.GetRequiredService<IConsumerCheckpointStore>());
+    }
 
     [Fact]
     public void RejectsPasswordBasedPostgresConfiguration()
@@ -140,6 +216,35 @@ public sealed class EventHubOutboxPublisherTests
         {
             WasCalled = true;
             throw new InvalidOperationException("Credential must not be called by this test.");
+        }
+    }
+
+    private sealed class CapturingPoisonStore : IProjectionPoisonStore
+    {
+        public List<ProjectionPoisonRecord> Records { get; } = [];
+
+        public Task<Guid> RecordAsync(ProjectionPoisonRecord record, CancellationToken cancellationToken)
+        {
+            Records.Add(record);
+            return Task.FromResult(record.PoisonId);
+        }
+
+        public Task MarkReplayedAsync(Guid poisonId, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class CapturingCheckpointStore : IConsumerCheckpointStore
+    {
+        public Guid? PoisonId { get; private set; }
+
+        public Task<ConsumerCheckpointAdvanceResult> AdvanceAsync(ConsumerCheckpoint checkpoint,
+            CancellationToken cancellationToken, bool alreadyProcessed = false) =>
+            throw new NotImplementedException();
+
+        public Task<ConsumerCheckpointAdvanceResult> AdvancePoisonAsync(string consumerId, string partitionId,
+            string offset, long brokerSequenceNumber, Guid poisonId, CancellationToken cancellationToken)
+        {
+            PoisonId = poisonId;
+            return Task.FromResult(ConsumerCheckpointAdvanceResult.Advanced);
         }
     }
 }
