@@ -12,8 +12,12 @@ From the repository root:
 In a second terminal, run the local API:
 
 ```bash
-dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+ASPNETCORE_ENVIRONMENT=Development Runtime__Profile=local dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
+
+In the local profile, fixture-backed demo GETs are anonymous and marked `X-PitchMind-Data-Class: synthetic-demo`. Canonical match routes remain protected; without a configured local identity or Entra authority they fail closed. For local authorization tests only, set `Identity__DevelopmentHeaderAuthEnabled=true` and send `X-Dev-Subject` plus `X-Dev-Roles: fan|analyst|admin`. This adapter is rejected outside `Development` with `Runtime__Profile=local` and is never a cloud identity mechanism.
+
+Azure runtime configuration must set `Runtime__Profile=azure`, an HTTPS `Identity__Authority`, and `Identity__Audience`; the API fails startup when these are absent. Do not set the local runtime profile in Azure.
 
 Back at the repository root, check readiness and later stop the services:
 

@@ -11,3 +11,4 @@ Accepted as **target decisions**, pending executable verification:
 
 - [ADR-008 — Bounded offline synthetic vertical slice](ADR-008-offline-vertical-slice.md)
 - [ADR-009 — Separate canonical BFF from offline demo routes](ADR-009-canonical-bff-boundary.md)
+- [ADR-010 — API identity, role boundaries and local synthetic access](ADR-010-api-identity-and-abuse-controls.md)

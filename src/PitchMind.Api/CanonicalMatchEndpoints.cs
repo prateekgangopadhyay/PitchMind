@@ -8,7 +8,10 @@ internal static class CanonicalMatchEndpoints
 {
     public static IEndpointRouteBuilder MapCanonicalMatchEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/v1/canonical/fixtures", async (
+        var canonical = app.MapGroup("/api/v1/canonical")
+            .RequireAuthorization("MatchRead")
+            .RequireRateLimiting("api");
+        canonical.MapGet("/fixtures", async (
             string? afterMatchId, int? limit, IMatchProjectionReader projections, HttpContext context,
             CancellationToken cancellationToken) =>
         {
@@ -30,7 +33,7 @@ internal static class CanonicalMatchEndpoints
                 hasMore ? items[^1].MatchId : null, hasMore));
         });
 
-        var match = app.MapGroup("/api/v1/canonical/matches/{matchId}");
+        var match = canonical.MapGroup("/matches/{matchId}");
         match.MapGet("/summary", async (
             string matchId, int? atSeconds, int? revision, IMatchProjectionReader projections,
             HttpContext context, CancellationToken cancellationToken) =>
@@ -131,7 +134,7 @@ internal static class CanonicalMatchEndpoints
             var items = evidence.Select(item => new CanonicalEvidencePayloadResponse(item.Kind, item.Id, item.Relation,
                 item.Sequence, item.ClockSeconds, item.Period, ParsePayload(item.PayloadJson))).ToArray();
             return Results.Ok(new CanonicalEvidenceResponse(ToInsight(insight, selectedTime), Array.AsReadOnly(items)));
-        });
+        }).RequireAuthorization("MatchReplay");
 
         match.MapGet("/replay", async (
             string matchId, int? atSeconds, int? revision, string? cursor, int? limit,
@@ -150,7 +153,7 @@ internal static class CanonicalMatchEndpoints
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, decodedCursor?.AfterSequence ?? -1, pageSize, cancellationToken);
             return Results.Ok(new CanonicalReplayResponse(ToSnapshot(projection, selectedTime), ToEventPage(projection, selectedTime, page, canonicalMatchId)));
-        });
+        }).RequireAuthorization("MatchReplay");
 
         match.MapGet("/key-moments", (string matchId, int? atSeconds, int? revision, HttpContext context) =>
         {

@@ -7,6 +7,8 @@
 ```mermaid
 flowchart LR
   U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
+  ID["Entra authority and audience (runtime configuration)"] -. "JWT bearer; tenant integration not verified" .-> A
+  A --> Auth["Role policies, audit, rate limits and security headers"]
   A --> S["SyntheticMatchService"]
   S --> G["C# generated fixture (transitional)"]
   S --> T["Deterministic pressing rule"]
@@ -18,7 +20,7 @@ flowchart LR
   J["JSON file in repository (not wired)"] -. "not imported" .-> S
 ```
 
-The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. If the PostgreSQL read adapter is absent, those routes return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. Authentication for these canonical routes is still an EP06-S04 gate; they must not be exposed through a cloud ingress before that boundary is implemented or an approved public-synthetic boundary exists. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
+The existing unprefixed demo routes still use `SyntheticMatchService`; `/api/v1/canonical/*` reads only revisioned PostgreSQL projections, ledger events, and persisted insight evidence. If the PostgreSQL read adapter is absent, those routes return 503 and never fall back to demo data. The database schema has no canonical key-moment projection, so the canonical key-moments route returns an explicit unavailable response. The API now has configurable JWT bearer validation and role policies; no Entra tenant or role assignment has been connected or verified. Anonymous fixture-backed GETs are limited to the explicit local Development profile and carry `X-PitchMind-Data-Class: synthetic-demo`. Azure runtime profiles require Entra issuer/audience configuration. The candidate JSON remains unimported and its coordinate/football semantics remain unapproved.
 
 ## TARGET — canonical Azure platform
 
