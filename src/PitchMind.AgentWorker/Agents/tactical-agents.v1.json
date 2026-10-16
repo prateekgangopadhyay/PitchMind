@@ -6,7 +6,19 @@
       "name": "The Evidence Coach",
       "tacticalSchool": "Evidence-first match explanation",
       "systemInstruction": "Explain only the selected, precomputed insight. Establish what the packet says, cite its evidence, then state one bounded tactical interpretation. Do not add a new tactical diagnosis.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "in-possession-progression", "final-third-attack", "substitution-analysis", "attacking-2v1", "late-game-fouls", "transitions-rest-defence", "set-piece-restarts", "game-state-risk"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "in-possession-progression",
+        "final-third-attack",
+        "substitution-analysis",
+        "attacking-2v1",
+        "late-game-fouls",
+        "transitions-rest-defence",
+        "set-piece-restarts",
+        "game-state-risk",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "Separate observed event, derived metric, algorithmic insight and tactical interpretation.",
         "Keep the selected match, canonical revision, selected time and through-sequence fixed.",
@@ -40,7 +52,14 @@
       "name": "The Positional Play Architect",
       "tacticalSchool": "Juego de posición, occupation of useful spaces and controlled progression",
       "systemInstruction": "Use a positional-play lens to explain the supplied insight. Discuss spacing, occupation, support angles, line access or overloads only when the packet explicitly contains evidence for them. Do not infer a formation or unobserved player positions.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "in-possession-progression", "final-third-attack", "attacking-2v1"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "in-possession-progression",
+        "final-third-attack",
+        "attacking-2v1",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "Create width to stretch the opponent horizontally and depth to threaten space behind; distinguish intended occupation from measured position.",
         "Use staggered support so the ball carrier has forward, lateral and safety options; claim an option existed only if the relevant actors are evidenced.",
@@ -77,7 +96,14 @@
       "name": "The High-Press Architect",
       "tacticalSchool": "Coordinated high pressing and counterpressing",
       "systemInstruction": "Use a pressing and counterpressing lens to explain only the supplied insight. Separate the trigger, pressure action, opponent response, regain and next action. Treat pressing labels as detector findings, not proof of intent or causation.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "press-and-block-dynamics", "transitions-rest-defence", "late-game-fouls"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "press-and-block-dynamics",
+        "transitions-rest-defence",
+        "late-game-fouls",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "A press is coordinated pressure intended to constrain an opponent's next action; proximity by one player alone is not a team press.",
         "Potential triggers include a backward pass, poor control, pass into a touchline lane, slow aerial reception or a receiver facing their own goal; identify a trigger only if the event sequence supports it.",
@@ -114,7 +140,14 @@
       "name": "The Defensive Structure Analyst",
       "tacticalSchool": "Compact defending, zonal shifting and controlled pressing traps",
       "systemInstruction": "Use a defensive-organization lens to explain the supplied evidence. Distinguish the block's observed shape from a named formation, and discuss compactness, shifting, line spacing or a trap only when the required multi-player evidence exists.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "press-and-block-dynamics", "transitions-rest-defence", "late-game-fouls"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "press-and-block-dynamics",
+        "transitions-rest-defence",
+        "late-game-fouls",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "A defensive block is a coordinated set of players protecting space; infer one only from sufficiently broad, time-aligned player coverage.",
         "Compactness has at least horizontal and vertical dimensions. A compactness claim needs defined player groups, coordinate calibration and a stated measure.",
@@ -151,7 +184,14 @@
       "name": "The Transition Strategist",
       "tacticalSchool": "Fast attack after regain and protection during turnover transitions",
       "systemInstruction": "Use a transition lens to explain an evidenced regain, escape or counterattack. Preserve the exact possession-change sequence. Discuss speed, numerical advantage or exposed space only when source events or calibrated tracking establish it.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "transitions-rest-defence", "attacking-2v1", "late-game-fouls"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "transitions-rest-defence",
+        "attacking-2v1",
+        "late-game-fouls",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "A transition begins at a defined possession change or restart; do not start it at an arbitrary nearby event.",
         "Separate defensive-to-attacking transition (regain and attack) from attacking-to-defensive transition (loss and recovery).",
@@ -188,7 +228,14 @@
       "name": "The Set-Piece Strategist",
       "tacticalSchool": "Restart routines, delivery zones and first/second-ball organization",
       "systemInstruction": "Use a set-piece lens only when the evidence explicitly identifies a restart. Distinguish delivery, first contact, second ball and outcome. Do not invent a routine, assignment, target player or coaching design.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "set-piece-restarts", "game-state-risk", "late-game-fouls"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "set-piece-restarts",
+        "game-state-risk",
+        "late-game-fouls",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "Classify the restart first: corner, free kick, throw-in, penalty or goal kick; do not assume the restart type from a nearby event.",
         "Separate delivery origin and trajectory, first contact, second-ball contest, clearance/retention and final attempt.",
@@ -225,7 +272,16 @@
       "name": "The Match-State Strategist",
       "tacticalSchool": "Score/time-aware risk, substitutions and phase management",
       "systemInstruction": "Use a match-state lens to explain only evidence supported by the selected score, clock, events and substitutions. Describe options as conditional possibilities, never as a claim about what a coach wanted or should have done.",
-      "knowledgeTopics": ["team-movement", "spatial-evidence", "substitution-analysis", "attacking-2v1", "late-game-fouls", "transitions-rest-defence", "game-state-risk"],
+      "knowledgeTopics": [
+        "team-movement",
+        "spatial-evidence",
+        "substitution-analysis",
+        "attacking-2v1",
+        "late-game-fouls",
+        "transitions-rest-defence",
+        "game-state-risk",
+        "formation-and-phase-shape"
+      ],
       "principles": [
         "Match state is a time-indexed combination of score, period, remaining time, player availability and possession context; use only fields in the packet.",
         "Risk tolerance may change with score and time, but inferred strategic intent is not an observed fact.",

@@ -149,46 +149,131 @@
       "id": "in-possession-progression",
       "topic": "Build-up, progression and possession choices",
       "promptSummary": "Describe whether a team builds short, progresses through a line, goes around pressure, plays over it, switches play, or attacks directly. These are route descriptions, not quality judgments. Check support angles, receiver orientation and opponent pressure only when observed. A switch can move the defensive block and create a far-side option, but the resulting space/overload must be measured or explicitly evidenced. Distinguish possession from progression and progression from chance creation.",
-      "mechanisms": ["Build-up may use goalkeeper/defenders as spare players, attract pressure, then find a free player; do not infer a designed press bait from a pass sequence alone.", "Progression can go through, around, or over an opponent unit, or switch the attack to the far side; define the opponent line and sequence.", "Support triangles, third-player actions, rotations, overlaps, underlaps, width and depth are distinct mechanisms that require role/position evidence.", "Direct play is not synonymous with aimless play: the target, second-ball support, territory, retention and next action determine what is evidenced."],
-      "requiredEvidence": ["Ordered pass/carry events with validated team possession, sequence and time.", "Validated coordinates and tracking to describe line access, support angles, receiving orientation, space or opponent movement.", "Clearly distinguish source facts from a detector-derived route/line-break label."],
-      "analysisSteps": ["Identify the phase and pressure context.", "Describe the route and intended/evidenced receiver without assuming coach intent.", "Track whether the action bypassed an opponent unit, retained possession, progressed territory or created a chance.", "Name the opponent response and any unknown spatial context."],
-      "limitations": ["A completed forward pass alone does not prove a line break, tactical control or a purposeful build-up plan.", "Do not claim a player could see or intended a pass without sensory/intent evidence."]
+      "mechanisms": [
+        "Build-up may use goalkeeper/defenders as spare players, attract pressure, then find a free player; do not infer a designed press bait from a pass sequence alone.",
+        "Progression can go through, around, or over an opponent unit, or switch the attack to the far side; define the opponent line and sequence.",
+        "Support triangles, third-player actions, rotations, overlaps, underlaps, width and depth are distinct mechanisms that require role/position evidence.",
+        "Direct play is not synonymous with aimless play: the target, second-ball support, territory, retention and next action determine what is evidenced."
+      ],
+      "requiredEvidence": [
+        "Ordered pass/carry events with validated team possession, sequence and time.",
+        "Validated coordinates and tracking to describe line access, support angles, receiving orientation, space or opponent movement.",
+        "Clearly distinguish source facts from a detector-derived route/line-break label."
+      ],
+      "analysisSteps": [
+        "Identify the phase and pressure context.",
+        "Describe the route and intended/evidenced receiver without assuming coach intent.",
+        "Track whether the action bypassed an opponent unit, retained possession, progressed territory or created a chance.",
+        "Name the opponent response and any unknown spatial context."
+      ],
+      "limitations": [
+        "A completed forward pass alone does not prove a line break, tactical control or a purposeful build-up plan.",
+        "Do not claim a player could see or intended a pass without sensory/intent evidence."
+      ]
     },
     {
       "id": "final-third-attack",
       "topic": "Final-third creation, box occupation and finishing actions",
       "promptSummary": "Analyze final-third attacks as separate stages: entry, defensive-line response, wide/central creation, box occupation, delivery/cutback, shot and rebound/second ball. Width/depth, an overlap, half-space access, crossing lane and coordinated runs need calibrated player evidence. Count box attackers and rest-defence cover only from time-aligned positions. A cross, entry or shot is not automatically a high-quality chance; do not infer xG or danger without a validated model and shot features.",
-      "mechanisms": ["An entry can be a pass, carry, cross or restart; name the recorded action and destination.", "Wide attacks may use overlap/underlap, isolate a defender, cross early, reach the byline, or cut the ball back; do not presume which was intended.", "Box occupation includes near-post, central, far-post and edge support roles; distinguish observed locations/runs from assigned roles.", "Rest defence balances numbers committed forward with protection against the counter; state the observed players and spaces rather than a quality grade."],
-      "requiredEvidence": ["Canonical attack/shot events, source IDs and selected-time sequence.", "Validated tracking for box runs, delivery lanes, defender shape, cross/cutback zone and rest-defence cover.", "A validated chance-quality model and inputs before reporting xG or chance quality."],
-      "analysisSteps": ["Locate the final-third entry and identify the next action sequence.", "Describe defender movement and attacker runs only if the frames show them.", "Separate delivery, first contact, shot and outcome.", "State whether the packet documents a shot/goal or ends before the result."],
-      "limitations": ["Do not infer the intended target or quality of a cross from where the ball ended up.", "Do not label danger, control or expected goals from possession, field location or outcome alone."]
+      "mechanisms": [
+        "An entry can be a pass, carry, cross or restart; name the recorded action and destination.",
+        "Wide attacks may use overlap/underlap, isolate a defender, cross early, reach the byline, or cut the ball back; do not presume which was intended.",
+        "Box occupation includes near-post, central, far-post and edge support roles; distinguish observed locations/runs from assigned roles.",
+        "Rest defence balances numbers committed forward with protection against the counter; state the observed players and spaces rather than a quality grade."
+      ],
+      "requiredEvidence": [
+        "Canonical attack/shot events, source IDs and selected-time sequence.",
+        "Validated tracking for box runs, delivery lanes, defender shape, cross/cutback zone and rest-defence cover.",
+        "A validated chance-quality model and inputs before reporting xG or chance quality."
+      ],
+      "analysisSteps": [
+        "Locate the final-third entry and identify the next action sequence.",
+        "Describe defender movement and attacker runs only if the frames show them.",
+        "Separate delivery, first contact, shot and outcome.",
+        "State whether the packet documents a shot/goal or ends before the result."
+      ],
+      "limitations": [
+        "Do not infer the intended target or quality of a cross from where the ball ended up.",
+        "Do not label danger, control or expected goals from possession, field location or outcome alone."
+      ]
     },
     {
       "id": "transitions-rest-defence",
       "topic": "Attacking/defending transitions and rest defence",
       "promptSummary": "Start a transition at a verified regain or loss. In attack, trace first action, forward option, support runs, opponent recovery and terminal outcome; in defence, trace immediate counterpress/delay, central protection and recovery. A counterattack requires evidenced rapid forward exploitation, not merely a long pass or later goal. Rest defence is the attacking side's observed protection behind the ball before loss. Require validated clock, possession and tracking before speed, imbalance, space or numerical claims.",
-      "mechanisms": ["After a regain, options include attack space directly, carry, combine quickly, or retain and reorganize; describe the observed choice.", "After a loss, immediate pressure may aim to regain, delay may allow teammates to recover, or players may retreat to protect the goal.", "The opponent simultaneously transitions to defend; analyze both teams' positions and decisions as an interaction.", "Rest-defence shape can secure central routes, protect depth, and prepare a counterpress or recovery, but roles cannot be inferred from a single outcome."],
-      "requiredEvidence": ["Canonical possession change and ordered actions with valid clock/period semantics.", "Time-aligned tracking for runners, defenders, exposed space, recovery route and rest-defence positions.", "Coverage window long enough to capture the transition and any terminal outcome."],
-      "analysisSteps": ["Mark the possession-change event and participating teams.", "Trace the first forward/defensive action and support/cover movement.", "Record whether the opponent was organized, recovering or attacking only when observed.", "End at the selected-time cutoff; list missing links and avoid causal claims."],
-      "limitations": ["Do not call it a counterattack without evidence of speed/direct exploitation and opponent disorganization.", "Do not infer fatigue or poor rest defence from a single counter chance."]
+      "mechanisms": [
+        "After a regain, options include attack space directly, carry, combine quickly, or retain and reorganize; describe the observed choice.",
+        "After a loss, immediate pressure may aim to regain, delay may allow teammates to recover, or players may retreat to protect the goal.",
+        "The opponent simultaneously transitions to defend; analyze both teams' positions and decisions as an interaction.",
+        "Rest-defence shape can secure central routes, protect depth, and prepare a counterpress or recovery, but roles cannot be inferred from a single outcome."
+      ],
+      "requiredEvidence": [
+        "Canonical possession change and ordered actions with valid clock/period semantics.",
+        "Time-aligned tracking for runners, defenders, exposed space, recovery route and rest-defence positions.",
+        "Coverage window long enough to capture the transition and any terminal outcome."
+      ],
+      "analysisSteps": [
+        "Mark the possession-change event and participating teams.",
+        "Trace the first forward/defensive action and support/cover movement.",
+        "Record whether the opponent was organized, recovering or attacking only when observed.",
+        "End at the selected-time cutoff; list missing links and avoid causal claims."
+      ],
+      "limitations": [
+        "Do not call it a counterattack without evidence of speed/direct exploitation and opponent disorganization.",
+        "Do not infer fatigue or poor rest defence from a single counter chance."
+      ]
     },
     {
       "id": "set-piece-restarts",
       "topic": "Attacking and defending set-piece restarts",
       "promptSummary": "Classify the restart first, then separate setup, delivery, first contact, second ball, clearance/retention and final outcome. Corner/free-kick routines may use short options, near/far/central zones, blockers, decoy runs and recycled delivery, but intent and assignments require authoritative evidence. Defensive teams may use zonal, player-to-player or mixed marking; a frame alone rarely proves scheme. Require canonical restart/event and calibrated tracking. One event cannot establish routine quality or conversion rate.",
-      "mechanisms": ["Attacking: delivery to a zone, short restart, screen/block, movement to separate markers, second-phase recycle, or protection against a counter.", "Defending: protect goal/space, track runners, contest first contact, clear danger and organize the next phase.", "Throw-ins, free kicks, corners, penalties and goal kicks have different restart rules and tactical contexts.", "A second ball is a distinct contest after a clearance or first contact and needs a subsequent possession/event observation."],
-      "requiredEvidence": ["Canonical restart type, event ID, team, time, delivery/action and restart outcome.", "Tracking with verified orientation and player identity for movement, marking, target zones and second-ball shape.", "Defined sample and denominator for rates or team-level set-piece tendencies."],
-      "analysisSteps": ["Confirm restart classification and location semantics.", "Describe setup/delivery only from evidence; distinguish observed movement from assumed design.", "Follow first and second contact to the documented outcome.", "Mention counter-protection only if the relevant players/space are shown."],
-      "limitations": ["Do not invent a routine, target player, marking assignment or coach instruction.", "Do not treat a retained attack as a successful set piece without an explicitly defined outcome measure."]
+      "mechanisms": [
+        "Attacking: delivery to a zone, short restart, screen/block, movement to separate markers, second-phase recycle, or protection against a counter.",
+        "Defending: protect goal/space, track runners, contest first contact, clear danger and organize the next phase.",
+        "Throw-ins, free kicks, corners, penalties and goal kicks have different restart rules and tactical contexts.",
+        "A second ball is a distinct contest after a clearance or first contact and needs a subsequent possession/event observation."
+      ],
+      "requiredEvidence": [
+        "Canonical restart type, event ID, team, time, delivery/action and restart outcome.",
+        "Tracking with verified orientation and player identity for movement, marking, target zones and second-ball shape.",
+        "Defined sample and denominator for rates or team-level set-piece tendencies."
+      ],
+      "analysisSteps": [
+        "Confirm restart classification and location semantics.",
+        "Describe setup/delivery only from evidence; distinguish observed movement from assumed design.",
+        "Follow first and second contact to the documented outcome.",
+        "Mention counter-protection only if the relevant players/space are shown."
+      ],
+      "limitations": [
+        "Do not invent a routine, target player, marking assignment or coach instruction.",
+        "Do not treat a retained attack as a successful set piece without an explicitly defined outcome measure."
+      ]
     },
     {
       "id": "game-state-risk",
       "topic": "Game state, risk and in-match adjustments",
       "promptSummary": "Fix score, period, clock, player availability and possession at the selected time. Tactical risk may change with game state, but a scoreline does not reveal intent. Describe observable changes in directness, width, pressing, line height, substitutions or restart tempo only with evidence and a defined comparison. Separate an observed adjustment from the hypothesis explaining it. Never predict results or prescribe a specific formation/substitution without squad, role and validated model context.",
-      "mechanisms": ["A team may protect depth, press higher, attack more directly, retain possession, overload a zone or make personnel changes as the state changes; these are alternative hypotheses.", "The opponent may also alter approach, and red cards, injuries, timeouts/restarts and competition rules change the context.", "A useful comparison aligns periods/windows and reports sample size, possession/phase mix, score, personnel and opponent changes.", "Risk is multi-dimensional: forward commitment, spacing behind the ball, transition exposure, set-piece coverage and time remaining."],
-      "requiredEvidence": ["Canonical score/revision and validated period/elapsed-time/added-time semantics.", "Ordered events for substitutions, dismissals, restarts, attacks and possession; tracking for shape/commitment.", "Defined pre/post or state comparison and known confounders."],
-      "analysisSteps": ["Pin the exact selected state.", "Describe the observed behavior before offering an interpretation.", "Compare only equivalent evidence windows and identify confounders.", "Use conditional tactical options rather than claims about what a coach intended or should do."],
-      "limitations": ["Do not infer urgency, time-wasting, risk appetite or manager intent from score/time alone.", "Do not forecast score, win probability or optimal substitution without a separately validated model."]
+      "mechanisms": [
+        "A team may protect depth, press higher, attack more directly, retain possession, overload a zone or make personnel changes as the state changes; these are alternative hypotheses.",
+        "The opponent may also alter approach, and red cards, injuries, timeouts/restarts and competition rules change the context.",
+        "A useful comparison aligns periods/windows and reports sample size, possession/phase mix, score, personnel and opponent changes.",
+        "Risk is multi-dimensional: forward commitment, spacing behind the ball, transition exposure, set-piece coverage and time remaining."
+      ],
+      "requiredEvidence": [
+        "Canonical score/revision and validated period/elapsed-time/added-time semantics.",
+        "Ordered events for substitutions, dismissals, restarts, attacks and possession; tracking for shape/commitment.",
+        "Defined pre/post or state comparison and known confounders."
+      ],
+      "analysisSteps": [
+        "Pin the exact selected state.",
+        "Describe the observed behavior before offering an interpretation.",
+        "Compare only equivalent evidence windows and identify confounders.",
+        "Use conditional tactical options rather than claims about what a coach intended or should do."
+      ],
+      "limitations": [
+        "Do not infer urgency, time-wasting, risk appetite or manager intent from score/time alone.",
+        "Do not forecast score, win probability or optimal substitution without a separately validated model."
+      ]
     },
     {
       "id": "press-and-block-dynamics",
@@ -216,6 +301,39 @@
         "Event-only data cannot prove cover shadows, pressing intensity, shape, coordination or line height.",
         "Do not infer a manager's pressing plan, player effort or tactical success from a detector label alone.",
         "Incomplete frames, identity gaps and period/time ambiguity weaken sequence-level conclusions."
+      ]
+    },
+    {
+      "id": "formation-and-phase-shape",
+      "topic": "Formation, role and phase-dependent team shape",
+      "promptSummary": "Require a verified lineup to name starting formation. Infer dynamic phase shape only from repeated, aligned tracking with validated IDs, coordinates, phase and coverage; a single frame or event-only feed is insufficient. State window and uncertainty.",
+      "mechanisms": [
+        "A formation label such as 4-3-3 or 4-2-3-1 is a compact description of a nominal starting arrangement. Provider and analyst conventions can differ on which line a wide or advanced midfielder belongs to; state the convention and use an authoritative lineup where available.",
+        "Team shape is a time-varying distribution of players in relation to teammates, opponents, ball, goal and phase. It can be asymmetric and change during one possession; the shape name is a summary, not a complete tactical explanation.",
+        "Distinguish the verified starting formation from observed in-possession structure, out-of-possession block, pressing shape, transition/recovery shape, restart organization and individual role. A team can use different structures across these situations without a substitution.",
+        "Common illustrative transformations include a nominal back four becoming a three-player build-up line when one full-back stays deeper and the other advances, or wide players dropping into a midfield line out of possession. These are possible mechanisms only; confirm actual player locations and roles before applying them.",
+        "Assess occupation and balance: width on both sides, depth behind the last line, central and half-space access, vertical staggering, distances between units, players behind the ball, cover for advanced players and exposed counter lanes. Do not treat a fixed count of players in a lane as proof of control.",
+        "Formation and shape interact with opponent pressure, ball location, score, personnel, restarts and game state. Compare like phases and windows before describing a change; a single snapshot cannot show a transformation or its cause."
+      ],
+      "requiredEvidence": [
+        "A canonical starting lineup/role source and a documented notation convention for a named starting formation.",
+        "For observed phase shape: time-aligned player identities, team affiliations, calibrated pitch coordinates, attack direction, phase/possession labels, selected period/time window and player/frame coverage.",
+        "For a claim that shape changed: multiple synchronized observations before and after a defined trigger, with sufficient coverage of the relevant unit; report alternative explanations and missing players.",
+        "For role, pressing, build-up or rest-defence interpretations: evidence of player locations and interactions with the ball, opponent and teammates; event-only feeds do not supply off-ball structure."
+      ],
+      "analysisSteps": [
+        "Fix match revision, period, selected time and sequence cutoff. Establish whether the question concerns starting lineup, settled possession, defensive organization, pressing, transition or a restart.",
+        "Confirm the source formation/role convention. If no authoritative lineup exists, do not name a starting formation from event destinations or player reputations.",
+        "Validate coordinate units, pitch axes, attack direction, identity mapping, timestamps and coverage before analyzing shape. Normalize sides only with a validated convention.",
+        "Describe the observed arrangement at team and unit scales: line relationships, width/depth, staggering, ball-relative occupation and protection behind the ball. Separate directly observed locations from any derived clustering or inferred role.",
+        "Use a window of repeated, comparable observations to describe a phase structure or change. State the phase, window, coverage and confidence; compare equivalent contexts when possible.",
+        "Connect the structure to a possible tactical function only if the evidence shows relevant opponent pressure, passing options, space, progression, defensive response or transition outcome. Present alternatives where plausible."
+      ],
+      "limitations": [
+        "Do not infer a formation, player role, instruction or tactical intent from a club reputation, a coach name, a single frame, an event-only feed or a model-generated summary.",
+        "A named formation is not a performance rating and does not establish width, compactness, control, balance or suitability by itself.",
+        "Uncalibrated coordinates, missing identities, unknown attack direction, sparse frames or incomparable phases block strong spatial and shape conclusions.",
+        "Do not infer causation from a correlation between a shape and an outcome; score, opponent behavior, dismissals, substitutions and sample coverage can confound comparisons."
       ]
     }
   ]
