@@ -1,9 +1,9 @@
 # EP07-S01 — shell language, information hierarchy, and responsive review
 
 **Result:** This local implementation slice is verified. EP07-S01 remains unverified and unaccepted.
-**Implementation commit:** `b400d830dcfb228870d029e9055ba63e4635f2f7` on `codex/ep07-s01-accessibility-followup`, based on `main` at `5f6f3367743bfac754d9b6ba7144091f1baed9a`.
-**Review PR:** [#308](https://github.com/prateekgangopadhyay/PitchMind/pull/308), draft, head `1049e09d165d66cbd94e7266cfb8fa4243e72472`. GitHub showed no review submissions and no combined status checks at the time of observation.
-**Scope:** Replace visible implementation jargon with viewer-facing language, progressively disclose match/source identifiers, sanitize a selected-moment mismatch, and keep long source hashes within narrow cards. No match facts, public API fields, data persistence, or architecture boundaries changed.
+**Implementation commits:** `b400d830dcfb228870d029e9055ba63e4635f2f7` and `ef4bf372fa9df6d248110438b9a9873165f142b3` on `codex/ep07-s01-accessibility-followup`, based on `main` at `5f6f3367743bfac754d9b6ba7144091f1baed9a`.
+**Review PR:** [#308](https://github.com/prateekgangopadhyay/PitchMind/pull/308), draft and pending independent review. The final documentation commit is recorded after it is created. No Product Owner acceptance is recorded.
+**Scope:** Replace visible implementation jargon with viewer-facing language, progressively disclose match/source identifiers, sanitize a selected-moment mismatch, keep long source hashes within narrow cards, expose the match collection as a named semantic list, and give its CTA a concise accessible name. No match facts, public API fields, data persistence, or architecture boundaries changed.
 
 ## Intent and observed delta
 
@@ -13,10 +13,10 @@ No team/player name or match fact is inferred to fill fields the current fixture
 
 ## Screenshots
 
-Captured from the local Vite app by Playwright with the inline test-only response. Home and Analyst states are shown at 1440px, 768px, and 320px. The expanded source-details screenshot verifies the wrapped hash at 320px.
+Captured from the local Vite app by Playwright with the inline test-only response. Home and Analyst states are shown at 1440px, 768px, 375px, and 320px. The expanded source-details screenshot verifies the wrapped hash at 320px.
 
-- Home: [desktop](ep07-s01-shell-ia/home-desktop-1440.png), [tablet](ep07-s01-shell-ia/home-tablet-768.png), [mobile](ep07-s01-shell-ia/home-mobile-320.png)
-- Analyst: [desktop](ep07-s01-shell-ia/analyst-desktop-1440.png), [tablet](ep07-s01-shell-ia/analyst-tablet-768.png), [mobile](ep07-s01-shell-ia/analyst-mobile-320.png)
+- Home: [desktop](ep07-s01-shell-ia/home-desktop-1440.png), [tablet](ep07-s01-shell-ia/home-tablet-768.png), [mobile 375px](ep07-s01-shell-ia/home-mobile-375.png), [mobile 320px](ep07-s01-shell-ia/home-mobile-320.png)
+- Analyst: [desktop](ep07-s01-shell-ia/analyst-desktop-1440.png), [tablet](ep07-s01-shell-ia/analyst-tablet-768.png), [mobile 375px](ep07-s01-shell-ia/analyst-mobile-375.png), [mobile 320px](ep07-s01-shell-ia/analyst-mobile-320.png)
 - Expanded source details: [mobile 320px](ep07-s01-shell-ia/home-source-details-open-mobile-320.png)
 
 ## Design and interaction review
@@ -27,11 +27,13 @@ Kept React/Vite/TypeScript and the existing navy/emerald CSS system. The screen 
 
 ### Impeccable
 
-Three concrete defects were found and corrected:
+Five concrete defects were found and corrected:
 
 1. Internal platform/API vocabulary was visible in user copy. It now describes what a viewer can do and what is unavailable.
 2. Source hashes and pipeline identifiers competed with the match score. They are in a native, keyboard-operable “Match and source details” disclosure.
 3. An unbroken source hash overflowed its mobile card when expanded. `overflow-wrap:anywhere` now keeps it inside the content width, with a browser assertion on the line’s actual `scrollWidth`.
+4. The match collection was a generic labelled `div`, which did not provide list semantics. It is now a named native list with list items, asserted by role in Playwright.
+5. The “Open match” link’s accessible name repeated an opaque UUID. The visible action text is now its accessible name; the identifier remains available in the details disclosure.
 
 ### Emil design engineering
 
@@ -68,12 +70,12 @@ The premium rubric is **Taste 32/40, Tech 26/30, Process 14/20, Output 8/10 = 80
 
 - `cd frontend && npm ci --offline` — completed; 244 packages installed, npm reported 0 vulnerabilities.
 - `cd frontend && npm test -- --run` — 8 files passed; 97 tests passed, 0 failed.
-- `cd frontend && npm run test:e2e` — 9 tests passed, 0 failed. This includes the new seven-screen journey at 1440px / 768px / 320px, keyboard route activation, 3px skip-link focus outline, preserved match context, simulation labeling, unavailable Match/Insights states, collapsed source details, and expanded 320px hash wrapping. The journey confirms the failed Match read displays no score.
+- `cd frontend && npm run test:e2e` — 9 tests passed, 0 failed. This includes the seven-screen journey at 1440px / 768px / 375px / 320px, keyboard route activation, 3px skip-link focus outline, preserved match context, simulation labeling, a named Matches list with one list item, the concise “Open match” accessible name, unavailable Match/Insights states, collapsed source details, and expanded 320px hash wrapping. The journey confirms the failed Match read displays no score.
 - `cd frontend && npm run build` — passed. Rollup emitted two existing SignalR pure-annotation warnings.
 - `cd frontend && npm run lint` — passed.
 - `node scripts/validate_operating_model.mjs` — passed: 12 epics, 59 stories, 28 Council skills, 5 design skills, 0 dependency cycles.
 - `node scripts/test_design_skills.mjs` — passed.
-- `node scripts/design-slop-scan.mjs` on the three changed TSX files — passed with no warnings.
+- `node scripts/design-slop-scan.mjs frontend/src/App.tsx`, `frontend/src/CanonicalMatchPage.tsx`, and `frontend/src/ShellPages.tsx` — each passed with no warnings.
 - `git diff --check` — passed.
 
 ## Unverified / pending
