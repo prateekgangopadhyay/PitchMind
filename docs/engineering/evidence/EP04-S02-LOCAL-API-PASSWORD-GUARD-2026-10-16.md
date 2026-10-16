@@ -1,6 +1,6 @@
 # EP04-S02 LOCAL API password guard — 2026-10-16
 
-**Locally verified code commits:** `57a6406e`, `5fa9ab55`, and `be2bc499`. The corresponding changes are published in draft PR #301, stacked on PR #299.
+**Locally verified code commits:** `57a6406e`, `5fa9ab55`, and `be2bc499`. The original credential-reset changes were submitted in draft PR #301, stacked on PR #299; that slice was later merged into PR #299, and the combined PR #299 merged to main.
 
 ## Change
 
@@ -30,4 +30,4 @@ Independent review of the combined EP04-S02 parent head `267536f45df86a2a783b63c
 - `./scripts/test-postgres.sh` on the follow-up code tree — Infrastructure **90/90** and Contracts **154/154**, 0 failed, 0 skipped. The harness used a uniquely named database on the healthy LOCAL container backed by `pitchmind_postgres_data`, then dropped the database. The temporary `.env` symlink used by the harness was removed.
 - Release Infrastructure test project on the follow-up code tree — **53 passed, 37 skipped, 0 failed**. The 37 are opt-in database tests, all exercised by the no-skip harness run above.
 - `git diff --check` — passed.
-- Independent re-review of the follow-up exact head and hosted CI remain pending; no GitHub review or hosted check is claimed. The story remains unaccepted.
+- Independent exact-head static re-review of combined PR #299 head `62388426a5b037a6b3403aef79ebf5ce52dc2049` found no actionable P0–P2 findings; the reviewer did not run tests or submit a GitHub review. PR #302 merged into PR #299 and the combined PR #299 merged to `main` at `5f6f3367743bfac754d9b6bba7144091f1baed9a`. No hosted checks are claimed. The story remains unaccepted pending provenance/backup-restore evidence and Product Owner acceptance.
