@@ -37,4 +37,14 @@ Verification on code commit `98b927c3ef9bbff875df947f01781744f9aba06b`:
 - Targeted PostgreSQL integration regression `EventHubProjectionHandlerUpdatesBrokerCheckpointAfterCommitAndDuringStaleReplay`: discovered but **skipped** because `PITCHMIND_TEST_POSTGRES` was not set. The guarded Compose startup could not connect to Docker's API socket, so the local database was unavailable.
 - `node scripts/validate_operating_model.mjs` and `git diff --check`: passed.
 
-The stale replay recovery change therefore compiles and its non-database Event Hubs tests pass, but the new callback-vs-PostgreSQL-cursor assertion remains unverified. Do not claim that this fix's PostgreSQL integration test passed. No Azure endpoint or resource was contacted.
+At that earlier run, the stale replay recovery change compiled and its non-database Event Hubs tests passed, but the new callback-vs-PostgreSQL-cursor assertion had not executed because the local database was unavailable. No Azure endpoint or resource was contacted.
+
+## Exact-head PostgreSQL follow-up — 2026-10-16
+
+The prior PostgreSQL skip was superseded on the published PR #309 head `63d5117731cedbc8a49878a4dd68952b5ad62f03` (code fix `98b927c3ef9bbff875df947f01781744f9aba06b`). Docker Desktop was reachable with the existing local PostgreSQL and Redis containers healthy. The repository harness created an isolated temporary database, ran the integration suites, and dropped that database during cleanup.
+
+- `PITCHMIND_TEST_RESULTS_DIRECTORY=/private/tmp/pitchmind-pr309-postgres-results-20261016 ./scripts/test-postgres.sh` — **Infrastructure 102/102 passed, 0 failed, 0 skipped; Contracts 154/154 passed, 0 failed, 0 skipped**.
+- The retained Infrastructure TRX result explicitly reports `Passed` for `PitchMind.Infrastructure.Tests.PostgresLedgerTests.EventHubProjectionHandlerUpdatesBrokerCheckpointAfterCommitAndDuringStaleReplay`.
+- The regression verifies that a successfully inbox-deduplicated stale replay advances the broker checkpoint callback while the PostgreSQL partition cursor remains monotonic.
+
+This closes the local PostgreSQL test gap for the stale-replay code path. It does not verify a live Event Hubs processor, Azure Blob checkpoint, Azure identity/network, cloud PostgreSQL, hosted CI, restart/rebuild in Azure, or measured load. The story remains partial, unaccepted, and pending independent exact-head review and Product Owner acceptance. No Azure resources or deployments were changed.
