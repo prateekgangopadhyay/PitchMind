@@ -2,7 +2,7 @@
 
 **Status:** Local code slice only. EP04-S03 remains partial, unverified, and unaccepted pending exact-head independent review and Product Owner acceptance.
 
-**Stack:** Draft child PR targets the PR #305 feature branch (`codex/ep04-s03-inbox-checkpoint-atomic`). Base code head before this slice: `d06a2e1a`. Final child commit: recorded after commit below.
+**Stack:** Draft child PR targets the PR #305 feature branch (`codex/ep04-s03-inbox-checkpoint-atomic`). Base code head before this slice: `d06a2e1a`. Implementation and design commit with the verified code tree: `1c46ca250d0a6aae8c6a4fdb12ee6250bfa49298`. This evidence file is in a documentation-only follow-up commit.
 
 ## Implementation
 
