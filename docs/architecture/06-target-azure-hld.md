@@ -26,12 +26,13 @@ PUB -. future adapter .-> SB[Service Bus commands + DLQ]
  AW --> TOOLS[Read-only evidence tools]
  TOOLS --> PG
  AW --> FO[Microsoft Foundry]
+ AW -. "profile-filtered hybrid retrieval; read-only" .-> KBSEARCH[Azure AI Search tactical knowledge index]
  AW --> CV[Claim validator]
  CV --> PG
  API -. Optional cache .-> REDIS[Azure Managed Redis P1]
  SB -. Recap P1 .-> FN[Azure Functions]
  FN --> BLOB[Storage export P1]
- PG -. Indexed read P2 .-> SEARCH[Azure AI Search]
+ PG -. Indexed canonical-evidence read P2 .-> SEARCH[Azure AI Search]
  EH -. History P2 .-> ADX[Data Lake + Data Explorer]
  API -. OTEL .-> MON[Azure Monitor App Insights]
  EW -. OTEL .-> MON
@@ -50,6 +51,7 @@ For the current `canonical-dev-topology.bicep` candidate, ACA is internal with p
 | Commands | local queue adapter | Service Bus DLQ, idempotent inbox | retry poison and recovery |
 | Live | local SignalR server | Azure SignalR | negotiated group access, reconnect + backfill |
 | AI | deterministic fallback/mock | Foundry model deployment via managed identity | grounding/timeout/token budget |
+| Tactical knowledge RAG | embedded, bounded lexical retrieval | Azure AI Search vector + semantic hybrid query using managed identity | corpus provenance, profile allowlist, grounding/refusal and outage tests; target only |
 | Jobs | local worker | Azure Functions / ACA Job | idempotent status, export permissions |
 | Identity | explicit dev-only test auth | Entra auth code+PKCE, roles `fan/analyst/admin` | unauthenticated/denied cases |
 | Infra | Compose | Bicep, VNet integrated ACA, private endpoints, managed identity, Key Vault | preflight what-if, DNS and TLS proofs |
@@ -62,6 +64,7 @@ For the current `canonical-dev-topology.bicep` candidate, ACA is internal with p
 - API enforces version, identity/authorization, pagination, query bounds, problem details, correlation, selectedTime/revision consistency.
 - EventWorker processes match-partition streams, validates monotonic sequence/idempotency, commits event+projection+evidence+outbox atomically; checkpoints only after DB success.
 - AgentWorker accesses **read-only** typed tools, invokes Foundry with bounded evidence, deterministically validates claims, writes validated output via authorized application port; returns fallback on timeout/reject.
+- Tactical knowledge search is a separate read-only corpus of reviewed educational summaries and source links. It is profile-topic-filtered, hybrid-ranked and limited to three bounded passages. It may explain a general concept but cannot establish that an event, player action, intent or outcome occurred. The canonical-evidence search projection is distinct from this knowledge index.
 - React shell renders factual DTOs only; no hardcoded football results or derived metric business logic.
 
 **Observed code slice:** EP04-S03 composes an Azure-only EventWorker publisher over the PostgreSQL leased outbox and an opt-in EventProcessorClient projection consumer. The publisher validates the persisted `ProjectionPublishedV1` contract, preserves the JSON body and stable outbox message ID, and uses the match ID as the Event Hubs partition key. The consumer commits a payload-bound inbox receipt and rebuildable latest snapshot in PostgreSQL, advances the database partition cursor, then updates the Azure Blob SDK checkpoint. Managed identity is used for Event Hubs and password-free Azure PostgreSQL access with verified TLS. This is code and local automated-test evidence only; no Azure resource, credential, network connection, cloud checkpoint, or deployment has been exercised.

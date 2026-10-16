@@ -43,12 +43,14 @@ public static class TacticalAgentCatalog
 
     public static string BuildPromptContext(TacticalAgentProfile profile)
     {
-        var cards = profile.KnowledgeTopics.Select(id => KnowledgeBase[id].FormatForPrompt());
-        var promptContext = profile.BuildBasePromptContext() + "\nTactical knowledge cards:\n" + string.Join("\n", cards);
+        var promptContext = profile.BuildBasePromptContext();
         if (promptContext.Length > 8_000)
             throw new InvalidDataException("Selected tactical profile exceeds the prompt context budget.");
         return promptContext;
     }
+
+    public static IReadOnlyList<TacticalKnowledgeCard> GetKnowledgeCards(IReadOnlyCollection<string> topicIds) =>
+        Array.AsReadOnly(topicIds.Where(KnowledgeBase.ContainsKey).Select(id => KnowledgeBase[id]).ToArray());
 
     public static bool TryGet(string? id, out TacticalAgentProfile profile)
     {
