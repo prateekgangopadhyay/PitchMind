@@ -13,6 +13,7 @@ type MatchView = {
   trackingFrames: CanonicalTrackingFramePage | null;
   trackingStatus: string;
   keyMomentsStatus: string;
+  linkedEvidenceStatus: string;
   eventsStatus: string;
   insightsStatus: string;
 };
@@ -150,8 +151,74 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           setError('This match data does not match the selected moment. Return to the match list and try again.');
           return;
         }
-        setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus,
-          eventsStatus: eventResult.status, insightsStatus: insightResult.status });
+        const linkedEventSequence = typeof window === 'undefined'
+          ? null
+          : /^#canonical-event-(\d+)$/.exec(window.location.hash)?.[1] ?? null;
+        let currentView: MatchView = { snapshot, events, insights, trackingFrames,
+          trackingStatus: frameResult.status, keyMomentsStatus,
+          eventsStatus: eventResult.status, insightsStatus: insightResult.status,
+          linkedEvidenceStatus: '' };
+        const parsedLinkedSequence = linkedEventSequence === null ? null : Number(linkedEventSequence);
+        const linkedSequence = parsedLinkedSequence !== null && Number.isSafeInteger(parsedLinkedSequence) && parsedLinkedSequence >= 0
+          ? parsedLinkedSequence : null;
+        const eventInPage = (items: CanonicalEventPage['items']) => linkedSequence !== null &&
+          items.some(event => event.sequence === linkedSequence);
+        setView(currentView);
+        if (linkedSequence === null || eventInPage(events.items) || !eventResult.page || !events.hasMore) return;
+
+        currentView = { ...currentView, linkedEvidenceStatus: 'Searching the selected match, time and revision for the linked event…' };
+        setView(currentView);
+        try {
+          let cursor = events.nextCursor;
+          let hasMore: boolean = events.hasMore;
+          let lastSequence = events.items.at(-1)?.sequence ?? -1;
+          const seenCursors = new Set<string>();
+          let pagesLoaded = 0;
+          let foundEvent: CanonicalEventPage['items'][number] | undefined;
+          let partial = false;
+          const pageLimit = 512;
+          if (hasMore && !cursor) partial = true;
+          while (hasMore && cursor && pagesLoaded < pageLimit && !controller.signal.aborted) {
+            if (seenCursors.has(cursor)) { partial = true; break; }
+            seenCursors.add(cursor);
+            const pageQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision), limit: '50', cursor });
+            const page = await request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${pageQuery}`, controller.signal);
+            pagesLoaded++;
+            const pageMatchesContext = page.matchId === matchId && page.canonicalRevision === snapshot.canonicalRevision &&
+              page.projectionRevision === snapshot.projectionRevision && page.selectedTimeSeconds === selectedSeconds &&
+              page.throughSequence === snapshot.throughSequence;
+            const pageEventsAreSafe = page.items.every((event, index) => event.matchId === matchId &&
+              event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
+              (index === 0 || page.items[index - 1].sequence < event.sequence));
+            if (!pageMatchesContext || !pageEventsAreSafe || !page.items.length || page.items[0].sequence <= lastSequence) {
+              partial = true;
+              break;
+            }
+            foundEvent = page.items.find(event => event.sequence === linkedSequence);
+            if (foundEvent) break;
+            lastSequence = page.items.at(-1)!.sequence;
+            hasMore = page.hasMore;
+            if (!hasMore) break;
+            cursor = page.nextCursor;
+            if (!cursor) { partial = true; break; }
+          }
+          if (controller.signal.aborted) return;
+          if (hasMore && pagesLoaded >= pageLimit) partial = true;
+          if (foundEvent) {
+            currentView = { ...currentView, events: { ...currentView.events,
+              items: [...currentView.events.items, foundEvent] }, linkedEvidenceStatus: '' };
+          } else {
+            currentView = { ...currentView, linkedEvidenceStatus: partial
+              ? 'The linked event could not be verified because additional selected-time pages were unavailable.'
+              : 'The linked event is not present in the selected match, time and revision.' };
+          }
+          setView(currentView);
+        } catch {
+          if (!controller.signal.aborted) {
+            currentView = { ...currentView, linkedEvidenceStatus: 'Some event pages could not be loaded. The linked event was not verified.' };
+            setView(currentView);
+          }
+        }
       })
       .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -365,6 +432,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     <small>Sequence {event.sequence} · period {event.period}</small>
                   </button>
                 </li>)}</ol>}
+              {view.linkedEvidenceStatus && <p className="empty" role="status" aria-live="polite">{view.linkedEvidenceStatus}</p>}
             </section>
             <section className="panel" aria-labelledby="insights-title">
               <h2 id="insights-title">Evidence-backed insights</h2>
