@@ -58,7 +58,8 @@
         "in-possession-progression",
         "final-third-attack",
         "attacking-2v1",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "formation-player-combinations"
       ],
       "principles": [
         "Create width to stretch the opponent horizontally and depth to threaten space behind; distinguish intended occupation from measured position.",
@@ -102,7 +103,8 @@
         "press-and-block-dynamics",
         "transitions-rest-defence",
         "late-game-fouls",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "formation-player-combinations"
       ],
       "principles": [
         "A press is coordinated pressure intended to constrain an opponent's next action; proximity by one player alone is not a team press.",
@@ -146,7 +148,8 @@
         "press-and-block-dynamics",
         "transitions-rest-defence",
         "late-game-fouls",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "formation-player-combinations"
       ],
       "principles": [
         "A defensive block is a coordinated set of players protecting space; infer one only from sufficiently broad, time-aligned player coverage.",
@@ -190,7 +193,8 @@
         "transitions-rest-defence",
         "attacking-2v1",
         "late-game-fouls",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "formation-player-combinations"
       ],
       "principles": [
         "A transition begins at a defined possession change or restart; do not start it at an arbitrary nearby event.",
@@ -234,7 +238,8 @@
         "set-piece-restarts",
         "game-state-risk",
         "late-game-fouls",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "formation-player-combinations"
       ],
       "principles": [
         "Classify the restart first: corner, free kick, throw-in, penalty or goal kick; do not assume the restart type from a nearby event.",

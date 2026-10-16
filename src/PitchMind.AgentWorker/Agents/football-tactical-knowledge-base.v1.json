@@ -335,6 +335,42 @@
         "Uncalibrated coordinates, missing identities, unknown attack direction, sparse frames or incomparable phases block strong spatial and shape conclusions.",
         "Do not infer causation from a correlation between a shape and an outcome; score, opponent behavior, dismissals, substitutions and sample coverage can confound comparisons."
       ]
+    },
+    {
+      "id": "formation-player-combinations",
+      "topic": "Formation advantages through defensive-attacking player combinations",
+      "promptSummary": "Formation is a starting reference, not a fixed shape. In 4-3-3, pivot plus two 8s connect a back four to three forwards; a full-back, winger and 8 can rotate overlap, underlap or hold width while the far side/pivot protect counters. 4-2-3-1 pairs complementary pivots behind a 10 and wide forwards; 4-4-2 pairs strikers and midfield banks but can be outnumbered centrally. 4-2-2-2 overloads central lanes and relies on full-backs for width. 3-5-2 pairs wing-backs, three centre-backs and two forwards; 3-4-3 stretches width but its midfield two can be overloaded. 4-1-4-1 screens central space but may isolate its lone striker. Every advantage has a space/cover trade-off; apply only after verifying actual roles, phase, opponent and evidence.",
+      "mechanisms": [
+        "In a 4-3-3, the single pivot can offer a build-up outlet and screen central counters while two 8s connect to the wide forwards and striker. A full-back can overlap outside a winger, underlap inside, or hold the deeper line; each choice changes width, passing angles and protection behind the ball.",
+        "The 4-2-3-1 can combine a back four with two pivots of complementary functions (for example, one holding while the other advances), a 10 between lines, and two wide forwards. The 10 links the midfield to the striker; the pivots can cover full-backs or receive under pressure. If both pivots stay flat, the 10/striker may become disconnected; if both advance, central counter protection can weaken.",
+        "A 4-4-2 can pair one forward who pressures or pins a centre-back with a partner who supports, drops or threatens depth. Two midfield banks can protect central routes and shift together; wide midfielders must coordinate with full-backs so one engages while another provides cover. The shape may concede a central numerical disadvantage against three central midfielders unless a forward or wide midfielder adjusts.",
+        "A 3-5-2 can use three centre-backs to support build-up and cover wide centre-back channels, wing-backs for width and recovery, a central midfielder to screen, and two forwards to combine or occupy separate defenders. The far wing-back can provide weak-side width or a back-post run; the near wing-back needs cover when advancing.",
+        "A 3-4-3 adds a front three for high pressure and wide/inside threats while wing-backs support the attack. Its two central midfielders need coordinated distances and help from a dropping forward or stepping wide centre-back against a central overload; wing-back space behind is a transition risk.",
+        "A 4-2-2-2 places two narrow attacking midfielders behind two forwards, creating short central combinations and multiple links around the ball. Full-backs often supply outside width, so the pivots and centre-backs need a clear cover rotation if both advance; opponents may target the vacated wide channels.",
+        "A 4-1-4-1 can layer a holding midfielder in front of the centre-backs and a midfield line that supports pressure or closes central access. The lone striker can screen a pivot and lead the press, but needs nearby midfield support or an outlet run to avoid isolation after a regain.",
+        "Wide-unit synergy depends on staggered options: winger holds width or attacks inside, full-back overlaps/underlaps or stays, and an 8 offers a bounce pass or third-player run. If all three occupy the same lane, they can crowd each other; if the full-back advances without cover, the opponent can counter into that channel.",
+        "Front-pair/front-three synergy can pin a defensive line, threaten depth, check between lines, press a return pass or create a third-player run. These are alternative roles that players exchange; a formation number does not establish who performs them.",
+        "A balanced attack needs a rest-defence relationship: centre-backs, pivot(s), and a far-side full-back/wing-back decide who secures the center and channels behind advancing players. More players ahead can improve box occupation while increasing exposure after a turnover; assess both sides of the trade-off."
+      ],
+      "requiredEvidence": [
+        "A verified lineup and notation convention for the nominal formation; do not infer it from team reputation or event locations.",
+        "Time-aligned player locations and identity/role evidence across the relevant phase to establish actual lines, rotations, width, depth and which defenders/midfielders/forwards combine.",
+        "Evidence of opponent structure/pressure and the subsequent action before claiming that a combination created a free player, overload, passing route, progression or chance.",
+        "For rest-defence or transition-risk claims, observed players behind/around the ball at the loss and the opponent response after the turnover."
+      ],
+      "analysisSteps": [
+        "Name the nominal setup only from verified lineup evidence; state that the notation describes a starting reference.",
+        "Identify phase, ball location and opponent arrangement. Use repeated synchronized frames for role/shape relationships, not a single frame alone.",
+        "Trace the relevant unit links: centre-back/pivot, pivot/8/10, full-back/winger/8, or forward pair/third runner. Describe the observed movement and available support.",
+        "State the possible advantage and its matching risk together (for example, width gained by an advancing full-back and space exposed behind).",
+        "Compare the opponent response and outcome using evidence IDs. Avoid rating a formation in isolation or claiming causality from a short sequence."
+      ],
+      "limitations": [
+        "These formations are illustrative coaching models, not fixed player duties or guaranteed advantages. Real structures are asymmetric and change by phase, opponent, score, personnel and instructions.",
+        "A nominal formation alone cannot establish player quality, suitability, tactical intent, success, spacing, local overload or defensive cover.",
+        "Event-only data cannot establish off-ball combinations or rest-defence shape. Unknown coordinates, timestamps, attack direction, identity or frame coverage block spatial conclusions.",
+        "Treat positional “advantages” as conditional mechanisms. Do not conclude the listed shape caused a goal, prevented a counter or was superior without a suitable comparison and evidence."
+      ]
     }
   ]
 }
