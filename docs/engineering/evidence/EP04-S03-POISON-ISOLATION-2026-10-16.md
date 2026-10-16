@@ -1,6 +1,6 @@
 # EP04-S03 consumer composition and poison isolation — 2026-10-16
 
-**Code head:** `21a9a15594b34c838c69f2c852c5fe2b741d8b6d` (PR #309 stacked branch).  
+**Tested code head before restack:** `21a9a15594b34c838c69f2c852c5fe2b741d8b6d`.
 **Status:** Local implementation evidence only. PR remains draft; independent exact-head review and Product Owner acceptance are pending.
 
 ## Change
@@ -21,3 +21,8 @@
 ## Limits and outstanding work
 
 No Azure Event Hubs or Blob Storage service was contacted; no SDK checkpoint was executed against a live broker. The runtime grant for the new poison table is not verified. Poison disposition persistence exists, but operator replay tooling and an Azure Blob checkpoint-reset procedure are not implemented or verified. The code only demonstrates that a corrected event at the same broker position can replace the poison marker. No deployment was performed. Story remains partial/unaccepted pending independent review, runtime permissions and operational recovery evidence.
+
+
+## Stack restack note — 2026-10-16
+
+PR #309 was restacked on the updated PR #305 head `bc9d129fb5db5874d6d685ff4766c72a66aaa843` to resolve the shared execution-register conflict while preserving both branches' evidence. Current PR #309 code commit is `001db345feefcba4abbee7fe5acd962a821a93f7`; current evidence/documentation head is `a40e12208766eda8b5fedc7efbafcc8479ceed36`. The `src/` and `tests/` trees are unchanged from the tested code head above. The restack changed documentation lineage only; tests were not rerun after this docs-only rebase.
