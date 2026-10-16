@@ -77,11 +77,12 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
         self.assertLessEqual(result["maxInMemoryQueueDepth"], 2)
         self.assertEqual(2.0, result["scheduledRatePerSecond"])
 
-    def test_profile_leaves_duration_and_acceptance_agreement_unset(self) -> None:
+    def test_profile_pins_owner_directed_diagnostic_without_acceptance_budgets(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         profile = load_profile(repo_root / "docs/engineering/performance/ep03-s05-load-profile.json")
-        self.assertIsNone(profile["workload"]["durationSeconds"])
-        self.assertIsNone(profile["workload"]["payloadMixApproval"])
+        self.assertEqual(5, profile["workload"]["durationSeconds"])
+        self.assertIn("attached playerPositions array", profile["workload"]["payloadMixApproval"])
+        self.assertEqual("stop-at-source-end", profile["workload"]["replayMode"])
         self.assertEqual(
             "owner-directed single-match partition mix (2026-10-16)",
             profile["workload"]["partitionMixApproval"],
@@ -98,7 +99,10 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
             {"complete": True}, duration_override=1.0, run_id="test-run", started_at="2026-10-16T00:00:00Z")
         self.assertEqual("single-source-match", report["profile"]["partitionMode"])
         self.assertEqual(profile["workload"]["partitionMixApproval"], report["profile"]["partitionMixApproval"])
-        self.assertIsNone(report["profile"]["payloadMixApproval"])
+        self.assertEqual(profile["workload"]["payloadMixApproval"], report["profile"]["payloadMixApproval"])
+        self.assertEqual("stop-at-source-end", report["profile"]["replayMode"])
+        self.assertTrue(report["source"]["attachedPlayerPositionsArePreserved"])
+        self.assertEqual(0, report["source"]["standaloneFrameRecords"])
 
     def test_profile_rejects_non_finite_duration(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -152,13 +156,28 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(HarnessError, "Payload shaping"):
                 load_profile(profile_path)
 
-    def test_execute_stops_before_source_load_when_duration_is_unset(self) -> None:
-        repo_root = Path(__file__).resolve().parents[1]
-        profile_path = repo_root / "docs/engineering/performance/ep03-s05-load-profile.json"
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(HarnessError, "durationSeconds is unset"):
-                asyncio.run(execute(profile_path, Path(directory) / "report.json", None))
-            self.assertFalse((Path(directory) / "report.json").exists())
+    def test_generator_stops_at_source_end_without_repeating_event_id_or_payload(self) -> None:
+        records = parse_json_array_records(
+            b'[{"eventId":"evt-A","sequence":7,"matchId":"match-X"},'
+            b'{"eventId":"evt-B","sequence":8,"matchId":"match-X"}]'
+        )
+        clock = FakeClock()
+        result = asyncio.run(run_generator(
+            records,
+            rate=2,
+            duration_seconds=5,
+            queue_capacity=2,
+            stop_at_source_end=True,
+            clock=clock,
+            sleep=clock.sleep,
+        ))
+        self.assertEqual(10, result["requestedRecords"])
+        self.assertEqual(2, result["plannedRecords"])
+        self.assertEqual(2, result["scheduledRecords"])
+        self.assertEqual(2, result["localSinkReceivedRecords"])
+        self.assertTrue(result["sourceRecordLimitReached"])
+        self.assertEqual(5, result["fullRunSeconds"])
+        self.assertFalse(result["complete"])
 
     def test_source_hash_drift_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

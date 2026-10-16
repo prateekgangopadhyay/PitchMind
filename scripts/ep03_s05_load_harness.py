@@ -153,6 +153,8 @@ def load_profile(path: Path) -> dict[str, Any]:
         raise HarnessError("Multi-match and custom partition mixes are unsupported")
     if workload.get("payloadMode") != "opaque-source-record-order":
         raise HarnessError("Payload shaping or semantic payload mixes are unsupported")
+    if workload.get("replayMode") not in ("cycle-source-records", "stop-at-source-end"):
+        raise HarnessError("replayMode must be cycle-source-records or stop-at-source-end")
     rate = workload.get("targetEventsPerSecond")
     if isinstance(rate, bool) or not isinstance(rate, int) or rate < 1 or rate > 100_000:
         raise HarnessError("targetEventsPerSecond must be an integer from 1 to 100000")
@@ -232,11 +234,13 @@ async def run_generator(
     rate: int,
     duration_seconds: float,
     queue_capacity: int,
+    stop_at_source_end: bool = False,
     clock: Callable[[], float] = time.perf_counter,
     sleep: Callable[[float], Any] = asyncio.sleep,
 ) -> dict[str, Any]:
     """Rate-schedule unchanged record bytes into a bounded in-memory discard sink."""
-    planned = _planned_records(rate, duration_seconds)
+    requested = _planned_records(rate, duration_seconds)
+    planned = min(requested, len(records)) if stop_at_source_end else requested
     queue: asyncio.Queue[tuple[SourceRecord, int] | None] = asyncio.Queue(maxsize=queue_capacity)
     sink_count = 0
     max_queue_depth = 0
@@ -276,13 +280,20 @@ async def run_generator(
             max_queue_depth = max(max_queue_depth, queue.qsize())
         scheduled_end = clock()
         await queue.join()
+        if stop_at_source_end and scheduled < requested:
+            # Honor the requested diagnostic window while making source exhaustion explicit.
+            remaining = start + duration_seconds - clock()
+            if remaining > 0:
+                await sleep(remaining)
     finally:
         await queue.put(None)
         await consumer
     finished = clock()
-    scheduled_elapsed = max(scheduled_end - start, planned / rate)
+    source_limited = scheduled < requested
+    scheduled_elapsed = duration_seconds if source_limited else max(scheduled_end - start, planned / rate)
     full_elapsed = max(0.0, finished - start)
     return {
+        "requestedRecords": requested,
         "plannedRecords": planned,
         "scheduledRecords": scheduled,
         "localSinkReceivedRecords": sink_count,
@@ -292,9 +303,10 @@ async def run_generator(
         "localSinkRatePerSecond": (sink_count / full_elapsed) if full_elapsed > 0 else None,
         "maxInMemoryQueueDepth": max_queue_depth,
         "queueCapacityRecords": queue_capacity,
+        "sourceRecordLimitReached": source_limited,
         "replayedEventIdSequenceSha256": replayed_identity_digest.hexdigest(),
         "replayedPayloadSha256": replayed_payload_digest.hexdigest(),
-        "complete": scheduled == planned and sink_count == planned,
+        "complete": scheduled == requested and sink_count == requested,
     }
 
 
@@ -311,6 +323,14 @@ def build_report(
 ) -> dict[str, Any]:
     duration = duration_override if duration_override is not None else profile["workload"]["durationSeconds"]
     source_matches = sorted({record.match_id for record in records})
+    records_with_positions = 0
+    attached_position_objects = 0
+    for record in records:
+        parsed_record = json.loads(record.payload)
+        positions = parsed_record.get("playerPositions")
+        if isinstance(positions, list):
+            records_with_positions += 1
+            attached_position_objects += len(positions)
     return {
         "reportSchemaVersion": "1.0",
         "storyId": "EP03-S05",
@@ -327,6 +347,7 @@ def build_report(
             "durationOverrideUsed": duration_override is not None,
             "payloadMode": profile["workload"]["payloadMode"],
             "payloadMixApproval": profile["workload"].get("payloadMixApproval"),
+            "replayMode": profile["workload"]["replayMode"],
             "partitionMode": profile["workload"]["partitionMode"],
             "partitionMixApproval": profile["workload"].get("partitionMixApproval"),
         },
@@ -344,7 +365,12 @@ def build_report(
             "orderedEventIdSequenceSha256": _ordered_identity_digest(records),
             "payloadBytesPreservedWithoutReserialization": True,
             "recordsAreReplayedInSourceOrder": True,
-            "replayCyclesRepeatOriginalEventIdsAndSequences": True,
+            "replayCyclesRepeatOriginalEventIdsAndSequences": profile["workload"]["replayMode"] == "cycle-source-records",
+            "sourceExhaustionStopsWithoutRepeating": profile["workload"]["replayMode"] == "stop-at-source-end",
+            "attachedPlayerPositionsArePreserved": True,
+            "eventRecordsWithPlayerPositionsArray": records_with_positions,
+            "attachedPlayerPositionObjectCount": attached_position_objects,
+            "standaloneFrameRecords": 0,
         },
         "generatorMeasurements": run_metrics,
         "ingestionMeasurements": {
@@ -384,6 +410,7 @@ async def execute(profile_path: Path, output_path: Path, duration_override: floa
         rate=workload["targetEventsPerSecond"],
         duration_seconds=float(duration),
         queue_capacity=workload["queueCapacityRecords"],
+        stop_at_source_end=workload["replayMode"] == "stop-at-source-end",
     )
     report = build_report(
         profile,
