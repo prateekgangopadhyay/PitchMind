@@ -28,6 +28,8 @@ Every specialist follows the same evidence order:
 6. **Use plain language.** Fan audience gets ordinary language with a brief explanation of necessary terms; analyst audience gets concise tactical terms. Audience changes wording, never facts.
 7. **Return a candidate.** The response is untrusted. Independent deterministic verification remains the only path to a user-facing safe explanation.
 
+Metric comparisons must use compatible definitions, units, denominators, time windows, roles and source coverage. Confidence follows evidence quality, calibration, sample size and missingness, not the model's fluency. General FIFA references inform football vocabulary only; selected-match claims still need packet evidence.
+
 ## Football domain details encoded in each specialist
 
 ### Positional play
@@ -36,7 +38,7 @@ The profile distinguishes width from depth; ball-side overload from general poss
 
 ### High pressing
 
-The profile reasons in the order **trigger → pressure → opponent response → regain or escape → exploitation**. Candidate triggers include a backward pass, poor control, touchline reception, slow aerial reception or a receiver facing their own goal, but the agent may name one only when the observed sequence supports it. A trap additionally requires constrained exits and an evidenced response. Counterpressing starts after a defined turnover and depends on validated clock semantics. Temporal sequence alone does not prove causality or coaching intent.
+The profile reasons in the order **trigger → pressure → opponent response → regain or escape → exploitation**. Candidate triggers include a backward pass, poor control, touchline reception, slow aerial reception or a receiver facing their own goal, but the agent may name one only when the observed sequence supports it. A trap additionally requires constrained exits and an evidenced response. The escape may go through, around, over, by carry/third player, switch or recycle, as shown by the ordered sequence. Counterpressing starts after a defined turnover and depends on validated clock semantics. Temporal sequence alone does not prove causality or coaching intent.
 
 ### Defensive structure
 
@@ -44,7 +46,15 @@ The profile treats compactness as at least horizontal and vertical, requiring de
 
 ### Transitions
 
-The profile distinguishes defensive-to-attacking transitions after a defined regain from attacking-to-defensive transitions after a defined loss. A counterattack needs evidenced rapid forward exploitation and opponent disorganization; a long pass or later goal alone is insufficient. Numerical advantage requires correctly mapped attackers and defenders in the relevant area and time. Speed, open space, recovery imbalance, and rest defence require calibrated tracking rather than sparse events.
+The profile distinguishes defensive-to-attacking transitions after a defined regain from attacking-to-defensive transitions after a defined loss. A counterattack needs evidenced rapid forward exploitation and opponent disorganization; a long pass or later goal alone is insufficient. It separately tracks first action, pressure/cover, outlets, opponent recovery and the phase end condition. Numerical advantage requires correctly mapped attackers and defenders in the relevant area and time. Speed, open space, recovery imbalance, and rest defence require calibrated tracking rather than sparse events.
+
+### Metrics and physical context
+
+Every statistic needs its definition, formula, unit, denominator, scope, time window, provider/version and missingness/coverage. Rates with different denominators are not directly comparable. External running load and internal physiological/perceived responses remain separate measures. Role, phase, possession, minutes and match state provide context; distance or sprint volume alone cannot establish fatigue, effort, fitness, injury, intent or decision quality.
+
+### Chance creation and prevention
+
+Patterns such as third-player combinations, switches, overlaps/underlaps, runs behind, cutbacks and second-ball attacks require their defining ordered events or calibrated off-ball positions. Pair the attacking action with observed defensive cover/response. Keep pattern, chance, shot and result separate; a goal or failed attempt is not by itself a quality judgment.
 
 ### Set pieces
 

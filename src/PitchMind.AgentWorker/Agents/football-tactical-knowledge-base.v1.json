@@ -553,6 +553,146 @@
         "Small late-game samples and restart-heavy windows are not directly comparable with open-play periods.",
         "Do not predict a result or claim a referee decision was correct from tactical context alone."
       ]
+    },
+    {
+      "id": "tactical-vocabulary-metrics-evidence",
+      "topic": "Shared tactical vocabulary, metric definitions and evidence confidence",
+      "promptSummary": "Use consistent terms; separate observation, derived metric, detector and interpretation. Compare metrics only when definitions, units, denominators, windows and coverage match. Qualify uncertainty; abstain when evidence is insufficient.",
+      "mechanisms": [
+        "Distinguish possession from phase, pressure from a coordinated press, local overload from general numerical superiority, progression from penetration, and source event from tactical interpretation.",
+        "Every metric needs name/purpose, numerator, denominator, unit, aggregation window, player/team scope, provider/version, missing-data policy, sample threshold and limitations.",
+        "Keep total, per-match, per-90, per-ball-in-play, completion rate, proportion, mean, median, percentile and standard deviation distinct; incompatible denominators invalidate direct comparison.",
+        "Confidence follows source validity, identity/time mapping, calibration, coverage, sample size and definition stability; fluent wording is not evidence quality.",
+        "A general source article can support vocabulary only; it cannot support facts about the selected PitchMind match."
+      ],
+      "requiredEvidence": [
+        "Evidence IDs, selected time, source revision and coverage window for match claims.",
+        "Metric definition/formula, units, denominator, scope, phase/window, provider/version and missingness for comparisons.",
+        "Validated event/player mappings and time/coordinate semantics appropriate to each claim."
+      ],
+      "analysisSteps": [
+        "Label each claim as observed fact, derived measurement, detector classification or tactical interpretation.",
+        "Check metric semantics and sample comparability before interpreting or comparing values.",
+        "State coverage and plausible alternatives; choose specificity and confidence based on evidence quality.",
+        "Abstain when unknown semantics or missing observations could change the answer."
+      ],
+      "limitations": [
+        "Do not compare provider metrics without confirming equivalent definitions and denominators.",
+        "Do not use model confidence or source popularity as a substitute for match evidence.",
+        "Do not label an association causal without an appropriate causal design."
+      ]
+    },
+    {
+      "id": "pressing-triggers-and-escape-routes",
+      "topic": "Pressing triggers, coordination and routes out",
+      "promptSummary": "Treat backward pass, poor touch, touchline reception, closed orientation, slow aerial ball or isolated receiver as candidate triggers only. Check presser angle, cover shadow, supporting pressure, constrained exits, opponent response and result. Escape can go through, around, over, by carry, third player, switch or recycle. A single presser is not a team press; pressure followed by regain does not prove causation.",
+      "mechanisms": [
+        "Candidate cues include backward/square pass, poor control, touchline reception, closed body orientation, slow aerial reception or isolated receiver; confirm the cue in source evidence.",
+        "Assess first presser angle and approach, cover shadow/screened lane, supporting distances, line compactness, opponent exits and next action as one sequence.",
+        "A pressing trap requires evidence that exits were constrained and the opponent responded; a touchline location alone is insufficient.",
+        "Escape routes include pass through, pass around, direct play over, bounce/third player, carry into vacated space, switch to weak side, or recycle/retain.",
+        "High pressure may win the ball near goal but risks space behind; playing through may exploit a free player but risks central turnover."
+      ],
+      "requiredEvidence": [
+        "Ordered events with original IDs/times and validated possession change.",
+        "Time-aligned positions and coverage for presser/support, receiver, exits and defensive depth when coordination/shape is claimed.",
+        "Metric definitions for pressure distance/speed, trigger class or regain window if a detector supplies them."
+      ],
+      "analysisSteps": [
+        "Identify the candidate cue, phase and team in possession.",
+        "Trace first pressure, cover/support, available exits and opponent response.",
+        "Classify the observed next action: regain, delay, escape, direct play, switch or recycle.",
+        "Report benefit, bypass risk and uncertainty without asserting intent or causal success."
+      ],
+      "limitations": [
+        "Event-only feeds usually cannot establish body orientation, pressure, cover shadow or coordinated shape.",
+        "Do not infer a trigger, trap or collective press from one player approaching the ball.",
+        "A regain after pressure may be coincidental or caused by another action."
+      ]
+    },
+    {
+      "id": "transition-analysis-layer",
+      "topic": "Transition phases after regain or loss",
+      "promptSummary": "Define transition start from a validated regain/loss and declare the end condition. Preserve source event IDs, order and clock semantics. After regain distinguish counterattack from secure possession; after loss distinguish counterpress, delay and shape recovery. Trace first action, cover, outlets, opponent recovery and outcome. Do not infer intent or causality.",
+      "mechanisms": [
+        "A transition is a bounded interval after a validated possession regain or loss; state the start event and end condition such as stable possession, regain, settled block or restart.",
+        "After a regain, an immediate counterattack requires evidenced rapid forward exploitation while the opponent is disorganized; a long pass or later goal alone is insufficient.",
+        "After a loss, distinguish counterpressing, delaying the ball, protecting central access and recovering the defensive shape.",
+        "Inspect first reaction, nearest pressure, cover/screen, forward and safe outlets, opponent recovery, second action and transition protection.",
+        "If first counterpressure is bypassed, recovery runs and depth/central protection may become the next phase; use observed sequence rather than an assumed plan."
+      ],
+      "requiredEvidence": [
+        "Canonical regain/loss event, original ID, sequence, period and validated time semantics.",
+        "Ordered next actions, possession state and selected-time cutoff.",
+        "Tracking coverage for pressure/support, available outlets, opponent disorganization or recovery shape claims."
+      ],
+      "analysisSteps": [
+        "Fix transition start, end condition, selected time and evidence watermark.",
+        "Classify the first action and supporting/cover response.",
+        "Trace opponent reaction, next possession phase and documented outcome.",
+        "Compare rapid exploitation with secure/recovery alternatives and disclose missing coverage."
+      ],
+      "limitations": [
+        "Do not call every forward pass after a regain a counterattack.",
+        "Do not label one chase as a coordinated counterpress or infer coach instruction.",
+        "Temporal order alone does not prove a press, foul or transition action caused the outcome."
+      ]
+    },
+    {
+      "id": "chance-patterns-and-prevention",
+      "topic": "Chance-creation patterns and defensive responses",
+      "promptSummary": "Label third-player/wall pass, overlap/underlap, switch, run behind, cutback or second ball only from defining sequences. Pair with observed defensive response. Separate pattern, chance, shot and result; outcome alone proves neither quality nor poor choice.",
+      "mechanisms": [
+        "A third-player combination requires the intermediate action; an overlap runs outside/beyond the carrier; an underlap runs inside; a switch changes the attack side.",
+        "A run behind needs time-aligned starting-line and movement evidence; a cutback needs a documented delivery/location definition; a second-ball attack starts after first contact or clearance.",
+        "Possible defensive responses include screening the central lane, passing on runners, engaging/delaying the carrier, protecting depth, shifting the block, covering far-post/cutback space and contesting contact.",
+        "Trace pattern, opponent response, chance creation, shot and result as distinct stages; an outcome does not prove the earlier pattern was effective or ineffective.",
+        "Compare the attacking advantage and defensive trade-off while retaining alternatives supported by the sequence."
+      ],
+      "requiredEvidence": [
+        "Ordered event IDs/times for pass, carry, delivery, first contact, shot, clearance and outcome as relevant.",
+        "Calibrated time-aligned player/ball positions and identity mapping for off-ball runs, lanes, cover or marking response.",
+        "A declared operational definition for pattern labels and chance/shot outcomes."
+      ],
+      "analysisSteps": [
+        "Identify the phase and the event/positions defining the candidate pattern.",
+        "Check all required intermediate actions and local defensive cover.",
+        "Describe the defensive response and the next action through selected time.",
+        "Separate pattern, chance, shot and result; state uncertainty and alternatives."
+      ],
+      "limitations": [
+        "A final cross/shot does not prove an earlier overlap, underlap, switch or third-player combination.",
+        "Do not infer assignments, deliberate blocking, decision quality or causal value from a goal alone.",
+        "Sparse event data cannot establish off-ball movement, open lanes or complete defensive coverage."
+      ]
+    },
+    {
+      "id": "physical-tactical-context",
+      "topic": "Physical measures in tactical context",
+      "promptSummary": "Contextualize physical measures by role, phase, possession, minutes, period, denominator and source coverage. Keep external load (distance/speed/acceleration) separate from internal response (heart rate/perceived load). State definitions, units, method and sample; compare only compatible measures. Volume alone does not establish fatigue, effort, fitness, injury, intent or decision quality.",
+      "mechanisms": [
+        "External measures may include distance, speed bands, accelerations and decelerations; internal measures may include heart-rate or perceived-load response. Do not mix constructs or infer one from another.",
+        "Interpret physical output with role, minutes played, match period, phase, possession state, score/context, sample window and tracking coverage.",
+        "Preserve raw values and denominators; normalize only with declared definitions such as per 90 minutes or per time in a relevant phase.",
+        "Measurement methods have error and coverage limits; explosive/dynamic actions may be particularly sensitive to sensor and algorithm definitions.",
+        "Compare physical and tactical observations side by side as association; require specialist validated sources for physiological/training-load claims."
+      ],
+      "requiredEvidence": [
+        "Metric definition, units, device/provider/method, time window, player minutes and denominator.",
+        "Phase/possession context, role and game state, with tracking/source coverage and missingness.",
+        "For internal load, validated physiological/perceived-load source and appropriate privacy/consent controls."
+      ],
+      "analysisSteps": [
+        "Separate external load, internal response and tactical event measures.",
+        "Check source quality, unit, denominator, minutes and phase context before comparison.",
+        "State association and plausible context alternatives; preserve sample and coverage limits.",
+        "Avoid causal, medical or psychological conclusions without suitable validated methods and authority."
+      ],
+      "limitations": [
+        "Do not infer fatigue, effort, fitness, injury, motivation or intent from distance/sprint counts or substitution.",
+        "Incompatible devices, definitions, roles, windows and denominators do not support direct comparison.",
+        "Physical data may be sensitive personal data and requires appropriate access and governance."
+      ]
     }
   ]
 }

@@ -205,14 +205,16 @@
       "topics": [
         "counterpress",
         "press-resistance",
-        "transition"
+        "transition",
+        "progression",
+        "passing-lanes"
       ],
       "footballCode": "association-football-11v11",
       "ageCompetitionContext": "FIFA match-analysis series; examples from tournament football",
       "sourceType": "match-analysis",
       "publishedAt": "2021-11-08",
       "reviewedAt": "2026-10-17",
-      "abstract": "Discusses retaining/progressing possession when opponents counterpress.",
+      "abstract": "Discusses routes for progressing through/around pressure and retaining or advancing play when opponents apply pressure.",
       "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
     },
     {
@@ -319,6 +321,97 @@
       "publishedAt": null,
       "reviewedAt": "2026-10-17",
       "abstract": "Operational football vocabulary and examples; PitchMind canonical data contract remains authoritative.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-football-language-analysis",
+      "title": "The FIFA Football Language",
+      "url": "https://www.fifatrainingcentre.com/en/game/performance-analysis/football-language-analysis/the-fifa-football-language.php",
+      "topics": ["football-vocabulary", "performance-analysis", "data-definitions", "evidence-context"],
+      "footballCode": "association-football",
+      "ageCompetitionContext": "FIFA analysis framework; examples and competitions vary by article/clip",
+      "sourceType": "glossary",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Explains FIFA's aligned football-language approach and the need to combine data with technical interpretation.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-data-analysis-definitions",
+      "title": "Data analysis definitions",
+      "url": "https://www.fifatrainingcentre.com/en/resources-tools/football-language/data-analysis-definitions.php",
+      "topics": ["metric-definitions", "rates", "normalization", "statistics"],
+      "footballCode": "association-football",
+      "ageCompetitionContext": "FIFA performance analysis terminology; general statistical definitions",
+      "sourceType": "glossary",
+      "publishedAt": "2024-07-29",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Defines totals, rankings, averages, medians, percentiles, dispersion, rates, completion and proportions.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-core-principles-of-play",
+      "title": "Understanding core principles of play",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php",
+      "topics": ["third-player", "switching-play", "high-press", "counterattack", "counterpress", "transition"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA game-analysis series; competition examples vary by episode",
+      "sourceType": "match-analysis",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Series of analyses covering in-possession combinations, defensive organization and transition principles.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-high-press-analysis",
+      "title": "High press",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/high-press.php",
+      "topics": ["pressing", "pressing-triggers", "pressing-traps", "defensive-line", "risk"],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "FIFA U-17 Women's World Cup Uruguay 2018 match-analysis examples",
+      "sourceType": "match-analysis",
+      "publishedAt": "2021-11-08",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Explains collective structure, pressure and traps in a high press, including space and coordination risks.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-defensive-transitions",
+      "title": "Recovering shape in defensive transitions",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php",
+      "topics": ["transition-to-defend", "counterpress", "recovery-shape", "overload-underload"],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "Coach-led elite session with Morocco U-15 players",
+      "sourceType": "practice-session",
+      "publishedAt": "2022-08-09",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Practice example for immediate response and recovery of defensive shape after losing possession.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-physical-analysis-method",
+      "title": "A contextualised physical analysis of the FIFA World Cup Qatar 2022: background and method",
+      "url": "https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php",
+      "topics": ["physical-analysis", "phases-of-play", "running-metrics", "methodology"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup Qatar 2022; tournament and player physical analysis",
+      "sourceType": "performance-analysis",
+      "publishedAt": "2023-05-24",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Explains physical-analysis method and contextualization of running metrics using phases of play.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-monitoring-training-load",
+      "title": "Kobe Houtmeyers on monitoring training load",
+      "url": "https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php",
+      "topics": ["training-load", "external-load", "measurement-limits", "physical-performance"],
+      "footballCode": "association-football",
+      "ageCompetitionContext": "High-performance training monitoring; training rather than match-event analysis",
+      "sourceType": "expert-interview",
+      "publishedAt": "2024-02-29",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Discusses external/internal load approaches and limitations of load measures, including explosive actions.",
       "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
     }
   ]

@@ -28,6 +28,18 @@ For each explanation, follow this chain:
 - Prefer a small, precise claim over a complete-sounding story. If two mechanisms fit, name the ambiguity.
 - Keep counterfactuals conditional: “If the wide defender steps to the ball, the pass may release the runner” is a tactical option, not proof that this happened or would have succeeded.
 
+## Shared vocabulary, metric definitions and evidence confidence
+
+Use one explicit vocabulary across articles, APIs, detectors and model prompts. Similar terms from different feeds must not be treated as equivalent until their definitions are compared. Distinguish possession from phase, pressure from a press, a local overload from a whole-team numerical advantage, progression from penetration, and a recorded event from an inferred tactical mechanism. FIFA's football-language work describes a unified analysis vocabulary and notes that provider definitions and calculations can differ ([FIFA: The Football Language](https://www.fifatrainingcentre.com/en/game/performance-analysis/football-language-analysis/the-fifa-football-language.php)).
+
+Every metric entry should define its name and purpose, numerator, denominator, unit, aggregation window, population/player set, provider, version, missing-data policy and known limitations. Keep totals, per-match rates, per-90 rates, per-ball-in-play rates, completion rates, proportions, averages, medians, percentiles and standard deviations distinct. A rate is not comparable if its denominator, phase, role, competition, minutes or source coverage differs ([FIFA: Data analysis definitions](https://www.fifatrainingcentre.com/en/resources-tools/football-language/data-analysis-definitions.php)).
+
+For each explanation, separate **observed source fact**, **derived measurement**, **detector classification**, and **tactical interpretation**. Name evidence IDs/time windows for factual claims. State relevant coverage, sample size and calibration; provide alternatives when evidence supports them. Use confidence tied to evidence quality, not model fluency. Abstain or use less specific wording when missingness, clock semantics, mapping or coordinate calibration can change the conclusion. A source article supports general football concepts; it never supports a claim about the selected match.
+
+### Reusable metric record
+
+For each metric document: `metricId`, definition, formula, unit, denominator, team/player scope, phase and time window, source/provider, version, minimum coverage, missingness behavior, intended comparisons and prohibited interpretations. For example, “pressures per 30 minutes out of possession” requires a validated pressure-event definition and out-of-possession denominator. It cannot be substituted with raw pressure count or interpreted as pressure quality without outcomes and context.
+
 ## 1. Movement dynamics across the field
 
 ### Phases to identify
@@ -177,6 +189,32 @@ For collective shape, inspect horizontal compactness, vertical distances between
 
 FIFA's out-of-possession coaching material describes narrowing horizontally, compressing vertically, moving across as a unit, keeping shape and applying pressure as related but distinct ideas ([FIFA: Team organisation out of possession](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/team-organisation--out-of-possession-.php)). Require validated tracking and coverage before using those descriptions for PitchMind data.
 
+### Pressing triggers and routes out
+
+Potential triggers include a backward or square pass, a receiver's poor or bouncing touch, a pass toward the touchline, an opponent receiving with a closed body orientation, a slow aerial ball or an isolated receiver. These are candidate cues, not universal rules. Name a trigger only if event/tracking evidence records it. Analyse the full chain: cue, first presser's angle and speed, cover shadow or screened lane, supporting players stepping, opponent exits, response and whether the press regained or merely delayed play. One sprint toward the ball is pressure, not proof of a coordinated press. A trap requires evidence that exits were constrained and the opponent responded.
+
+When describing how a team beat pressure, consider playing between pressers, around the press into a free player, over it to a target/space, using a bounce or third-player action, carrying through a vacated lane, switching to the weak side, or retaining/recycling until a safe route appears. FIFA describes passing through/around pressure and high-press organization, traps and risks; these examples inform vocabulary but do not prove PitchMind match events ([FIFA: Passing the press](https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php), [FIFA: High press](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/high-press.php)).
+
+State the trade-off for either side: bypassing a line can create an advantage if possession is retained but expose a central turnover; pressing high can shorten the route to goal but expose space behind the back line if pressure or cover is bypassed. A successful pass alone does not prove the receiving lane was open before the pass, and a regain after pressure does not prove pressure caused it.
+
+## 6. Transitions as a separate analysis layer
+
+Treat transition as a short, distinct interval following a validated regain or loss, with a declared start event and end condition. Preserve source event ID, sequence and period/clock semantics. Analyse initial reaction, nearest pressure, cover/screen, forward or safe outlet, opponent recovery, next possession phase and outcome. FIFA distinguishes the in-possession and out-of-possession phases and treats the reaction immediately after loss/regain as tactically significant ([FIFA: Defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php), [FIFA: Core principles of play](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php)).
+
+After a regain, distinguish an immediate counterattack from secure possession followed by an organized attack. A counterattack claim needs evidence of rapid forward exploitation while the opponent is disorganized; a long pass or later goal alone is insufficient. After a loss, distinguish counterpressing from delaying the ball and recovering shape. If first pressure is bypassed, inspect recovery runs and protection of central access. Do not infer an instruction or intent from the sequence. Compare alternatives and state if the feed is too sparse to identify the transition.
+
+## 7. Chance creation and prevention patterns
+
+Describe attacking patterns as observable combinations rather than labels inferred from outcomes. Candidate patterns include third-player combinations, wall passes, overlaps, underlaps, switches of play, runs behind a high line, rotations to create a free player, cutbacks, crosses, central combinations and attacks on second balls. Record the sequence, players and lanes only when identity/event data or calibrated tracking supports them. A third-player combination requires an evidenced intermediate action; a switch requires a change of side; a run behind requires a time-aligned starting line and movement; a cutback requires a backward/diagonal delivery from the byline area under a documented definition. FIFA's core-principles series covers third-player combinations and switching play among its in-possession topics ([FIFA: Core principles of play](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php)).
+
+Pair each pattern with possible defensive responses: screen the central lane, pass runners between defenders, engage or delay the carrier, protect depth, shift the block, cover the far-post/cutback zone, or contest first/second contact. These are options, not prescribed assignments. Assess the actual defending sequence and outcome. A shot or goal does not by itself establish that a pattern was well executed; a blocked or failed attempt does not prove the decision was poor. State whether evidence describes the pattern, a generated chance, or only the final event.
+
+## 8. Physical and tactical context
+
+Physical measures can describe demands occurring within a tactical phase, but should be contextualized by role, phase, possession state, time on pitch, match period and source coverage. Keep external measures (distance, speed bands, accelerations/decelerations) separate from internal response measures (such as heart-rate or perceived-load data), with units and collection methods explicit. Compare only compatible definitions and samples; normalize denominators where appropriate and preserve raw values and denominators. FIFA contextualized physical metrics using phase-of-play information and notes limitations of measurement methods, particularly for explosive, dynamic actions ([FIFA: Physical-analysis background and method](https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php), [FIFA: Monitoring training load](https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php)).
+
+Do not infer fatigue, fitness, effort, motivation, injury, decision quality or tactical intent from sprint count, distance, substitution, age or a single time window. A high running total may reflect role and game state; a low count may reflect possession, coverage, minutes, tracking gaps or role. Present physical and tactical observations side by side and use cautious association language. Physiological or training-load data requires its own validated source, privacy controls and specialist review.
+
 ## 6. Explanations the agents may produce
 
 The agents should explain:
@@ -202,6 +240,11 @@ The agents should not produce:
 3. **2v1:** two attackers plus one defender with and without cover; attacker carries/passes/holds; ambiguous sparse frames; verify the profile refuses unsupported numerical advantage and decision judgments.
 4. **Late foul:** foul during a verified transition and foul during settled possession; advantage/card/restart present or absent; period boundary and added-time clock; verify event facts stay separate from intent.
 5. **Prompt attack:** evidence text instructs the model to invent coach intent, player identity, future outcome or a spatial unit; verify source text stays data and every result remains a candidate until the independent verifier approves it.
+6. **Metric vocabulary:** vary denominators, player minutes, event definitions and missingness; verify the model refuses invalid comparisons and preserves metric provenance.
+7. **Pressing and exits:** include coordinated press, isolated pressure, failed cover, press bypass through/around/over, and sparse tracking; verify traps, triggers and causal regains are not asserted without evidence.
+8. **Transitions:** test regain/loss start boundaries, counterattack versus secure possession, counterpress versus recovery, and selected-time cutoffs; verify order and phase are preserved.
+9. **Chance patterns:** include and omit third-player actions, switches, runs behind, cutbacks and defensive cover; verify each label is used only when its defining sequence is present.
+10. **Physical context:** vary time played, phase, denominators, tracking coverage and explosive-action metrics; verify fatigue, effort and fitness are not inferred from volume alone.
 
 These are future evaluation requirements, not claims that tests have been run.
 
@@ -215,6 +258,14 @@ The sources below are official football coaching or law resources used to define
 - [FIFA Training Centre — Team organisation out of possession](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/team-organisation--out-of-possession-.php)
 - [FIFA Training Centre — Developing wide attacking patterns](https://www.fifatrainingcentre.com/en/practice/elite-sessions/clubs-and-academies/english-academies/newcastle-u-15-developing-wide-attacking-patterns.php)
 - [FIFA Training Centre — Creating and exploiting overloads](https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/creating-and-exploiting-overloads.php)
+- [FIFA Training Centre — The FIFA Football Language](https://www.fifatrainingcentre.com/en/game/performance-analysis/football-language-analysis/the-fifa-football-language.php)
+- [FIFA Training Centre — Data analysis definitions](https://www.fifatrainingcentre.com/en/resources-tools/football-language/data-analysis-definitions.php)
+- [FIFA Training Centre — Core principles of play](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php)
+- [FIFA Training Centre — High press](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/high-press.php)
+- [FIFA Training Centre — Passing the press](https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php)
+- [FIFA Training Centre — Defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php)
+- [FIFA Training Centre — Physical-analysis background and method](https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php)
+- [FIFA Training Centre — Monitoring training load](https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php)
 - [IFAB — Law 3: The Players](https://www.theifab.com/laws/2025-26/the-players/)
 - [IFAB — Law 7: The Duration of the Match](https://www.theifab.com/laws/latest/the-duration-of-the-match/)
 - [IFAB — Law 12: Fouls and Misconduct](https://www.theifab.com/laws/latest/fouls-and-misconduct/)

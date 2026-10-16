@@ -84,6 +84,24 @@ FIFA's [phases-of-play framework](https://www.fifatrainingcentre.com/en/fwc2022/
 
 **Evidence:** time/location of loss, pressure distance/trajectory, teammate cover, opponent exit/action, regain or escape, later defensive line. Event-only data cannot prove synchronized counterpressing.
 
+### Pressing cues and exit routes
+
+Candidate press cues include a backward pass, poor touch, touchline reception, closed body orientation, slow aerial reception or isolated player. Check the cue, approach angle, cover shadow, supporting distances, opponent exits and next action in sequence. A cue is not a universal trigger and one player pressing does not establish team coordination. FIFA's [high-press analysis](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/high-press.php) discusses structure, traps and risk; apply it as a concept reference.
+
+To describe an escape, test whether play went through the first line, around it to a free player, over it to a target/space, through a bounce/third player, by carrying into the space left behind, by switching to the weak side, or by recycling until an outlet appeared. A completed pass alone cannot prove that its lane was open earlier. Record the opponent response and the risk: pressing high may regain near goal but can expose depth if the press is bypassed; playing through can exploit a free player but a central loss may expose the goal.
+
+### Transition sequence
+
+Use the canonical regain/loss as a transition start, then bound the phase with a declared end condition such as stable possession, opponent regain, settled block or restart. Preserve source event order and clock semantics. After a regain, distinguish rapid forward exploitation from securing and circulating possession. After a loss, distinguish counterpress, delay and recovery into shape. Include first pressure, nearby cover, safe/forward outlets, opponent recovery and the next evidenced action. FIFA treats transition response as a distinct tactical moment ([FIFA defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php)).
+
+### Chance creation and defensive response
+
+Trace patterns as sequences: third-player combination, wall pass, overlap/underlap, switch, run behind, rotation, cutback, cross or second-ball attack. Specify the event or calibrated positions that define the label. Pair it with the observed defensive response: screen, track/pass on, engage, delay, protect depth, shift, cover the delivery zone or contest contact. Compare the generated chance with the final shot/result; a goal does not prove the move was executed well, and failure does not prove the choice was wrong. FIFA's [core principles series](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php) covers third-player combinations and switching as general concepts.
+
+### Physical measures in tactical context
+
+Report external load (distance, speed bands, accelerations/decelerations) separately from internal responses (such as heart rate or perceived load). State units, definition, player minutes, phase, possession state, sample and collection method. Use compatible denominators when comparing players/windows and preserve raw value plus denominator. FIFA's physical analysis combines running measures with phase context, while training-load guidance notes measurement limitations, particularly for explosive activity ([FIFA physical-analysis method](https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php), [FIFA monitoring training load](https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php)). Do not infer fatigue, effort, fitness, injury, intent or decision quality from volume alone.
+
 ## 3. Player-role fit and complementary skills
 
 A role describes a task in a phase, not a permanent identity or a player rating. Use known and validated metrics only; never infer skill/fitness from reputation or position label.
@@ -144,4 +162,4 @@ The catalogue is curated, not exhaustive. To add a source, verify the direct pag
 
 ## Model application contract
 
-Every playbook should be represented as: **phase/state → participants/roles → trigger → mechanism → possible advantage → trade-off/failure mode → required evidence → alternatives → source**. The AI must separate source facts, derived metrics, detector outputs and tactical interpretations. It must abstain from unsupported lineup, role, intent, fitness, spatial, referee or causal claims. This guide provides vocabulary and hypotheses; deterministic canonical evidence and verification remain the authority for match facts.
+Every playbook should be represented as: **phase/state → participants/roles → trigger → mechanism → possible advantage → trade-off/failure mode → required evidence → alternatives → source**. Each metric must additionally declare formula/definition, unit, denominator, window, source/version and missingness/coverage. The AI must separate source facts, derived metrics, detector outputs and tactical interpretations; confidence follows evidence quality and coverage, not fluency. It must abstain from unsupported lineup, role, intent, fitness, spatial, referee or causal claims. This guide provides vocabulary and hypotheses; deterministic canonical evidence and verification remain the authority for match facts.

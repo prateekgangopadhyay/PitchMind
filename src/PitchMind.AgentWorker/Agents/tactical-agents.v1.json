@@ -17,7 +17,7 @@
         "transitions-rest-defence",
         "set-piece-restarts",
         "game-state-risk",
-        "formation-and-phase-shape"
+        "tactical-vocabulary-metrics-evidence"
       ],
       "principles": [
         "Separate observed event, derived metric, algorithmic insight and tactical interpretation.",
@@ -61,7 +61,8 @@
         "formation-and-phase-shape",
         "formation-player-combinations",
         "formation-matchups-and-adjustments",
-        "phase-by-phase-playbooks"
+        "phase-by-phase-playbooks",
+        "chance-patterns-and-prevention"
       ],
       "principles": [
         "Create width to stretch the opponent horizontally and depth to threaten space behind; distinguish intended occupation from measured position.",
@@ -104,11 +105,11 @@
         "spatial-evidence",
         "press-and-block-dynamics",
         "transitions-rest-defence",
-        "late-game-fouls",
         "formation-and-phase-shape",
         "formation-player-combinations",
         "formation-matchups-and-adjustments",
-        "phase-by-phase-playbooks"
+        "phase-by-phase-playbooks",
+        "pressing-triggers-and-escape-routes"
       ],
       "principles": [
         "A press is coordinated pressure intended to constrain an opponent's next action; proximity by one player alone is not a team press.",
@@ -197,7 +198,7 @@
       "knowledgeTopics": [
         "team-movement",
         "spatial-evidence",
-        "transitions-rest-defence",
+        "transition-analysis-layer",
         "attacking-2v1",
         "late-game-fouls",
         "formation-and-phase-shape",
@@ -292,13 +293,13 @@
         "team-movement",
         "spatial-evidence",
         "substitution-analysis",
-        "attacking-2v1",
         "late-game-fouls",
         "transitions-rest-defence",
         "game-state-risk",
         "formation-and-phase-shape",
         "late-match-and-unusual-game-states",
-        "phase-by-phase-playbooks"
+        "phase-by-phase-playbooks",
+        "physical-tactical-context"
       ],
       "principles": [
         "Match state is a time-indexed combination of score, period, remaining time, player availability and possession context; use only fields in the packet.",

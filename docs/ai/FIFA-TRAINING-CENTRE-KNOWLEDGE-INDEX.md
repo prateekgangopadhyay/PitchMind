@@ -99,6 +99,20 @@ For every claimed advantage, describe the trigger, actual player/role relationsh
 - [FIFA: Compact defending](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/press-and-regain/8v7-team-game-compact-defending.php) — compact shape and high-press scenarios.
 - [FIFA: Out-of-possession team organization](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/team-organisation--out-of-possession-.php) — shifting, block structure and pressure.
 
+### Shared vocabulary, metrics and evidence
+
+- [FIFA: The FIFA Football Language](https://www.fifatrainingcentre.com/en/game/performance-analysis/football-language-analysis/the-fifa-football-language.php) — the rationale for shared terms, aligned analysis and combining data with technical interpretation.
+- [FIFA: Data analysis definitions](https://www.fifatrainingcentre.com/en/resources-tools/football-language/data-analysis-definitions.php) — totals, rates, distributions, proportions and other metric terms.
+- [FIFA: Physical-analysis background and method](https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php) — contextualizing physical measures with phases of play.
+- [FIFA: Monitoring training load](https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php) — load measurement methods and interpretation cautions.
+
+### Pressing exits, transitions and attacking principles
+
+- [FIFA: High press](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/high-press.php) — collective structure, pressure, pressing traps and risk behind the line.
+- [FIFA: Passing the press](https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php) — options to play between or around pressure and progress after bypassing it.
+- [FIFA: Defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php) — immediate pressure and recovery into shape after a loss.
+- [FIFA: Core principles of play](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php) — third-player combinations, switches, pressing, counterattacks and counterpressing.
+
 ### Rules and event context
 
 For substitutions, match duration and time lost, or fouls and misconduct, use the current [IFAB Laws of the Game](https://www.theifab.com/laws/latest/). FIFA coaching articles may explain tactical context; IFAB remains the authority for the laws, and PitchMind should not adjudicate referee correctness without an appropriate authoritative decision source.
@@ -110,3 +124,5 @@ When curating another FIFA article, add its direct canonical URL, title, topic(s
 ## Use by the model
 
 A source-linked concept can explain what evidence might mean; it cannot supply absent facts. For each answer, cite the selected evidence packet for match statements, identify interpretation as interpretation, state missing context, and abstain from formation or shape labels where required lineup/positional evidence is absent. Never infer personal endorsement, private knowledge, or a coach's intent from the list of named managers in the product request.
+
+Metric comparisons require compatible definitions, units, denominators, windows, roles and source coverage. Keep observed event facts, derived measurements, detector classifications and tactical interpretations separate. Report coverage/sample limits and use confidence calibrated to source quality; abstain or reduce specificity when those limits could change the answer. FIFA source examples establish general concepts only, never match-specific facts.
