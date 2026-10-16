@@ -1,0 +1,615 @@
+{
+  "authPreview": {
+    "headline": "Understand the Premier League beyond the scoreline",
+    "description": "Evidence-grounded tactical intelligence, live sequence tracking, and verified spatial insights for elite analysts and passionate supporters.",
+    "featuredMatch": {
+      "matchId": "sim-match-arsenal-mancity",
+      "homeTeam": "Arsenal",
+      "awayTeam": "Man City",
+      "homeScore": 2,
+      "awayScore": 1,
+      "clock": "67:24",
+      "status": "Live Match",
+      "tacticalSnippet": "Arsenal's 4-3-3 high press forcing turnovers in Zone 14 (8 regains in attacking third)",
+      "pitchSnippet": {
+        "pressureZone": "Attacking Third / Zone 14",
+        "regainsCount": 8,
+        "players": [
+          { "id": "p1", "x": 62, "y": 34, "team": "home", "number": 7, "name": "Saka" },
+          { "id": "p2", "x": 58, "y": 50, "team": "home", "number": 8, "name": "Ødegaard" },
+          { "id": "p3", "x": 52, "y": 48, "team": "home", "number": 41, "name": "Rice" },
+          { "id": "p4", "x": 64, "y": 66, "team": "home", "number": 29, "name": "Havertz" },
+          { "id": "p5", "x": 42, "y": 49, "team": "away", "number": 16, "name": "Rodri" },
+          { "id": "p6", "x": 35, "y": 32, "team": "away", "number": 24, "name": "Gvardiol" },
+          { "id": "p7", "x": 30, "y": 50, "team": "away", "number": 3, "name": "Dias" }
+        ]
+      }
+    },
+    "valueBadges": [
+      { "title": "Zero Speculative Stats", "detail": "Every metric proven by tracking timestamps and verified spatial telemetry." },
+      { "title": "Full Spatial Evidence", "detail": "25Hz player and ball coordinate verification with millimeter precision." },
+      { "title": "Chain of Causality", "detail": "Every insight grounded in observable action sequences and tactical triggers." },
+      { "title": "Real-Time EPL Telemetry", "detail": "Deterministic synchronization with live pitch state and tactical phases." }
+    ],
+    "trustCertifications": [
+      { "title": "256-Bit Encrypted Telemetry", "detail": "End-to-end transport security for club and broadcast streams." },
+      { "title": "SOC-2 Type II Certified", "detail": "Enterprise-grade operational and spatial data controls." },
+      { "title": "Role-Based Analyst Access", "detail": "Granular permissions for coaching staff, scouts, and broadcast media." }
+    ]
+  },
+  "hub": {
+    "eyebrow": "Premier League Match Hub",
+    "title": "What matters across EPL matches right now",
+    "subtitle": "Live tactical intelligence across the league, grounded in real-time tracking data.",
+    "heroMatch": {
+      "matchId": "sim-match-arsenal-mancity",
+      "homeTeam": "Arsenal",
+      "awayTeam": "Man City",
+      "homeScore": 2,
+      "awayScore": 1,
+      "clock": "67:24",
+      "status": "LIVE",
+      "competition": "Premier League · Matchweek 28",
+      "stadium": "Emirates Stadium",
+      "leadingInsight": "Arsenal's high press forcing Man City into wide turnovers (8 regains in attacking third)",
+      "keyStats": [
+        { "label": "Possession", "home": "48%", "away": "52%" },
+        { "label": "Field Tilt", "home": "62%", "away": "38%" },
+        { "label": "Expected Goals (xG)", "home": "1.84", "away": "0.92" },
+        { "label": "High Regains", "home": "8", "away": "3" }
+      ]
+    },
+    "otherLiveMatches": [
+      {
+        "matchId": "sim-match-liv-avl",
+        "homeTeam": "Liverpool",
+        "awayTeam": "Aston Villa",
+        "homeScore": 1,
+        "awayScore": 1,
+        "clock": "54:10",
+        "status": "LIVE",
+        "statHighlight": "Szoboszlai creating space behind midfield (4 line-breaking carries)",
+        "momentum": [30, 42, 55, 60, 48, 52, 65, 70, 62, 58]
+      },
+      {
+        "matchId": "sim-match-new-tot",
+        "homeTeam": "Newcastle",
+        "awayTeam": "Tottenham",
+        "homeScore": 0,
+        "awayScore": 2,
+        "clock": "71:45",
+        "status": "LIVE",
+        "statHighlight": "Tottenham counter-press generating 2.4s regain-to-shot transitions",
+        "momentum": [60, 58, 65, 75, 80, 72, 68, 77, 85, 82]
+      },
+      {
+        "matchId": "sim-match-che-wol",
+        "homeTeam": "Chelsea",
+        "awayTeam": "Wolves",
+        "homeScore": 3,
+        "awayScore": 0,
+        "clock": "82:19",
+        "status": "LIVE",
+        "statHighlight": "Palmer orchestrating right half-space overloads (6 key passes)",
+        "momentum": [50, 55, 70, 75, 65, 80, 85, 90, 88, 92]
+      }
+    ],
+    "whatMattersNow": [
+      {
+        "rank": 1,
+        "title": "Arsenal pressing trap reducing central progression",
+        "summary": "Mikel Arteta's front four funneling City into congested touchlines, cutting Rodri's passing lanes by 68%.",
+        "metric": "8 High Regains",
+        "badge": "Tactical Superiority",
+        "matchId": "sim-match-arsenal-mancity"
+      },
+      {
+        "rank": 2,
+        "title": "Liverpool central overload breaking Villa's mid-block",
+        "summary": "Szoboszlai and Mac Allister rotating into half-spaces to isolate Kamara.",
+        "metric": "62% Half-space Entries",
+        "badge": "Spatial Control",
+        "matchId": "sim-match-liv-avl"
+      },
+      {
+        "rank": 3,
+        "title": "Tottenham transition speed exploiting Newcastle high line",
+        "summary": "Son Heung-min timing blindside runs behind Trippier with 34.2 km/h sprint velocity.",
+        "metric": "2.4s Regain to Shot",
+        "badge": "Counter Mechanism",
+        "matchId": "sim-match-new-tot"
+      }
+    ],
+    "keyMoments": [
+      {
+        "id": "km-1",
+        "clock": "53:12",
+        "title": "Saka cutback after pressing regain",
+        "description": "Declan Rice dispossesses Rodri; Saka drives into box and cuts back to Havertz for 0.42 xG chance.",
+        "player": "Bukayo Saka",
+        "team": "Arsenal",
+        "mechanism": "High Turn-over to Cutback",
+        "xG": 0.42,
+        "matchId": "sim-match-arsenal-mancity"
+      },
+      {
+        "id": "km-2",
+        "clock": "61:05",
+        "title": "Rice interception breaks counter-attack",
+        "description": "Anticipates De Bruyne's pass into Haaland, executing clean slide regain 45m from goal.",
+        "player": "Declan Rice",
+        "team": "Arsenal",
+        "mechanism": "Anticipatory Interception",
+        "xG": 0.08,
+        "matchId": "sim-match-arsenal-mancity"
+      },
+      {
+        "id": "km-3",
+        "clock": "42:30",
+        "title": "Gabriel physical duel halts Haaland breakout",
+        "description": "Forces Haaland onto his weaker right foot in 1v1 defensive isolation.",
+        "player": "Gabriel Magalhães",
+        "team": "Arsenal",
+        "mechanism": "Isolated Duel Win",
+        "xG": 0.04,
+        "matchId": "sim-match-arsenal-mancity"
+      }
+    ],
+    "leagueSnapshot": [
+      { "rank": 1, "team": "Liverpool", "played": 28, "won": 20, "drawn": 4, "lost": 4, "gd": "+38", "points": 64, "form": ["W", "W", "D", "W", "W"] },
+      { "rank": 2, "team": "Arsenal", "played": 28, "won": 19, "drawn": 6, "lost": 3, "gd": "+35", "points": 63, "form": ["W", "W", "D", "W", "L"] },
+      { "rank": 3, "team": "Manchester City", "played": 28, "won": 18, "drawn": 5, "lost": 5, "gd": "+31", "points": 59, "form": ["L", "W", "W", "D", "W"] },
+      { "rank": 4, "team": "Aston Villa", "played": 28, "won": 16, "drawn": 5, "lost": 7, "gd": "+18", "points": 53, "form": ["D", "W", "L", "W", "W"] },
+      { "rank": 5, "team": "Tottenham", "played": 28, "won": 15, "drawn": 5, "lost": 8, "gd": "+14", "points": 50, "form": ["W", "L", "W", "D", "W"] },
+      { "rank": 6, "team": "Chelsea", "played": 28, "won": 14, "drawn": 6, "lost": 8, "gd": "+12", "points": 48, "form": ["W", "W", "L", "D", "W"] }
+    ],
+    "upcomingFixtures": [
+      { "homeTeam": "Manchester United", "awayTeam": "Brighton", "kickOff": "17:30 GMT", "date": "Tomorrow", "stadium": "Old Trafford" },
+      { "homeTeam": "West Ham", "awayTeam": "Everton", "kickOff": "14:00 GMT", "date": "Sunday", "stadium": "London Stadium" },
+      { "homeTeam": "Brentford", "awayTeam": "Crystal Palace", "kickOff": "16:30 GMT", "date": "Sunday", "stadium": "Gtech Community Stadium" }
+    ],
+    "suggestedQueries": [
+      "Why is Arsenal's press working against City?",
+      "How is Rodri being bypassed in the second half?",
+      "Compare Saka vs Foden tactical impact today",
+      "Show transition sequence leading to 53' shot"
+    ]
+  },
+  "teams": [
+    {
+      "id": "arsenal",
+      "name": "Arsenal",
+      "shortName": "ARS",
+      "formation": "4-3-3",
+      "leagueRank": 2,
+      "points": 63,
+      "form": ["W", "W", "D", "W", "L"],
+      "manager": "Mikel Arteta",
+      "avgPossession": 61.4,
+      "xGPer90": 2.12,
+      "xGAPer90": 0.84,
+      "ppda": 8.4,
+      "summary": "Elite high-pressing territorial dominance with structured right-flank overloads and rapid counter-press regains.",
+      "zonesOfControl": {
+        "dominantSide": "Right Flank (58% focus)",
+        "defensiveLineHeight": "51.4m from goal (2nd highest in EPL)",
+        "players": [
+          { "number": 22, "name": "Raya", "role": "GK", "x": 6, "y": 50 },
+          { "number": 4, "name": "White", "role": "RB", "x": 28, "y": 18 },
+          { "number": 2, "name": "Saliba", "role": "CB", "x": 22, "y": 38 },
+          { "number": 6, "name": "Gabriel", "role": "CB", "x": 22, "y": 62 },
+          { "number": 12, "name": "Timber", "role": "LB", "x": 28, "y": 82 },
+          { "number": 5, "name": "Partey", "role": "DM", "x": 42, "y": 50 },
+          { "number": 41, "name": "Rice", "role": "LCM", "x": 52, "y": 68 },
+          { "number": 8, "name": "Ødegaard", "role": "RCM", "x": 56, "y": 32 },
+          { "number": 7, "name": "Saka", "role": "RW", "x": 72, "y": 18 },
+          { "number": 29, "name": "Havertz", "role": "ST", "x": 78, "y": 50 },
+          { "number": 11, "name": "Martinelli", "role": "LW", "x": 72, "y": 82 }
+        ],
+        "tacticalZones": [
+          { "name": "Right Flank Dominance", "x": 50, "y": 0, "width": 55, "height": 35, "intensity": "High Overload (58%)" },
+          { "name": "Central Pressing Trap", "x": 40, "y": 35, "width": 30, "height": 30, "intensity": "Rodri Isolation (8 regains)" },
+          { "name": "High Defensive Line", "x": 15, "y": 20, "width": 25, "height": 60, "intensity": "51.4m Average Rest Defense" }
+        ]
+      },
+      "progressionRoutes": {
+        "left": 24,
+        "center": 18,
+        "right": 58,
+        "description": "Heavy right-side progression channel driven by White-Ødegaard-Saka rotational triangle."
+      },
+      "keyMetrics": [
+        { "name": "PPDA (Passes Per Defensive Action)", "value": "8.4", "leagueAvg": "11.2", "percentile": 96, "status": "Elite High Press" },
+        { "name": "Field Tilt (Territorial Share)", "value": "64.2%", "leagueAvg": "50.0%", "percentile": 94, "status": "Territorial Dominance" },
+        { "name": "Direct Speed (Circulation pace)", "value": "1.42 m/s", "leagueAvg": "1.78 m/s", "percentile": 88, "status": "Methodical Patient Build-up" },
+        { "name": "Opponent Box Entries / 90", "value": "34.1", "leagueAvg": "22.6", "percentile": 98, "status": "1st in Premier League" }
+      ],
+      "pressingStats": {
+        "highTurnovers": 12,
+        "shotsFromTurnovers": 4,
+        "defensiveDistance": "51.4m",
+        "regainsAttackingThird": 8
+      },
+      "keyPlayers": [
+        { "id": "saka", "name": "Bukayo Saka", "number": 7, "role": "Right Winger", "rating": 8.7, "stat1": "12 Goals / 10 Assists", "stat2": "3.1 Key Passes / 90" },
+        { "id": "odegaard", "name": "Martin Ødegaard", "number": 8, "role": "Attacking Midfielder", "rating": 8.4, "stat1": "89% Pass Accuracy", "stat2": "4.2 Shot-Creating Actions" },
+        { "id": "rice", "name": "Declan Rice", "number": 41, "role": "Defensive Midfielder", "rating": 8.6, "stat1": "4.2 Interceptions / 90", "stat2": "92% Progressive Pass Rate" },
+        { "id": "saliba", "name": "William Saliba", "number": 2, "role": "Center Back", "rating": 8.2, "stat1": "78% Duel Success", "stat2": "0 Dribbled Past" }
+      ],
+      "teamComparison": {
+        "opponent": "Manchester City",
+        "metrics": [
+          { "label": "Possession", "team": 61.4, "opponent": 64.8 },
+          { "label": "Field Tilt", "team": 64.2, "opponent": 63.1 },
+          { "label": "xG per 90", "team": 2.12, "opponent": 2.05 },
+          { "label": "PPDA (lower is more intense)", "team": 8.4, "opponent": 9.1 },
+          { "label": "High Regains / 90", "team": 11.2, "opponent": 9.8 }
+        ]
+      },
+      "recentMatches": [
+        { "opponent": "Manchester City", "score": "2–1", "result": "W", "date": "Today", "tag": "High Press Regains" },
+        { "opponent": "Chelsea", "score": "3–1", "result": "W", "date": "10 Mar", "tag": "Right Flank Overload" },
+        { "opponent": "Tottenham", "score": "1–1", "result": "D", "date": "03 Mar", "tag": "Low Block Solidity" },
+        { "opponent": "Newcastle", "score": "4–1", "result": "W", "date": "24 Feb", "tag": "Transition Dominance" },
+        { "opponent": "Liverpool", "score": "1–2", "result": "L", "date": "17 Feb", "tag": "Contested Half-Spaces" }
+      ],
+      "tacticalInsights": [
+        {
+          "title": "Right-Side Triangle Dynamics",
+          "summary": "Ben White overlapping creates 2v1 isolations against opposing left-backs, freeing Saka to drive inside or cross.",
+          "badge": "Offensive Mechanism"
+        },
+        {
+          "title": "Declan Rice Rest Defense Anchor",
+          "summary": "Positioning in Zone 11 prevents central counter-attacks during sustained attacking pressure.",
+          "badge": "Defensive Structure"
+        }
+      ]
+    },
+    {
+      "id": "man-city",
+      "name": "Manchester City",
+      "shortName": "MCI",
+      "formation": "4-2-3-1",
+      "leagueRank": 3,
+      "points": 59,
+      "form": ["L", "W", "W", "D", "W"],
+      "manager": "Pep Guardiola",
+      "avgPossession": 64.8,
+      "xGPer90": 2.05,
+      "xGAPer90": 0.95,
+      "ppda": 9.1,
+      "summary": "Positional play dominance seeking central overloads through Rodri and De Bruyne pocket entries.",
+      "zonesOfControl": {
+        "dominantSide": "Balanced (38% Left, 34% Center, 28% Right)",
+        "defensiveLineHeight": "52.8m from goal",
+        "players": [
+          { "number": 31, "name": "Ederson", "role": "GK", "x": 6, "y": 50 },
+          { "number": 2, "name": "Walker", "role": "RB", "x": 26, "y": 18 },
+          { "number": 3, "name": "Dias", "role": "CB", "x": 22, "y": 38 },
+          { "number": 25, "name": "Akanji", "role": "CB", "x": 22, "y": 62 },
+          { "number": 24, "name": "Gvardiol", "role": "LB", "x": 26, "y": 82 },
+          { "number": 16, "name": "Rodri", "role": "DM", "x": 38, "y": 48 },
+          { "number": 8, "name": "Kovačić", "role": "CM", "x": 42, "y": 64 },
+          { "number": 17, "name": "De Bruyne", "role": "AM", "x": 60, "y": 38 },
+          { "number": 47, "name": "Foden", "role": "RW", "x": 68, "y": 20 },
+          { "number": 9, "name": "Haaland", "role": "ST", "x": 76, "y": 50 },
+          { "number": 10, "name": "Grealish", "role": "LW", "x": 68, "y": 80 }
+        ],
+        "tacticalZones": [
+          { "name": "Rodri Pivot Distribution", "x": 30, "y": 35, "width": 25, "height": 30, "intensity": "Primary Build-up" },
+          { "name": "Foden Half-Space Pocket", "x": 55, "y": 15, "width": 25, "height": 30, "intensity": "Chance Creation" }
+        ]
+      },
+      "progressionRoutes": { "left": 36, "center": 38, "right": 26, "description": "Fluid buildup seeking central third penetration." },
+      "keyMetrics": [
+        { "name": "PPDA", "value": "9.1", "leagueAvg": "11.2", "percentile": 92, "status": "Counter-Press" },
+        { "name": "Field Tilt", "value": "63.1%", "leagueAvg": "50.0%", "percentile": 92, "status": "High Territorial Control" },
+        { "name": "Direct Speed", "value": "1.38 m/s", "leagueAvg": "1.78 m/s", "percentile": 85, "status": "High Pass Volume" },
+        { "name": "Opponent Box Entries / 90", "value": "31.8", "leagueAvg": "22.6", "percentile": 94, "status": "2nd in Premier League" }
+      ],
+      "pressingStats": { "highTurnovers": 9, "shotsFromTurnovers": 2, "defensiveDistance": "52.8m", "regainsAttackingThird": 6 },
+      "keyPlayers": [
+        { "id": "rodri", "name": "Rodri", "number": 16, "role": "Defensive Midfielder", "rating": 8.5, "stat1": "93% Pass Accuracy", "stat2": "8.8 Long Balls / 90" },
+        { "id": "haaland", "name": "Erling Haaland", "number": 9, "role": "Striker", "rating": 8.3, "stat1": "22 Goals in 26 Matches", "stat2": "0.88 xG / 90" }
+      ],
+      "teamComparison": {
+        "opponent": "Arsenal",
+        "metrics": [
+          { "label": "Possession", "team": 64.8, "opponent": 61.4 },
+          { "label": "Field Tilt", "team": 63.1, "opponent": 64.2 },
+          { "label": "xG per 90", "team": 2.05, "opponent": 2.12 },
+          { "label": "PPDA", "team": 9.1, "opponent": 8.4 },
+          { "label": "High Regains / 90", "team": 9.8, "opponent": 11.2 }
+        ]
+      },
+      "recentMatches": [
+        { "opponent": "Arsenal", "score": "1–2", "result": "L", "date": "Today", "tag": "Disrupted Buildup" },
+        { "opponent": "Manchester United", "score": "3–1", "result": "W", "date": "09 Mar", "tag": "Second Half Dominance" }
+      ],
+      "tacticalInsights": [
+        { "title": "Rodri Build-up Reliance", "summary": "When opponents cut off Rodri with a dedicated shadow, City's central progression drops by 45%.", "badge": "Tactical Vulnerability" }
+      ]
+    }
+  ],
+  "players": [
+    {
+      "id": "saka",
+      "name": "Bukayo Saka",
+      "number": 7,
+      "role": "Right Winger",
+      "club": "Arsenal",
+      "nationality": "England",
+      "age": 23,
+      "minutesPlayed": 67,
+      "matchStats": {
+        "chancesCreated": 2,
+        "progressiveCarries": 3,
+        "xA": 0.32,
+        "duelsWon": 4,
+        "passAccuracy": 88,
+        "touches": 48,
+        "shots": 2,
+        "dribblesCompleted": 3
+      },
+      "whyItMatters": [
+        "Isolating full-back in 1v1 situations with 75% take-on success rate against Gvardiol.",
+        "Drawing double coverage inward, creating open passing lanes for Martin Ødegaard in the right half-space.",
+        "High counter-press recovery rate (3 defensive regains in the final third directly initiating shots).",
+        "Elite box entry frequency: 6 carries or passes into the penalty area during 67 minutes."
+      ],
+      "touches": [
+        { "x": 68, "y": 14, "type": "receive", "minute": 4, "outcome": "completed" },
+        { "x": 74, "y": 18, "type": "carry", "minute": 7, "outcome": "completed" },
+        { "x": 82, "y": 12, "type": "cross", "minute": 12, "outcome": "completed" },
+        { "x": 62, "y": 22, "type": "pass", "minute": 18, "outcome": "completed" },
+        { "x": 78, "y": 20, "type": "dribble", "minute": 24, "outcome": "completed" },
+        { "x": 88, "y": 26, "type": "shot", "minute": 29, "outcome": "saved" },
+        { "x": 64, "y": 16, "type": "receive", "minute": 35, "outcome": "completed" },
+        { "x": 76, "y": 28, "type": "regain", "minute": 41, "outcome": "completed" },
+        { "x": 70, "y": 15, "type": "pass", "minute": 48, "outcome": "completed" },
+        { "x": 84, "y": 22, "type": "carry", "minute": 53, "outcome": "completed" },
+        { "x": 92, "y": 34, "type": "pass", "minute": 53, "outcome": "completed" },
+        { "x": 66, "y": 20, "type": "regain", "minute": 61, "outcome": "completed" },
+        { "x": 79, "y": 17, "type": "cross", "minute": 66, "outcome": "blocked" }
+      ],
+      "progressiveCarries": [
+        { "startX": 58, "startY": 16, "endX": 74, "endY": 18, "distance": "16.4m" },
+        { "startX": 65, "startY": 22, "endX": 84, "endY": 24, "distance": "19.2m" },
+        { "startX": 70, "startY": 14, "endX": 88, "endY": 28, "distance": "22.8m" }
+      ],
+      "chanceCreation": [
+        { "fromX": 88, "fromY": 28, "toX": 94, "toY": 48, "recipient": "Kai Havertz", "outcome": "Shot on target", "xA": 0.24, "minute": 53 },
+        { "fromX": 82, "fromY": 16, "toX": 86, "toY": 44, "recipient": "Declan Rice", "outcome": "Blocked shot", "xA": 0.08, "minute": 12 }
+      ],
+      "receivingZones": [
+        { "zone": "Defensive Third", "pct": 4 },
+        { "zone": "Middle Third Left", "pct": 2 },
+        { "zone": "Middle Third Center", "pct": 8 },
+        { "zone": "Middle Third Right", "pct": 26 },
+        { "zone": "Attacking Third Left", "pct": 0 },
+        { "zone": "Attacking Third Center", "pct": 6 },
+        { "zone": "Attacking Third Right Half-Space", "pct": 34 },
+        { "zone": "Attacking Third Right Touchline", "pct": 42 },
+        { "zone": "Penalty Box Right", "pct": 16 },
+        { "zone": "Penalty Box Center", "pct": 4 },
+        { "zone": "Six Yard Box", "pct": 0 },
+        { "zone": "Other Zones", "pct": 2 }
+      ],
+      "defensiveWork": [
+        { "x": 68, "y": 22, "action": "Attacking 3rd Tackle", "minute": 18, "outcome": "Won" },
+        { "x": 76, "y": 28, "action": "Counter-press Interception", "minute": 41, "outcome": "Won" },
+        { "x": 66, "y": 20, "action": "High Regain", "minute": 61, "outcome": "Won" }
+      ],
+      "cumulativeXA": [
+        { "minute": 0, "value": 0.0 },
+        { "minute": 12, "value": 0.08 },
+        { "minute": 25, "value": 0.08 },
+        { "minute": 45, "value": 0.08 },
+        { "minute": 53, "value": 0.32 },
+        { "minute": 67, "value": 0.32 }
+      ],
+      "comparison": {
+        "opponentPlayer": "Phil Foden (Man City)",
+        "metrics": [
+          { "label": "Key Passes / 90", "player": 3.1, "opponent": 2.4 },
+          { "label": "Take-On Success %", "player": 75, "opponent": 58 },
+          { "label": "Expected Assists (xA)", "player": 0.32, "opponent": 0.14 },
+          { "label": "Attacking 3rd Regains", "player": 3, "opponent": 1 },
+          { "label": "Touches in Opponent Box", "player": 8, "opponent": 4 },
+          { "label": "Pass Accuracy %", "player": 88, "opponent": 86 }
+        ]
+      },
+      "recentImpact": [
+        { "clock": "53:12", "title": "Cutback Assist Creation", "summary": "Driving past Gvardiol along the byline, delivering low pinpoint cutback into Havertz's stride." },
+        { "clock": "41:04", "title": "Final Third Pressing Regain", "summary": "Anticipating Dias's lateral pass to win possession and trigger rapid transition." },
+        { "clock": "18:20", "title": "1v1 Dribble Win", "summary": "Sharp body feint taking the ball outside onto right foot, drawing defensive foul." }
+      ],
+      "analystAssessment": "Bukayo Saka is delivering an exceptional performance in tactical execution. His gravity on the right touchline stretches City's backline, while his defensive discipline in tracking back and pressing Gvardiol has yielded 3 regains and limited City's left-sided progression."
+    }
+  ],
+  "insights": [
+    {
+      "id": "arsenal-press-city",
+      "matchId": "sim-match-arsenal-mancity",
+      "truthClass": "Evidence-Supported Interpretation",
+      "confidence": "High (94% Model Grounding)",
+      "clock": "67:24",
+      "selectedTimeSeconds": 4044,
+      "title": "Arsenal's press is reducing City's central progression",
+      "subtitle": "Mikel Arteta's mid-to-high pressing structure is funneling Manchester City into low-value wide zones, neutralizing Rodri's central distribution.",
+      "pitchDiagram": {
+        "title": "CENTRAL PROGRESSION UNDER PRESSURE",
+        "description": "Arsenal front four compressing central passing lanes, isolating Rodri while cutting off passing routes to Gvardiol.",
+        "players": [
+          { "id": "p-havertz", "name": "Havertz", "number": 29, "team": "home", "x": 68, "y": 48, "role": "Forward pressing Dias" },
+          { "id": "p-odegaard", "name": "Ødegaard", "number": 8, "team": "home", "x": 58, "y": 40, "role": "Cover shadow on Rodri" },
+          { "id": "p-rice", "name": "Rice", "number": 41, "team": "home", "x": 50, "y": 52, "role": "Stepping to second ball" },
+          { "id": "p-saka", "name": "Saka", "number": 7, "team": "home", "x": 62, "y": 20, "role": "Cutting line to Gvardiol" },
+          { "id": "p-martinelli", "name": "Martinelli", "number": 11, "team": "home", "x": 64, "y": 80, "role": "Screening Walker" },
+          { "id": "p-rodri", "name": "Rodri", "number": 16, "team": "away", "x": 42, "y": 48, "role": "Pressed Ball Carrier" },
+          { "id": "p-dias", "name": "Dias", "number": 3, "team": "away", "x": 32, "y": 42, "role": "Under Pressure" },
+          { "id": "p-akanji", "name": "Akanji", "number": 25, "team": "away", "x": 32, "y": 64, "role": "Wide Option" },
+          { "id": "p-gvardiol", "name": "Gvardiol", "number": 24, "team": "away", "x": 38, "y": 18, "role": "Blocked Target" }
+        ],
+        "passingLanes": [
+          { "fromX": 32, "fromY": 42, "toX": 42, "toY": 48, "status": "blocked", "label": "Blocked pass to Rodri" },
+          { "fromX": 32, "fromY": 42, "toX": 38, "toY": 18, "status": "blocked", "label": "Screened pass to Gvardiol" },
+          { "fromX": 32, "fromY": 42, "toX": 32, "toY": 64, "status": "forced", "label": "Forced wide release" }
+        ],
+        "pressureZones": [
+          { "x": 35, "y": 32, "width": 30, "height": 36, "label": "PRESSING TRAP ZONE" }
+        ]
+      },
+      "evidenceAtAGlance": [
+        { "label": "Central Line Breaks", "value": "-68%", "comparison": "4 vs City season avg 12.5", "trend": "down" },
+        { "label": "Attacking 3rd Regains", "value": "+50%", "comparison": "8 regains vs league avg 4.0", "trend": "up" },
+        { "label": "Field Tilt Share", "value": "62%", "comparison": "Arsenal territorial dominance", "trend": "up" },
+        { "label": "Transition Chances", "value": "+100%", "comparison": "4 shots directly from regains", "trend": "up" }
+      ],
+      "developingChart": [
+        { "minute": 10, "pressIntensity": 45, "centralProgression": 72 },
+        { "minute": 20, "pressIntensity": 58, "centralProgression": 65 },
+        { "minute": 35, "pressIntensity": 78, "centralProgression": 42 },
+        { "minute": 45, "pressIntensity": 82, "centralProgression": 36 },
+        { "minute": 55, "pressIntensity": 89, "centralProgression": 28 },
+        { "minute": 67, "pressIntensity": 92, "centralProgression": 22 }
+      ],
+      "causalChain": [
+        { "step": 1, "phase": "Trigger", "action": "Declan Rice steps up 10m to shadow Rodri on goal-kick restarts", "time": "52:48" },
+        { "step": 2, "phase": "Spatial Constraint", "action": "Saka and Martinelli pinch inward, cutting passing lanes to Gvardiol and Walker", "time": "52:56" },
+        { "step": 3, "phase": "Turnover Event", "action": "Dias forced into hurried aerial clearance intercepted by Saliba at midfield", "time": "53:04" },
+        { "step": 4, "phase": "Chance Created", "action": "Immediate vertical release to Havertz yielding 0.42 xG shot on target", "time": "53:12" }
+      ],
+      "keyMoment": {
+        "clock": "53:12",
+        "title": "Turnover Sequence Leading to Havertz Shot",
+        "summary": "Full 4-player pressing sequence resulting in ball regain and immediate 3-touch entry into penalty box.",
+        "videoThumbnail": "video-5312-regain.jpg",
+        "eventIds": ["EV-84920", "EV-84921", "EV-84922", "EV-84923"]
+      },
+      "secondaryInsights": [
+        {
+          "id": "sec-1",
+          "category": "Pressing",
+          "title": "Ødegaard cover shadow forcing Dias into backline passes",
+          "summary": "Ødegaard has denied 14 forward passing options by positioning himself within Rodri's passing corridor.",
+          "badge": "Spatial Denial"
+        },
+        {
+          "id": "sec-2",
+          "category": "Transitions",
+          "title": "Saka byline penetration exploiting Gvardiol's forward positioning",
+          "summary": "When City lose possession centrally, Gvardiol is caught 38m upfield, allowing Saka uncontested entries.",
+          "badge": "Transition Flaw"
+        },
+        {
+          "id": "sec-3",
+          "category": "Build-up",
+          "title": "Raya long distribution targeting right flank",
+          "summary": "David Raya has bypassed City's front line with 6 long diagonal passes to Saka (83% retention).",
+          "badge": "Direct Progression"
+        },
+        {
+          "id": "sec-4",
+          "category": "Set Pieces",
+          "title": "Arsenal near-post corner congestion",
+          "summary": "Targeting Gabriel at the near post with 3 in-swinging deliveries, generating 2 shots.",
+          "badge": "Set Piece Threat"
+        }
+      ]
+    }
+  ],
+  "analyst": {
+    "matchId": "sim-match-arsenal-mancity",
+    "selectedTimeSeconds": 4044,
+    "matchContextPill": "Arsenal 2–1 Man City · 67:24",
+    "suggestedPrompts": [
+      "Why is Arsenal's press working against City?",
+      "How is Rodri being bypassed in the second half?",
+      "Saka vs Gvardiol 1v1 tactical analysis",
+      "Show transition sequence leading to 53' shot"
+    ],
+    "conversation": [
+      {
+        "id": "msg-1",
+        "sender": "user",
+        "text": "Explain why Arsenal's press is disrupting Man City's build-up in the second half",
+        "timestamp": "67:24"
+      },
+      {
+        "id": "msg-2",
+        "sender": "analyst",
+        "timestamp": "67:25",
+        "text": "Arsenal's second-half pressing structure is specifically designed to isolate Rodri and force Manchester City's center-backs into hurried wide distributions or contested aerial clearances. By maintaining a compact 4-3-3 mid-to-high block, Mikel Arteta's side has reduced City's central progression from 72% in the first 20 minutes down to just 22% in the current match phase.",
+        "keyMetrics": [
+          { "label": "Attacking 3rd Regains", "value": "8 vs 3", "detail": "Arsenal dominance in high turnovers" },
+          { "label": "Field Tilt Share", "value": "62% vs 38%", "detail": "Territorial advantage in final third" },
+          { "label": "Shots Generated", "value": "12 vs 6", "detail": "4 shots from pressing turnovers" },
+          { "label": "Build-up Disrupted", "value": "68%", "detail": "City forced away from central channel" }
+        ],
+        "tacticalStory": [
+          {
+            "phase": "Phase 1: High Block Organization",
+            "description": "Kai Havertz initiates the press by angling his run to shepherd Rúben Dias onto his weaker left foot, denying the direct central ground pass."
+          },
+          {
+            "phase": "Phase 2: Rodri Isolation & Lane Denials",
+            "description": "Martin Ødegaard positions himself directly between Dias and Rodri in an active cover shadow, while Declan Rice steps up 10 meters behind to contest any chipped vertical passes."
+          },
+          {
+            "phase": "Phase 3: Immediate Vertical Counter-Attack",
+            "description": "Upon regaining possession in Zone 14, Arsenal transition from regain to shot in an average of 4.1 seconds, releasing Bukayo Saka into 1v1 space on the right flank."
+          }
+        ],
+        "keyEvidence": [
+          {
+            "id": "ev-clip-1",
+            "type": "Video Sequence",
+            "title": "53:12 High Regain and Shot",
+            "timestamp": "53:12",
+            "description": "Rodri dispossessed by Rice; quick 3-touch progression to Saka cutback for Havertz."
+          },
+          {
+            "id": "ev-pitch-1",
+            "type": "Tactical Snapshot",
+            "title": "Pressure Geometry at 53:04",
+            "timestamp": "53:04",
+            "description": "Spatial mapping showing 4 Arsenal players surrounding City's central pivot."
+          },
+          {
+            "id": "ev-heat-1",
+            "type": "Build-up Heatmap",
+            "title": "City Passing Distribution (45'–67')",
+            "timestamp": "45'–67'",
+            "description": "Heatmap demonstrating zero completed passes through central Zone 14."
+          }
+        ],
+        "provenance": {
+          "service": "PitchMind Grounded Football Reasoner",
+          "trackingFrames": 1420,
+          "verifiedEvents": 38,
+          "limitations": [
+            "Analysis bounded to observed tracking frames up to 67:24.",
+            "Tactical interpretations reflect spatial geometry and do not assume unrecorded coaching instructions."
+          ]
+        }
+      }
+    ],
+    "matchContextSidebar": {
+      "keyMoments": [
+        { "minute": "53:12", "title": "Saka Cutback to Havertz", "badge": "High Regain", "selectedSeconds": 3192 },
+        { "minute": "61:05", "title": "Rice Interception on De Bruyne", "badge": "Interception", "selectedSeconds": 3665 },
+        { "minute": "42:30", "title": "Gabriel Duel Win vs Haaland", "badge": "Duel", "selectedSeconds": 2550 },
+        { "minute": "34:18", "title": "Saka 1v1 Take-on vs Gvardiol", "badge": "Take-on", "selectedSeconds": 2058 },
+        { "minute": "18:02", "title": "Arsenal High Turn-over in Box", "badge": "Turn-over", "selectedSeconds": 1082 }
+      ],
+      "evidenceItems": [
+        { "id": "ev-1", "category": "Key moments", "title": "53:12 Regain Sequence", "detail": "Event EV-84920 · 25Hz coordinates verified" },
+        { "id": "ev-2", "category": "Metrics", "title": "Central Progression Deficit", "detail": "-68% reduction in completed line breaks" },
+        { "id": "ev-3", "category": "Tactical views", "title": "Pressing Trap Spatial Zone", "detail": "Cover shadow envelope: 18.4m radius" },
+        { "id": "ev-4", "category": "Player impact", "title": "Saka Right Flank Isolation", "detail": "6 box entries · 0.32 xA generated" }
+      ]
+    }
+  }
+}
