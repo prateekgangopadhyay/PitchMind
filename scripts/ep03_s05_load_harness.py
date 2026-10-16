@@ -326,7 +326,9 @@ def build_report(
             "durationSeconds": duration,
             "durationOverrideUsed": duration_override is not None,
             "payloadMode": profile["workload"]["payloadMode"],
+            "payloadMixApproval": profile["workload"].get("payloadMixApproval"),
             "partitionMode": profile["workload"]["partitionMode"],
+            "partitionMixApproval": profile["workload"].get("partitionMixApproval"),
         },
         "source": {
             "repositoryPath": profile["source"]["path"],

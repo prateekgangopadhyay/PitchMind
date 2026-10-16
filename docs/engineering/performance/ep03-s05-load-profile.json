@@ -1,7 +1,7 @@
 {
   "profileSchemaVersion": "1.0",
   "storyId": "EP03-S05",
-  "profileId": "candidate-feed-single-match-pending-agreement",
+  "profileId": "candidate-feed-single-match-owner-directed-duration-payload-pending",
   "source": {
     "path": "data/simulations/manu-liv-match-dataset.json",
     "format": "json-array",
@@ -22,7 +22,7 @@
     "payloadMode": "opaque-source-record-order",
     "payloadMixApproval": null,
     "partitionMode": "single-source-match",
-    "partitionMixApproval": null,
+    "partitionMixApproval": "owner-directed single-match partition mix (2026-10-16)",
     "queueCapacityRecords": 1024
   },
   "agreement": {

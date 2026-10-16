@@ -8,6 +8,7 @@ import unittest
 from scripts.ep03_s05_load_harness import (
     HarnessError,
     _source_records,
+    build_report,
     execute,
     load_profile,
     parse_json_array_records,
@@ -81,9 +82,23 @@ class Ep03S05LoadHarnessTests(unittest.TestCase):
         profile = load_profile(repo_root / "docs/engineering/performance/ep03-s05-load-profile.json")
         self.assertIsNone(profile["workload"]["durationSeconds"])
         self.assertIsNone(profile["workload"]["payloadMixApproval"])
-        self.assertIsNone(profile["workload"]["partitionMixApproval"])
+        self.assertEqual(
+            "owner-directed single-match partition mix (2026-10-16)",
+            profile["workload"]["partitionMixApproval"],
+        )
         self.assertEqual("pending", profile["agreement"]["status"])
         self.assertTrue(all(value is None for value in profile["agreement"]["acceptanceBudgets"].values()))
+
+    def test_report_distinguishes_owner_partition_choice_from_unapproved_payload_mix(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        profile_path = repo_root / "docs/engineering/performance/ep03-s05-load-profile.json"
+        profile = load_profile(profile_path)
+        record = parse_json_array_records(b'[{"eventId":"evt-1","sequence":1,"matchId":"match-1"}]')[0]
+        report = build_report(profile, repo_root / "data/source.json", b"[]", [record],
+            {"complete": True}, duration_override=1.0, run_id="test-run", started_at="2026-10-16T00:00:00Z")
+        self.assertEqual("single-source-match", report["profile"]["partitionMode"])
+        self.assertEqual(profile["workload"]["partitionMixApproval"], report["profile"]["partitionMixApproval"])
+        self.assertIsNone(report["profile"]["payloadMixApproval"])
 
     def test_profile_rejects_non_finite_duration(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
