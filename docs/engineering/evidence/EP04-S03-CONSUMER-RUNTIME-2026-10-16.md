@@ -25,3 +25,16 @@
 ## Not verified / acceptance status
 
 No live Event Hubs delivery, Azure Blob checkpoint, Azure managed-identity auth, cloud PostgreSQL, hosted CI, restart/rebuild operation, measured load/lag, accessibility review, security review, independent exact-head review, or Product Owner acceptance was performed. PR remains draft. Story remains unaccepted. No Azure resources or deployments were changed.
+
+## Stale replay checkpoint recovery follow-up — code commit `98b927c3ef9bbff875df947f01781744f9aba06b`
+
+The handler now invokes the EventProcessorClient checkpoint callback after a successfully committed or inbox-deduplicated event even when PostgreSQL reports `StaleReplay`. This allows a lagging Blob checkpoint to advance through the already-processed partition prefix; the PostgreSQL cursor still refuses backwards movement. The safety premise is the SDK's documented guarantee that callbacks for each partition run one at a time in source order ([Microsoft API reference](https://learn.microsoft.com/en-us/dotnet/api/azure.messaging.eventhubs.eventprocessorclient.processeventasync?view=azure-dotnet)).
+
+Verification on code commit `98b927c3ef9bbff875df947f01781744f9aba06b`:
+
+- EventWorker Release build: passed, 0 warnings, 0 errors.
+- Focused `EventHubOutboxPublisherTests`: 21 passed, 0 failed, 0 skipped.
+- Targeted PostgreSQL integration regression `EventHubProjectionHandlerUpdatesBrokerCheckpointAfterCommitAndDuringStaleReplay`: discovered but **skipped** because `PITCHMIND_TEST_POSTGRES` was not set. The guarded Compose startup could not connect to Docker's API socket, so the local database was unavailable.
+- `node scripts/validate_operating_model.mjs` and `git diff --check`: passed.
+
+The stale replay recovery change therefore compiles and its non-database Event Hubs tests pass, but the new callback-vs-PostgreSQL-cursor assertion remains unverified. Do not claim that this fix's PostgreSQL integration test passed. No Azure endpoint or resource was contacted.
