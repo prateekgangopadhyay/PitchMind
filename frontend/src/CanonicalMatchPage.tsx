@@ -18,6 +18,71 @@ type MatchView = {
 };
 type FocusRequest = { kind: 'event'; eventId: string } | { kind: 'retry' };
 
+const INSIGHT_PAGE_SIZE = 100;
+const MAX_INSIGHT_PAGES = 100;
+
+class InvalidInsightPaginationError extends Error {}
+
+async function loadSelectedTimeInsights(
+  matchId: string,
+  selectedSeconds: number,
+  canonicalRevision: number,
+  projectionRevision: number,
+  throughSequence: number,
+  signal: AbortSignal
+): Promise<CanonicalInsightPage> {
+  const items: CanonicalInsightPage['items'] = [];
+  const seenInsightIds = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+  let lastPage: CanonicalInsightPage | null = null;
+
+  for (let pageIndex = 0; pageIndex < MAX_INSIGHT_PAGES; pageIndex++) {
+    const query = new URLSearchParams({
+      atSeconds: String(selectedSeconds),
+      revision: String(projectionRevision),
+      limit: String(INSIGHT_PAGE_SIZE)
+    });
+    if (cursor) query.set('cursor', cursor);
+    const page = await request<CanonicalInsightPage>(
+      `canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, signal);
+    const pageContextIsValid = page.matchId === matchId && page.canonicalRevision === canonicalRevision &&
+      page.projectionRevision === projectionRevision && page.selectedTimeSeconds === selectedSeconds && Number.isSafeInteger(page.throughSequence) &&
+      page.throughSequence >= 0 && page.throughSequence === throughSequence;
+    if (!pageContextIsValid || !Array.isArray(page.items) || typeof page.hasMore !== 'boolean')
+      throw new InvalidInsightPaginationError('This match data does not match the selected moment.');
+
+    for (const insight of page.items) {
+      const validInsight = insight.matchId === matchId && insight.canonicalRevision === canonicalRevision &&
+        insight.projectionRevision === projectionRevision && insight.selectedTimeSeconds === selectedSeconds && Number.isSafeInteger(insight.throughSequence) &&
+        insight.throughSequence >= 0 && insight.throughSequence <= throughSequence &&
+        typeof insight.insightId === 'string' && insight.insightId.length > 0 &&
+        typeof insight.summary === 'string' && !seenInsightIds.has(insight.insightId);
+      if (!validInsight)
+        throw new InvalidInsightPaginationError('This match data does not match the selected moment.');
+      seenInsightIds.add(insight.insightId);
+      items.push(insight);
+    }
+
+    if (!page.hasMore) {
+      if (page.nextCursor !== null)
+        throw new InvalidInsightPaginationError('Canonical insight pagination returned an unexpected cursor.');
+      lastPage = page;
+      break;
+    }
+    if (page.items.length === 0 || typeof page.nextCursor !== 'string' || !page.nextCursor.trim() ||
+        seenCursors.has(page.nextCursor))
+      throw new InvalidInsightPaginationError('Canonical insight pagination did not advance.');
+    seenCursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+    lastPage = page;
+  }
+
+  if (!lastPage || lastPage.hasMore)
+    throw new InvalidInsightPaginationError('Canonical insight history exceeds the safe pagination limit.');
+  return { ...lastPage, items, nextCursor: null, hasMore: false };
+}
+
 export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision, replay, initialMode }: {
   matchId: string;
   selectedSeconds: number;
@@ -98,9 +163,12 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal)
             .then(page => ({ page, status: '' }))
             .catch(failure => ({ page: null, status: unavailableMessage(failure, 'Recorded events') })),
-          request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal)
+          loadSelectedTimeInsights(matchId, selectedSeconds, snapshot.canonicalRevision, revision, snapshot.throughSequence, controller.signal)
             .then(page => ({ page, status: '' }))
-            .catch(failure => ({ page: null, status: unavailableMessage(failure, 'Saved insights') })),
+            .catch(failure => {
+              if (failure instanceof InvalidInsightPaginationError) throw failure;
+              return { page: null, status: unavailableMessage(failure, 'Saved insights') };
+            }),
           request<CanonicalTrackingFramePage>(`canonical/matches/${encodeURIComponent(matchId)}/frames?${frameQuery}`, controller.signal)
             .then(page => ({ page, status: '' }))
             .catch(error => ({
@@ -160,7 +228,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus,
           eventsStatus: eventResult.status, insightsStatus: insightResult.status });
       })
-      .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Match data')); } })
+      .catch(failure => { if (!controller.signal.aborted) {
+        setView(null);
+        setPlaying(false);
+        setError(failure instanceof InvalidInsightPaginationError
+          ? failure.message
+          : unavailableMessage(failure, 'Match data'));
+      } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [matchId, requestedRevision, requestedFrameId, requestedSourceRevision, selectedSeconds, retryCounter, realtimeMode]);
@@ -234,6 +308,11 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const snapshot = view?.snapshot;
   const approvedTrackingFrames = view?.trackingFrames?.items.filter(frame => frame?.frame?.source?.rightsReviewStatus === 'approved_for_use') ?? [];
   const hasUnapprovedTrackingFrames = view?.trackingFrames?.items.some(frame => frame?.frame?.source?.rightsReviewStatus !== 'approved_for_use') ?? false;
+  const selectedTimeInsight = view
+    ? view.insights.items.filter(insight => insight.summary.trim().length > 0)
+      .reduce<CanonicalInsightPage['items'][number] | null>((latest, insight) =>
+        latest === null || insight.throughSequence > latest.throughSequence ? insight : latest, null)
+    : null;
   const selectedFrame = requestedFrameId === null
     ? approvedTrackingFrames.at(-1) ?? null
     : approvedTrackingFrames.find(frame => frame.frameId === requestedFrameId &&
@@ -293,6 +372,18 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
             <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{phaseLabel(snapshot.phase)}</small></div>
             <span className="score">{snapshot.awayScore}</span><div className="team">Away</div>
+          </section>
+          <section className="panel selected-time-explanation" aria-labelledby="selected-time-explanation-title">
+            <h2 id="selected-time-explanation-title">Explanation at {clock(selectedSeconds)}</h2>
+            {view.insightsStatus
+              ? <p className="empty" role="status">{view.insightsStatus}</p>
+              : selectedTimeInsight ? <>
+                <p><span className="badge">{selectedTimeInsight.truthClass}</span> Saved insight through sequence {selectedTimeInsight.throughSequence}</p>
+                <p>{selectedTimeInsight.summary}</p>
+                <a href={contextHref(`/insights/${encodeURIComponent(selectedTimeInsight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>
+                  Inspect supporting evidence
+                </a>
+              </> : <p className="empty">No saved explanation is available at this selected time.</p>}
           </section>
           <section className="page-state match-provenance" aria-label="Match source and revision">
             <span className="badge">{provenanceLabel(snapshot.provenance)}</span>
