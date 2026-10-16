@@ -17,6 +17,9 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
 {
     private const int MaximumMatchSeconds = 5400;
     private const int MaximumPageSize = 100;
+    private const int MaximumReplayEventCount = 100_000;
+    private const int MaximumReplayEventBytes = 64 * 1024;
+    private const long MaximumReplayInputBytes = 32L * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>One SQL statement gives the replay a single PostgreSQL MVCC snapshot across all source inputs.</summary>
@@ -394,7 +397,8 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         var matchId = new MatchId(parsedMatchId);
         var persistedSequence = await VerifyPersistedProjectionAsync(matchId, projection, cancellationToken);
         await using var command = dataSource.CreateCommand("""
-            SELECT source_event_json::text, payload::text, sequence, clock_seconds, period
+            SELECT octet_length(source_event_json::text), octet_length(payload::text),
+                   source_event_json::text, payload::text, sequence, clock_seconds, period
             FROM pitchmind.match_events
             WHERE match_id = $1 AND canonical_revision <= $2 AND sequence <= $3 AND clock_seconds <= $4
             ORDER BY sequence
@@ -405,18 +409,28 @@ public sealed class PostgresMatchProjectionReader(NpgsqlDataSource dataSource) :
         command.Parameters.AddWithValue(selectedSeconds);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         long expectedSequence = 0;
+        long totalInputBytes = 0;
         while (await reader.ReadAsync(cancellationToken))
         {
-            if (reader.IsDBNull(0)) throw new InvalidDataException("Canonical event is missing its immutable replay source envelope.");
-            var item = JsonSerializer.Deserialize<SimulationEvent>(reader.GetString(0), JsonOptions)
+            if (reader.IsDBNull(0) || reader.IsDBNull(1))
+                throw new InvalidDataException("Canonical event is missing its immutable replay source envelope or payload.");
+            var sourceBytes = reader.GetInt32(0);
+            var payloadBytes = reader.GetInt32(1);
+            if (expectedSequence >= MaximumReplayEventCount || sourceBytes is <= 0 or > MaximumReplayEventBytes ||
+                payloadBytes is <= 0 or > MaximumReplayEventBytes ||
+                totalInputBytes > MaximumReplayInputBytes - sourceBytes - payloadBytes)
+                throw new InvalidDataException("Selected replay exceeds its event count or input byte limit.");
+
+            var item = JsonSerializer.Deserialize<SimulationEvent>(reader.GetString(2), JsonOptions)
                 ?? throw new InvalidDataException("Canonical replay source event is empty.");
-            var indexedEvent = JsonSerializer.Deserialize<MatchEvent>(reader.GetString(1))
+            var indexedEvent = JsonSerializer.Deserialize<MatchEvent>(reader.GetString(3), JsonOptions)
                 ?? throw new InvalidDataException("Canonical event payload is empty.");
             MatchEventValidator.Validate(item.Event);
             if (item.Event != indexedEvent || item.Event.MatchId != matchId || item.Event.Sequence != expectedSequence ||
-                reader.GetInt64(2) != expectedSequence || item.Event.ClockSeconds != reader.GetInt32(3) ||
-                item.Event.Period != reader.GetInt32(4) || item.Event.ClockSeconds > selectedSeconds)
+                reader.GetInt64(4) != expectedSequence || item.Event.ClockSeconds != reader.GetInt32(5) ||
+                item.Event.Period != reader.GetInt32(6) || item.Event.ClockSeconds > selectedSeconds)
                 throw new InvalidDataException("Canonical replay envelope does not match its immutable indexed event.");
+            totalInputBytes += sourceBytes + payloadBytes;
             expectedSequence++;
             yield return item;
         }
