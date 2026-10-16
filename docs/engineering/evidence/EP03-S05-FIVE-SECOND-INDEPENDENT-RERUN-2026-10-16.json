@@ -1,0 +1,88 @@
+{
+  "generatorMeasurements": {
+    "complete": false,
+    "fullRunSeconds": 5.000742624979466,
+    "localSinkRatePerSecond": 439.73468840721023,
+    "localSinkReceivedRecords": 2199,
+    "maxInMemoryQueueDepth": 3,
+    "plannedRecords": 2199,
+    "queueCapacityRecords": 1024,
+    "replayedEventIdSequenceSha256": "1573be4a52ddd73f6f73e221980858a633443d722426eff8d1ed142dd738c260",
+    "replayedPayloadSha256": "34e5d5c7d9cf7b1169ee53743a631d701a34473afd5713d13a2a4de49aaf6a05",
+    "requestedRecords": 2500,
+    "scheduleWindowSeconds": 5.0,
+    "scheduledRatePerSecond": 439.8,
+    "scheduledRecords": 2199,
+    "sourceRecordLimitReached": true
+  },
+  "ingestionMeasurements": {
+    "acceptedRecords": null,
+    "backpressureRecoverySeconds": null,
+    "consumerLag": null,
+    "databaseLatencyPercentilesMs": null,
+    "duplicateRecords": null,
+    "quarantinedRecords": null,
+    "status": "not_measured"
+  },
+  "measurementScope": "local_rate_scheduler_and_in_memory_discard_sink",
+  "profile": {
+    "durationOverrideUsed": false,
+    "durationSeconds": 5,
+    "partitionMixApproval": "owner-directed single-match partition mix (2026-10-16)",
+    "partitionMode": "single-source-match",
+    "payloadMixApproval": "Owner-approved diagnostic profile (2026-10-16): each unchanged source event JSON object, including its attached playerPositions array; no standalone frame messages; stop at source exhaustion without repeating IDs or sequences. This is not canonical event/frame approval or story acceptance.",
+    "payloadMode": "opaque-source-record-order",
+    "profileAgreement": {
+      "acceptanceBudgets": {
+        "acceptedRecordLoss": null,
+        "backpressureRecoverySeconds": null,
+        "consumerLagMs": null,
+        "endToEndLatencyP95Ms": null,
+        "endToEndLatencyP99Ms": null
+      },
+      "approvedAtUtc": null,
+      "approvedBy": null,
+      "status": "pending"
+    },
+    "profileId": "candidate-feed-single-match-five-second-raw-payload-diagnostic",
+    "profileSchemaVersion": "1.0",
+    "replayMode": "stop-at-source-end",
+    "targetEventsPerSecond": 500
+  },
+  "reportSchemaVersion": "1.0",
+  "runId": "e2272906-6553-4d76-a45b-7797c2ca5557",
+  "source": {
+    "attachedPlayerPositionObjectCount": 48048,
+    "attachedPlayerPositionsArePreserved": true,
+    "byteSize": 28601013,
+    "eventRecordsWithPlayerPositionsArray": 2199,
+    "fixtureVersion": null,
+    "matchCount": 1,
+    "matchIds": [
+      "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+    ],
+    "orderedEventIdSequenceSha256": "1573be4a52ddd73f6f73e221980858a633443d722426eff8d1ed142dd738c260",
+    "payloadBytesPreservedWithoutReserialization": true,
+    "provenanceIsEmbeddedInSource": false,
+    "provenanceLabel": "owner-confirmed-synthetic",
+    "recordCount": 2199,
+    "recordsAreReplayedInSourceOrder": true,
+    "replayCyclesRepeatOriginalEventIdsAndSequences": false,
+    "repositoryPath": "data/simulations/manu-liv-match-dataset.json",
+    "sha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+    "sourceExhaustionStopsWithoutRepeating": true,
+    "sourceVersion": null,
+    "standaloneFrameRecords": 0
+  },
+  "startedAtUtc": "2026-10-16T07:46:00.766127+00:00",
+  "status": "generator_only_not_ingestion_evidence",
+  "storyId": "EP03-S05",
+  "unsupported": [
+    "No broker, event worker, database, API, or Azure endpoint was exercised.",
+    "Generator throughput is not ingestion throughput and does not prove zero data loss.",
+    "The source contains a single match; multi-match partition mixes are unsupported.",
+    "Payloads are opaque source records; semantic payload mixes and payload shaping are unsupported.",
+    "Consumer lag, accepted/duplicate/quarantine counts, end-to-end latency, and recovery are unmeasured.",
+    "The source clock, coordinates, player metrics, canonical event mapping, and football realism are not validated by this harness."
+  ]
+}

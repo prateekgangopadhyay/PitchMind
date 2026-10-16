@@ -1,7 +1,7 @@
 {
   "profileSchemaVersion": "1.0",
   "storyId": "EP03-S05",
-  "profileId": "candidate-feed-single-match-pending-agreement",
+  "profileId": "candidate-feed-single-match-five-second-raw-payload-diagnostic",
   "source": {
     "path": "data/simulations/manu-liv-match-dataset.json",
     "format": "json-array",
@@ -18,11 +18,12 @@
   "workload": {
     "mode": "generator-only-local-in-memory",
     "targetEventsPerSecond": 500,
-    "durationSeconds": null,
+    "durationSeconds": 5,
     "payloadMode": "opaque-source-record-order",
-    "payloadMixApproval": null,
+    "payloadMixApproval": "Owner-approved diagnostic profile (2026-10-16): each unchanged source event JSON object, including its attached playerPositions array; no standalone frame messages; stop at source exhaustion without repeating IDs or sequences. This is not canonical event/frame approval or story acceptance.",
+    "replayMode": "stop-at-source-end",
     "partitionMode": "single-source-match",
-    "partitionMixApproval": null,
+    "partitionMixApproval": "owner-directed single-match partition mix (2026-10-16)",
     "queueCapacityRecords": 1024
   },
   "agreement": {
