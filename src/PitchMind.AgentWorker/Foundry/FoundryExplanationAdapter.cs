@@ -218,7 +218,7 @@ public sealed class FoundryExplanationAdapter(
             _ => throw new ArgumentOutOfRangeException(nameof(audience))
         };
 
-        return SystemInstruction + " " + audienceGuidance + "\n" + profile.BuildPromptContext();
+        return SystemInstruction + " " + audienceGuidance + "\n" + TacticalAgentCatalog.BuildPromptContext(profile);
     }
 
     private const string SystemInstruction = "You produce a concise football explanation candidate from the supplied JSON evidence only. " +

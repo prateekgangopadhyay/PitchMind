@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "1.0.0",
+  "cards": [
+    {
+      "id": "team-movement",
+      "topic": "Team movement dynamics across the field",
+      "promptSummary": "Analyze by team phase, then unit and player. Keep width, depth, line distances, centroid, ball-side shift, weak side, between-line position, overload, rest defence and recovery run distinct. A team shift needs multiple aligned observations and opponent context; a single frame is a snapshot, not a movement trend. Compare measured change with possession/phase and opponent response. State coverage and missing players. Event-only feeds cannot prove off-ball movement, shape, compactness, body orientation, velocity or intent.",
+      "mechanisms": [
+        "Describe team behavior by phase: settled build-up, progression, final-third attack, defensive organization, pressing, transition after regain, and transition after loss.",
+        "Distinguish nominal starting formation from phase-dependent shape, player role, and a specific tactical mechanism. A shape can change with the ball, opponent, score, personnel, and restart.",
+        "Useful spatial summaries include team width, team length, centroid, between-line distance, line height, local density, inter-player spacing, and ball-to-block distance; every metric needs a defined player set and coordinate reference.",
+        "Team movement is interaction: compare the team's movement with ball movement and opponent response. A shift toward the ball may preserve compactness, create weak-side space, or be a retreat; context determines which is supported.",
+        "Track width/depth occupation, support angles, passing lanes, overloads, runs beyond, third-player actions, rest defence, and recovery runs as distinct mechanisms rather than synonyms for attacking or defending well."
+      ],
+      "requiredEvidence": [
+        "Use time-synchronized tracking with validated coordinate units, pitch dimensions, axes, attack direction per team/period, player identity/team mapping, timestamps and stated frame coverage for spatial/shape claims.",
+        "Use ordered source events with original IDs, sequence, period and match-time semantics to describe event sequences; do not reconstruct missing time or movement between sparse frames.",
+        "State which players/lines are observed and missing. A single frame supports a snapshot, not a coordinated movement trend."
+      ],
+      "analysisSteps": [
+        "Fix match revision, selected time and sequence watermark; normalize coordinates to the attacking team's direction only after the source convention is validated.",
+        "Establish phase and possession from canonical events, then identify the ball zone and relevant team/opponent units.",
+        "Compare multiple aligned frames to describe movement direction and change; quantify a metric only with an explicit definition and coverage window.",
+        "Separate measured movement from role/shape interpretation; offer a plausible alternative when evidence supports more than one reading.",
+        "Close with an outcome only if the subsequent selected-time evidence documents it."
+      ],
+      "limitations": [
+        "Event-only data cannot establish off-ball movement, collective compactness, body orientation, line height or pitch control.",
+        "Unverified coordinates or timestamps block metres, speed, direction, duration and before/after movement claims.",
+        "Do not infer a coach's instruction, player intention, tactical quality or causality from synchronized movement alone."
+      ]
+    },
+    {
+      "id": "spatial-evidence",
+      "topic": "Spatial evidence and 2D pitch interpretation",
+      "promptSummary": "Before spatial claims, require validated pitch dimensions, coordinate unit/origin/axes, period-specific attack direction, identity/team mapping, time alignment, frame cadence, missingness and versioned metric definitions. A local overload is counted in a declared zone and time; a passing lane needs origin, receiver and intervening defenders. Use the least specific defensible wording when calibration is missing. Never convert unknown 0–100 coordinates to metres or estimate velocity from sparse frames.",
+      "mechanisms": [
+        "A zone is a declared partition of the pitch; name the partition/version before describing central, half-space, wide, defensive or final-third locations.",
+        "Distances need a known unit and pitch calibration. Angles and left/right need known axes and attack orientation. Reflecting the pitch for the opposite attack direction must preserve football meaning.",
+        "A local overload is a counted numerical or positional advantage in a declared area and time. Global player counts or possession percentages do not establish a local overload.",
+        "A passing lane is a geometric and temporal path with an origin, receiver and intervening defenders; event success alone does not show whether the lane was open or intentionally created.",
+        "State space/time coverage: observed players, sample interval, missing frames, tracking interpolation, and whether each value is measured or derived."
+      ],
+      "requiredEvidence": [
+        "Validated coordinate origin, axes, units, pitch dimensions, orientation and team-relative direction.",
+        "Identity-bound, timestamp-aligned player and ball positions with missingness and sampling metadata.",
+        "Versioned definitions for zones, lines, compactness, overload and any spatial thresholds."
+      ],
+      "analysisSteps": [
+        "Check source semantics and mapping status before calculating spatial measures.",
+        "Select a time window no later than the requested selected time and list the exact frame IDs used.",
+        "Define the players, zone and metric, including threshold and units; expose uncertainty and missing coverage.",
+        "Use the least specific defensible phrase when calibration is incomplete: event progression rather than metres, snapshot rather than movement, proximity rather than pressure."
+      ],
+      "limitations": [
+        "Do not convert 0–100 values to metres or assume origin/orientation without an authoritative source dictionary.",
+        "Do not estimate velocity from sparse frames or fill missing players with invented positions.",
+        "Do not report expected threat, expected goals, pitch control or numerical advantage without validated models and coverage."
+      ]
+    },
+    {
+      "id": "attacking-2v1",
+      "topic": "Attacking 2v1 and local overload scenarios",
+      "promptSummary": "A 2v1 is a local, time-specific relationship: two eligible attackers versus one relevant defender in a defined area, with nearby cover checked. The carrier may commit the defender and pass, attack space if the defender delays, combine through a third player, or recycle if cover closes the route. Distinguish overlap (outside/beyond) from underlap (inside); a third-player combination needs the intermediate action. Track defender engage/delay/screen/show and the next evidenced outcome. Require aligned calibrated positions and IDs; events alone do not prove the 2v1 or what a player should have done.",
+      "mechanisms": [
+        "A 2v1 is a local, time-specific relationship: two eligible attackers can act against one relevant defender in a defined corridor/zone. State whether the ball carrier is included in the two and what defensive support is outside the local picture.",
+        "The ball carrier's choices are carry to commit the defender, pass to the free teammate, or hold/return if the defender delays. The best choice depends on distance, pressure, angle, support, goal/space, and defender cover; the model may describe options, not assert the player's unobserved intent.",
+        "An overlap is an outside run beyond the ball carrier; an underlap is an inside run. A third-player combination requires the ball to pass through an intermediate player before reaching the third; do not infer these from a final pass alone.",
+        "The defender can engage the carrier, delay and protect depth, block the pass lane, show play outside/inside, or wait for cover. Describe only the observed response and avoid declaring a mistake from outcome alone.",
+        "Evaluate the sequence: initial numerical relation → carrier action → defender commitment/containment → pass or carry → receiver's next action → documented result (progress, cross, shot, regain, turnover or no outcome)."
+      ],
+      "requiredEvidence": [
+        "Aligned positions for the ball, both attackers, the relevant defender, nearby cover defenders and target space at the interaction time.",
+        "Validated identity/team mapping, coordinates/orientation, frame cadence and event timestamps; use events to confirm pass/carry and outcome.",
+        "For event-only feeds, require explicit canonical local-overload evidence. Otherwise say the event sequence does not prove a 2v1."
+      ],
+      "analysisSteps": [
+        "Define the corridor/zone, time and participants; check whether a covering defender changes the true local count.",
+        "Record carrier, support-runner and defender positions/angles only if observed; distinguish a static snapshot from changing movement.",
+        "Identify the defender's choice (engage, delay, screen, show) and the attacker's observable action.",
+        "Describe the tactical trade-off: commit defender to release teammate, carry into space if defender holds, or recycle if the lane closes.",
+        "Report the evidenced outcome and whether the defender's action preserved cover; do not rank decision quality without context."
+      ],
+      "limitations": [
+        "A pass followed by a cross does not prove an earlier 2v1, defender commitment, or deliberate overload.",
+        "Sparse tracking can miss the cover defender, offside line, body orientation, pressure or the timing that makes the advantage real.",
+        "Do not claim the player should have passed, dribbled or shot as a factual conclusion; phrase options conditionally."
+      ]
+    },
+    {
+      "id": "substitution-analysis",
+      "topic": "Substitutions and late-match personnel changes",
+      "promptSummary": "A substitution proves personnel changed, not motive, fatigue, injury, instruction, role or formation. Potential effects include lane coverage, width/depth, pressing/recovery, progression, aerial outlet, transition balance and restart roles. Pin the event and active roster; compare defined pre/post windows on the same measures and state selected-time limits. Control for score, opponent changes, dismissals, stoppages, possession and small samples. Describe association ('after the change, X was observed'), not causation. Validate period and added-time semantics before saying 'last minute'.",
+      "mechanisms": [
+        "A substitution event proves only that one player left and another entered at a recorded time, subject to source validity. Tactical role, formation change, instruction, fitness state and motive are separate claims.",
+        "Possible mechanisms include fresh running capacity, a like-for-like role, a role conversion, adding/removing a forward or defender, changing pressing coverage, protecting a channel, increasing width/height, or managing a restart. Treat these as hypotheses until observable post-change behavior supports one.",
+        "A late substitution can alter pressing intensity, transition speed, defensive line, possession outlet, aerial matchups, set-piece assignments and game-state risk—but only if those variables are actually observed.",
+        "Assess pre/post windows with comparable state: score, period, possession share, opponent behavior, red cards, restart frequency and time remaining. A substitution coinciding with a change does not establish it caused the change.",
+        "Separate immediate settling-in effects from sustained shape: inspect first actions and a later stable window, but do not compare beyond the selected-time cutoff."
+      ],
+      "requiredEvidence": [
+        "Canonical substitution event, outgoing/incoming player identities, team, source time/period, and active roster before/after.",
+        "Validated role/position labels or time-aligned tracking before and after; identify changed coverage and observed tasks rather than inferring a coach's instruction.",
+        "A stated comparison window and game-state controls. Small samples and stoppages must be reported."
+      ],
+      "analysisSteps": [
+        "Pin the exact substitution event and selected-time revision; reject any post-substitution evidence later than the selected time.",
+        "Describe the personnel fact, then list evidence-supported role/shape differences; if role evidence is absent, stop at personnel change.",
+        "Compare a defined pre-window with a post-window, aligning time, possession/phase and opponent context where possible.",
+        "Check alternative explanations: score state, opponent substitution, dismissal, injury stoppage, tactical change by opponent, sample variance.",
+        "Use association language: 'after the change, observed X'; reserve causal wording for a validated evaluation design."
+      ],
+      "limitations": [
+        "Do not infer fatigue, injury, manager intent, player quality, formation change or a substitution's success from the event alone.",
+        "A few post-change events cannot establish that the substitute caused a tactical improvement or deterioration.",
+        "Late clocks and stoppage-time labels are provider-specific; validate semantics before claiming 'last minute' or elapsed duration."
+      ]
+    },
+    {
+      "id": "late-game-fouls",
+      "topic": "Late-game fouls, stoppages and tactical-foul hypotheses",
+      "promptSummary": "Separate recorded foul, advantage/whistle, restart, card and next action. A tactical-foul label is a cautious interpretation only when a verified foul interrupts an evidenced transition; late timing alone does not prove deliberate time-wasting, instruction or cynicism. Pin clock/period, score, restart location and cards. Describe observed football consequences neutrally; do not advise fouling, adjudicate referee correctness or infer that the foul changed the result. Validate added-time semantics before 'last minute'.",
+      "mechanisms": [
+        "First distinguish an observed foul, a foul decision, advantage, card, restart location and subsequent restart outcome. These are related but different facts.",
+        "A tactical foul is an interpretation that a player deliberately stopped an opponent's transition; a late foul is not automatically tactical, time-wasting, cynical, instructed or strategic.",
+        "Potential context includes transition speed, opponent numerical advantage, field zone, nearby cover, score, period, remaining time, card state and foul/restart pattern. Describe only available evidence.",
+        "Foul consequences may include direct/indirect free kick, penalty, card, dismissal risk, set-piece delivery and lost playing time. Do not infer expected danger without a validated model.",
+        "Repeated restarts or slow restarts can be consistent with time management, injury, referee procedure or tactical rhythm; intent needs external authoritative evidence."
+      ],
+      "requiredEvidence": [
+        "Canonical foul event with offender/team, opponent action, source time/period, location if validated, restart/advantage and card events if present.",
+        "Transition evidence before the foul to describe what it interrupted; a foul event by itself does not establish a counterattack.",
+        "Validated regulation/stoppage-time semantics before making claims about the final minute or remaining time."
+      ],
+      "analysisSteps": [
+        "Describe the foul and restart as recorded, preserving the original event ID and match-time meaning.",
+        "If supported, describe the phase before contact (settled attack, counterattack, press escape, set piece); do not assume tactical intent.",
+        "State the relevant match state and disciplinary context only from the selected canonical packet.",
+        "Explain the tactical trade-off conditionally: the defending team may have stopped a transition but conceded a restart; identify what is known and unknown.",
+        "Separate event effect (play stopped, restart awarded) from consequence (shot, card, goal, time lost) and report only observed downstream events."
+      ],
+      "limitations": [
+        "Do not advise a player to foul, celebrate dangerous conduct, or claim a manager ordered it.",
+        "Do not call it deliberate time-wasting or tactical cynicism based only on late timing or repeated fouls.",
+        "Do not assess referee correctness, severity, card threshold or foul location without authoritative adjudication data."
+      ]
+    },
+    {
+      "id": "in-possession-progression",
+      "topic": "Build-up, progression and possession choices",
+      "promptSummary": "Describe whether a team builds short, progresses through a line, goes around pressure, plays over it, switches play, or attacks directly. These are route descriptions, not quality judgments. Check support angles, receiver orientation and opponent pressure only when observed. A switch can move the defensive block and create a far-side option, but the resulting space/overload must be measured or explicitly evidenced. Distinguish possession from progression and progression from chance creation.",
+      "mechanisms": ["Build-up may use goalkeeper/defenders as spare players, attract pressure, then find a free player; do not infer a designed press bait from a pass sequence alone.", "Progression can go through, around, or over an opponent unit, or switch the attack to the far side; define the opponent line and sequence.", "Support triangles, third-player actions, rotations, overlaps, underlaps, width and depth are distinct mechanisms that require role/position evidence.", "Direct play is not synonymous with aimless play: the target, second-ball support, territory, retention and next action determine what is evidenced."],
+      "requiredEvidence": ["Ordered pass/carry events with validated team possession, sequence and time.", "Validated coordinates and tracking to describe line access, support angles, receiving orientation, space or opponent movement.", "Clearly distinguish source facts from a detector-derived route/line-break label."],
+      "analysisSteps": ["Identify the phase and pressure context.", "Describe the route and intended/evidenced receiver without assuming coach intent.", "Track whether the action bypassed an opponent unit, retained possession, progressed territory or created a chance.", "Name the opponent response and any unknown spatial context."],
+      "limitations": ["A completed forward pass alone does not prove a line break, tactical control or a purposeful build-up plan.", "Do not claim a player could see or intended a pass without sensory/intent evidence."]
+    },
+    {
+      "id": "final-third-attack",
+      "topic": "Final-third creation, box occupation and finishing actions",
+      "promptSummary": "Analyze final-third attacks as separate stages: entry, defensive-line response, wide/central creation, box occupation, delivery/cutback, shot and rebound/second ball. Width/depth, an overlap, half-space access, crossing lane and coordinated runs need calibrated player evidence. Count box attackers and rest-defence cover only from time-aligned positions. A cross, entry or shot is not automatically a high-quality chance; do not infer xG or danger without a validated model and shot features.",
+      "mechanisms": ["An entry can be a pass, carry, cross or restart; name the recorded action and destination.", "Wide attacks may use overlap/underlap, isolate a defender, cross early, reach the byline, or cut the ball back; do not presume which was intended.", "Box occupation includes near-post, central, far-post and edge support roles; distinguish observed locations/runs from assigned roles.", "Rest defence balances numbers committed forward with protection against the counter; state the observed players and spaces rather than a quality grade."],
+      "requiredEvidence": ["Canonical attack/shot events, source IDs and selected-time sequence.", "Validated tracking for box runs, delivery lanes, defender shape, cross/cutback zone and rest-defence cover.", "A validated chance-quality model and inputs before reporting xG or chance quality."],
+      "analysisSteps": ["Locate the final-third entry and identify the next action sequence.", "Describe defender movement and attacker runs only if the frames show them.", "Separate delivery, first contact, shot and outcome.", "State whether the packet documents a shot/goal or ends before the result."],
+      "limitations": ["Do not infer the intended target or quality of a cross from where the ball ended up.", "Do not label danger, control or expected goals from possession, field location or outcome alone."]
+    },
+    {
+      "id": "transitions-rest-defence",
+      "topic": "Attacking/defending transitions and rest defence",
+      "promptSummary": "Start a transition at a verified regain or loss. In attack, trace first action, forward option, support runs, opponent recovery and terminal outcome; in defence, trace immediate counterpress/delay, central protection and recovery. A counterattack requires evidenced rapid forward exploitation, not merely a long pass or later goal. Rest defence is the attacking side's observed protection behind the ball before loss. Require validated clock, possession and tracking before speed, imbalance, space or numerical claims.",
+      "mechanisms": ["After a regain, options include attack space directly, carry, combine quickly, or retain and reorganize; describe the observed choice.", "After a loss, immediate pressure may aim to regain, delay may allow teammates to recover, or players may retreat to protect the goal.", "The opponent simultaneously transitions to defend; analyze both teams' positions and decisions as an interaction.", "Rest-defence shape can secure central routes, protect depth, and prepare a counterpress or recovery, but roles cannot be inferred from a single outcome."],
+      "requiredEvidence": ["Canonical possession change and ordered actions with valid clock/period semantics.", "Time-aligned tracking for runners, defenders, exposed space, recovery route and rest-defence positions.", "Coverage window long enough to capture the transition and any terminal outcome."],
+      "analysisSteps": ["Mark the possession-change event and participating teams.", "Trace the first forward/defensive action and support/cover movement.", "Record whether the opponent was organized, recovering or attacking only when observed.", "End at the selected-time cutoff; list missing links and avoid causal claims."],
+      "limitations": ["Do not call it a counterattack without evidence of speed/direct exploitation and opponent disorganization.", "Do not infer fatigue or poor rest defence from a single counter chance."]
+    },
+    {
+      "id": "set-piece-restarts",
+      "topic": "Attacking and defending set-piece restarts",
+      "promptSummary": "Classify the restart first, then separate setup, delivery, first contact, second ball, clearance/retention and final outcome. Corner/free-kick routines may use short options, near/far/central zones, blockers, decoy runs and recycled delivery, but intent and assignments require authoritative evidence. Defensive teams may use zonal, player-to-player or mixed marking; a frame alone rarely proves scheme. Require canonical restart/event and calibrated tracking. One event cannot establish routine quality or conversion rate.",
+      "mechanisms": ["Attacking: delivery to a zone, short restart, screen/block, movement to separate markers, second-phase recycle, or protection against a counter.", "Defending: protect goal/space, track runners, contest first contact, clear danger and organize the next phase.", "Throw-ins, free kicks, corners, penalties and goal kicks have different restart rules and tactical contexts.", "A second ball is a distinct contest after a clearance or first contact and needs a subsequent possession/event observation."],
+      "requiredEvidence": ["Canonical restart type, event ID, team, time, delivery/action and restart outcome.", "Tracking with verified orientation and player identity for movement, marking, target zones and second-ball shape.", "Defined sample and denominator for rates or team-level set-piece tendencies."],
+      "analysisSteps": ["Confirm restart classification and location semantics.", "Describe setup/delivery only from evidence; distinguish observed movement from assumed design.", "Follow first and second contact to the documented outcome.", "Mention counter-protection only if the relevant players/space are shown."],
+      "limitations": ["Do not invent a routine, target player, marking assignment or coach instruction.", "Do not treat a retained attack as a successful set piece without an explicitly defined outcome measure."]
+    },
+    {
+      "id": "game-state-risk",
+      "topic": "Game state, risk and in-match adjustments",
+      "promptSummary": "Fix score, period, clock, player availability and possession at the selected time. Tactical risk may change with game state, but a scoreline does not reveal intent. Describe observable changes in directness, width, pressing, line height, substitutions or restart tempo only with evidence and a defined comparison. Separate an observed adjustment from the hypothesis explaining it. Never predict results or prescribe a specific formation/substitution without squad, role and validated model context.",
+      "mechanisms": ["A team may protect depth, press higher, attack more directly, retain possession, overload a zone or make personnel changes as the state changes; these are alternative hypotheses.", "The opponent may also alter approach, and red cards, injuries, timeouts/restarts and competition rules change the context.", "A useful comparison aligns periods/windows and reports sample size, possession/phase mix, score, personnel and opponent changes.", "Risk is multi-dimensional: forward commitment, spacing behind the ball, transition exposure, set-piece coverage and time remaining."],
+      "requiredEvidence": ["Canonical score/revision and validated period/elapsed-time/added-time semantics.", "Ordered events for substitutions, dismissals, restarts, attacks and possession; tracking for shape/commitment.", "Defined pre/post or state comparison and known confounders."],
+      "analysisSteps": ["Pin the exact selected state.", "Describe the observed behavior before offering an interpretation.", "Compare only equivalent evidence windows and identify confounders.", "Use conditional tactical options rather than claims about what a coach intended or should do."],
+      "limitations": ["Do not infer urgency, time-wasting, risk appetite or manager intent from score/time alone.", "Do not forecast score, win probability or optimal substitution without a separately validated model."]
+    },
+    {
+      "id": "press-and-block-dynamics",
+      "topic": "Pressing, block movement and defensive response",
+      "promptSummary": "Separate high press, mid/low block, isolated pressure, counterpress and recovery. Explain trigger → pressure → cover/support → opponent response → regain/escape → next action. Collective shifting needs multiple aligned player/line observations; compactness has separate horizontal and vertical dimensions. A trap needs an evidenced route constraint and opponent response. A regain after pressure is a sequence, not proof of cause. Event-only data cannot establish cover shadows, block shape, coordination, intensity or line height.",
+      "mechanisms": [
+        "Separate high press, mid-block, low block, counterpress and isolated pressure; each describes a different phase or field position and needs operational criteria.",
+        "A collective press involves a trigger, pressure on the ball, supporting pressure/cover, constrained exits and an opponent response. One close defender is not proof of collective pressing.",
+        "Block movement can shift toward the ball, drop to protect depth, step up to compress space, or split while chasing a runner. Confirm coordinated movement across multiple lines and frames.",
+        "A trap is not just a location: identify the intended route constraint and the opponent's evidenced action. A regain after pressure is associated in sequence, not automatically caused by pressure.",
+        "After a turnover, distinguish counterpress to regain near the loss from recovery defending toward own goal; link each to the documented possession state."
+      ],
+      "requiredEvidence": [
+        "Ordered possession/event sequence and outcome; team-relative pitch orientation for high/mid/low location.",
+        "Time-aligned player locations and adequate tracking coverage for collective pressure, cover shadows, block shift and line distances.",
+        "Validated clock and spatial thresholds before calling a response immediate, close, compact or high."
+      ],
+      "analysisSteps": [
+        "Establish possession and phase, then name the observable trigger or explicitly say none is visible.",
+        "Describe ball pressure and supporting shape only to the extent shown by evidence.",
+        "Follow the opponent response and classify the outcome: retained, escaped, forced backward/long, lost or unknown.",
+        "Describe regain and exploitation as later stages with their own evidence IDs; do not compress the sequence into causal certainty."
+      ],
+      "limitations": [
+        "Event-only data cannot prove cover shadows, pressing intensity, shape, coordination or line height.",
+        "Do not infer a manager's pressing plan, player effort or tactical success from a detector label alone.",
+        "Incomplete frames, identity gaps and period/time ambiguity weaken sequence-level conclusions."
+      ]
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 PitchMind now has six named tactical specialist profiles plus one evidence-first default. They are **analysis lenses**, not copies of real people and not autonomous model agents. The names refer to football coaching disciplines; each profile carries its own tactical school, principles, diagnostic questions, evidence requirements, blind spots and prohibited inferences in [`tactical-agents.v1.json`](../../src/PitchMind.AgentWorker/Agents/tactical-agents.v1.json).
 
-The Foundry adapter inserts only the selected profile into a bounded request. One profile is selected for one model call. The existing workflow still validates a read-only, selected-time MatchIntelligence packet, generates one untrusted candidate, then returns only deterministic verifier output. The profile cannot retrieve data, call tools, revise canonical match state, publish a claim, or override verification. Unknown profile IDs are rejected. Traces carry the profile ID and workflow version.
+The Foundry adapter inserts the selected profile and only its referenced cards from the [Football Tactical Knowledge Base](FOOTBALL-TACTICAL-KNOWLEDGE-BASE.md) into a bounded request. One profile is selected for one model call. The existing workflow still validates a read-only, selected-time MatchIntelligence packet, generates one untrusted candidate, then returns only deterministic verifier output. The profile cannot retrieve data, call tools, revise canonical match state, publish a claim, or override verification. Unknown profile IDs are rejected. Traces carry the profile ID and workflow version.
 
 ## Available agents
 
