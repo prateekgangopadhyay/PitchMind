@@ -1,0 +1,49 @@
+{
+  "storyId": "EP03-S05",
+  "status": "diagnostic_only_unaccepted",
+  "executedAt": "2026-10-16",
+  "runner": "dotnet test / xUnit",
+  "testName": "ManuLivCandidateFeedReplayLoadDiagnosticTests.Replays_the_single_match_candidate_with_local_durable_checkpoints",
+  "sourcePath": "data/simulations/manu-liv-match-dataset.json",
+  "sourceSha256": "e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c",
+  "partitionMix": {
+    "approval": "owner-directed single-match partition mix (2026-10-16)",
+    "observedMatches": 1
+  },
+  "payloadMix": {
+    "approval": null,
+    "observedRecords": 2199,
+    "observedAttachedPlayerPositions": 48048,
+    "separateFrameRecords": 0
+  },
+  "burstDurationApprovalSeconds": null,
+  "measuredDurationSeconds": 18.886,
+  "configuredProducerCeilingRecordsPerSecond": 500,
+  "recordsDeliveredAndCheckpointed": 2199,
+  "effectiveDeliveredRecordsPerSecond": 116.44,
+  "checkpointMode": "local file checkpoint after every successful callback",
+  "orderedEventIdSequenceSha256": "7ec2e21b291e11238ad5b7e0005daf071538fbf2da1c29289e0cd7831d6366ae",
+  "replayedRawPayloadSha256": "34e5d5c7d9cf7b1169ee53743a631d701a34473afd5713d13a2a4de49aaf6a05",
+  "result": {
+    "passed": 1,
+    "failed": 0
+  },
+  "exercised": [
+    "ManuLivCandidateFeedReader",
+    "LocalCandidateFeedReplaySession",
+    "in-process measurement callback",
+    "FileCandidateFeedReplayCheckpointStore"
+  ],
+  "notExercised": [
+    "Event Hubs",
+    "EventWorker",
+    "PostgreSQL",
+    "canonical admission",
+    "duplicate and quarantine accounting",
+    "consumer lag",
+    "Azure",
+    "approved event/frame payload mix",
+    "approved burst duration and acceptance budgets"
+  ],
+  "acceptanceClaim": false
+}

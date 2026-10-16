@@ -33,3 +33,7 @@ Harness suite: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_ep03_
 ## Limitations
 
 The harness scheduled source records into a local in-memory discard sink only. It did not exercise Event Hubs, EventWorker, PostgreSQL, API, Azure, or the canonical admission path. It therefore reports no accepted/duplicate/quarantined counts, consumer lag, database/API latency, backpressure recovery, or end-to-end data-loss result. Replayed source records are not validated canonical football facts; source clock, coordinates, player metrics, event mappings and football realism remain unverified. The story remains unaccepted.
+
+## Application replay diagnostic follow-up
+
+The same single-match source was also run through the C# `ManuLivCandidateFeedReader` → `LocalCandidateFeedReplaySession` path with a local file checkpoint saved after every successful callback. That diagnostic delivered and checkpointed 2,199/2,199 records in order. The configured producer ceiling was 500 records/s; observed wall duration including those checkpoint writes was 18.886 seconds (116.44 delivered records/s). This is local replay/checkpoint evidence only. It did not exercise Event Hubs, EventWorker, PostgreSQL, canonical admission, or an approved event/frame payload mix. See [the detailed .NET report](EP03-S05-DOTNET-LOCAL-REPLAY-2026-10-16.md).
