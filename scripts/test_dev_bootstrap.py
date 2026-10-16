@@ -89,7 +89,7 @@ count=0
 if [ -f \"$PITCHMIND_FAKE_OPENSSL_COUNT\" ]; then count=$(cat \"$PITCHMIND_FAKE_OPENSSL_COUNT\"); fi
 count=$((count + 1))
 printf '%s' \"$count\" > \"$PITCHMIND_FAKE_OPENSSL_COUNT\"
-if [ \"$count\" -eq 1 ]; then alphabet='0123456789abcdef'; else alphabet='fedcba9876543210'; fi
+if [ \"$count\" -eq 1 ]; then alphabet='0123456789abcdef'; elif [ \"$count\" -eq 2 ]; then alphabet='fedcba9876543210'; else alphabet='89abcdef01234567'; fi
 repeat=0
 while [ \"$repeat\" -lt 3 ]; do printf '%s' \"$alphabet\"; repeat=$((repeat + 1)); done
 printf '\\n'
@@ -132,9 +132,10 @@ printf '\\n'
 
     def _write_valid_env(self, image: str | None = None) -> Path:
         env_file = self.root / "docker" / ".env"
-        postgres_password, redis_password = self._strong_test_passwords()
+        postgres_password, api_password, redis_password = self._strong_test_passwords()
         values = [
             f"POSTGRES_PASSWORD={postgres_password}",
+            f"PITCHMIND_API_PASSWORD={api_password}",
             f"REDIS_PASSWORD={redis_password}",
         ]
         if image is not None:
@@ -143,12 +144,13 @@ printf '\\n'
         return env_file
 
     @staticmethod
-    def _strong_test_passwords() -> tuple[str, str]:
+    def _strong_test_passwords() -> tuple[str, str, str]:
         """Generate valid temporary credentials without embedding secret-shaped strings."""
         alphabet = "0123456789abcdef"
         postgres_password = "".join(alphabet[index % len(alphabet)] for index in range(48))
         redis_password = "".join(alphabet[(len(alphabet) - 1 - index) % len(alphabet)] for index in range(48))
-        return postgres_password, redis_password
+        api_password = "".join("89abcdef01234567"[index % 16] for index in range(48))
+        return postgres_password, api_password, redis_password
 
     def test_first_boot_generates_private_distinct_passwords_and_waits_for_health(self) -> None:
         self.env["PITCHMIND_FAKE_VOLUME_EXISTS"] = "0"
@@ -159,11 +161,16 @@ printf '\\n'
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
         postgres_password = values["POSTGRES_PASSWORD"]
+        api_password = values["PITCHMIND_API_PASSWORD"]
         redis_password = values["REDIS_PASSWORD"]
         self.assertRegex(postgres_password, r"^[0-9a-f]{48}$")
+        self.assertRegex(api_password, r"^[0-9a-f]{48}$")
         self.assertRegex(redis_password, r"^[0-9a-f]{48}$")
+        self.assertNotEqual(postgres_password, api_password)
         self.assertNotEqual(postgres_password, redis_password)
+        self.assertNotEqual(api_password, redis_password)
         self.assertNotIn(postgres_password, result.stdout + result.stderr)
+        self.assertNotIn(api_password, result.stdout + result.stderr)
         self.assertNotIn(redis_password, result.stdout + result.stderr)
         self.assertEqual(
             self.docker_log.read_text().splitlines(),
@@ -215,10 +222,10 @@ printf '\\n'
         self.assertIn("up -d --wait", log)
 
     def test_invalid_and_duplicate_postgres_image_settings_fail_closed(self) -> None:
-        valid_postgres, valid_redis = self._strong_test_passwords()
+        valid_postgres, valid_api, valid_redis = self._strong_test_passwords()
         cases = (
-            f"POSTGRES_IMAGE=latest\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
-            f"POSTGRES_IMAGE=postgres:16-alpine\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD={valid_postgres}\nREDIS_PASSWORD={valid_redis}\n",
+            f"POSTGRES_IMAGE=latest\nPOSTGRES_PASSWORD={valid_postgres}\nPITCHMIND_API_PASSWORD={valid_api}\nREDIS_PASSWORD={valid_redis}\n",
+            f"POSTGRES_IMAGE=postgres:16-alpine\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD={valid_postgres}\nPITCHMIND_API_PASSWORD={valid_api}\nREDIS_PASSWORD={valid_redis}\n",
         )
 
         for contents in cases:
@@ -416,9 +423,9 @@ printf '\\n'
 
     def test_existing_strong_credentials_are_restricted_before_compose_start(self) -> None:
         env_file = self.root / "docker" / ".env"
-        postgres_password, redis_password = self._strong_test_passwords()
+        postgres_password, api_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
-            f"POSTGRES_PASSWORD={postgres_password}\nREDIS_PASSWORD={redis_password}\n",
+            f"POSTGRES_PASSWORD={postgres_password}\nPITCHMIND_API_PASSWORD={api_password}\nREDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
         env_file.chmod(0o644)
@@ -427,16 +434,17 @@ printf '\\n'
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             env_file.read_text(),
-            f"POSTGRES_PASSWORD={postgres_password}\nREDIS_PASSWORD={redis_password}\n",
+            f"POSTGRES_PASSWORD={postgres_password}\nPITCHMIND_API_PASSWORD={api_password}\nREDIS_PASSWORD={redis_password}\n",
         )
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
         self.assertFalse(self.openssl_count.exists())
 
     def test_exported_passwords_cannot_override_validated_env_file(self) -> None:
         env_file = self.root / "docker" / ".env"
-        postgres_password, redis_password = self._strong_test_passwords()
+        postgres_password, api_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
             f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"PITCHMIND_API_PASSWORD={api_password}\n"
             f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
@@ -451,9 +459,10 @@ printf '\\n'
 
     def test_compose_readiness_failure_explains_safe_local_recovery(self) -> None:
         env_file = self.root / "docker" / ".env"
-        postgres_password, redis_password = self._strong_test_passwords()
+        postgres_password, api_password, redis_password = self._strong_test_passwords()
         env_file.write_text(
             f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"PITCHMIND_API_PASSWORD={api_password}\n"
             f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )
@@ -520,10 +529,10 @@ printf '\\n'
         )
 
     def test_duplicate_password_keys_and_reused_password_are_rejected(self) -> None:
-        valid, distinct = self._strong_test_passwords()
+        valid, api_password, distinct = self._strong_test_passwords()
         env_file = self.root / "docker" / ".env"
         env_file.write_text(
-            f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={distinct}\n",
+            f"POSTGRES_PASSWORD={valid}\nPOSTGRES_PASSWORD={valid}\nPITCHMIND_API_PASSWORD={api_password}\nREDIS_PASSWORD={distinct}\n",
             encoding="utf-8",
         )
         duplicate = self._run("dev-up.sh")
@@ -538,7 +547,7 @@ printf '\\n'
         )
 
         self.docker_log.write_text("")
-        env_file.write_text(f"POSTGRES_PASSWORD={valid}\nREDIS_PASSWORD={valid}\n", encoding="utf-8")
+        env_file.write_text(f"POSTGRES_PASSWORD={valid}\nPITCHMIND_API_PASSWORD={api_password}\nREDIS_PASSWORD={valid}\n", encoding="utf-8")
         reused = self._run("dev-up.sh")
         self.assertNotEqual(reused.returncode, 0)
         self.assertEqual(
@@ -551,7 +560,7 @@ printf '\\n'
         )
 
     def test_compose_alternate_password_assignments_are_counted_as_duplicates(self) -> None:
-        valid, distinct = self._strong_test_passwords()
+        valid, api_password, distinct = self._strong_test_passwords()
         cases = (
             ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD: weak"),
             ("POSTGRES_PASSWORD", "POSTGRES_PASSWORD = weak"),
@@ -567,10 +576,12 @@ printf '\\n'
                 env_file = self.root / "docker" / ".env"
                 values = {
                     "POSTGRES_PASSWORD": valid,
+                    "PITCHMIND_API_PASSWORD": api_password,
                     "REDIS_PASSWORD": distinct,
                 }
                 env_file.write_text(
                     f"POSTGRES_PASSWORD={values['POSTGRES_PASSWORD']}\n"
+                    f"PITCHMIND_API_PASSWORD={values['PITCHMIND_API_PASSWORD']}\n"
                     f"REDIS_PASSWORD={values['REDIS_PASSWORD']}\n"
                     f"{duplicate}\n",
                     encoding="utf-8",
@@ -757,10 +768,11 @@ services:
         self.assertIn(None, {port.get("host_ip") for _, port in published_ports})
 
     def _write_local_credentials(self) -> None:
-        postgres_password, redis_password = self._strong_test_passwords()
+        postgres_password, api_password, redis_password = self._strong_test_passwords()
         (self.root / "docker" / ".env").write_text(
             "POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\n"
             f"POSTGRES_PASSWORD={postgres_password}\n"
+            f"PITCHMIND_API_PASSWORD={api_password}\n"
             f"REDIS_PASSWORD={redis_password}\n",
             encoding="utf-8",
         )

@@ -9,6 +9,7 @@ export COMPOSE_PROJECT_NAME=pitchmind-isolated
 export POSTGRES_DATA_VOLUME=pitchmind_isolated_postgres_data
 export REDIS_DATA_VOLUME=pitchmind_isolated_redis_data
 ./scripts/dev-up.sh
+./scripts/dev-migrate.py
 ./scripts/dev-health.sh
 ./scripts/dev-down.sh
 ```
@@ -19,6 +20,7 @@ From the repository root:
 
 ```bash
 ./scripts/dev-up.sh
+./scripts/dev-migrate.py
 ./scripts/dev-health.sh
 ```
 
@@ -29,7 +31,7 @@ set -a
 source docker/.env
 set +a
 Runtime__Profile=local Realtime__Provider=local \
-  ConnectionStrings__PitchMind="Host=127.0.0.1;Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-pitchmind};Username=${POSTGRES_USER:-pitchmind};Password=${POSTGRES_PASSWORD}" \
+  ConnectionStrings__PitchMind="Host=127.0.0.1;Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-pitchmind};Username=pitchmind_api;Password=${PITCHMIND_API_PASSWORD}" \
   DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development \
   dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
 ```
@@ -41,7 +43,9 @@ Back at the repository root, check readiness and later stop the services:
 ./scripts/dev-down.sh
 ```
 
-The first run creates `docker/.env` with independent random passwords and restricts it to the current user. It is gitignored. Never share its contents. On each start, the bootstrap requires exactly one distinct 48-character lowercase hexadecimal password for PostgreSQL and Redis, each containing at least 12 unique hex digits. This rejects the committed example placeholders and low-diversity or ambiguous values. If validation fails, replace both values locally with strong random values and rerun the command. The values are never printed by the bootstrap. The API is a separate local process, bound to loopback by the command above; `/health` is the readiness endpoint. `./scripts/dev-api-health.sh` checks API readiness independently, and the optional URL to `dev-health.sh` checks the API after PostgreSQL and Redis.
+The first run creates gitignored `docker/.env` with independent random passwords for PostgreSQL, the restricted API role, and Redis, then restricts it to the current user. Never share its contents. On each start, the bootstrap requires exactly one distinct 48-character lowercase hexadecimal password for each role, with at least 12 unique hex digits. This rejects the committed example placeholders and low-diversity or ambiguous values. If validation fails, replace the values locally with strong random values and rerun the command. The values are never printed by the bootstrap. The API is a separate local process, bound to loopback by the command above; `/health` is the readiness endpoint. `./scripts/dev-api-health.sh` checks API readiness independently, and the optional URL to `dev-health.sh` checks the API after PostgreSQL and Redis.
+
+`./scripts/dev-migrate.py` is the explicit LOCAL schema migration step. It uses the PostgreSQL owner from the private Compose environment, refuses non-loopback port mappings, applies versioned migrations, then creates or refreshes `pitchmind_api` with SELECT on canonical read tables and only the column-level UPDATE privileges needed by the local outbox dispatcher. The runtime API command uses that restricted role. It cannot create or alter schema objects, insert canonical data, or change migration history.
 
 To stop the services and preserve data, run `./scripts/dev-down.sh`. To delete both data volumes, run `./scripts/dev-reset.sh` and type `RESET` at its prompt. For automation, `./scripts/dev-reset.sh --force` explicitly skips the prompt. Reset retains `docker/.env`; restarting reuses the local credentials.
 
