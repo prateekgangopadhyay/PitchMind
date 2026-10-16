@@ -57,8 +57,9 @@ flowchart LR
   PG --> Outbox["Transactional outbox intent + assigned revision"]
   Outbox --> Dispatcher["ACA EventWorker: leased PostgreSQL outbox dispatcher"]
   Dispatcher -->|ProjectionPublishedV1; partition key matchId| EH["Azure Event Hubs (at-least-once)"]
-  EH -. "consumer not implemented; PostgreSQL partition-cursor primitive available" .-> Worker["Future projection consumer"]
-  Worker -.-> PG
+  EH --> Worker["Opt-in EventWorker projection consumer"]
+  Worker --> PG["PostgreSQL inbox + cursor + rebuildable snapshot"]
+  Worker --> Blob["Azure Blob Event Hubs checkpoint"]
   API -. "LOCAL only: cursor notification" .-> Signal["Local SignalR"]
   Dispatcher -. "future adapter" .-> Bus["Azure Service Bus commands / DLQ"]
   Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
@@ -76,7 +77,7 @@ flowchart LR
 
 **Non-negotiable contract:** raw source candidates are never published directly to the canonical telemetry channel. PostgreSQL assigns each admitted per-match `canonicalRevision` atomically with the record and outbox intent. Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
-**Implemented adapter boundary (code only):** `EventWorker` leases only committed PostgreSQL outbox rows, validates the exact `ProjectionPublishedV1` payload, and sends its original JSON to Event Hubs with the stable outbox ID and `matchId` partition key. The Azure host requires `Runtime:Profile=azure`, Event Hubs namespace/name, a password-free PostgreSQL connection string, TLS verification, and managed identity for both services. Schema v11 provides a PostgreSQL consumer partition-cursor store, but there is no Event Hubs consumer or SDK checkpoint call. Local SignalR remains an API-local adapter. This code has local automated evidence only; no Azure connection, resource, consumer runtime, or deployment has been verified.
+**Implemented adapter boundary (code only):** `EventWorker` leases only committed PostgreSQL outbox rows, validates the exact `ProjectionPublishedV1` payload, and sends its original JSON to Event Hubs with the stable outbox ID and `matchId` partition key. The Azure host requires `Runtime:Profile=azure`, Event Hubs namespace/name, a password-free PostgreSQL connection string, TLS verification, and managed identity for both services. The opt-in EventProcessorClient consumer validates broker metadata and payload, writes a payload-bound inbox receipt and rebuildable snapshot in PostgreSQL, advances the v11 partition cursor, then advances the Azure Blob SDK checkpoint. Schema v12 adds the consumer inbox and snapshot tables. Local SignalR remains an API-local adapter. This code has local automated evidence only; no Azure connection, resource, hosted consumer runtime, or deployment has been verified.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 

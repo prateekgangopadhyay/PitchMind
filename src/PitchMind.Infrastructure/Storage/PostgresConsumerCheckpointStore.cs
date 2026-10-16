@@ -11,7 +11,8 @@ public sealed class PostgresConsumerCheckpointStore(NpgsqlDataSource dataSource)
 {
     public async Task<ConsumerCheckpointAdvanceResult> AdvanceAsync(
         ConsumerCheckpoint checkpoint,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool alreadyProcessed = false)
     {
         Validate(checkpoint);
 
@@ -59,6 +60,15 @@ public sealed class PostgresConsumerCheckpointStore(NpgsqlDataSource dataSource)
 
                 await transaction.CommitAsync(cancellationToken);
                 return ConsumerCheckpointAdvanceResult.AlreadyCurrent;
+            }
+
+            if (checkpoint.BrokerSequenceNumber < lastBrokerSequence && alreadyProcessed)
+            {
+                // Event Hubs may replay older records when its Blob checkpoint lags the
+                // durable inbox/cursor. They are safe to consume again, but must never
+                // move either cursor backwards.
+                await transaction.CommitAsync(cancellationToken);
+                return ConsumerCheckpointAdvanceResult.StaleReplay;
             }
 
             if (checkpoint.BrokerSequenceNumber < lastBrokerSequence)

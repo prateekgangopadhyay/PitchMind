@@ -10,6 +10,7 @@ using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
 using PitchMind.Infrastructure.Storage;
+using PitchMind.EventWorker;
 using PitchMind.TestFixtures;
 using Xunit;
 
@@ -489,8 +490,8 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, (int[])(await versions.ExecuteScalarAsync())!);
-        foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }, (int[])(await versions.ExecuteScalarAsync())!);
+        foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "consumer_projection_inbox", "consumer_projection_snapshots", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
             command.Parameters.AddWithValue($"pitchmind.{table}");
@@ -634,7 +635,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(11, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(12, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -919,7 +920,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -1476,6 +1477,173 @@ public sealed class PostgresLedgerTests
     }
 
     [PostgresIntegrationFact]
+    public async Task ProjectionConsumerCommitsInboxSnapshotAndCursorWithReplaySafeOrdering()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var consumer = new PostgresProjectionPublishedConsumer(source, new PostgresConsumerCheckpointStore(source));
+        var matchId = Guid.NewGuid();
+        var firstMessage = Guid.NewGuid();
+        var firstPayload = ProjectionPayload(firstMessage, matchId, canonicalRevision: 1, projectionRevision: 1,
+            sequence: 0, stateJson: "{\"score\":0}");
+        var firstProjection = ProjectionSnapshot(firstMessage, matchId, 1, 1, 0, "{\"score\":0}");
+        var invalidHash = await Assert.ThrowsAsync<InvalidDataException>(() => consumer.ConsumeAsync(
+            "projection-reader-v1", "0", "1000", 450, firstMessage,
+            firstProjection with { StateSha256 = new string('b', 64) },
+            Encoding.UTF8.GetBytes(firstPayload), CancellationToken.None));
+        Assert.Contains("hash", invalidHash.Message, StringComparison.OrdinalIgnoreCase);
+
+        var first = await consumer.ConsumeAsync("projection-reader-v1", "0", "1000", 450,
+            firstMessage, firstProjection, Encoding.UTF8.GetBytes(firstPayload), CancellationToken.None);
+        Assert.True(first.AppliedProjection);
+        Assert.Equal(ConsumerCheckpointAdvanceResult.Advanced, first.CheckpointResult);
+
+        // Simulate PostgreSQL commit succeeding while the Event Hubs Blob checkpoint fails.
+        // Re-delivery must be content-checked, idempotent, and complete the broker cursor.
+        var redelivery = await consumer.ConsumeAsync("projection-reader-v1", "0", "1000", 450,
+            firstMessage, firstProjection, Encoding.UTF8.GetBytes(firstPayload), CancellationToken.None);
+        Assert.False(redelivery.AppliedProjection);
+        Assert.Equal(ConsumerCheckpointAdvanceResult.AlreadyCurrent, redelivery.CheckpointResult);
+
+        var secondMessage = Guid.NewGuid();
+        var secondPayload = ProjectionPayload(secondMessage, matchId, canonicalRevision: 2, projectionRevision: 2,
+            sequence: 1, stateJson: "{\"score\":1}");
+        var second = await consumer.ConsumeAsync("projection-reader-v1", "0", "1001", 451,
+            secondMessage, ProjectionSnapshot(secondMessage, matchId, 2, 2, 1, "{\"score\":1}"),
+            Encoding.UTF8.GetBytes(secondPayload), CancellationToken.None);
+        Assert.True(second.AppliedProjection);
+        Assert.Equal(ConsumerCheckpointAdvanceResult.Advanced, second.CheckpointResult);
+
+        var staleReplay = await consumer.ConsumeAsync("projection-reader-v1", "0", "1000", 450,
+            firstMessage, firstProjection, Encoding.UTF8.GetBytes(firstPayload), CancellationToken.None);
+        Assert.False(staleReplay.AppliedProjection);
+        Assert.Equal(ConsumerCheckpointAdvanceResult.StaleReplay, staleReplay.CheckpointResult);
+
+        await using var snapshot = source.CreateCommand("""
+            SELECT canonical_revision, projection_revision, sequence, state_json::text
+            FROM pitchmind.consumer_projection_snapshots
+            WHERE consumer_id = 'projection-reader-v1' AND match_id = $1
+            """);
+        snapshot.Parameters.AddWithValue(matchId);
+        await using var reader = await snapshot.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(2L, reader.GetInt64(0));
+        Assert.Equal(2, reader.GetInt32(1));
+        Assert.Equal(1L, reader.GetInt64(2));
+        using var state = JsonDocument.Parse(reader.GetString(3));
+        Assert.Equal(1, state.RootElement.GetProperty("score").GetInt32());
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ProjectionConsumerRejectsConflictingPayloadAndRevisionGapWithoutAdvancingCursor()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var consumer = new PostgresProjectionPublishedConsumer(source, new PostgresConsumerCheckpointStore(source));
+        var matchId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var payload = ProjectionPayload(messageId, matchId, canonicalRevision: 1, projectionRevision: 1,
+            sequence: 0, stateJson: "{\"score\":0}");
+        await consumer.ConsumeAsync("projection-reader-v1", "0", "1000", 450,
+            messageId, ProjectionSnapshot(messageId, matchId, 1, 1, 0, "{\"score\":0}"),
+            Encoding.UTF8.GetBytes(payload), CancellationToken.None);
+
+        var conflicting = ProjectionPayload(messageId, matchId, canonicalRevision: 1, projectionRevision: 1,
+            sequence: 0, stateJson: "{\"score\":1}");
+        await Assert.ThrowsAsync<InvalidDataException>(() => consumer.ConsumeAsync("projection-reader-v1", "0", "1000", 450,
+            messageId, ProjectionSnapshot(messageId, matchId, 1, 1, 0, "{\"score\":1}"),
+            Encoding.UTF8.GetBytes(conflicting), CancellationToken.None));
+
+        var gapMessage = Guid.NewGuid();
+        var gap = ProjectionPayload(gapMessage, matchId, canonicalRevision: 3, projectionRevision: 3,
+            sequence: 2, stateJson: "{\"score\":2}");
+        await Assert.ThrowsAsync<InvalidDataException>(() => consumer.ConsumeAsync("projection-reader-v1", "0", "1001", 451,
+            gapMessage, ProjectionSnapshot(gapMessage, matchId, 3, 3, 2, "{\"score\":2}"),
+            Encoding.UTF8.GetBytes(gap), CancellationToken.None));
+
+        await using var cursor = source.CreateCommand("""
+            SELECT last_broker_sequence_number FROM pitchmind.consumer_checkpoints
+            WHERE consumer_id = 'projection-reader-v1' AND partition_id = '0'
+            """);
+        Assert.Equal(450L, (long)(await cursor.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task EventHubProjectionHandlerUpdatesBrokerCheckpointOnlyAfterDatabaseCommit()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var consumerId = "projection-handler-v1";
+        var matchId = Guid.NewGuid();
+        var messageId = Guid.NewGuid();
+        var payload = ProjectionPayload(messageId, matchId, canonicalRevision: 1, projectionRevision: 1,
+            sequence: 0, stateJson: "{\"score\":0}");
+        var consumer = new PostgresProjectionPublishedConsumer(source, new PostgresConsumerCheckpointStore(source));
+        var handler = new EventHubProjectionEventHandler(consumer, consumerId);
+        var checkpointUpdates = 0;
+        var message = MakeProjectionEvent(payload, messageId, matchId, brokerSequence: 450, offset: "1000");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.HandleAsync(message, "0", _ =>
+        {
+            checkpointUpdates++;
+            throw new InvalidOperationException("simulated Blob checkpoint failure after PostgreSQL commit");
+        }, CancellationToken.None));
+        Assert.Equal(1, checkpointUpdates);
+
+        await handler.HandleAsync(message, "0", async _ =>
+        {
+            await using var cursor = source.CreateCommand("""
+                SELECT last_broker_sequence_number FROM pitchmind.consumer_checkpoints
+                WHERE consumer_id = $1 AND partition_id = '0'
+                """);
+            cursor.Parameters.AddWithValue(consumerId);
+            Assert.Equal(450L, (long)(await cursor.ExecuteScalarAsync())!);
+            checkpointUpdates++;
+        }, CancellationToken.None);
+        Assert.Equal(2, checkpointUpdates);
+    }
+
+    private static string ProjectionPayload(Guid messageId, Guid matchId, long canonicalRevision,
+        int projectionRevision, long sequence, string stateJson)
+    {
+        var state = JsonSerializer.Deserialize<JsonElement>(stateJson);
+        var stateSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson))).ToLowerInvariant();
+        return JsonSerializer.Serialize(new
+        {
+            messageId,
+            matchId = matchId.ToString("D"),
+            canonicalRevision,
+            projectionRevision,
+            sequence,
+            clockSeconds = 60 + (int)sequence,
+            algorithmVersion = "aggregate-v1",
+            sourceSha256 = new string('a', 64),
+            stateSha256,
+            state
+        });
+    }
+
+    private static ConsumerProjectionSnapshot ProjectionSnapshot(Guid messageId, Guid matchId,
+        long canonicalRevision, int projectionRevision, long sequence, string stateJson)
+    {
+        var stateSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(stateJson))).ToLowerInvariant();
+        return new ConsumerProjectionSnapshot(messageId, matchId, canonicalRevision, projectionRevision,
+            sequence, 60 + (int)sequence, "aggregate-v1", new string('a', 64), stateSha256, stateJson);
+    }
+
+    private static ProjectionEvent MakeProjectionEvent(string payload, Guid messageId, Guid matchId,
+        long brokerSequence, string offset) => new(messageId.ToString("D"), offset, brokerSequence,
+        Encoding.UTF8.GetBytes(payload), new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["schemaName"] = "ProjectionPublishedV1",
+            ["matchId"] = matchId.ToString("D"),
+            ["canonicalRevision"] = "1",
+            ["projectionRevision"] = "1",
+            ["sequence"] = "0",
+            ["sourceSha256"] = new string('a', 64)
+        });
+
+    [PostgresIntegrationFact]
     public async Task ConsumerCheckpointV11PreservesLegacyCursorWithoutInventingBrokerPosition()
     {
         await using var source = Source();
@@ -1484,7 +1652,7 @@ public sealed class PostgresLedgerTests
         await using (var reset = source.CreateCommand("""
             DROP TABLE pitchmind.consumer_checkpoints;
             ALTER TABLE pitchmind.consumer_checkpoints_legacy_v10 RENAME TO consumer_checkpoints;
-            DELETE FROM pitchmind.schema_versions WHERE version = 11;
+            DELETE FROM pitchmind.schema_versions WHERE version >= 11;
             """))
             await reset.ExecuteNonQueryAsync();
 

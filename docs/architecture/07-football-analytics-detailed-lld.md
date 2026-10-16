@@ -143,6 +143,7 @@ erDiagram
   MATCHES ||--o{ QUARANTINE : records
   MATCHES ||--o{ OUTBOX : emits
   MATCHES ||--o{ CONSUMER_CHECKPOINTS : checkpoints
+  MATCHES ||--o{ CONSUMER_PROJECTION_SNAPSHOTS : snapshots
 ```
 `matches(id PK,fixture_version,source_hash,provenance,pitch_length,width,clock_policy,created_at)`;
 `match_events(match_id,event_id,sequence,period,match_ms,team_id,actor_id,type,outcome,source_ptr,payload_hash,schema_version,raw_json,revision,received_at)`, UNIQUE(match_id,sequence), UNIQUE(event_id);
@@ -152,7 +153,7 @@ erDiagram
 `insight_evidence(insight_id,kind,event_id?,frame_id?,metric_id?,relation,source_revision)`;
 `quarantine(match_id,source_ptr,payload_hash,reason,observed_at,retry_status)`;
 `outbox(id,match_id,revision,kind,payload_json,created_at,published_at,attempt_count)`;
-`consumer_checkpoints(consumer_id,partition_id,last_offset,last_broker_sequence_number,last_match_id,last_message_id,last_canonical_sequence,updated_at)`.
+`consumer_checkpoints(consumer_id,partition_id,last_offset,last_broker_sequence_number,last_match_id,last_message_id,last_canonical_sequence,updated_at)`; schema v12 also adds `consumer_projection_inbox(consumer_id,message_id,payload_sha256,processed_at)` and `consumer_projection_snapshots(consumer_id,match_id,canonical_revision,projection_revision,as_of_sequence,as_of_clock_seconds,algorithm_version,source_hash,state_hash,state_json,updated_at)`. The snapshot is a rebuildable read model, not canonical football state.
 Indexes begin with `match_id` plus sequence/time/revision; no unlimited cardinality indexes on source JSON; partition only with measured benefit. Schema migrator separate principal, runtime barred from UPDATE/DELETE match_events. Event+projection+evidence+outbox intention writes **one transaction** with per-match advisory lock; checkpoint update after commit; outbox dispatcher publishes at least once and records ack; each consumer inbox idempotent by message ID.
 
 ## I. Determinism, reliability, fault handling

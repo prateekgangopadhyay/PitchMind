@@ -72,6 +72,45 @@ public sealed class EventHubOutboxPublisherTests
         Assert.Equal("pitchmind.servicebus.windows.net",
             AzureEventWorkerConfiguration.ValidateEventHubNamespace("PITCHMIND.servicebus.windows.net"));
 
+    [Fact]
+    public void AcceptsAzureBlobServiceUriForProcessorCheckpointStorage() =>
+        Assert.Equal("https://pitchmind.blob.core.windows.net",
+            AzureEventWorkerConfiguration.ValidateBlobServiceUri("https://PITCHMIND.blob.core.windows.net"));
+
+    [Theory]
+    [InlineData("http://pitchmind.blob.core.windows.net")]
+    [InlineData("https://pitchmind.blob.core.windows.net.evil.example")]
+    [InlineData("https://pitchmind.blob.core.windows.net/other")]
+    [InlineData("https://pitchmind.blob.core.windows.net:444")]
+    public void RejectsNonAzureOrMalformedBlobServiceUri(string value) =>
+        Assert.Throws<InvalidOperationException>(() => AzureEventWorkerConfiguration.ValidateBlobServiceUri(value));
+
+    [Fact]
+    public async Task ConsumerRejectsMismatchedTransportPropertiesBeforeDatabaseOrBrokerCheckpoint()
+    {
+        var callbackReached = false;
+        var handler = new EventHubProjectionEventHandler(null!, "projection-reader-v1");
+        var properties = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["schemaName"] = "ProjectionPublishedV2",
+            ["matchId"] = MatchId.ToString("D"),
+            ["canonicalRevision"] = "9",
+            ["projectionRevision"] = "4",
+            ["sequence"] = "42",
+            ["sourceSha256"] = Sha256
+        };
+        var message = new ProjectionEvent(MessageId.ToString("D"), "9000", 100,
+            System.Text.Encoding.UTF8.GetBytes(Payload(MessageId, MatchId)), properties);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => handler.HandleAsync(message, "0", _ =>
+        {
+            callbackReached = true;
+            return Task.CompletedTask;
+        }, CancellationToken.None));
+
+        Assert.False(callbackReached);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("local")]

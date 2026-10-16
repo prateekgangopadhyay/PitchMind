@@ -16,12 +16,14 @@ public sealed record ConsumerCheckpoint(
 public enum ConsumerCheckpointAdvanceResult
 {
     Advanced,
-    AlreadyCurrent
+    AlreadyCurrent,
+    StaleReplay
 }
 
 public interface IConsumerCheckpointStore
 {
     Task<ConsumerCheckpointAdvanceResult> AdvanceAsync(
         ConsumerCheckpoint checkpoint,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool alreadyProcessed = false);
 }

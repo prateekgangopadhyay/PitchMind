@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -45,6 +45,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, QuarantineV10Sql, cancellationToken);
         if (currentVersion < 11)
             await ExecuteAsync(connection, transaction, ConsumerCheckpointsV11Sql, cancellationToken);
+        if (currentVersion < 12)
+            await ExecuteAsync(connection, transaction, ConsumerProjectionV12Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -463,5 +465,34 @@ public static class PostgresSchemaMigrator
                     AND last_canonical_sequence IS NOT NULL))
         );
         INSERT INTO pitchmind.schema_versions(version) VALUES (11) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Stores replayable, noncanonical consumer snapshots and payload-bound inbox receipts.</summary>
+    public const string ConsumerProjectionV12Sql = """
+        CREATE TABLE IF NOT EXISTS pitchmind.consumer_projection_inbox (
+            consumer_id text NOT NULL CHECK (length(consumer_id) BETWEEN 1 AND 128),
+            message_id uuid NOT NULL CHECK (message_id <> '00000000-0000-0000-0000-000000000000'),
+            payload_sha256 char(64) NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
+            processed_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (consumer_id, message_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS pitchmind.consumer_projection_snapshots (
+            consumer_id text NOT NULL CHECK (length(consumer_id) BETWEEN 1 AND 128),
+            match_id uuid NOT NULL CHECK (match_id <> '00000000-0000-0000-0000-000000000000'),
+            canonical_revision bigint NOT NULL CHECK (canonical_revision > 0),
+            projection_revision integer NOT NULL CHECK (projection_revision > 0),
+            sequence bigint NOT NULL CHECK (sequence >= 0),
+            clock_seconds integer NOT NULL CHECK (clock_seconds >= 0),
+            algorithm_version text NOT NULL CHECK (length(algorithm_version) BETWEEN 1 AND 128),
+            source_sha256 char(64) NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
+            state_sha256 char(64) NOT NULL CHECK (state_sha256 ~ '^[0-9a-f]{64}$'),
+            state_json jsonb NOT NULL CHECK (jsonb_typeof(state_json) = 'object'),
+            updated_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (consumer_id, match_id)
+        );
+        CREATE INDEX IF NOT EXISTS consumer_projection_snapshots_revision_idx
+            ON pitchmind.consumer_projection_snapshots (consumer_id, match_id, canonical_revision);
+        INSERT INTO pitchmind.schema_versions(version) VALUES (12) ON CONFLICT DO NOTHING;
         """;
 }
