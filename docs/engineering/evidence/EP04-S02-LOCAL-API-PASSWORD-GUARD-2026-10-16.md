@@ -22,3 +22,12 @@ The exact-head review found that .NET regex `$` could match before a final newli
 ## Limits
 
 This is LOCAL credential validation and PostgreSQL role-grant/reset evidence only. No Azure resources, cloud identities, deployment, or Product Owner acceptance were involved. EP04-S02 remains unaccepted pending formal GitHub review, broader provenance/backup-restore evidence, and PO acceptance.
+
+## Existing PostgreSQL large-object ACL follow-up — 2026-10-16
+
+Independent review of the combined EP04-S02 parent head `267536f45df86a2a783b63c37b879f5decbe8055` found that direct `SELECT` and `UPDATE` grants on existing large objects were not cleared by the API-role reset. The follow-up code commit `c7eb7c640aaa08d9a14a9eb7b9dd4bc25be4facd` enumerates large-object catalog ACLs granted directly to `pitchmind_api` and revokes them by OID. The integration regression creates a large object owned by the migration identity, grants both privileges to the API role, reprovisions the role, and confirms the direct ACL entries are absent. Test setup now encloses cleanup so a failed assertion removes the temporary role and object.
+
+- `./scripts/test-postgres.sh` on the follow-up code tree — Infrastructure **90/90** and Contracts **154/154**, 0 failed, 0 skipped. The harness used a uniquely named database on the healthy LOCAL container backed by `pitchmind_postgres_data`, then dropped the database. The temporary `.env` symlink used by the harness was removed.
+- Release Infrastructure test project on the follow-up code tree — **53 passed, 37 skipped, 0 failed**. The 37 are opt-in database tests, all exercised by the no-skip harness run above.
+- `git diff --check` — passed.
+- Independent re-review of the follow-up exact head and hosted CI remain pending; no GitHub review or hosted check is claimed. The story remains unaccepted.
