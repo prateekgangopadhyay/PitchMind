@@ -20,6 +20,7 @@ Never include literal club names, player names, scores, tactics, match IDs, time
 | AI Analyst | What do I want to understand? | structured question + same selected context + claim cites and fallback | suggestions from supported insight IDs, ask, timeout, model offline, invalid evidence, screen-reader citations | [07](../mockups/07-ai-analyst.webp) |
 
 ## Shared client state
+Home links keep the selected clock only when the selected `matchId` is the same as that card; opening another match starts from that card’s canonical `asOfSeconds`. Match/time/revision context must not leak between fixtures.
 `MatchContextProvider` owns `{matchId, mode, selectedElapsedMs, clientContextRevision, canonicalRevision, selectedInsightId}`. Only one store owns match context; pages subscribe. Every time/match selection increments `clientContextRevision` and cancels stale in-flight calls via AbortController; every response must match selected match/time/revision before render. Live cursor never mutates historical SelectedTime; user gets explicit return-to-live CTA. Pitch, score, events, narrative and AI proof are co-revisioned.
 
 ## Component boundaries

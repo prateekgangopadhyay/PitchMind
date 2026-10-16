@@ -89,7 +89,7 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
     <a className="primary-link" href="/home">Check match availability</a>
   </section>;
 
-  if (route.kind === 'home') return <HomePage search={search} selectedSeconds={hasSelectedTime ? selectedSeconds : undefined} />;
+  if (route.kind === 'home') return <HomePage search={search} selectedMatchId={selectedMatchId} selectedSeconds={hasSelectedTime ? selectedSeconds : undefined} />;
 
   if (route.kind === 'teams') return <section className="content-page">
     <PageHeading eyebrow="Teams" title={route.teamId ? 'Team profile' : 'Team overview'} question="What team pattern is supported by the available match evidence?" />
@@ -118,7 +118,7 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
   </section>;
 }
 
-function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds?: number }) {
+function HomePage({ search, selectedMatchId, selectedSeconds }: { search: string; selectedMatchId?: string | null; selectedSeconds?: number }) {
   const { page, error, loading, loadingMore, moreError, retry, loadMore } = useCanonicalFixtures();
   const matches = page?.items ?? [];
   const requestedPhase = new URLSearchParams(search).get('phase') ?? 'all';
@@ -160,7 +160,7 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
                       <p>Source hash {match.sourceSha256}</p>
                     </details>
                   </div>
-                  <a className="primary-link" href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
+                  <a className="primary-link" href={contextHref(matchPath, match.matchId, (selectedMatchId === match.matchId ? selectedSeconds : undefined) ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
                 </article>
               </li>;
             })}</ul>
