@@ -531,7 +531,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
     provenance: 'synthetic-approved', algorithmVersion: 'projection-v1', sourceSha256: 'c'.repeat(64)
   });
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  window.history.replaceState(null, '', '/home');
+  window.history.replaceState(null, '', `/home?matchId=${firstId}&atSeconds=1200&revision=5`);
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ items: [card(firstId, 'secondhalf', 1, 0), card(secondId, 'fulltime', 1, 1)], nextMatchId: null, hasMore: false }) })));
   const container = document.createElement('div');
   const root = createRoot(container);
@@ -541,8 +541,10 @@ it('renders persisted home cards from canonical fields and keeps the match id in
     expect(container.textContent).toContain('Home team 1–0 Away team');
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).toContain('Second half');
-    const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(link => link.href.includes(firstId));
-    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=2700&revision=5`);
+    const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('.match-card a.primary-link')].find(link => link.href.includes(firstId));
+    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=1200&revision=5`);
+    const secondLink = [...container.querySelectorAll<HTMLAnchorElement>('.match-card a.primary-link')].find(link => link.href.includes(secondId));
+    expect(secondLink?.getAttribute('href')).toBe(`/matches/${secondId}?matchId=${secondId}&atSeconds=2700&revision=5`);
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(phaseFilter, 'secondhalf');
@@ -550,7 +552,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
     });
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).not.toContain(secondId);
-    expect(window.location.search).toBe('?phase=secondhalf');
+    expect(window.location.search).toBe(`?matchId=${firstId}&atSeconds=1200&revision=5&phase=secondhalf`);
     expect(container.textContent).not.toContain('Arsenal');
   } finally {
     await act(async () => root.unmount());
