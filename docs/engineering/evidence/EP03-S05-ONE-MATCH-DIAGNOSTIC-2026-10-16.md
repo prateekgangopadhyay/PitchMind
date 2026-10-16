@@ -2,6 +2,8 @@
 
 **Status:** Generator-only diagnostic. It does not verify story acceptance or the ingestion path.
 
+**Verified code/profile commit:** `613964182e50294de7764f2e2f7d7f3d33fe9938`. This evidence note is committed in a documentation-only follow-up.
+
 ## Owner-directed profile
 
 The repository owner specified one source match / one partition. The candidate file is pinned at SHA-256 `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`. Structural inspection observed 2,199 event-shaped JSON records with a `playerPositions` array on each record and 48,048 total attached position objects. It has no separate frame-record stream. The load harness treats each original event-shaped object as an opaque source record and preserves its original JSON bytes. That source-native shape has not been separately approved as an event/frame workload mix.
