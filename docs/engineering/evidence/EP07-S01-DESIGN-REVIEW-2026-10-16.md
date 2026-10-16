@@ -2,6 +2,7 @@
 
 **Result:** This local implementation slice is verified. EP07-S01 remains unverified and unaccepted.
 **Implementation commit:** `b400d830dcfb228870d029e9055ba63e4635f2f7` on `codex/ep07-s01-accessibility-followup`, based on `main` at `5f6f3367743bfac754d9b6ba7144091f1baed9a`.
+**Review PR:** [#308](https://github.com/prateekgangopadhyay/PitchMind/pull/308), draft, head `1049e09d165d66cbd94e7266cfb8fa4243e72472`. GitHub showed no review submissions and no combined status checks at the time of observation.
 **Scope:** Replace visible implementation jargon with viewer-facing language, progressively disclose match/source identifiers, sanitize a selected-moment mismatch, and keep long source hashes within narrow cards. No match facts, public API fields, data persistence, or architecture boundaries changed.
 
 ## Intent and observed delta
