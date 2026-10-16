@@ -30,6 +30,10 @@ For every match explanation, preserve the distinction between source observation
 
 These are not universal rankings. A nominal 4-3-3 can defend as a 4-1-4-1, attack in a 3-2-5, or show another shape; only tracking/lineup evidence can establish what occurred. Such labels are summaries, not full explanations. FIFA's [team-shape metric](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--team-shape.php) distinguishes structures in and out of possession.
 
+### In-game adaptation loop
+
+Describe **initial approach → opponent response → observed adjustment → space/constraint changed → next response → outcome**. Separate the team's general playing philosophy from a match-specific strategy and from observed behavior during a phase. Control for score, personnel, dismissal, restart and phase before attributing a change to an adjustment. A response may solve one problem while exposing another; keep both the advantage and trade-off. FIFA discusses the consistency/adaptability choice and provides a match-specific example of adjustments ([consistent vs adaptable approaches](https://www.fifatrainingcentre.com/en/environment/fifa-research/high-performance/possession-analysis/part-2-2--consistent-v--adaptable-approaches.php), [Japan v Sweden](https://www.fifatrainingcentre.com/en/fifa-world-cup-2026/japan-v-sweden-adapting-attacking-strategies-mid-game.php)). Those match examples are source context, not PitchMind evidence.
+
 ## 2. Phase-by-phase playbooks
 
 FIFA's [phases-of-play framework](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--phases-of-play.php) breaks ball-in-play time into phases; [scales of the game](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/training-framework/scales-of-the-game.php) connects team, unit, and player interactions. PitchMind should use a phase label as context, then explain the specific action sequence.
@@ -54,6 +58,10 @@ FIFA's [phases-of-play framework](https://www.fifatrainingcentre.com/en/fwc2022/
 
 **Evidence:** ball and player locations across multiple frames, pass/carry crossing a defined line, receiver action, opponent shift and next event.
 
+### Scanning, receiving and playing under pressure
+
+Trace the pass/approach, pressure at receipt, any observable scan, receiving body orientation, first touch and next action. Scan and body orientation require suitable video/tracking plus an explicit coding definition; events often record only the pass and action. Compare role and phase, and avoid claims about what a player perceived or intended. FIFA's [scanning research brief](https://www.fifatrainingcentre.com/en/environment/research-brief/high-performance/play/aksum-scanning.php) describes a specific elite-youth sample; do not generalize its findings to every age, role or competition.
+
 ### Defending the box
 
 **Potential plan:** pressure the ball source; protect central goal-facing space; track/pass on runners according to observed organization; contest the delivery and first contact; cover cut-back, far-post and edge zones; then attack the second ball or organize a counter.
@@ -63,6 +71,14 @@ FIFA's [phases-of-play framework](https://www.fifatrainingcentre.com/en/fwc2022/
 **Trade-off:** a line that collapses toward the goal may expose the edge; stepping to the ball may open a cut-back/far-post lane. Do not describe marking assignments unless observed.
 
 **Evidence:** delivery location/time, all visible attackers/defenders, keeper location/action, first contact, clearance, second contact and outcome.
+
+### Defensive line and balls in behind
+
+Measure line height relative to goal separately from team length and distances between units. Describe a coordinated step, drop or hold only across aligned defender positions and with ball, runner, cover and goalkeeper context. A step can compress space but risks a mistimed run behind; a drop can protect depth but open space in front. Offside requires the relevant instant and law-defined evidence; do not infer a successful trap from a later flag alone. FIFA's [defensive-line metric](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--defensive-line-height-and-team-length.php) defines related but distinct measures, and its [balls-in-behind analysis](https://www.fifatrainingcentre.com/en/game/game-insights/balls-in-behind-the-defence.php) examines attacking and defending those runs.
+
+### Finishing and chance context
+
+Keep pattern, chance, shot and result separate. For shot context, inspect valid location/angle, preceding action, body part, pressure/defender position, goalkeeper position, shot type and block/deflection. Video/tracking is needed for several of these fields. Use expected goals only from a versioned validated model with documented inputs and calibration; do not manufacture a chance score from narrative. Goals and misses alone establish neither chance quality nor decision quality.
 
 ### Counterattack after a regain
 
@@ -159,6 +175,8 @@ Risk is multi-dimensional: central protection, depth behind the last line, wide 
 The versioned source register is [`fifa-training-centre-article-catalog.v1.json`](fifa-training-centre-article-catalog.v1.json). Each reviewed entry records a stable source ID, title, direct link, topics, football code, age/competition context, source type, known publication date, review date, short original abstract and rights/use note. A null publication date means the article page did not expose a reliable date during review; do not guess it.
 
 The catalogue is curated, not exhaustive. To add a source, verify the direct page, capture those metadata fields, write a short original paraphrase, distinguish a practice-session example from tournament analysis/metrics/interview/terminology, note age and competition scope, and state what match evidence would be necessary to apply it. Do not bulk scrape, reproduce copyrighted prose/media, or treat article examples as PitchMind match evidence. Review links and metadata periodically because FIFA's library changes.
+
+For model evaluation, pair every positive scenario with a near-miss, missing-data case and plausible alternative. Record the scenario's synthetic/canonical provenance, required evidence, selected-time boundary and expected bounded explanation or abstention. Keep all such examples outside canonical match tables unless separately admitted under the data-governance process.
 
 ## Model application contract
 

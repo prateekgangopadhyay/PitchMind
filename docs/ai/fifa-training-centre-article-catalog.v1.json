@@ -413,6 +413,71 @@
       "reviewedAt": "2026-10-17",
       "abstract": "Discusses external/internal load approaches and limitations of load measures, including explosive actions.",
       "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-defensive-line-height-team-length",
+      "title": "EFI metric: defensive line height and team length",
+      "url": "https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--defensive-line-height-and-team-length.php",
+      "topics": ["defensive-line", "team-length", "line-height", "spatial-metrics"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup Qatar 2022 metric analysis",
+      "sourceType": "performance-metric",
+      "publishedAt": "2022-11-11",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Defines defensive line height and team length as related but distinct spatial measures.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-balls-in-behind-defence",
+      "title": "Balls in behind the defence",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-insights/balls-in-behind-the-defence.php",
+      "topics": ["through-balls", "runs-behind", "defensive-line", "offside-context"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA tournament match-analysis examples; competitions vary by clip",
+      "sourceType": "match-analysis",
+      "publishedAt": "2021-11-08",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Examines coordinated runs and passes behind retreating or deep defensive lines and ways to defend them.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-scanning-youth-players",
+      "title": "Scanning activity in elite youth football players",
+      "url": "https://www.fifatrainingcentre.com/en/environment/research-brief/high-performance/play/aksum-scanning.php",
+      "topics": ["scanning", "perception-action", "receiving", "youth-research"],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "Research brief summarizing elite U-17 and U-19 tournament finalists; findings are sample-specific",
+      "sourceType": "research-brief",
+      "publishedAt": "2023-03-30",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Summarizes research on scan frequency/timing and related actions in a defined elite-youth sample.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-adapting-strategy-japan-sweden-2026",
+      "title": "Japan v Sweden: Adapting attacking strategies mid-game",
+      "url": "https://www.fifatrainingcentre.com/en/fifa-world-cup-2026/japan-v-sweden-adapting-attacking-strategies-mid-game.php",
+      "topics": ["in-game-adaptation", "opponent-response", "attacking-space", "tactical-adjustments"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup 2026, Japan v Sweden, Group F match analysis",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2026-06-29",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Analyzes attacking space, a defensive response and subsequent in-match tactical adaptations in one match.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-consistent-adaptable-approaches",
+      "title": "Part 2.2: Consistent v. adaptable approaches",
+      "url": "https://www.fifatrainingcentre.com/en/environment/fifa-research/high-performance/possession-analysis/part-2-2--consistent-v--adaptable-approaches.php",
+      "topics": ["playing-philosophy", "match-tactics", "adaptability", "possession-analysis"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup Qatar 2022 and FIFA Women's World Cup 2023 possession analysis",
+      "sourceType": "performance-analysis",
+      "publishedAt": "2025-03-13",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Discusses the trade-off between consistent playing principles and opponent/match-specific adaptation.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
     }
   ]
 }

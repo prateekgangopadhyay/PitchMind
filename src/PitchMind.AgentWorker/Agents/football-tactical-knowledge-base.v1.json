@@ -174,27 +174,32 @@
     {
       "id": "final-third-attack",
       "topic": "Final-third creation, box occupation and finishing actions",
-      "promptSummary": "Analyze final-third attacks as separate stages: entry, defensive-line response, wide/central creation, box occupation, delivery/cutback, shot and rebound/second ball. Width/depth, an overlap, half-space access, crossing lane and coordinated runs need calibrated player evidence. Count box attackers and rest-defence cover only from time-aligned positions. A cross, entry or shot is not automatically a high-quality chance; do not infer xG or danger without a validated model and shot features.",
+      "promptSummary": "Analyze entry, opponent response, chance pattern, box occupation, shot and result separately. Off-ball runs, shot pressure, defender/keeper position and shot context need calibrated evidence. A goal is not proof of chance quality; use xG only from a validated model with known inputs and calibration.",
       "mechanisms": [
         "An entry can be a pass, carry, cross or restart; name the recorded action and destination.",
         "Wide attacks may use overlap/underlap, isolate a defender, cross early, reach the byline, or cut the ball back; do not presume which was intended.",
         "Box occupation includes near-post, central, far-post and edge support roles; distinguish observed locations/runs from assigned roles.",
-        "Rest defence balances numbers committed forward with protection against the counter; state the observed players and spaces rather than a quality grade."
+        "Rest defence balances numbers committed forward with protection against the counter; state the observed players and spaces rather than a quality grade.",
+        "For shot context, separate location/angle, preceding action, body part, pressure/defender position, goalkeeper position, shot type, block/deflection and result. Require valid fields; several require aligned video/tracking.",
+        "Expected-goals or other chance-quality output is a versioned derived metric. Require model provenance, input coverage and calibration; do not construct a numerical chance score from narrative."
       ],
       "requiredEvidence": [
         "Canonical attack/shot events, source IDs and selected-time sequence.",
         "Validated tracking for box runs, delivery lanes, defender shape, cross/cutback zone and rest-defence cover.",
-        "A validated chance-quality model and inputs before reporting xG or chance quality."
+        "A validated chance-quality model and inputs before reporting xG or chance quality.",
+        "For shot context: valid location/angle, preceding action, body part, pressure/defender and goalkeeper positions, shot type, block/deflection, units, coverage and feature provenance."
       ],
       "analysisSteps": [
         "Locate the final-third entry and identify the next action sequence.",
         "Describe defender movement and attacker runs only if the frames show them.",
         "Separate delivery, first contact, shot and outcome.",
-        "State whether the packet documents a shot/goal or ends before the result."
+        "State whether the packet documents a shot/goal or ends before the result.",
+        "Separate opportunity pattern, shot characteristics, derived chance quality and result; require model version, inputs and calibration before using xG."
       ],
       "limitations": [
         "Do not infer the intended target or quality of a cross from where the ball ended up.",
-        "Do not label danger, control or expected goals from possession, field location or outcome alone."
+        "Do not label danger, control or expected goals from possession, field location or outcome alone.",
+        "A goal or miss alone establishes neither chance quality nor decision quality."
       ]
     },
     {
@@ -278,29 +283,34 @@
     {
       "id": "press-and-block-dynamics",
       "topic": "Pressing, block movement and defensive response",
-      "promptSummary": "Separate high press, mid/low block, isolated pressure, counterpress and recovery. Explain trigger → pressure → cover/support → opponent response → regain/escape → next action. Collective shifting needs multiple aligned player/line observations; compactness has separate horizontal and vertical dimensions. A trap needs an evidenced route constraint and opponent response. A regain after pressure is a sequence, not proof of cause. Event-only data cannot establish cover shadows, block shape, coordination, intensity or line height.",
+      "promptSummary": "Separate high press, block, isolated pressure, counterpress and recovery. Trace trigger, cover, response and outcome. Collective shifting and line height/team length need aligned player/line evidence. Distinguish stepping, dropping and holding; a trap needs constrained exits. Events alone do not establish coordination, offside or causation.",
       "mechanisms": [
         "Separate high press, mid-block, low block, counterpress and isolated pressure; each describes a different phase or field position and needs operational criteria.",
         "A collective press involves a trigger, pressure on the ball, supporting pressure/cover, constrained exits and an opponent response. One close defender is not proof of collective pressing.",
         "Block movement can shift toward the ball, drop to protect depth, step up to compress space, or split while chasing a runner. Confirm coordinated movement across multiple lines and frames.",
         "A trap is not just a location: identify the intended route constraint and the opponent's evidenced action. A regain after pressure is associated in sequence, not automatically caused by pressure.",
-        "After a turnover, distinguish counterpress to regain near the loss from recovery defending toward own goal; link each to the documented possession state."
+        "After a turnover, distinguish counterpress to regain near the loss from recovery defending toward own goal; link each to the documented possession state.",
+        "Defensive line height relative to the goal and team length/distance between units are separate measures. A coordinated step can compress space but risks a run behind if timing/cover fail; a drop can protect depth but open space in front.",
+        "Assess a step/drop/hold with ball, runner, cover defender, goalkeeper depth, attack direction and time-aligned line positions. Offside is a law-defined instant, not inferable from a later flag alone."
       ],
       "requiredEvidence": [
         "Ordered possession/event sequence and outcome; team-relative pitch orientation for high/mid/low location.",
         "Time-aligned player locations and adequate tracking coverage for collective pressure, cover shadows, block shift and line distances.",
-        "Validated clock and spatial thresholds before calling a response immediate, close, compact or high."
+        "Validated clock and spatial thresholds before calling a response immediate, close, compact or high.",
+        "For step/drop/offside/depth claims, aligned line, ball, runner, cover and goalkeeper positions, validated attack direction and event-time semantics."
       ],
       "analysisSteps": [
         "Establish possession and phase, then name the observable trigger or explicitly say none is visible.",
         "Describe ball pressure and supporting shape only to the extent shown by evidence.",
         "Follow the opponent response and classify the outcome: retained, escaped, forced backward/long, lost or unknown.",
-        "Describe regain and exploitation as later stages with their own evidence IDs; do not compress the sequence into causal certainty."
+        "Describe regain and exploitation as later stages with their own evidence IDs; do not compress the sequence into causal certainty.",
+        "Distinguish line height relative to goal from team length and unit spacing; assess step, drop or hold with runner timing and goalkeeper depth."
       ],
       "limitations": [
         "Event-only data cannot prove cover shadows, pressing intensity, shape, coordination or line height.",
         "Do not infer a manager's pressing plan, player effort or tactical success from a detector label alone.",
-        "Incomplete frames, identity gaps and period/time ambiguity weaken sequence-level conclusions."
+        "Incomplete frames, identity gaps and period/time ambiguity weaken sequence-level conclusions.",
+        "A later offside flag alone does not prove a coordinated offside trap; evaluate law-defined positions at the relevant instant."
       ]
     },
     {
@@ -339,7 +349,7 @@
     {
       "id": "formation-player-combinations",
       "topic": "Formation advantages through defensive-attacking player combinations",
-      "promptSummary": "Formation is a starting reference, not a fixed shape. In 4-3-3, pivot plus two 8s connect a back four to three forwards; a full-back, winger and 8 can rotate overlap, underlap or hold width while the far side/pivot protect counters. 4-2-3-1 pairs complementary pivots behind a 10 and wide forwards; 4-4-2 pairs strikers and midfield banks but can be outnumbered centrally. 4-2-2-2 overloads central lanes and relies on full-backs for width. 3-5-2 pairs wing-backs, three centre-backs and two forwards; 3-4-3 stretches width but its midfield two can be overloaded. 4-1-4-1 screens central space but may isolate its lone striker. Every advantage has a space/cover trade-off; apply only after verifying actual roles, phase, opponent and evidence.",
+      "promptSummary": "Formation is a starting reference, not a fixed shape. In 4-3-3, pivot/8s connect a back four to three forwards; full-back, winger and 8 can rotate overlap, underlap or width. 4-2-3-1 pairs pivots behind a 10; 4-4-2 pairs strikers/banks but may be outnumbered centrally. 4-2-2-2 overloads central lanes and relies on full-backs for width. 3-5-2 uses wing-backs, three centre-backs and two forwards; 3-4-3 stretches width but its midfield two can be overloaded. 4-1-4-1 screens central space but may isolate its striker. Verify roles, phase, opponent and trade-offs. Before receiving, observable scanning/body orientation may relate to options; claim it only from suitable video/tracking, never infer perceived information.",
       "mechanisms": [
         "In a 4-3-3, the single pivot can offer a build-up outlet and screen central counters while two 8s connect to the wide forwards and striker. A full-back can overlap outside a winger, underlap inside, or hold the deeper line; each choice changes width, passing angles and protection behind the ball.",
         "The 4-2-3-1 can combine a back four with two pivots of complementary functions (for example, one holding while the other advances), a 10 between lines, and two wide forwards. The 10 links the midfield to the striker; the pivots can cover full-backs or receive under pressure. If both pivots stay flat, the 10/striker may become disconnected; if both advance, central counter protection can weaken.",
@@ -356,50 +366,57 @@
         "A verified lineup and notation convention for the nominal formation; do not infer it from team reputation or event locations.",
         "Time-aligned player locations and identity/role evidence across the relevant phase to establish actual lines, rotations, width, depth and which defenders/midfielders/forwards combine.",
         "Evidence of opponent structure/pressure and the subsequent action before claiming that a combination created a free player, overload, passing route, progression or chance.",
-        "For rest-defence or transition-risk claims, observed players behind/around the ball at the loss and the opponent response after the turnover."
+        "For rest-defence or transition-risk claims, observed players behind/around the ball at the loss and the opponent response after the turnover.",
+        "Scanning/body-orientation claims require suitable video/tracking, defined coding, receiver/pressure context and adequate sample; pass events alone are insufficient."
       ],
       "analysisSteps": [
         "Name the nominal setup only from verified lineup evidence; state that the notation describes a starting reference.",
         "Identify phase, ball location and opponent arrangement. Use repeated synchronized frames for role/shape relationships, not a single frame alone.",
         "Trace the relevant unit links: centre-back/pivot, pivot/8/10, full-back/winger/8, or forward pair/third runner. Describe the observed movement and available support.",
         "State the possible advantage and its matching risk together (for example, width gained by an advancing full-back and space exposed behind).",
-        "Compare the opponent response and outcome using evidence IDs. Avoid rating a formation in isolation or claiming causality from a short sequence."
+        "Compare the opponent response and outcome using evidence IDs. Avoid rating a formation in isolation or claiming causality from a short sequence.",
+        "For receiving under pressure, trace pass arrival, observable scan, body orientation, first touch and next action only where each is captured; do not infer perceived information."
       ],
       "limitations": [
         "These formations are illustrative coaching models, not fixed player duties or guaranteed advantages. Real structures are asymmetric and change by phase, opponent, score, personnel and instructions.",
         "A nominal formation alone cannot establish player quality, suitability, tactical intent, success, spacing, local overload or defensive cover.",
         "Event-only data cannot establish off-ball combinations or rest-defence shape. Unknown coordinates, timestamps, attack direction, identity or frame coverage block spatial conclusions.",
+        "Scan frequency and body orientation do not prove awareness, intelligence or decision quality; source research may be limited to an age/competition sample.",
         "Treat positional “advantages” as conditional mechanisms. Do not conclude the listed shape caused a goal, prevented a counter or was superior without a suitable comparison and evidence."
       ]
     },
     {
       "id": "formation-matchups-and-adjustments",
       "topic": "Formation matchups and in-game adjustments",
-      "promptSummary": "Compare the actual phase shapes, not just formation labels. Look for local overloads, spare defenders, press-cover links and weak-side space. A role adjustment can solve one problem while exposing another; compare the opponent response and transition cover before calling it an advantage.",
+      "promptSummary": "Compare actual phase shapes, not labels. Trace initial approach, opponent response, observed adjustment, space changed and second response. A change may solve one problem while exposing another; control for phase, score and personnel, and do not infer coach intent.",
       "mechanisms": [
         "A nominal 4-3-3 against a 4-4-2 may offer a third central midfielder against a pair, while the 4-4-2 can use two forwards to press or pin centre-backs and wide midfielders to protect full-backs. Test whether the nominal spare can receive/use the ball and whether the opponent closes that route.",
         "A 4-2-3-1 facing a 4-3-3 may use its 10 between the opponent pivot and defence, but the opponent three can outnumber the double pivot. A wide forward dropping to help can restore numbers while reducing the counter-attacking outlet.",
         "A back three against a front two can create an extra first-line build-up player; the opponent may instead press wing-backs or use a midfielder to jump to the spare centre-back. A wing-back held high can pin a full-back, but exposes the channel if the wide centre-back cannot cover.",
         "An in-game adjustment may be a role/height/side change inside the same nominal formation: a winger drops to the midfield line, a full-back stays to make a back three, a pivot steps forward, or a forward screens a pivot. Describe what changed and the space opened elsewhere.",
         "When the opponent overloads a flank, possible responses include shifting a midfielder wide, narrowing the far-side winger, having a full-back engage earlier, or changing the press direction. Each changes central cover, far-side access, or the outlet after a regain.",
-        "Compare score, personnel, dismissal, phase, ball location and opponent behavior before and after any adjustment. Do not infer a coach instruction from the resulting shape alone."
+        "Compare score, personnel, dismissal, phase, ball location and opponent behavior before and after any adjustment. Do not infer a coach instruction from the resulting shape alone.",
+        "Separate broad playing principles, match-specific strategy and an observed in-game adjustment. Trace initial approach → opponent response → adjustment → newly opened/protected space → second response and outcome; a response can expose a different lane."
       ],
       "requiredEvidence": [
         "Verified lineup and formation notation if naming a nominal shape.",
         "Repeated, time-aligned player locations, identities, phase, ball/opponent locations and coverage for observed matchup or role change.",
-        "Evidence of the opponent response and next action before claiming an overload, spare player, free route or successful adjustment."
+        "Evidence of the opponent response and next action before claiming an overload, spare player, free route or successful adjustment.",
+        "For adaptation claims, compare phase, score, personnel, dismissal, restart, ball zone, opponent response and sample window before/after."
       ],
       "analysisSteps": [
         "State nominal lineup formation only when sourced; otherwise describe the observed phase shape.",
         "Identify the phase, local unit, relevant players and opponent arrangement.",
         "Count local options and cover using an explicitly bounded zone/time; note defenders who can recover.",
         "Describe the adjustment as observed, then name the space gained and space conceded as hypotheses.",
-        "Compare opponent response and subsequent outcome with evidence IDs; offer another plausible explanation."
+        "Compare opponent response and subsequent outcome with evidence IDs; offer another plausible explanation.",
+        "Separate broad team principles from match strategy and observed in-game adjustment; report association and alternatives, not inferred coaching intent."
       ],
       "limitations": [
         "Formation-number matchups are hypotheses, not deterministic numerical outcomes; pressing assignments and player movement can erase or move an apparent spare.",
         "Do not claim superiority, tactical intent or causation from the formation label or a short sequence.",
-        "Sparse/un-calibrated tracking and event-only data cannot establish off-ball shape, cover, or space."
+        "Sparse/un-calibrated tracking and event-only data cannot establish off-ball shape, cover, or space.",
+        "A sequence change can reflect score, personnel, phase, dismissal or restart rather than deliberate adaptation; do not claim motive from behavior alone."
       ]
     },
     {
@@ -563,7 +580,8 @@
         "Every metric needs name/purpose, numerator, denominator, unit, aggregation window, player/team scope, provider/version, missing-data policy, sample threshold and limitations.",
         "Keep total, per-match, per-90, per-ball-in-play, completion rate, proportion, mean, median, percentile and standard deviation distinct; incompatible denominators invalidate direct comparison.",
         "Confidence follows source validity, identity/time mapping, calibration, coverage, sample size and definition stability; fluent wording is not evidence quality.",
-        "A general source article can support vocabulary only; it cannot support facts about the selected PitchMind match."
+        "A general source article can support vocabulary only; it cannot support facts about the selected PitchMind match.",
+        "Maintain paired positive, near-miss, missing/conflicting-data scenarios for evaluation; identify the decisive evidence element and prefer bounded abstention when it is absent. Synthetic fixtures never become match evidence."
       ],
       "requiredEvidence": [
         "Evidence IDs, selected time, source revision and coverage window for match claims.",
@@ -574,6 +592,7 @@
         "Label each claim as observed fact, derived measurement, detector classification or tactical interpretation.",
         "Check metric semantics and sample comparability before interpreting or comparing values.",
         "State coverage and plausible alternatives; choose specificity and confidence based on evidence quality.",
+        "For each tactical label, check its defining sequence against a near-miss/counterexample and name the missing element when the match packet does not meet the definition.",
         "Abstain when unknown semantics or missing observations could change the answer."
       ],
       "limitations": [

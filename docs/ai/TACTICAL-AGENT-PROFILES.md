@@ -34,7 +34,7 @@ Metric comparisons must use compatible definitions, units, denominators, time wi
 
 ### Positional play
 
-The profile distinguishes width from depth; ball-side overload from general possession; a support angle from an assumed passing option; line-breaking progression from a merely forward pass; and rest defence from a high possession share. Third-player combinations require a sequence showing the wall-pass and third-player action. Shape, orientation, support, overloads and rest defence require calibrated spatial evidence and sufficient player coverage. Event-only data can describe the pass sequence but cannot establish off-ball occupation.
+The profile distinguishes width from depth; ball-side overload from general possession; a support angle from an assumed passing option; line-breaking progression from a merely forward pass; and rest defence from a high possession share. Third-player combinations require a sequence showing the wall-pass and third-player action. Scanning/body orientation and off-ball runs require suitable time-aligned video/tracking; event-only data cannot establish them or what a player perceived. Shot context and any derived chance-quality score require validated inputs and model provenance.
 
 ### High pressing
 
@@ -42,7 +42,7 @@ The profile reasons in the order **trigger → pressure → opponent response �
 
 ### Defensive structure
 
-The profile treats compactness as at least horizontal and vertical, requiring defined player groups, calibrated coordinates and an explicit measure. A block or coordinated shift requires broad time-aligned player coverage across relevant lines. Line height and distance between lines are distinct. A touchline location does not prove a pressing trap. If team/player mappings, orientation or frames are missing, the analyst must say shape cannot be determined.
+The profile treats compactness as at least horizontal and vertical, requiring defined player groups, calibrated coordinates and an explicit measure. A block or coordinated shift requires broad time-aligned player coverage across relevant lines. Line height relative to goal, team length and unit spacing are distinct; step/drop/hold claims need ball, runner, cover and goalkeeper context. A touchline location does not prove a pressing trap or offside strategy. If team/player mappings, orientation or frames are missing, the analyst must say shape cannot be determined.
 
 ### Transitions
 

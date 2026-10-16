@@ -40,6 +40,17 @@ For each explanation, separate **observed source fact**, **derived measurement**
 
 For each metric document: `metricId`, definition, formula, unit, denominator, team/player scope, phase and time window, source/provider, version, minimum coverage, missingness behavior, intended comparisons and prohibited interpretations. For example, “pressures per 30 minutes out of possession” requires a validated pressure-event definition and out-of-possession denominator. It cannot be substituted with raw pressure count or interpreted as pressure quality without outcomes and context.
 
+### Scenario and counterexample record
+
+For each model-evaluable concept, maintain paired, fictionalized scenarios with (1) evidence that satisfies the operational definition, (2) a near-miss that looks similar but lacks one required element, (3) missing or conflicting data, (4) the bounded explanation expected in each case, (5) evidence citations and temporal cutoff, and (6) a reviewer note on plausible alternatives. Store scenario evidence separately from canonical match data and label synthetic examples. Include counterexamples such as a lateral pass mislabeled as a switch, pressure mislabeled as a team press, a high shot count mislabeled as good chance quality, and distance mislabeled as fatigue. A polished answer must not score better than a correct abstention.
+
+| Concept | Supporting scenario | Near-miss/counterexample | Expected bounded response |
+| --- | --- | --- | --- |
+| In-game adaptation | Same phase repeated: opponent changes the press; team repeatedly changes build-up role; changed exit is observed. | Shape differs after a substitution or score change, but no opponent response/adjustment sequence is documented. | Describe the observed sequence and alternatives; do not assign coaching intent or causal success. |
+| Defensive line | Multiple aligned defenders step as the ball travels; runner, cover and keeper are visible. | One defender steps in a single frame, or a later offside flag appears without relevant positions. | State line action only when measured; do not call an offside trap from the later event alone. |
+| Scanning/receiving | Video coding records a head turn before receipt and the subsequent touch/action. | Pass completion exists but video/scan/body orientation is unavailable. | Describe scan only in the first case; otherwise report the pass/action and mark perception unknown. |
+| Chance context | Shot event plus valid location, pressure, goalkeeper/defender positions and a calibrated model result. | Goal or miss exists without model features, or shot count is used as quality. | Separate shot and result; withhold chance-quality or xG conclusion without validated inputs. |
+
 ## 1. Movement dynamics across the field
 
 ### Phases to identify
@@ -215,7 +226,29 @@ Physical measures can describe demands occurring within a tactical phase, but sh
 
 Do not infer fatigue, fitness, effort, motivation, injury, decision quality or tactical intent from sprint count, distance, substitution, age or a single time window. A high running total may reflect role and game state; a low count may reflect possession, coverage, minutes, tracking gaps or role. Present physical and tactical observations side by side and use cautious association language. Physiological or training-load data requires its own validated source, privacy controls and specialist review.
 
-## 6. Explanations the agents may produce
+## 9. In-game adaptation and opponent response
+
+Separate a team's broad playing principles from match-specific choices and from an observed in-game adjustment. Use the sequence **initial approach → opponent response → observed adjustment → new space/constraint → second response → next outcome**. Compare like phases and account for score, personnel, dismissal, restart, field zone and sample size. A tactical change may address one exposed space while opening another; an apparent response could also reflect a phase or personnel change. Do not infer coaching intent solely from changed positions or possession share. FIFA describes the consistency/adaptability trade-off and illustrates tactical adjustments during a match ([FIFA: Consistent vs adaptable approaches](https://www.fifatrainingcentre.com/en/environment/fifa-research/high-performance/possession-analysis/part-2-2--consistent-v--adaptable-approaches.php), [FIFA: Japan v Sweden, adapting attacking strategies mid-game](https://www.fifatrainingcentre.com/en/fifa-world-cup-2026/japan-v-sweden-adapting-attacking-strategies-mid-game.php)). These sources inform concepts only; do not transfer their team-specific findings to PitchMind matches.
+
+## 10. Defensive line management
+
+Describe the defensive line as a time-varying unit: height relative to the goal, distance to the midfield/forward lines, movement when the ball travels, depth coverage, and relationship to the goalkeeper. Distinguish stepping up to compress space from dropping to protect depth. A coordinated step may compress a between-lines space or attempt to catch runners offside, but mistiming can expose a run behind; dropping may protect depth while creating space in front. These are conditional trade-offs, not quality verdicts. FIFA defines defensive line height and team length as separate metrics ([FIFA: Defensive line height and team length](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--defensive-line-height-and-team-length.php)).
+
+For a line movement claim, require time-aligned locations for the relevant defenders, ball, attackers/runners and goalkeeper, calibrated pitch direction, period/time and adequate frame coverage. Offside status requires the law-defined positions at the relevant instant and suitable authoritative event/geometry; do not infer a successful offside trap from an opponent being flagged later. For a ball in behind, inspect passer pressure, line movement, runner start/timing, cover defender, keeper depth and actual reception/shot sequence. A through pass alone does not prove the line was high, disorganized or deliberately beaten ([FIFA: Balls in behind the defence](https://www.fifatrainingcentre.com/en/game/game-insights/balls-in-behind-the-defence.php)).
+
+## 11. Scanning and receiving under pressure
+
+Scanning is a player's observable head movement away from the ball to gather information; a scan count does not reveal what information was perceived or how it affected a decision. FIFA's youth research reports relationships between pressing, scanning behavior and some subsequent actions in the specific studied sample, not universal causal rules ([FIFA: Scanning activity in elite youth football players](https://www.fifatrainingcentre.com/en/environment/research-brief/high-performance/play/aksum-scanning.php)).
+
+To analyze receiving, separate the approach/pass, pressure at arrival, observable scan if captured, body orientation, first touch, next action and outcome. Suitable video/tracking and a defined coding protocol are needed for scan/body-orientation claims; event-only feeds may show only the pass and next action. Compare role, phase, age/competition context, pressure and sample before interpreting behavior. Do not infer awareness, intelligence, composure or decision quality from scan frequency or one successful forward pass.
+
+## 12. Finishing and chance context
+
+Separate a possession's creation pattern, shot opportunity, shot characteristics and result. For a shot, the relevant context may include location, angle, body part, preceding action, defender pressure/position, goalkeeper position, shot type and whether a block or deflection occurred. Require valid fields and definitions; body orientation, pressure and goalkeeper position need time-aligned video/tracking. A goal does not establish that the chance was high quality, and a miss does not establish poor choice or execution without appropriate context.
+
+Expected-goals or other chance-quality measures must come from a versioned, validated model with documented inputs, calibration population, coverage and uncertainty. Do not create or infer a numerical chance score from tactical prose. Keep chance-quality output as a derived model result, separate from canonical shot events and analyst interpretation.
+
+## 13. Explanations the agents may produce
 
 The agents should explain:
 
@@ -233,7 +266,7 @@ The agents should not produce:
 - Referee-law conclusions or predictions without the appropriate authoritative data/model.
 - A tactic presented as the only correct decision when alternatives fit the evidence.
 
-## Evaluation cases for later independent review
+## 14. Evaluation cases for later independent review
 
 1. **Movement:** mirror the pitch for opposite attack directions; omit frames; shift only one player; vary line spacing; validate that the agent limits language to actual coverage.
 2. **Substitution:** like-for-like and role-changing examples; substitution followed by no change; multiple simultaneous context changes; selection time before and after substitution; verify no causal claim is emitted.
@@ -245,6 +278,11 @@ The agents should not produce:
 8. **Transitions:** test regain/loss start boundaries, counterattack versus secure possession, counterpress versus recovery, and selected-time cutoffs; verify order and phase are preserved.
 9. **Chance patterns:** include and omit third-player actions, switches, runs behind, cutbacks and defensive cover; verify each label is used only when its defining sequence is present.
 10. **Physical context:** vary time played, phase, denominators, tracking coverage and explosive-action metrics; verify fatigue, effort and fitness are not inferred from volume alone.
+11. **In-game adaptation:** contrast a repeated adjustment with a score/phase-driven shape change and a coincidental change; require opponent response, alternatives and an outcome cutoff.
+12. **Defensive line:** test coordinated step, uncoordinated step, drop to protect depth, goalkeeper cover and through-ball sequences; do not infer line height or offside from one event.
+13. **Scanning/receiving:** vary video visibility, scan coding, pressure and first-touch outcome; prohibit claims about perceived information or awareness.
+14. **Finishing context:** vary shot location/angle/pressure/keeper fields and model validity; prohibit chance-quality or xG claims when required inputs/model provenance are absent.
+15. **Counterexamples:** use near-misses for every tactical label, contradictory sources and partial coverage; reward a precise limitation/abstention over an unsupported complete story.
 
 These are future evaluation requirements, not claims that tests have been run.
 
@@ -266,6 +304,11 @@ The sources below are official football coaching or law resources used to define
 - [FIFA Training Centre — Defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php)
 - [FIFA Training Centre — Physical-analysis background and method](https://www.fifatrainingcentre.com/en/fwc2022/physical-analysis/background-and-method.php)
 - [FIFA Training Centre — Monitoring training load](https://www.fifatrainingcentre.com/en/environment/science-explained/high-performance/performance-support/kobe-houtmeyers-on-monitoring-training-load.php)
+- [FIFA Training Centre — Consistent vs adaptable approaches](https://www.fifatrainingcentre.com/en/environment/fifa-research/high-performance/possession-analysis/part-2-2--consistent-v--adaptable-approaches.php)
+- [FIFA Training Centre — Japan v Sweden: adapting attacking strategies mid-game](https://www.fifatrainingcentre.com/en/fifa-world-cup-2026/japan-v-sweden-adapting-attacking-strategies-mid-game.php)
+- [FIFA Training Centre — Defensive line height and team length](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--defensive-line-height-and-team-length.php)
+- [FIFA Training Centre — Balls in behind the defence](https://www.fifatrainingcentre.com/en/game/game-insights/balls-in-behind-the-defence.php)
+- [FIFA Training Centre — Scanning activity in elite youth football players](https://www.fifatrainingcentre.com/en/environment/research-brief/high-performance/play/aksum-scanning.php)
 - [IFAB — Law 3: The Players](https://www.theifab.com/laws/2025-26/the-players/)
 - [IFAB — Law 7: The Duration of the Match](https://www.theifab.com/laws/latest/the-duration-of-the-match/)
 - [IFAB — Law 12: Fouls and Misconduct](https://www.theifab.com/laws/latest/fouls-and-misconduct/)

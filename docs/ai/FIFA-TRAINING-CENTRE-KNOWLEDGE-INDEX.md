@@ -82,6 +82,7 @@ For every claimed advantage, describe the trigger, actual player/role relationsh
 
 - [FIFA: Team shape metric](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--team-shape.php) — positional structures in and out of possession.
 - [FIFA: Scales of the game](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/training-framework/scales-of-the-game.php) — team, unit and player scales; dynamic roles and numerical relationships.
+- [FIFA: Defensive line height and team length](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--defensive-line-height-and-team-length.php) — separate views of defensive depth and team length.
 - [FIFA: Team organisation out of possession](https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/team-organisation--out-of-possession-.php) — horizontal/vertical compactness, shifting and pressure.
 - [FIFA: Football Language](https://www.fifatrainingcentre.com/en/resources-tools/football-language/index.php) — operational terminology and on/off-ball examples.
 
@@ -92,6 +93,10 @@ For every claimed advantage, describe the trigger, actual player/role relationsh
 - [FIFA: Developing wide attacking patterns](https://www.fifatrainingcentre.com/en/practice/elite-sessions/clubs-and-academies/english-academies/newcastle-u-15-developing-wide-attacking-patterns.php) — overlap, underlap and wide 2v1 examples.
 - [FIFA: Combination play in the final third](https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php) — rotations, third-player movements and final-third combinations.
 - [FIFA: 8v8 building through middle areas](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/8v8-team-game-building-up-through-middle-areas.php) — central progression against a high press.
+- [FIFA: Balls in behind the defence](https://www.fifatrainingcentre.com/en/game/game-insights/balls-in-behind-the-defence.php) — timing, runs and defending different line depths.
+- [FIFA: Japan v Sweden - adapting attacking strategies mid-game](https://www.fifatrainingcentre.com/en/fifa-world-cup-2026/japan-v-sweden-adapting-attacking-strategies-mid-game.php) — match-specific example of opponent response and second-half tactical adjustments.
+- [FIFA: Consistent vs adaptable approaches](https://www.fifatrainingcentre.com/en/environment/fifa-research/high-performance/possession-analysis/part-2-2--consistent-v--adaptable-approaches.php) — trade-offs between stable team principles and opponent/game-specific adaptation.
+- [FIFA: Scanning activity in elite youth football players](https://www.fifatrainingcentre.com/en/environment/research-brief/high-performance/play/aksum-scanning.php) — research brief about scanning and related actions in a defined elite-youth sample.
 
 ### Defending and pressing
 
