@@ -45,11 +45,14 @@ public sealed class PostgresLedgerTests
     public async Task LocalApiRoleCanReadCanonicalDataAndDispatchOutboxWithoutSchemaOrLedgerWrites()
     {
         await using var migrationSource = Source();
-        await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
-        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
-        await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
+        uint largeObjectId = 0;
+        try
+        {
+            await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
+            var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+            await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
 
-        await using (var overprivilege = migrationSource.CreateCommand("""
+            await using (var overprivilege = migrationSource.CreateCommand("""
             ALTER ROLE pitchmind_api WITH SUPERUSER CREATEDB CREATEROLE INHERIT REPLICATION BYPASSRLS;
             CREATE ROLE pitchmind_api_privileged;
             GRANT pitchmind_api_privileged TO pitchmind_api;
@@ -68,43 +71,55 @@ public sealed class PostgresLedgerTests
             ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO pitchmind_api;
             ALTER DEFAULT PRIVILEGES IN SCHEMA pitchmind GRANT ALL ON TABLES TO pitchmind_api;
             """))
-            await overprivilege.ExecuteNonQueryAsync();
+                await overprivilege.ExecuteNonQueryAsync();
 
-        await using (var grantDatabasePrivilegesSql = migrationSource.CreateCommand(
-                         "SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO pitchmind_api', current_database())"))
-        {
-            var sql = (string)(await grantDatabasePrivilegesSql.ExecuteScalarAsync())!;
-            await using var grantDatabasePrivileges = migrationSource.CreateCommand(sql);
-            await grantDatabasePrivileges.ExecuteNonQueryAsync();
-        }
+            await using (var createLargeObject = migrationSource.CreateCommand("SELECT lo_create(0)"))
+                largeObjectId = (uint)(await createLargeObject.ExecuteScalarAsync())!;
 
-        await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
+            await using (var grantLargeObjectSql = migrationSource.CreateCommand(
+                             "SELECT format('GRANT SELECT, UPDATE ON LARGE OBJECT %s TO %I', $1::oid, 'pitchmind_api')"))
+            {
+                grantLargeObjectSql.Parameters.AddWithValue(NpgsqlDbType.Oid, largeObjectId);
+                var sql = (string)(await grantLargeObjectSql.ExecuteScalarAsync())!;
+                await using var grantLargeObject = migrationSource.CreateCommand(sql);
+                await grantLargeObject.ExecuteNonQueryAsync();
+            }
 
-        await using (var futureTable = migrationSource.CreateCommand(
-                         "CREATE TABLE pitchmind.api_default_acl_probe (id integer); " +
-                         "CREATE TABLE \"api'schema_probe\".api_default_acl_probe (id integer)"))
-            await futureTable.ExecuteNonQueryAsync();
+            await using (var grantDatabasePrivilegesSql = migrationSource.CreateCommand(
+                             "SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO pitchmind_api', current_database())"))
+            {
+                var sql = (string)(await grantDatabasePrivilegesSql.ExecuteScalarAsync())!;
+                await using var grantDatabasePrivileges = migrationSource.CreateCommand(sql);
+                await grantDatabasePrivileges.ExecuteNonQueryAsync();
+            }
 
-        await using (var roleFlags = migrationSource.CreateCommand("""
+            await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
+
+            await using (var futureTable = migrationSource.CreateCommand(
+                             "CREATE TABLE pitchmind.api_default_acl_probe (id integer); " +
+                             "CREATE TABLE \"api'schema_probe\".api_default_acl_probe (id integer)"))
+                await futureTable.ExecuteNonQueryAsync();
+
+            await using (var roleFlags = migrationSource.CreateCommand("""
             SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolreplication, rolbypassrls
             FROM pg_roles WHERE rolname = 'pitchmind_api'
             """))
-        await using (var reader = await roleFlags.ExecuteReaderAsync())
-        {
-            Assert.True(await reader.ReadAsync());
-            Assert.False(reader.GetBoolean(0));
-            Assert.False(reader.GetBoolean(1));
-            Assert.False(reader.GetBoolean(2));
-            Assert.False(reader.GetBoolean(3));
-            Assert.False(reader.GetBoolean(4));
-            Assert.False(reader.GetBoolean(5));
-        }
+            await using (var reader = await roleFlags.ExecuteReaderAsync())
+            {
+                Assert.True(await reader.ReadAsync());
+                Assert.False(reader.GetBoolean(0));
+                Assert.False(reader.GetBoolean(1));
+                Assert.False(reader.GetBoolean(2));
+                Assert.False(reader.GetBoolean(3));
+                Assert.False(reader.GetBoolean(4));
+                Assert.False(reader.GetBoolean(5));
+            }
 
-        await using (var membershipCount = migrationSource.CreateCommand(
-                         "SELECT COUNT(*) FROM pg_auth_members WHERE member = 'pitchmind_api'::regrole"))
-            Assert.Equal(0L, (long)(await membershipCount.ExecuteScalarAsync())!);
+            await using (var membershipCount = migrationSource.CreateCommand(
+                             "SELECT COUNT(*) FROM pg_auth_members WHERE member = 'pitchmind_api'::regrole"))
+                Assert.Equal(0L, (long)(await membershipCount.ExecuteScalarAsync())!);
 
-        await using (var privilegeCheck = migrationSource.CreateCommand("""
+            await using (var privilegeCheck = migrationSource.CreateCommand("""
             SELECT has_database_privilege('pitchmind_api', current_database(), 'CREATE'),
                    has_schema_privilege('pitchmind_api', 'pitchmind', 'CREATE'),
                    has_table_privilege('pitchmind_api', 'pitchmind.match_events', 'UPDATE'),
@@ -115,27 +130,38 @@ public sealed class PostgresLedgerTests
                    has_schema_privilege('pitchmind_api', 'api_schema_probe', 'CREATE'),
                    has_table_privilege('pitchmind_api', 'api_schema_probe.probe', 'SELECT'),
                    pg_get_userbyid((SELECT relowner FROM pg_class WHERE oid = 'pitchmind.api_owned_probe'::regclass))
-                       = 'pitchmind_api'
+                       = 'pitchmind_api',
+                   EXISTS (
+                       SELECT 1 FROM pg_largeobject_metadata metadata
+                       CROSS JOIN LATERAL aclexplode(metadata.lomacl) acl
+                       WHERE metadata.oid = $1::oid AND acl.grantee = 'pitchmind_api'::regrole
+                           AND acl.privilege_type = 'SELECT'),
+                   EXISTS (
+                       SELECT 1 FROM pg_largeobject_metadata metadata
+                       CROSS JOIN LATERAL aclexplode(metadata.lomacl) acl
+                       WHERE metadata.oid = $1::oid AND acl.grantee = 'pitchmind_api'::regrole
+                           AND acl.privilege_type = 'UPDATE')
             """))
-        await using (var reader = await privilegeCheck.ExecuteReaderAsync())
-        {
-            Assert.True(await reader.ReadAsync());
-            Assert.False(reader.GetBoolean(0));
-            Assert.False(reader.GetBoolean(1));
-            Assert.False(reader.GetBoolean(2));
-            Assert.False(reader.GetBoolean(3));
-            Assert.False(reader.GetBoolean(4));
-            Assert.False(reader.GetBoolean(5));
-            Assert.False(reader.GetBoolean(6));
-            Assert.False(reader.GetBoolean(7));
-            Assert.False(reader.GetBoolean(8));
-            Assert.False(reader.GetBoolean(9));
-        }
+            {
+                privilegeCheck.Parameters.AddWithValue(NpgsqlDbType.Oid, largeObjectId);
+                await using var reader = await privilegeCheck.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                Assert.False(reader.GetBoolean(0));
+                Assert.False(reader.GetBoolean(1));
+                Assert.False(reader.GetBoolean(2));
+                Assert.False(reader.GetBoolean(3));
+                Assert.False(reader.GetBoolean(4));
+                Assert.False(reader.GetBoolean(5));
+                Assert.False(reader.GetBoolean(6));
+                Assert.False(reader.GetBoolean(7));
+                Assert.False(reader.GetBoolean(8));
+                Assert.False(reader.GetBoolean(9));
+                Assert.False(reader.GetBoolean(10));
+                Assert.False(reader.GetBoolean(11));
+            }
 
-        var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
-        { Username = "pitchmind_api", Password = password };
-        try
-        {
+            var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
+            { Username = "pitchmind_api", Password = password };
             await using var apiSource = NpgsqlDataSource.Create(builder.ConnectionString);
             await using (var read = apiSource.CreateCommand("SELECT COUNT(*) FROM pitchmind.matches"))
                 Assert.True((long)(await read.ExecuteScalarAsync())! >= 0);
@@ -176,6 +202,12 @@ public sealed class PostgresLedgerTests
                 DROP SCHEMA IF EXISTS "api'schema_probe" CASCADE;
                 """);
             await cleanup.ExecuteNonQueryAsync();
+            await using var removeLargeObject = migrationSource.CreateCommand("SELECT lo_unlink($1::oid)");
+            if (largeObjectId != 0)
+            {
+                removeLargeObject.Parameters.AddWithValue(NpgsqlDbType.Oid, largeObjectId);
+                await removeLargeObject.ExecuteScalarAsync();
+            }
         }
     }
 
@@ -301,7 +333,10 @@ public sealed class PostgresLedgerTests
         {
             var payload = JsonSerializer.Serialize(new
             {
-                matchId = matchGuid.ToString("D"), frameId, sequence, canonicalRevision,
+                matchId = matchGuid.ToString("D"),
+                frameId,
+                sequence,
+                canonicalRevision,
                 matchTime = new { elapsedSeconds = clockSeconds, period = 2 },
                 source = new { sourceSha256 = sourceHash, rightsReviewStatus }
             });
@@ -396,7 +431,10 @@ public sealed class PostgresLedgerTests
 
         var payload = JsonSerializer.Serialize(new
         {
-            matchId = matchGuid.ToString("D"), frameId = "oversize-frame", sequence = 3L, canonicalRevision = 9L,
+            matchId = matchGuid.ToString("D"),
+            frameId = "oversize-frame",
+            sequence = 3L,
+            canonicalRevision = 9L,
             matchTime = new { elapsedSeconds = 120, period = 2 },
             source = new { sourceSha256 = sourceHash, rightsReviewStatus = "approved_for_use" },
             padding = new string('x', oversizedField == "payload" ? 40_000 : 8)
@@ -2200,7 +2238,7 @@ public sealed class PostgresLedgerTests
         var role = "ledger_test_" + Guid.NewGuid().ToString("N");
         var password = Guid.NewGuid().ToString("N");
         // Identifiers and password are internally generated lowercase hexadecimal values, never user input.
-            await using (var setup = migrationSource.CreateCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT ON pitchmind.match_events TO {role};"))
+        await using (var setup = migrationSource.CreateCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password}'; GRANT USAGE ON SCHEMA pitchmind TO {role}; GRANT SELECT, INSERT ON pitchmind.match_events TO {role};"))
             await setup.ExecuteNonQueryAsync();
         try
         {

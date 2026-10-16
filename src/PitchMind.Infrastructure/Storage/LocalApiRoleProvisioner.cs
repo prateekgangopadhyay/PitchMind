@@ -116,6 +116,7 @@ public static partial class LocalApiRoleProvisioner
             await revokeSchemaPrivileges.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        await RevokeLargeObjectPrivilegesAsync(connection, cancellationToken);
         await RevokeDefaultPrivilegesAsync(connection, cancellationToken);
 
         await using (var grantConnectSql = new NpgsqlCommand(
@@ -138,6 +139,37 @@ public static partial class LocalApiRoleProvisioner
                 failed_at, last_error_code) ON TABLE pitchmind.outbox TO pitchmind_api;
             """, connection);
         await grants.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task RevokeLargeObjectPrivilegesAsync(NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        List<uint> largeObjectIds = [];
+        await using (var query = new NpgsqlCommand("""
+            SELECT DISTINCT metadata.oid
+            FROM pg_largeobject_metadata metadata
+            CROSS JOIN LATERAL aclexplode(metadata.lomacl) acl
+            WHERE acl.grantee = 'pitchmind_api'::regrole
+            ORDER BY metadata.oid
+            """, connection))
+        await using (var reader = await query.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                largeObjectIds.Add(reader.GetFieldValue<uint>(0));
+        }
+
+        foreach (var largeObjectId in largeObjectIds)
+        {
+            await using var revokeSql = new NpgsqlCommand(
+                "SELECT format('REVOKE ALL PRIVILEGES ON LARGE OBJECT %s FROM %I', $1::oid, 'pitchmind_api')",
+                connection);
+            revokeSql.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Oid, largeObjectId);
+            var sql = (string)(await revokeSql.ExecuteScalarAsync(cancellationToken)
+                               ?? throw new InvalidOperationException(
+                                   "Could not prepare LOCAL API large-object grant reset."));
+            await using var revoke = new NpgsqlCommand(sql, connection);
+            await revoke.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static async Task RevokeDefaultPrivilegesAsync(NpgsqlConnection connection,
