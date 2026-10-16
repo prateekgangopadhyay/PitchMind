@@ -8,8 +8,11 @@ The Training Centre is a large, changing library, not a finite article bundle. T
 
 ## Companion playbooks and machine-readable catalog
 
+- [Football domain knowledge atlas](FOOTBALL-DOMAIN-KNOWLEDGE-ATLAS.md) — cross-source reference for laws, phases, formations, roles, goalkeeper play, restarts, development and match-analysis evidence.
 - [Football tactical playbooks](FOOTBALL-TACTICAL-PLAYBOOKS.md) — matchups, phases, role fit, goalkeeper, set pieces and late-match states.
-- [Reviewed FIFA article catalogue](fifa-training-centre-article-catalog.v1.json) — topic, code, age/competition context, source type and direct link per entry.
+- [Reviewed article catalogue](fifa-training-centre-article-catalog.v1.json) — 43 curated FIFA, IFAB, UEFA, FA and research references with topic, code, age/competition context, source type, review date and direct link.
+
+The catalog is intentionally curated rather than a mirror or full crawl of FIFA's changing library. General-law claims use IFAB; competition trend claims use the relevant UEFA/FIFA season and competition; empirical claims link to research and retain sample limits. The atlas paraphrases sources in original language and does not ingest entire pages or media. See [knowledge provenance and AI evidence limits](FOOTBALL-DOMAIN-KNOWLEDGE-ATLAS.md#purpose-and-source-discipline).
 
 ## Training Centre topic map
 
@@ -29,6 +32,7 @@ The Training Centre is a large, changing library, not a finite article bundle. T
 | [Technical leadership](https://www.fifatrainingcentre.com/en/environment/technicalleadership.php) | Federation/club technical structures and long-term football development | Organization and programme context, not an individual match detector |
 | [High performance](https://www.fifatrainingcentre.com/en/environment/high-performance.php) | Performance environment, physical preparation, recovery and multidisciplinary practice | Context for performance hypotheses; player workload/fatigue claims need validated data |
 | [Goalkeeping](https://www.fifatrainingcentre.com/en/environment/goalkeeping.php) | Goalkeeper technique, decisions, distribution, positioning and integration with team phases | Goalkeeper-specific analysis when the source data includes the relevant actions and locations |
+| [Cross-source reference set](fifa-training-centre-article-catalog.v1.json) | IFAB laws; UEFA senior men's and women's competition reports; FA player-development and practice design; peer-reviewed match-analysis, small-sided-game and AI reviews | Apply the right authority for the claim type; do not treat coaching examples or competition-specific trends as canonical match facts |
 
 FIFA navigation and article availability may change. Recheck each source before adding a new model-facing claim. Categories such as futsal and beach soccer are intentionally kept distinct from association football's 11-a-side laws and dimensions.
 

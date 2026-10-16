@@ -181,3 +181,9 @@ For model evaluation, pair every positive scenario with a near-miss, missing-dat
 ## Model application contract
 
 Every playbook should be represented as: **phase/state → participants/roles → trigger → mechanism → possible advantage → trade-off/failure mode → required evidence → alternatives → source**. Each metric must additionally declare formula/definition, unit, denominator, window, source/version and missingness/coverage. The AI must separate source facts, derived metrics, detector outputs and tactical interpretations; confidence follows evidence quality and coverage, not fluency. It must abstain from unsupported lineup, role, intent, fitness, spatial, referee or causal claims. This guide provides vocabulary and hypotheses; deterministic canonical evidence and verification remain the authority for match facts.
+
+## Cross-source domain application
+
+Use the [Football Domain Knowledge Atlas](FOOTBALL-DOMAIN-KNOWLEDGE-ATLAS.md) for wider game context: applicable laws, distinct football codes, player development, practice design, match-analysis methodology and AI generalization limits. The [article catalogue](fifa-training-centre-article-catalog.v1.json) includes FIFA coaching and match-analysis material, current IFAB laws, UEFA reports from multiple seasons and competitions, FA development/practice resources, and peer-reviewed reviews. It supplements the playbooks; it does not replace feature-specific evidence requirements.
+
+When using a source example, retain its publisher, competition/season, age group, code, source type and whether it is a coaching session, expert observation, statistic or research synthesis. Do not turn a competition trend into a rule, a training drill into a match result, or a population-level research finding into an individual diagnosis. Check the applicable IFAB edition for law questions and preserve provider clock/event semantics for match-time claims.
