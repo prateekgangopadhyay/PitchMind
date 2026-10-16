@@ -19,3 +19,15 @@ The pinned source (`data/simulations/manu-liv-match-dataset.json`, SHA-256 `e374
 The full run is recorded in [machine-readable evidence](EP03-S05-FIVE-SECOND-DIAGNOSTIC-2026-10-16.json). The harness command was `PYTHONDONTWRITEBYTECODE=1 python3 scripts/ep03_s05_load_harness.py --output /private/tmp/ep03-s05-five-second-diagnostic.json`; exit code 1 is the harness's expected incomplete-result signal for this source-limited diagnostic.
 
 The harness unit suite passed 13/13 before this run. This is generator throughput to a local discard sink only. Event Hubs, EventWorker, PostgreSQL, canonical admission, accepted/duplicate/quarantine counts, consumer lag, end-to-end latency, and recovery were not measured. Source clock/coordinate/player metric semantics and football realism remain unvalidated. Story acceptance budgets remain unset and the story remains unaccepted.
+
+## Independent rerun — 2026-10-16
+
+The approved profile and pinned candidate source were rerun independently on the evidence branch. The 13 focused harness tests passed again (13/13). The source contained 2,199 records against a 2,500-record request; the run again stopped at source exhaustion and returned the expected incomplete-result exit code 1.
+
+- Run ID: `e2272906-6553-4d76-a45b-7797c2ca5557`.
+- Full window: `5.000742624979466` seconds; scheduled/sink rates: 439.8 / `439.73468840721023` records/s.
+- Scheduled and received: 2,199 / 2,199; queue high-water/capacity: `3` / 1,024.
+- Ordered ID/sequence and payload hashes matched the first run exactly.
+- Manual assertions against `ep03-s05-load-report.schema.json` passed, including explicit null ingestion measurements and incomplete source-limited status.
+
+The independent machine report is [`EP03-S05-FIVE-SECOND-INDEPENDENT-RERUN-2026-10-16.json`](EP03-S05-FIVE-SECOND-INDEPENDENT-RERUN-2026-10-16.json). It remains generator-only local evidence and does not establish ingestion acceptance.
