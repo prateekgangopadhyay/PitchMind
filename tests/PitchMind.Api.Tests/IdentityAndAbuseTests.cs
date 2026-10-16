@@ -14,6 +14,7 @@ using Xunit;
 
 namespace PitchMind.Api.Tests;
 
+[Collection("EnvironmentVariables")]
 public sealed class IdentityAndAbuseTests
 {
     [Fact]

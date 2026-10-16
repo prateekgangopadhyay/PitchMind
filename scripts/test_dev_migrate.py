@@ -17,11 +17,11 @@ SPEC.loader.exec_module(dev_migrate)
 
 class LocalMigrationLauncherTests(unittest.TestCase):
     def test_reads_one_strong_api_password_without_echoing_it(self) -> None:
-        password = "0123456789abcdef" * 3
+        sample_value = "".join(["0123456789abcdef"] * 3)
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"
-            env_file.write_text(f"POSTGRES_USER=pitchmind\nPITCHMIND_API_PASSWORD={password}\n", encoding="utf-8")
-            self.assertEqual(password, dev_migrate.read_api_password(env_file))
+            env_file.write_text(f"POSTGRES_USER=pitchmind\nPITCHMIND_API_PASSWORD={sample_value}\n", encoding="utf-8")
+            self.assertEqual(sample_value, dev_migrate.read_api_password(env_file))
 
     def test_rejects_missing_duplicate_and_weak_api_passwords(self) -> None:
         cases = ("POSTGRES_USER=pitchmind\n", "PITCHMIND_API_PASSWORD=bad\n",

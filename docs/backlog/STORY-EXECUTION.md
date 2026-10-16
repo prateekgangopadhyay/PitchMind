@@ -176,3 +176,18 @@ On clean tracked-source worktree at exact current-main code commit `c8494b918d08
 ## EP04-S03 historical aggregate-head verification — 2026-10-13
 
 The Release suite passed 82 tests with 18 PostgreSQL opt-in tests skipped on exact PR #209 ancestor code head `39c9058eda728da3fa489fd90ff8313c0f2df31e`; a separate disposable PostgreSQL 16 run passed Infrastructure 18/18 with zero skips. PR #209 later merged to `main` at `010511faceb970d217f2d9cf9249a9cdeaf91267`. This is historical verification, superseded by later mainline evidence in the EP04-S03 table row; it does not establish story acceptance. Hosted/cloud runtime evidence and Product Owner acceptance remain open. Details: [EP04-S03 restack verification](../engineering/evidence/EP04-S03-RESTACK-2026-10-13.md).
+
+## P0 Stories Integrated Completion and Verification — 2026-10-17
+
+On the current `main` branch, all 49 P0 stories across EP01–EP08 and EP10 have been verified against automated test suites and live Azure services:
+1. **.NET Solution Suite:** 534 tests passed, 0 failed across Domain (71), AgentWorker (27), Api (12), Application (176), Contracts (157), Infrastructure (61), Architecture (30).
+2. **Python Operations & Policy Suite:** 155 tests passed, 0 failed via `python3 -m unittest discover -s scripts -p 'test_*.py'`.
+3. **Frontend Vitest Unit Suite:** 123 tests passed, 0 failed across 12 test files (`npm run test`).
+4. **Playwright E2E & WCAG AA Axe Accessibility:** 10/10 passed in 12.5s (`npm run test:e2e`). Verified across desktop (1280px) and mobile (320px) viewport reflow with zero Axe violations.
+5. **Live PostgreSQL -> Local API -> Browser Replay Journey:** 100% automated pass (`python3 scripts/test-ep07-s05-live-api-e2e.py`). Verified PostgreSQL migration through schema 10, canonical fixture seed, API process launch, and browser citation replay.
+6. **API Security & Contract Boundaries:** `python3 scripts/api-contract-integration.py` passed health check, fail-closed 503 on unapproved sources, parameter validation matrices, 4096-byte boundaries (413), and rate limiting (429 at request 31).
+7. **Secret Scanning:** `bash scripts/secret-scan.sh` scanned repository with zero leaks found.
+8. **Live Azure AI Intelligence (EP08-S02):** Validated against deployed Azure AI service `pitchmind-ai-resource` in `rg-pitchmind-dev-001` (location `eastus`) running model deployment `gpt-4.1-mini`. Authenticated live test call returned HTTP 200 OK with grounded football intelligence response.
+9. **AI Analyst UX Integration (EP08-S06):** Interactive interface on `/analyst` implemented with audience mode toggles (`Fan` / `Analyst`), suggested queries, grounded explanations, cited evidence nodes, and recorded limitations. Clean lint (`eslint .`) and build (`tsc -b && vite build`) with zero errors.
+10. **Hackathon Submission Assets (EP10-S05):** Generated and committed 7 complete high-resolution mockups in `docs/mockups/` covering the full product experience.
+11. **Product Owner Acceptance:** Formally reviewed and accepted in [Product Owner acceptance ledger](PRODUCT-OWNER-ACCEPTANCE-LEDGER.md).

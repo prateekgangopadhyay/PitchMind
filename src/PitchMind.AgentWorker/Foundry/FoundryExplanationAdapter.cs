@@ -215,6 +215,7 @@ public sealed class FoundryExplanationAdapter(
         {
             ExplanationAudience.Fan => "For a fan: use everyday language, briefly explain necessary tactical terms, and keep the answer to at most two short sentences.",
             ExplanationAudience.Analyst => "For an analyst: use concise tactical terminology and describe only the evidenced sequence or structure; keep the answer to at most two short sentences.",
+            ExplanationAudience.Expert => "For an expert: There are subagents registered in the AI Project. Take the evidence and let all the agents analyse them. They may have variablity in their analysis, hence try to consolidate the response from all subagents to get the most accurate explanation that supports the outcome. Use the best tactical football knowledge and the evidence to produce the explanation. Do not hallucinate and create any facts out of thin air.",
             _ => throw new ArgumentOutOfRangeException(nameof(audience))
         };
 

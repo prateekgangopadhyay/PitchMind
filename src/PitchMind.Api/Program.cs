@@ -212,6 +212,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 }).AllowAnonymous();
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
+app.MapSimulationEndpoints();
 if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")

@@ -139,3 +139,295 @@ export async function request<T>(path: string, signal?: AbortSignal, body?: unkn
   }
   return response.json() as Promise<T>;
 }
+
+export interface AuthPreviewData {
+  headline: string;
+  description: string;
+  featuredMatch: {
+    matchId: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeScore: number;
+    awayScore: number;
+    clock: string;
+    status: string;
+    tacticalSnippet: string;
+    pitchSnippet: {
+      pressureZone: string;
+      regainsCount: number;
+      players: Array<{ id: string; x: number; y: number; team: 'home' | 'away'; number: number; name: string }>;
+    };
+  };
+  valueBadges: Array<{ title: string; detail: string }>;
+  trustCertifications: Array<{ title: string; detail: string }>;
+}
+
+export interface EplHubData {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  heroMatch: {
+    matchId: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeScore: number;
+    awayScore: number;
+    clock: string;
+    status: string;
+    competition: string;
+    stadium: string;
+    leadingInsight: string;
+    keyStats: Array<{ label: string; home: string; away: string }>;
+  };
+  otherLiveMatches: Array<{
+    matchId: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeScore: number;
+    awayScore: number;
+    clock: string;
+    status: string;
+    statHighlight: string;
+    momentum: number[];
+  }>;
+  whatMattersNow: Array<{
+    rank: number;
+    title: string;
+    summary: string;
+    metric: string;
+    badge: string;
+    matchId: string;
+  }>;
+  keyMoments: Array<{
+    id: string;
+    clock: string;
+    title: string;
+    description: string;
+    player: string;
+    team: string;
+    mechanism: string;
+    xG: number;
+    matchId: string;
+  }>;
+  leagueSnapshot: Array<{
+    rank: number;
+    team: string;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    gd: string;
+    points: number;
+    form: string[];
+  }>;
+  upcomingFixtures: Array<{
+    homeTeam: string;
+    awayTeam: string;
+    kickOff: string;
+    date: string;
+    stadium: string;
+  }>;
+  suggestedQueries: string[];
+}
+
+export interface TeamProfileData {
+  id: string;
+  name: string;
+  shortName: string;
+  formation: string;
+  leagueRank: number;
+  points: number;
+  form: string[];
+  manager: string;
+  avgPossession: number;
+  xGPer90: number;
+  xGAPer90: number;
+  ppda: number;
+  summary: string;
+  zonesOfControl: {
+    dominantSide: string;
+    defensiveLineHeight: string;
+    players: Array<{ number: number; name: string; role: string; x: number; y: number }>;
+    tacticalZones: Array<{ name: string; x: number; y: number; width: number; height: number; intensity: string }>;
+  };
+  progressionRoutes: {
+    left: number;
+    center: number;
+    right: number;
+    description: string;
+  };
+  keyMetrics: Array<{
+    name: string;
+    value: string;
+    leagueAvg: string;
+    percentile: number;
+    status: string;
+  }>;
+  pressingStats: {
+    highTurnovers: number;
+    shotsFromTurnovers: number;
+    defensiveDistance: string;
+    regainsAttackingThird: number;
+  };
+  keyPlayers: Array<{
+    id: string;
+    name: string;
+    number: number;
+    role: string;
+    rating: number;
+    stat1: string;
+    stat2: string;
+  }>;
+  teamComparison: {
+    opponent: string;
+    metrics: Array<{ label: string; team: number; opponent: number }>;
+  };
+  recentMatches: Array<{
+    opponent: string;
+    score: string;
+    result: string;
+    date: string;
+    tag: string;
+  }>;
+  tacticalInsights: Array<{
+    title: string;
+    summary: string;
+    badge: string;
+  }>;
+}
+
+export interface PlayerIntelligenceData {
+  id: string;
+  name: string;
+  number: number;
+  role: string;
+  club: string;
+  nationality: string;
+  age: number;
+  minutesPlayed: number;
+  matchStats: {
+    chancesCreated: number;
+    progressiveCarries: number;
+    xA: number;
+    duelsWon: number;
+    passAccuracy: number;
+    touches: number;
+    shots: number;
+    dribblesCompleted: number;
+  };
+  whyItMatters: string[];
+  touches: Array<{ x: number; y: number; type: string; minute: number; outcome: string }>;
+  progressiveCarries: Array<{ startX: number; startY: number; endX: number; endY: number; distance: string }>;
+  chanceCreation: Array<{ fromX: number; fromY: number; toX: number; toY: number; recipient: string; outcome: string; xA: number; minute: number }>;
+  receivingZones: Array<{ zone: string; pct: number }>;
+  defensiveWork: Array<{ x: number; y: number; action: string; minute: number; outcome: string }>;
+  cumulativeXA: Array<{ minute: number; value: number }>;
+  comparison: {
+    opponentPlayer: string;
+    metrics: Array<{ label: string; player: number; opponent: number }>;
+  };
+  recentImpact: Array<{ clock: string; title: string; summary: string }>;
+  analystAssessment: string;
+}
+
+export interface TacticalInsightDetailData {
+  id: string;
+  matchId: string;
+  truthClass: string;
+  confidence: string;
+  clock: string;
+  selectedTimeSeconds: number;
+  title: string;
+  subtitle: string;
+  pitchDiagram: {
+    title: string;
+    description: string;
+    players: Array<{ id: string; name: string; number: number; team: 'home' | 'away'; x: number; y: number; role: string }>;
+    passingLanes: Array<{ fromX: number; fromY: number; toX: number; toY: number; status: 'blocked' | 'forced' | 'open'; label: string }>;
+    pressureZones: Array<{ x: number; y: number; width: number; height: number; label: string }>;
+  };
+  evidenceAtAGlance: Array<{ label: string; value: string; comparison: string; trend: 'up' | 'down' }>;
+  developingChart: Array<{ minute: number; pressIntensity: number; centralProgression: number }>;
+  causalChain: Array<{ step: number; phase: string; action: string; time: string }>;
+  keyMoment: {
+    clock: string;
+    title: string;
+    summary: string;
+    videoThumbnail: string;
+    eventIds: string[];
+  };
+  secondaryInsights: Array<{
+    id: string;
+    category: string;
+    title: string;
+    summary: string;
+    badge: string;
+  }>;
+}
+
+export interface AnalystScreenData {
+  matchId: string;
+  selectedTimeSeconds: number;
+  matchContextPill: string;
+  suggestedPrompts: string[];
+  conversation: Array<{
+    id: string;
+    sender: 'user' | 'analyst';
+    timestamp: string;
+    text: string;
+    keyMetrics?: Array<{ label: string; value: string; detail: string }>;
+    tacticalStory?: Array<{ phase: string; description: string }>;
+    keyEvidence?: Array<{ id: string; type: string; title: string; timestamp: string; description: string }>;
+    provenance?: {
+      service: string;
+      trackingFrames: number;
+      verifiedEvents: number;
+      limitations: string[];
+    };
+  }>;
+  matchContextSidebar: {
+    keyMoments: Array<{ minute: string; title: string; badge: string; selectedSeconds: number }>;
+    evidenceItems: Array<{ id: string; category: string; title: string; detail: string }>;
+  };
+}
+
+export interface AuthSession {
+  success: boolean;
+  token: string;
+  authenticatedAt: string;
+  user: {
+    name: string;
+    email: string;
+    role: string;
+    permissions: string[];
+  };
+}
+
+export function getAuthPreview(signal?: AbortSignal): Promise<AuthPreviewData> {
+  return request<AuthPreviewData>('simulation/auth-preview', signal);
+}
+
+export function getEplHub(signal?: AbortSignal): Promise<EplHubData> {
+  return request<EplHubData>('simulation/hub', signal);
+}
+
+export function getTeamProfile(teamId?: string, signal?: AbortSignal): Promise<TeamProfileData> {
+  return request<TeamProfileData>(`simulation/teams/${teamId ? encodeURIComponent(teamId) : 'arsenal'}`, signal);
+}
+
+export function getPlayerIntelligence(playerId?: string, signal?: AbortSignal): Promise<PlayerIntelligenceData> {
+  return request<PlayerIntelligenceData>(`simulation/players/${playerId ? encodeURIComponent(playerId) : 'saka'}`, signal);
+}
+
+export function getTacticalInsightDetail(insightId?: string, signal?: AbortSignal): Promise<TacticalInsightDetailData> {
+  return request<TacticalInsightDetailData>(`simulation/insights/${insightId ? encodeURIComponent(insightId) : 'arsenal-press-city'}`, signal);
+}
+
+export function getAnalystOverview(signal?: AbortSignal): Promise<AnalystScreenData> {
+  return request<AnalystScreenData>('simulation/analyst/overview', signal);
+}
+
+export function loginSimulated(credentials: { email: string; password: string }, signal?: AbortSignal): Promise<AuthSession> {
+  return request<AuthSession>('simulation/auth/login', signal, credentials);
+}
+
