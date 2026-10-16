@@ -43,7 +43,7 @@ Motion is **not applicable**: this change adds no animation. Native anchors and 
 
 Reviewed against the official guideline file retrieved on 2026-10-16 from [the Vercel Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md). The changed routes use native links and disclosures, the shell retains a skip link and visible `:focus-visible` ring, errors stay sanitized, and the expanded hash wraps on mobile. No actionable guideline finding remains in the changed scope.
 
-The review is a code/browser review, not a WCAG conformance declaration. A real screen reader and axe were not run.
+The review is a code/browser review, not a WCAG conformance declaration. A real screen reader was not run. Automated axe evidence added later on 2026-10-16 is recorded separately below.
 
 ### Awesome Design audit
 
@@ -81,6 +81,6 @@ The premium rubric is **Taste 32/40, Tech 26/30, Process 14/20, Output 8/10 = 80
 ## Unverified / pending
 
 - No real candidate feed was admitted or used; the full source-backed viewer journey remains unavailable.
-- No axe run, real screen-reader session, 200% zoom review, or complete manual keyboard audit was performed. Automated tests check the tested keyboard path and measured token pairs only.
+- The automated axe run does not replace a real screen-reader session, 200% zoom review, complete manual keyboard audit, or full contrast review. The automated scope is recorded in [EP07-S01 axe accessibility evidence](EP07-S01-AXE-ACCESSIBILITY-2026-10-16.md).
 - Independent human frontend/accessibility review and Product Owner acceptance remain pending. This slice does not accept EP07-S01.
 - Hosted CI, Azure, deployment, and any cloud operation were not run.
