@@ -180,19 +180,21 @@ public static partial class LocalApiRoleProvisioner
                     $"Unsupported PostgreSQL default privilege object type '{objectType}'.")
             };
 
-            var scope = schema is null ? string.Empty : " IN SCHEMA " + QuoteIdentifier(schema);
-            await using var revokeSql = new NpgsqlCommand(
-                "SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I" + scope +
-                " REVOKE ALL PRIVILEGES ON " + objectClass + " FROM pitchmind_api', $1)", connection);
+            var revokeFormat = schema is null
+                ? "SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I REVOKE ALL PRIVILEGES ON " +
+                  objectClass + " FROM pitchmind_api', $1)"
+                : "SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I REVOKE ALL PRIVILEGES ON " +
+                  objectClass + " FROM pitchmind_api', $1, $2)";
+            await using var revokeSql = new NpgsqlCommand(revokeFormat, connection);
             revokeSql.Parameters.AddWithValue(owner);
+            if (schema is not null)
+                revokeSql.Parameters.AddWithValue(schema);
             var sql = (string)(await revokeSql.ExecuteScalarAsync(cancellationToken)
                                ?? throw new InvalidOperationException("Could not prepare LOCAL API default-ACL reset."));
             await using var revoke = new NpgsqlCommand(sql, connection);
             await revoke.ExecuteNonQueryAsync(cancellationToken);
         }
     }
-
-    private static string QuoteIdentifier(string identifier) => "\"" + identifier.Replace("\"", "\"\"") + "\"";
 
     [GeneratedRegex(@"\A[0-9a-f]{48}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ApiPasswordPattern();

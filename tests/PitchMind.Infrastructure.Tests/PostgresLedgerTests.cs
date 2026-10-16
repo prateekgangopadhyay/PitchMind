@@ -58,6 +58,8 @@ public sealed class PostgresLedgerTests
             ALTER TABLE pitchmind.api_owned_probe OWNER TO pitchmind_api;
             CREATE SCHEMA api_schema_probe;
             CREATE TABLE api_schema_probe.probe (id integer);
+            CREATE SCHEMA "api'schema_probe";
+            ALTER DEFAULT PRIVILEGES IN SCHEMA "api'schema_probe" GRANT ALL ON TABLES TO pitchmind_api;
             GRANT ALL PRIVILEGES ON SCHEMA pitchmind TO pitchmind_api;
             GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA pitchmind TO pitchmind_api;
             GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA pitchmind TO pitchmind_api;
@@ -79,7 +81,8 @@ public sealed class PostgresLedgerTests
         await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
 
         await using (var futureTable = migrationSource.CreateCommand(
-                         "CREATE TABLE pitchmind.api_default_acl_probe (id integer)"))
+                         "CREATE TABLE pitchmind.api_default_acl_probe (id integer); " +
+                         "CREATE TABLE \"api'schema_probe\".api_default_acl_probe (id integer)"))
             await futureTable.ExecuteNonQueryAsync();
 
         await using (var roleFlags = migrationSource.CreateCommand("""
@@ -106,6 +109,7 @@ public sealed class PostgresLedgerTests
                    has_schema_privilege('pitchmind_api', 'pitchmind', 'CREATE'),
                    has_table_privilege('pitchmind_api', 'pitchmind.match_events', 'UPDATE'),
                    has_table_privilege('pitchmind_api', 'pitchmind.api_default_acl_probe', 'SELECT'),
+                   has_table_privilege('pitchmind_api', format('%I.%I', 'api''schema_probe', 'api_default_acl_probe'), 'SELECT'),
                    has_sequence_privilege('pitchmind_api', 'pitchmind.api_privilege_probe', 'USAGE'),
                    has_table_privilege('pitchmind_api', 'pitchmind.api_owned_probe', 'UPDATE'),
                    has_schema_privilege('pitchmind_api', 'api_schema_probe', 'CREATE'),
@@ -125,6 +129,7 @@ public sealed class PostgresLedgerTests
             Assert.False(reader.GetBoolean(6));
             Assert.False(reader.GetBoolean(7));
             Assert.False(reader.GetBoolean(8));
+            Assert.False(reader.GetBoolean(9));
         }
 
         var builder = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES"))
@@ -146,6 +151,7 @@ public sealed class PostgresLedgerTests
                 "UPDATE pitchmind.schema_versions SET version = version WHERE false",
                 "DELETE FROM pitchmind.outbox WHERE false",
                 "SELECT COUNT(*) FROM pitchmind.api_default_acl_probe",
+                "SELECT COUNT(*) FROM \"api'schema_probe\".api_default_acl_probe",
                 "CREATE TABLE pitchmind.local_api_must_not_ddl (id integer)"
             })
             {
@@ -159,6 +165,7 @@ public sealed class PostgresLedgerTests
             await using var cleanup = migrationSource.CreateCommand("""
                 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM pitchmind_api;
                 ALTER DEFAULT PRIVILEGES IN SCHEMA pitchmind REVOKE ALL ON TABLES FROM pitchmind_api;
+                ALTER DEFAULT PRIVILEGES IN SCHEMA "api'schema_probe" REVOKE ALL ON TABLES FROM pitchmind_api;
                 DROP OWNED BY pitchmind_api;
                 DROP ROLE IF EXISTS pitchmind_api;
                 DROP ROLE IF EXISTS pitchmind_api_privileged;
@@ -166,6 +173,7 @@ public sealed class PostgresLedgerTests
                 DROP TABLE IF EXISTS pitchmind.api_owned_probe;
                 DROP TABLE IF EXISTS pitchmind.api_default_acl_probe;
                 DROP SCHEMA IF EXISTS api_schema_probe CASCADE;
+                DROP SCHEMA IF EXISTS "api'schema_probe" CASCADE;
                 """);
             await cleanup.ExecuteNonQueryAsync();
         }
