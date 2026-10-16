@@ -20,3 +20,14 @@
 ## Remaining limits and status
 
 This is a PostgreSQL cursor persistence primitive. No Event Hubs consumer calls it; no Event Hubs SDK checkpoint operation, checkpoint rebuild/reconciliation, Azure runtime grant, Azure connectivity, hosted CI, load/lag measurement, or cloud deployment was executed. It does not prove Event Hubs delivery or cloud restart recovery. Exact-head independent technical review and Product Owner acceptance remain pending. EP04-S03 remains unverified and unaccepted. No Azure resource or deployment was changed.
+
+
+## Independent exact-head rerun — 2026-10-16
+
+The following verification was independently repeated on code/evidence head `d06a2e1a10d78b541635c52e0491ca335ed606b2` (code implementation commit `b7e2af04`):
+
+- `./scripts/test-postgres.sh`: Infrastructure **93 passed, 0 failed, 0 skipped**; PostgreSQL readiness/API contracts **154 passed, 0 failed, 0 skipped**. This rerun used disposable Compose project `pm_pr305_20261016_164a`, uniquely named PostgreSQL/Redis volumes and loopback ports. The harness created and removed its uniquely named test database. Then only those scratch containers, network and volumes were removed; the existing owner database and volumes were not contacted. Temporary credentials were deleted.
+- `dotnet test PitchMind.slnx -c Release -m:1 --disable-build-servers -p:NuGetAudit=false`: **522 passed, 0 failed, 41 skipped**. The 40 opt-in Infrastructure PostgreSQL tests and one readiness test were executed by the no-skip harness above. The first sandboxed VSTest invocation aborted before test execution because loopback IPC binding was denied; rerunning the same command with local test-host permission passed.
+- `node scripts/validate_operating_model.mjs`: passed; `git diff --check`: passed.
+
+This establishes local exact-head test evidence only. It does not close the documented runtime/Event Hubs/cloud integration gaps, independent human review, or Product Owner acceptance.
