@@ -296,6 +296,13 @@ public sealed record CanonicalReplayResponse(
     CanonicalMatchSnapshotResponse Snapshot,
     CanonicalEventPageResponse Events);
 
+/// <summary>A verified canonical state replay; it deliberately contains no detector output.</summary>
+public sealed record CanonicalDeterministicReplayResponse(
+    CanonicalMatchSnapshotResponse Snapshot,
+    CanonicalEventPageResponse Events,
+    string ReplayInputSha256,
+    string ReplayedStateSha256);
+
 public sealed record CanonicalTrackingFrameResponse(
     string FrameId,
     long Sequence,

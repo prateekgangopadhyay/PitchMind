@@ -241,6 +241,39 @@ paths:
         '429': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '503': { $ref: '#/components/responses/Problem' }
+  /api/v1/canonical/matches/{matchId}/replay/deterministic:
+    get:
+      operationId: replayCanonicalMatchState
+      summary: Verify a persisted selected-time state by replaying its canonical event prefix.
+      description: >-
+        Replays the immutable canonical source event prefix and returns only the persisted
+        snapshot, bounded event page, replay input digest, and replayed state digest. No
+        detector output or inferred football facts are returned. Replay is bounded to 100,000
+        events and 32 MiB of source inputs; malformed or mismatching persisted data returns
+        CANONICAL_DATA_INVALID.
+      x-required-roles: [analyst, admin]
+      parameters:
+        - $ref: '#/components/parameters/MatchId'
+        - $ref: '#/components/parameters/AtSeconds'
+        - $ref: '#/components/parameters/Revision'
+        - name: canonicalRevision
+          in: query
+          description: Optional maximum canonical admission revision.
+          schema: { type: integer, format: int64, minimum: 1 }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Deterministically replayed canonical state and bounded event page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CanonicalDeterministicReplay' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
   /api/v1/canonical/matches/{matchId}/key-moments:
     get:
       operationId: listCanonicalKeyMoments
@@ -598,3 +631,11 @@ components:
       properties:
         snapshot: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
         events: { $ref: '#/components/schemas/CanonicalEventPage' }
+    CanonicalDeterministicReplay:
+      type: object
+      required: [snapshot, events, replayInputSha256, replayedStateSha256]
+      properties:
+        snapshot: { $ref: '#/components/schemas/CanonicalMatchSnapshot' }
+        events: { $ref: '#/components/schemas/CanonicalEventPage' }
+        replayInputSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        replayedStateSha256: { type: string, pattern: '^[0-9a-f]{64}$' }

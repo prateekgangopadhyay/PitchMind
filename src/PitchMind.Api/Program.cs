@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Infrastructure.Storage;
 using Npgsql;
 
@@ -70,6 +71,7 @@ else
     builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
     builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
 }
+builder.Services.AddSingleton<ReplayCanonicalMatchStateService>();
 builder.Services.AddHealthChecks().AddCheck<ReadinessHealthCheck>("readiness", tags: ["ready"]);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4096);
 builder.Services.AddRateLimiter(options =>

@@ -1,4 +1,5 @@
 using PitchMind.Application.Abstractions;
+using PitchMind.Application.Matches;
 using PitchMind.Contracts.Telemetry.V1;
 using PitchMind.Contracts.V1;
 using PitchMind.Domain.Match;
@@ -277,6 +278,58 @@ internal static class CanonicalMatchEndpoints
                 return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
             var page = await projections.ReadEventsPageAtAsync(projection, selectedTime, decodedCursor?.AfterSequence ?? -1, pageSize, cancellationToken);
             return Results.Ok(new CanonicalReplayResponse(ToSnapshot(projection, selectedTime), ToEventPage(projection, selectedTime, page, canonicalMatchId)));
+        }).RequireAuthorization("MatchReplay");
+
+        match.MapGet("/replay/deterministic", async (
+            string matchId, int? atSeconds, int? revision, long? canonicalRevision, string? cursor, int? limit,
+            IMatchProjectionReader projections, ReplayCanonicalMatchStateService replay, HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            if (ValidateSelection(context, atSeconds, revision) is { } invalid) return invalid;
+            if (ValidateMatchId(context, matchId, out var canonicalMatchId) is { } invalidMatchId) return invalidMatchId;
+            if (canonicalRevision is <= 0)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_CANONICAL_REVISION", "canonicalRevision must be a positive integer.");
+            var pageSize = limit ?? 50;
+            if (pageSize is < 1 or > 100)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_LIMIT", "limit must be between 1 and 100.");
+
+            var selectedTime = atSeconds ?? 0;
+            var decodedCursor = cursor is null
+                ? null
+                : CanonicalCursorCodec.DecodeEvent(cursor, canonicalMatchId, selectedTime, revision);
+            if (decodedCursor is not null && canonicalRevision is { } requestedCanonicalRevision &&
+                requestedCanonicalRevision != decodedCursor.CanonicalRevision)
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_CURSOR", "cursor and canonicalRevision must select the same admission revision.");
+
+            var maximumCanonicalRevision = decodedCursor?.CanonicalRevision ?? canonicalRevision;
+            var maximumProjectionRevision = decodedCursor?.ProjectionRevision ?? revision;
+            var projection = await projections.GetForApiAtAsync(new MatchId(canonicalMatchId), selectedTime,
+                maximumCanonicalRevision, maximumProjectionRevision, cancellationToken);
+            if (projection is null)
+                return Problem(context, StatusCodes.Status404NotFound, "MATCH_STATE_UNAVAILABLE", "No canonical state is available at the selected time.");
+
+            try
+            {
+                var verified = await replay.ExecuteAsync(projection, selectedTime, cancellationToken);
+                if (verified.Projection.CanonicalRevision != projection.CanonicalRevision ||
+                    verified.Projection.ProjectionRevision != projection.ProjectionRevision ||
+                    verified.Projection.SourceSha256 != projection.SourceSha256 ||
+                    verified.Projection.StateSha256 != projection.StateSha256 ||
+                    verified.ReplayedStateSha256 != projection.StateSha256)
+                    return CanonicalInsightDataInvalid(context);
+
+                var page = await projections.ReadEventsPageAtAsync(projection, selectedTime,
+                    decodedCursor?.AfterSequence ?? -1, pageSize, cancellationToken);
+                return Results.Ok(new CanonicalDeterministicReplayResponse(
+                    ToSnapshot(projection, selectedTime),
+                    ToEventPage(projection, selectedTime, page, canonicalMatchId),
+                    verified.ReplayInputSha256,
+                    verified.ReplayedStateSha256));
+            }
+            catch (InvalidDataException)
+            {
+                return CanonicalInsightDataInvalid(context);
+            }
         }).RequireAuthorization("MatchReplay");
 
         match.MapGet("/key-moments", (string matchId, int? atSeconds, int? revision, HttpContext context) =>
