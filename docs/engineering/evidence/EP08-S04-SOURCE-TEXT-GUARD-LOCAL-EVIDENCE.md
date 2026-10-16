@@ -2,8 +2,8 @@
 
 **Scope:** A deterministic, non-publishing Application guard rejects model-added wording unless a single claim exactly matches the selected canonical insight text and cites the complete evidence set. This is a follow-up implementation slice, not EP08-S04 acceptance.
 
-**Base:** Current `main` at `5b678320ec8c7cd5f04f9a7a3cb8d1749767fb47`, including PR #256 merge `bc08d4b48b13f77cf03a91a4e02f996d967cc770`.
-**Implementation code commit:** `6e8e57f` on `codex/ep08-s04-source-bound-verifier`; verification was rerun after rebasing onto the current main base above.
+**Base:** PR #257 was based on `main` at `5b678320ec8c7cd5f04f9a7a3cb8d1749767fb47`, including PR #256 merge `bc08d4b48b13f77cf03a91a4e02f996d967cc770`.
+**Merged PR:** [#257](https://github.com/prateekgangopadhyay/PitchMind/pull/257), final reviewed/tested head `217cad5da2c676915ee10cef3e6a157c32146e21`, squash merge `ac3b2a5c2e53473c8fde56ad7bec4da6b82e7fcc`.
 **SDK:** .NET 10.0.401.
 
 ## Behavior exercised
@@ -31,4 +31,4 @@ VSTest used local execution permission for its loopback socket. The full suite b
 
 - This guard is exact-source-text binding, not semantic entailment. It trusts the selected persisted insight and does not independently prove that insight is factually/football-valid.
 - The guard is not wired to API, UI or persistence; no user-facing candidate is publishable.
-- Broader number/player/team/event extraction, approved source semantics, complete false-claim red-team evaluation, independent review of the updated head and Product Owner acceptance remain open. EP08-S04 routing status remains `unverified`.
+- Broader number/player/team/event extraction, approved source semantics, complete false-claim red-team evaluation, caller wiring, hosted CI, and Product Owner acceptance remain open. Independent exact-head review of PR #257 found no blockers; EP08-S04 routing status remains `unverified` and the story is not accepted.
