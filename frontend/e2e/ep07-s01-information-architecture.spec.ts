@@ -34,6 +34,7 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 1000 },
     { name: 'tablet', width: 768, height: 1024 },
+    { name: 'mobile-375', width: 375, height: 812 },
     { name: 'mobile', width: 320, height: 800 }
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -56,6 +57,9 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
     await expect(page.getByText('Match data with source details')).toBeVisible();
     await expect(page.getByText('Simulated EPL-context match')).toBeVisible();
 
+    const matches = page.getByRole('list', { name: 'Matches' });
+    await expect(matches).toBeVisible();
+    await expect(matches.getByRole('listitem')).toHaveCount(1);
     const card = page.locator('.match-card');
     await expect(card.getByRole('heading', { name: 'Home team 1–0 Away team' })).toBeVisible();
     const sourceDetails = card.locator('details');
@@ -76,7 +80,7 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
       await page.screenshot({ path: testInfo.outputPath('ep07-s01-home-source-details-open-mobile-320.png'), fullPage: true });
     }
 
-    await card.getByRole('link', { name: `Open match ${matchId}` }).focus();
+    await card.getByRole('link', { name: 'Open match', exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Match overview' })).toBeVisible();
     await expect(page.getByRole('alert')).toContainText('Match data service is temporarily unavailable.');

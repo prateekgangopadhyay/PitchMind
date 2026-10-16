@@ -78,6 +78,8 @@ button, select { min-height: 44px; }
 .error-copy { border-color: #b46a6a; }
 .data-limit { color: var(--pm-text-secondary); }
 .match-list, .entity-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.match-list { margin: 0; padding: 0; list-style: none; }
+.match-list-item { min-width: 0; }
 .match-card, .entity-card {
   min-width: 0;
   padding: 1.15rem;

@@ -144,24 +144,26 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
             : 'No matches are available in this phase.'}</p>
             : <>
               <p className="match-count" role="status" aria-live="polite">{visibleMatches.length} {visibleMatches.length === 1 ? 'match' : 'matches'}</p>
-              <div className="match-list" aria-label="Matches">{visibleMatches.map(match => {
+              <ul className="match-list" aria-label="Matches">{visibleMatches.map(match => {
               const matchPath = `/matches/${encodeURIComponent(match.matchId)}`;
               const simulationLabel = provenanceLabel(match.provenance);
-              return <article className="match-card" key={match.matchId}>
-                <div className="match-card-copy">
-                  <div className="match-card-topline"><span className="badge">{simulationLabel}</span><span className="phase-tag">{phaseLabel(match.phase)}</span></div>
-                  <h2>Home team <span className="match-score">{match.homeScore}–{match.awayScore}</span> Away team</h2>
-                  <p>Recorded at {clock(match.asOfSeconds)} · {phaseLabel(match.phase)}</p>
-                  <details className="match-source-details">
-                    <summary>Match and source details</summary>
-                    <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p>
-                    <p>Revision {match.canonicalRevision} · source {match.provenance} · algorithm {match.algorithmVersion}</p>
-                    <p>Source hash {match.sourceSha256}</p>
-                  </details>
-                </div>
-                <a className="primary-link" aria-label={`Open match ${match.matchId}`} href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
-              </article>;
-            })}</div>
+              return <li className="match-list-item" key={match.matchId}>
+                <article className="match-card">
+                  <div className="match-card-copy">
+                    <div className="match-card-topline"><span className="badge">{simulationLabel}</span><span className="phase-tag">{phaseLabel(match.phase)}</span></div>
+                    <h2>Home team <span className="match-score">{match.homeScore}–{match.awayScore}</span> Away team</h2>
+                    <p>Recorded at {clock(match.asOfSeconds)} · {phaseLabel(match.phase)}</p>
+                    <details className="match-source-details">
+                      <summary>Match and source details</summary>
+                      <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p>
+                      <p>Revision {match.canonicalRevision} · source {match.provenance} · algorithm {match.algorithmVersion}</p>
+                      <p>Source hash {match.sourceSha256}</p>
+                    </details>
+                  </div>
+                  <a className="primary-link" href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
+                </article>
+              </li>;
+            })}</ul>
             </>}
     {!loading && !error && page?.hasMore && <div className="load-more-wrap">
       {moreError && <p className="error-copy" role="alert">{moreError}</p>}
