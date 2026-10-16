@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 12;
+    public const int CurrentSchemaVersion = 13;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -47,6 +47,9 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, ConsumerCheckpointsV11Sql, cancellationToken);
         if (currentVersion < 12)
             await ExecuteAsync(connection, transaction, ConsumerProjectionV12Sql, cancellationToken);
+
+        if (currentVersion < 13)
+            await ExecuteAsync(connection, transaction, ConsumerProjectionPoisonV13Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -494,5 +497,52 @@ public static class PostgresSchemaMigrator
         CREATE INDEX IF NOT EXISTS consumer_projection_snapshots_revision_idx
             ON pitchmind.consumer_projection_snapshots (consumer_id, match_id, canonical_revision);
         INSERT INTO pitchmind.schema_versions(version) VALUES (12) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Durably isolates poison notifications and lets the broker cursor cross their positions.</summary>
+    public const string ConsumerProjectionPoisonV13Sql = """
+        CREATE TABLE IF NOT EXISTS pitchmind.consumer_projection_poison (
+            poison_id uuid NOT NULL CHECK (poison_id <> '00000000-0000-0000-0000-000000000000'),
+            consumer_id text NOT NULL CHECK (length(consumer_id) BETWEEN 1 AND 128),
+            partition_id text NOT NULL CHECK (length(partition_id) BETWEEN 1 AND 128),
+            broker_offset text NOT NULL CHECK (length(broker_offset) BETWEEN 1 AND 128),
+            broker_sequence_number bigint NOT NULL CHECK (broker_sequence_number >= 0),
+            payload_sha256 char(64) NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
+            reason_code text NOT NULL CHECK (reason_code ~ '^[A-Z][A-Z0-9_]{0,99}$'),
+            exception_type text NOT NULL CHECK (length(exception_type) BETWEEN 1 AND 128),
+            first_observed_at timestamptz NOT NULL DEFAULT now(),
+            last_observed_at timestamptz NOT NULL DEFAULT now(),
+            attempt_count integer NOT NULL DEFAULT 1 CHECK (attempt_count > 0),
+            disposition text NOT NULL DEFAULT 'pending' CHECK (disposition IN ('pending', 'replayed', 'rejected')),
+            PRIMARY KEY (consumer_id, partition_id, broker_sequence_number),
+            UNIQUE (poison_id),
+            UNIQUE (poison_id, consumer_id, partition_id)
+        );
+
+        ALTER TABLE pitchmind.consumer_checkpoints
+            ADD COLUMN IF NOT EXISTS last_poison_id uuid;
+        ALTER TABLE pitchmind.consumer_checkpoints
+            DROP CONSTRAINT IF EXISTS consumer_checkpoints_check;
+        ALTER TABLE pitchmind.consumer_checkpoints
+            DROP CONSTRAINT IF EXISTS consumer_checkpoints_position_check;
+        ALTER TABLE pitchmind.consumer_checkpoints
+            ADD CONSTRAINT consumer_checkpoints_position_check CHECK (
+                (last_broker_sequence_number = -1 AND last_offset IS NULL AND last_match_id IS NULL
+                    AND last_message_id IS NULL AND last_canonical_sequence IS NULL AND last_poison_id IS NULL)
+                OR (last_broker_sequence_number >= 0 AND length(last_offset) BETWEEN 1 AND 128
+                    AND last_match_id IS NOT NULL AND last_match_id <> '00000000-0000-0000-0000-000000000000'
+                    AND last_message_id IS NOT NULL AND last_message_id <> '00000000-0000-0000-0000-000000000000'
+                    AND last_canonical_sequence IS NOT NULL AND last_poison_id IS NULL)
+                OR (last_broker_sequence_number >= 0 AND length(last_offset) BETWEEN 1 AND 128
+                    AND last_match_id IS NULL AND last_message_id IS NULL
+                    AND last_canonical_sequence IS NULL AND last_poison_id IS NOT NULL)
+            );
+        ALTER TABLE pitchmind.consumer_checkpoints
+            DROP CONSTRAINT IF EXISTS consumer_checkpoints_poison_fk;
+        ALTER TABLE pitchmind.consumer_checkpoints
+            ADD CONSTRAINT consumer_checkpoints_poison_fk
+            FOREIGN KEY (last_poison_id, consumer_id, partition_id)
+            REFERENCES pitchmind.consumer_projection_poison(poison_id, consumer_id, partition_id);
+        INSERT INTO pitchmind.schema_versions(version) VALUES (13) ON CONFLICT DO NOTHING;
         """;
 }

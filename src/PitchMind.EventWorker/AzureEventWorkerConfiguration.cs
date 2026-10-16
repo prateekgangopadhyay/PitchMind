@@ -71,9 +71,13 @@ public static class AzureEventWorkerConfiguration
         services.AddSingleton(serviceProvider => new EventProcessorClient(
             serviceProvider.GetRequiredService<BlobContainerClient>(), consumerGroup,
             eventHubNamespace, eventHubName, serviceProvider.GetRequiredService<TokenCredential>()));
+        services.AddSingleton<IConsumerCheckpointStore, PostgresConsumerCheckpointStore>();
+        services.AddSingleton<IProjectionPoisonStore, PostgresProjectionPoisonStore>();
         services.AddSingleton<PostgresProjectionPublishedConsumer>();
         services.AddSingleton(serviceProvider => new EventHubProjectionEventHandler(
-            serviceProvider.GetRequiredService<PostgresProjectionPublishedConsumer>(), consumerId));
+            serviceProvider.GetRequiredService<PostgresProjectionPublishedConsumer>(),
+            serviceProvider.GetRequiredService<IProjectionPoisonStore>(),
+            serviceProvider.GetRequiredService<IConsumerCheckpointStore>(), consumerId));
         services.AddHostedService<ProjectionConsumerWorker>();
     }
 

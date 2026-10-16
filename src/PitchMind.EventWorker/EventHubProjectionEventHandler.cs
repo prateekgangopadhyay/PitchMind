@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using Azure.Messaging.EventHubs;
 using PitchMind.Application.Abstractions;
 using PitchMind.Contracts.Streaming;
@@ -13,8 +14,16 @@ public sealed record ProjectionEvent(
     ReadOnlyMemory<byte> Body,
     IReadOnlyDictionary<string, object> Properties);
 
+public sealed class ProjectionEventPoisonException(string reasonCode, string message, Exception? inner = null)
+    : Exception(message, inner)
+{
+    public string ReasonCode { get; } = reasonCode;
+}
+
 public sealed class EventHubProjectionEventHandler(
     PostgresProjectionPublishedConsumer consumer,
+    IProjectionPoisonStore poisonStore,
+    IConsumerCheckpointStore checkpointStore,
     string consumerId)
 {
     public async Task HandleAsync(
@@ -38,34 +47,88 @@ public sealed class EventHubProjectionEventHandler(
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(updateBrokerCheckpoint);
 
-        if (!Guid.TryParse(data.MessageId, out var messageId) || messageId == Guid.Empty)
-            throw new InvalidDataException("Projection event requires a valid Event Hubs message ID.");
+        try
+        {
+            await ConsumeValidEventAsync(data, partitionId, updateBrokerCheckpoint, cancellationToken);
+        }
+        catch (ProjectionEventPoisonException poison)
+        {
+            if (string.IsNullOrWhiteSpace(data.Offset) || data.Offset.Length > 128 || data.SequenceNumber < 0)
+                throw new InvalidOperationException("Cannot durably isolate a poison event without a valid broker position.", poison);
 
-        var payloadBytes = data.Body;
+            var payloadHash = Convert.ToHexString(SHA256.HashData(data.Body.Span)).ToLowerInvariant();
+            var poisonId = StablePoisonId(consumerId, partitionId, data.Offset, data.SequenceNumber);
+            var durableId = await poisonStore.RecordAsync(new ProjectionPoisonRecord(poisonId, consumerId,
+                partitionId, data.Offset, data.SequenceNumber, payloadHash, poison.ReasonCode,
+                (poison.InnerException ?? poison).GetType().Name), cancellationToken);
+            await checkpointStore.AdvancePoisonAsync(consumerId, partitionId, data.Offset,
+                data.SequenceNumber, durableId, cancellationToken);
+            await updateBrokerCheckpoint(cancellationToken);
+        }
+    }
+
+    private async Task ConsumeValidEventAsync(
+        ProjectionEvent data,
+        string partitionId,
+        Func<CancellationToken, Task> updateBrokerCheckpoint,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(data.MessageId, out var messageId) || messageId == Guid.Empty)
+            throw new ProjectionEventPoisonException("INVALID_MESSAGE_ID", "Projection event requires a valid Event Hubs message ID.");
+
         string payloadText;
         try
         {
-            payloadText = new System.Text.UTF8Encoding(false, true).GetString(payloadBytes.Span);
+            payloadText = new System.Text.UTF8Encoding(false, true).GetString(data.Body.Span);
         }
         catch (System.Text.DecoderFallbackException exception)
         {
-            throw new InvalidDataException("Projection event body must be valid UTF-8 JSON.", exception);
+            throw new ProjectionEventPoisonException("INVALID_UTF8", "Projection event body must be valid UTF-8 JSON.", exception);
         }
-        var envelope = ProjectionPublishedV1Envelope.Parse(messageId, payloadText);
+
+        ProjectionPublishedV1Envelope envelope;
+        try
+        {
+            envelope = ProjectionPublishedV1Envelope.Parse(messageId, payloadText);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or System.Text.Json.JsonException or FormatException)
+        {
+            throw new ProjectionEventPoisonException("INVALID_ENVELOPE", "Projection event does not satisfy ProjectionPublishedV1.", exception);
+        }
         ValidateProperties(data, envelope);
         if (string.IsNullOrWhiteSpace(data.Offset))
-            throw new InvalidDataException("Projection event is missing its Event Hubs offset.");
+            throw new ProjectionEventPoisonException("MISSING_BROKER_OFFSET", "Projection event is missing its Event Hubs offset.");
+        if (data.SequenceNumber < 0)
+            throw new ProjectionEventPoisonException("INVALID_BROKER_SEQUENCE", "Projection event has an invalid broker sequence.");
 
         var projection = new ConsumerProjectionSnapshot(envelope.MessageId, envelope.MatchId,
             envelope.CanonicalRevision, envelope.ProjectionRevision, envelope.Sequence, envelope.ClockSeconds,
             envelope.AlgorithmVersion, envelope.SourceSha256, envelope.StateSha256, envelope.State.GetRawText());
-        await consumer.ConsumeAsync(consumerId, partitionId, data.Offset,
-            data.SequenceNumber, messageId, projection, payloadBytes, cancellationToken);
+        try
+        {
+            await consumer.ConsumeAsync(consumerId, partitionId, data.Offset,
+                data.SequenceNumber, messageId, projection, data.Body, cancellationToken);
+            var poisonId = StablePoisonId(consumerId, partitionId, data.Offset, data.SequenceNumber);
+            await poisonStore.MarkReplayedAsync(poisonId, cancellationToken);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new ProjectionEventPoisonException("INVALID_PROJECTION_STATE", "Projection event conflicts with persisted consumer state.", exception);
+        }
 
         // EventProcessorClient processes each partition sequentially in source order.
-        // Advancing the Blob checkpoint for a safely deduplicated stale replay lets it
-        // catch up when it lagged behind the durable PostgreSQL cursor.
+        // The database effect and durable cursor commit before the SDK checkpoint.
         await updateBrokerCheckpoint(cancellationToken);
+    }
+
+    private static Guid StablePoisonId(string consumerId, string partitionId, string offset, long sequence)
+    {
+        var material = System.Text.Encoding.UTF8.GetBytes(
+            $"{consumerId}\0{partitionId}\0{offset}\0{sequence.ToString(CultureInfo.InvariantCulture)}");
+        var bytes = SHA256.HashData(material)[..16];
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes, bigEndian: true);
     }
 
     private static void ValidateProperties(ProjectionEvent data, ProjectionPublishedV1Envelope envelope)
@@ -80,7 +143,7 @@ public sealed class EventHubProjectionEventHandler(
             !ReadLong(properties, "sequence", envelope.Sequence) ||
             !properties.TryGetValue("sourceSha256", out var sourceSha256) ||
             !string.Equals(sourceSha256 as string, envelope.SourceSha256, StringComparison.Ordinal))
-            throw new InvalidDataException("Projection event properties do not match its versioned body.");
+            throw new ProjectionEventPoisonException("TRANSPORT_METADATA_MISMATCH", "Projection event properties do not match its versioned body.");
     }
 
     private static bool ReadLong(IReadOnlyDictionary<string, object> properties, string name, long expected) =>

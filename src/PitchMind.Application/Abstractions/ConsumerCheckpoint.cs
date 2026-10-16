@@ -26,4 +26,12 @@ public interface IConsumerCheckpointStore
         ConsumerCheckpoint checkpoint,
         CancellationToken cancellationToken,
         bool alreadyProcessed = false);
+
+    Task<ConsumerCheckpointAdvanceResult> AdvancePoisonAsync(
+        string consumerId,
+        string partitionId,
+        string offset,
+        long brokerSequenceNumber,
+        Guid poisonId,
+        CancellationToken cancellationToken);
 }
