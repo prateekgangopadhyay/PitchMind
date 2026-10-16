@@ -152,7 +152,7 @@ erDiagram
 `insight_evidence(insight_id,kind,event_id?,frame_id?,metric_id?,relation,source_revision)`;
 `quarantine(match_id,source_ptr,payload_hash,reason,observed_at,retry_status)`;
 `outbox(id,match_id,revision,kind,payload_json,created_at,published_at,attempt_count)`;
-`consumer_checkpoints(match_id,partition_id,offset,sequence,updated_at)`.
+`consumer_checkpoints(consumer_id,partition_id,last_offset,last_broker_sequence_number,last_match_id,last_message_id,last_canonical_sequence,updated_at)`.
 Indexes begin with `match_id` plus sequence/time/revision; no unlimited cardinality indexes on source JSON; partition only with measured benefit. Schema migrator separate principal, runtime barred from UPDATE/DELETE match_events. Event+projection+evidence+outbox intention writes **one transaction** with per-match advisory lock; checkpoint update after commit; outbox dispatcher publishes at least once and records ack; each consumer inbox idempotent by message ID.
 
 ## I. Determinism, reliability, fault handling

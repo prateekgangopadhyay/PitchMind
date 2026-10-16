@@ -489,7 +489,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -634,7 +634,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(10, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(11, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -919,7 +919,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));
@@ -1123,7 +1123,7 @@ public sealed class PostgresLedgerTests
         await using (var reset = source.CreateCommand("""
             DROP TABLE IF EXISTS pitchmind.quarantine CASCADE;
             DROP FUNCTION IF EXISTS pitchmind.reject_quarantine_mutation();
-            DELETE FROM pitchmind.schema_versions WHERE version = 10;
+            DELETE FROM pitchmind.schema_versions WHERE version >= 10;
             CREATE TABLE pitchmind.quarantine (
                 quarantine_id uuid PRIMARY KEY,
                 match_id uuid,
@@ -1383,6 +1383,137 @@ public sealed class PostgresLedgerTests
         await using var effect = source.CreateCommand("SELECT count FROM pitchmind.consumer_effect_test WHERE message_id = $1");
         effect.Parameters.AddWithValue(update.Event.EventId);
         Assert.Equal(1, (int)(await effect.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ConsumerCheckpointAdvancesAfterCommitAndRejectsReplayGapOrConflictingPosition()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        var store = new PostgresConsumerCheckpointStore(source);
+        var matchId = Guid.NewGuid();
+        var first = new ConsumerCheckpoint("projection-reader-v1", "3", "90001", 450, matchId,
+            Guid.NewGuid(), 17);
+
+        Assert.Equal(ConsumerCheckpointAdvanceResult.Advanced,
+            await store.AdvanceAsync(first, CancellationToken.None));
+        var second = first with { Offset = "90007", BrokerSequenceNumber = 451, MessageId = Guid.NewGuid(), CanonicalSequence = 18 };
+        Assert.Equal(ConsumerCheckpointAdvanceResult.Advanced,
+            await store.AdvanceAsync(second, CancellationToken.None));
+        Assert.Equal(ConsumerCheckpointAdvanceResult.AlreadyCurrent,
+            await store.AdvanceAsync(second, CancellationToken.None));
+
+        var stale = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.AdvanceAsync(first, CancellationToken.None));
+        Assert.Contains("move backwards", stale.Message, StringComparison.Ordinal);
+        var gap = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.AdvanceAsync(second with { Offset = "90009", BrokerSequenceNumber = 453, MessageId = Guid.NewGuid(), CanonicalSequence = 20 }, CancellationToken.None));
+        Assert.Contains("skip", gap.Message, StringComparison.Ordinal);
+        var conflictingDuplicate = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.AdvanceAsync(second with { MessageId = Guid.NewGuid() }, CancellationToken.None));
+        Assert.Contains("different event", conflictingDuplicate.Message, StringComparison.Ordinal);
+
+        await using var current = source.CreateCommand("""
+            SELECT last_offset, last_broker_sequence_number, last_match_id, last_message_id, last_canonical_sequence
+            FROM pitchmind.consumer_checkpoints WHERE consumer_id = $1 AND partition_id = $2
+            """);
+        current.Parameters.AddWithValue(second.ConsumerId);
+        current.Parameters.AddWithValue(second.PartitionId);
+        await using var reader = await current.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(second.Offset, reader.GetString(0));
+        Assert.Equal(second.BrokerSequenceNumber, reader.GetInt64(1));
+        Assert.Equal(second.MatchId, reader.GetGuid(2));
+        Assert.Equal(second.MessageId, reader.GetGuid(3));
+        Assert.Equal(second.CanonicalSequence, reader.GetInt64(4));
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ConsumerRedeliveryAfterEffectCommitCanAdvanceCheckpointWithoutRepeatingEffect()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await using (var setup = source.CreateCommand("CREATE TABLE pitchmind.consumer_checkpoint_effect_test (message_id uuid PRIMARY KEY, effect_count integer NOT NULL)"))
+            await setup.ExecuteNonQueryAsync();
+
+        var inbox = new PostgresConsumerInbox(source);
+        var checkpoints = new PostgresConsumerCheckpointStore(source);
+        var consumerId = $"checkpoint-recovery-{Guid.NewGuid():N}";
+        var messageId = Guid.NewGuid();
+        var checkpoint = new ConsumerCheckpoint(consumerId, "partition-0", "offset-250", 250,
+            Guid.NewGuid(), messageId, 0);
+        async Task Apply(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+        {
+            await using var effect = new NpgsqlCommand("""
+                INSERT INTO pitchmind.consumer_checkpoint_effect_test(message_id, effect_count) VALUES ($1, 1)
+                ON CONFLICT (message_id) DO UPDATE SET effect_count = pitchmind.consumer_checkpoint_effect_test.effect_count + 1
+                """, connection, transaction);
+            effect.Parameters.AddWithValue(messageId);
+            await effect.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => inbox.ExecuteOnceAsync(
+            consumerId, messageId, (_, _, _) => throw new InvalidOperationException("simulated consumer failure"), CancellationToken.None));
+        await using (var beforeCommit = source.CreateCommand("SELECT count(*) FROM pitchmind.consumer_checkpoints WHERE consumer_id = $1"))
+        {
+            beforeCommit.Parameters.AddWithValue(consumerId);
+            Assert.Equal(0L, (long)(await beforeCommit.ExecuteScalarAsync())!);
+        }
+
+        Assert.True(await inbox.ExecuteOnceAsync(consumerId, messageId, Apply, CancellationToken.None));
+        // Simulate a crash after the inbox/effect commit but before either checkpoint operation.
+        Assert.False(await inbox.ExecuteOnceAsync(consumerId, messageId, Apply, CancellationToken.None));
+        Assert.Equal(ConsumerCheckpointAdvanceResult.Advanced,
+            await checkpoints.AdvanceAsync(checkpoint, CancellationToken.None));
+
+        await using var effectCount = source.CreateCommand("SELECT effect_count FROM pitchmind.consumer_checkpoint_effect_test WHERE message_id = $1");
+        effectCount.Parameters.AddWithValue(messageId);
+        Assert.Equal(1, (int)(await effectCount.ExecuteScalarAsync())!);
+        await using var savedSequence = source.CreateCommand("SELECT last_broker_sequence_number FROM pitchmind.consumer_checkpoints WHERE consumer_id = $1 AND partition_id = $2");
+        savedSequence.Parameters.AddWithValue(consumerId);
+        savedSequence.Parameters.AddWithValue(checkpoint.PartitionId);
+        Assert.Equal(250L, (long)(await savedSequence.ExecuteScalarAsync())!);
+    }
+
+    [PostgresIntegrationFact]
+    public async Task ConsumerCheckpointV11PreservesLegacyCursorWithoutInventingBrokerPosition()
+    {
+        await using var source = Source();
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+
+        await using (var reset = source.CreateCommand("""
+            DROP TABLE pitchmind.consumer_checkpoints;
+            ALTER TABLE pitchmind.consumer_checkpoints_legacy_v10 RENAME TO consumer_checkpoints;
+            DELETE FROM pitchmind.schema_versions WHERE version = 11;
+            """))
+            await reset.ExecuteNonQueryAsync();
+
+        var legacyMatchId = Guid.NewGuid();
+        await using (var insert = source.CreateCommand("""
+            INSERT INTO pitchmind.consumer_checkpoints(consumer_id, match_id, last_sequence)
+            VALUES ('legacy-consumer', $1, 99)
+            """))
+        {
+            insert.Parameters.AddWithValue(legacyMatchId);
+            await insert.ExecuteNonQueryAsync();
+        }
+
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
+        await using var preserved = source.CreateCommand("""
+            SELECT old.last_sequence,
+                   current.last_broker_sequence_number,
+                   current.last_offset
+            FROM pitchmind.consumer_checkpoints_legacy_v10 old
+            LEFT JOIN pitchmind.consumer_checkpoints current ON current.consumer_id = old.consumer_id
+            WHERE old.consumer_id = 'legacy-consumer' AND old.match_id = $1
+            """);
+        preserved.Parameters.AddWithValue(legacyMatchId);
+        await using var reader = await preserved.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(99L, reader.GetInt64(0));
+        Assert.True(reader.IsDBNull(1));
+        Assert.True(reader.IsDBNull(2));
     }
 
     [PostgresIntegrationFact]
