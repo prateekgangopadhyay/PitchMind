@@ -371,6 +371,188 @@
         "Event-only data cannot establish off-ball combinations or rest-defence shape. Unknown coordinates, timestamps, attack direction, identity or frame coverage block spatial conclusions.",
         "Treat positional “advantages” as conditional mechanisms. Do not conclude the listed shape caused a goal, prevented a counter or was superior without a suitable comparison and evidence."
       ]
+    },
+    {
+      "id": "formation-matchups-and-adjustments",
+      "topic": "Formation matchups and in-game adjustments",
+      "promptSummary": "Compare the actual phase shapes, not just formation labels. Look for local overloads, spare defenders, press-cover links and weak-side space. A role adjustment can solve one problem while exposing another; compare the opponent response and transition cover before calling it an advantage.",
+      "mechanisms": [
+        "A nominal 4-3-3 against a 4-4-2 may offer a third central midfielder against a pair, while the 4-4-2 can use two forwards to press or pin centre-backs and wide midfielders to protect full-backs. Test whether the nominal spare can receive/use the ball and whether the opponent closes that route.",
+        "A 4-2-3-1 facing a 4-3-3 may use its 10 between the opponent pivot and defence, but the opponent three can outnumber the double pivot. A wide forward dropping to help can restore numbers while reducing the counter-attacking outlet.",
+        "A back three against a front two can create an extra first-line build-up player; the opponent may instead press wing-backs or use a midfielder to jump to the spare centre-back. A wing-back held high can pin a full-back, but exposes the channel if the wide centre-back cannot cover.",
+        "An in-game adjustment may be a role/height/side change inside the same nominal formation: a winger drops to the midfield line, a full-back stays to make a back three, a pivot steps forward, or a forward screens a pivot. Describe what changed and the space opened elsewhere.",
+        "When the opponent overloads a flank, possible responses include shifting a midfielder wide, narrowing the far-side winger, having a full-back engage earlier, or changing the press direction. Each changes central cover, far-side access, or the outlet after a regain.",
+        "Compare score, personnel, dismissal, phase, ball location and opponent behavior before and after any adjustment. Do not infer a coach instruction from the resulting shape alone."
+      ],
+      "requiredEvidence": [
+        "Verified lineup and formation notation if naming a nominal shape.",
+        "Repeated, time-aligned player locations, identities, phase, ball/opponent locations and coverage for observed matchup or role change.",
+        "Evidence of the opponent response and next action before claiming an overload, spare player, free route or successful adjustment."
+      ],
+      "analysisSteps": [
+        "State nominal lineup formation only when sourced; otherwise describe the observed phase shape.",
+        "Identify the phase, local unit, relevant players and opponent arrangement.",
+        "Count local options and cover using an explicitly bounded zone/time; note defenders who can recover.",
+        "Describe the adjustment as observed, then name the space gained and space conceded as hypotheses.",
+        "Compare opponent response and subsequent outcome with evidence IDs; offer another plausible explanation."
+      ],
+      "limitations": [
+        "Formation-number matchups are hypotheses, not deterministic numerical outcomes; pressing assignments and player movement can erase or move an apparent spare.",
+        "Do not claim superiority, tactical intent or causation from the formation label or a short sequence.",
+        "Sparse/un-calibrated tracking and event-only data cannot establish off-ball shape, cover, or space."
+      ]
+    },
+    {
+      "id": "phase-by-phase-playbooks",
+      "topic": "Phase-by-phase tactical playbooks",
+      "promptSummary": "Identify the phase before the pattern: build-up vs press, progression vs block, box defence, attack after regain, or counterpress after loss. Describe the action, supporting unit, opponent response, outcome and uncertainty. These playbooks are options; apply them only when selected match evidence shows the sequence.",
+      "mechanisms": [
+        "Build-up against a high press: goalkeeper and first line can create an extra passing option; pivots/8s stagger to offer forward and bounce passes; wide players stretch the press. A pass, carry, third player, switch or direct ball can bypass pressure. Risk: central turnover with defenders spread. Identify the press trigger and exits actually observed.",
+        "Progression against a mid-block: circulate to move the block, occupy distinct lines/lanes, connect a receiver between lines, or progress around/through/over the block. A full-back/winger/8 triangle can create a 2v1. Risk: sterile circulation or loss while players are ahead of the ball.",
+        "Defending the box: protect central goal-facing space, track or pass on runners according to the visible organization, contest the delivery/first contact, cover cut-back and far-post areas, then organize for the second ball. The ball source and arrival zones determine priorities; do not infer marking assignments from one frame.",
+        "Attack after a regain: first secure the ball or play forward if a safe lane and available runner are evidenced; support with width/depth and a second wave. If the direct route is closed, retain and reorganize. Risk: forcing a pass into pressure or leaving no protection after losing it again.",
+        "Counterpress after a loss: nearest player may pressure the ball, teammates can cover/screen forward outlets, and the far side may narrow. If the first pressure is bypassed, recovery toward goal can become the priority. Require the loss, pressure, cover, opponent exit and next action in sequence.",
+        "Every phase pattern includes a trigger, roles, spatial conditions, alternative action and failure mode. A coaching exercise or tactical principle describes a possible solution, not evidence that the match team selected it."
+      ],
+      "requiredEvidence": [
+        "Ordered canonical events for possession changes, passes, carries, shots and outcomes, preserving source IDs/order/time.",
+        "Time-aligned tracking with validated coordinates, identities and coverage for off-ball movement, unit shape, box occupation, pressure/cover and passing options.",
+        "Phase boundaries and clock semantics; include opponent locations and relevant restarts."
+      ],
+      "analysisSteps": [
+        "Classify the selected sequence and phase using canonical events; say unknown when possession/phase is uncertain.",
+        "Set the team scale: opponent block/press, ball zone, line relationships and coverage.",
+        "Trace the relevant unit and player actions in order, including supporting and covering players.",
+        "State the apparent option and the alternative/space trade-off without implying an unobserved instruction.",
+        "Follow the sequence to its evidenced outcome and state missing data."
+      ],
+      "limitations": [
+        "A named phase or standard pattern cannot fill missing events/frames; do not infer off-ball roles from event-only data.",
+        "Do not label a press as successful or a progression as line-breaking without the relevant evidence.",
+        "A goal, regain or clearance after a sequence is not proof the described tactic caused it."
+      ]
+    },
+    {
+      "id": "player-role-fit-and-complementarity",
+      "topic": "Player-role fit and complementary skills",
+      "promptSummary": "Assess role fit through observed actions and support, not reputation or formation. A pivot needs safe outlets/cover; an advancing full-back needs winger/8 coordination and rest defence; a winger needs width, inside support or depth; a pressing forward needs cover behind; a target forward needs runners and second-ball support. State evidence and trade-offs.",
+      "mechanisms": [
+        "Pivot: build-up angle, scanning/receiving under pressure, progression or circulation, central screening and second-ball support are distinct tasks. A pivot advancing may free a teammate to hold, but requires someone else to protect the centre.",
+        "Full-back: overlapping outside can free a winger to come inside; underlapping can occupy an inside lane while a winger holds width; staying deeper can secure rest defence. Support from an 8 or wide centre-back determines cover and return options.",
+        "Winger: holding width can stretch a block and open an inside lane; receiving inside can connect a 10/8 and free the touchline for a full-back. Both can be options, but require timing, opposite-side balance and defensive recovery.",
+        "Pressing forward: pressure angle, screening lane, trigger timing and ability of midfield/back line to step together shape whether pressure constrains an exit. Sprinting at a defender alone is not a coordinated press.",
+        "Target/central forward: securing a direct pass, setting a bounce pass, occupying centre-backs, attacking depth or contesting aerial balls are different functions. Supporting midfield runners and nearby second-ball coverage decide whether a direct outlet can be retained.",
+        "Complementarity is about task coverage, not universal player archetypes: one player may perform more than one task and duties can rotate by phase or opponent."
+      ],
+      "requiredEvidence": [
+        "Validated player identity and role/lineup data; relevant event and/or time-aligned tracking evidence for the action being assessed.",
+        "Evidence of teammate support, opponent pressure and resulting space/outcome before claiming a combination helped.",
+        "Player metrics only when their definition, unit, period, sample and source quality are known."
+      ],
+      "analysisSteps": [
+        "Name the task/phase rather than a personality or fixed archetype.",
+        "Identify the action observed and which teammate/opponent enables or constrains it.",
+        "State the potential benefit and the matching support/cover requirement.",
+        "Compare repeated comparable actions before describing a stable role tendency.",
+        "Describe uncertainty and avoid ranking a player without an appropriate validated evaluation model."
+      ],
+      "limitations": [
+        "Do not infer speed, strength, fitness, preferred foot, aerial ability, press resistance or decision quality from a name or formation.",
+        "One successful action does not establish role suitability; results depend on teammates and opponent context.",
+        "Unknown player metrics or identities block player-specific claims."
+      ]
+    },
+    {
+      "id": "goalkeeper-team-integration",
+      "topic": "Goalkeeper integration in team tactics",
+      "promptSummary": "Treat the goalkeeper as a phase participant: build-up outlet, depth cover behind a high line, transition decision-maker and last defender. Assess passing angle, pressure, defensive line, ball/runner position and next action. Do not infer keeper height, communication or intent from events without matching evidence.",
+      "mechanisms": [
+        "In build-up, the goalkeeper can widen or deepen the first line to create a safe angle and numerical option; centre-backs and pivots need staggered lanes and clear decisions to play through, around or over pressure.",
+        "When a press closes the goalkeeper, a return pass may invite pressure; the team needs a planned wide/central outlet and cover for a forced long ball. A goalkeeper pass completion alone does not establish that the press was broken.",
+        "Behind a high defensive line, goalkeeper starting depth may protect space behind defenders and allow a response to through balls. Assess ball location, opponent runners, defensive-line position, keeper position and shot/through-ball sequence together.",
+        "After a turnover, the goalkeeper can adjust toward goal/ball and communicate or organize teammates, but communication is not visible in positional/event feeds unless recorded. Covering depth and choosing whether to advance depend on attacker control, distance, angle and defender recovery.",
+        "On crosses and 1v1s, separate starting position, movement, set/ready state, decision/attempt, contact and outcome. Avoid grading the goalkeeper without a suitable shot quality/context model.",
+        "After a save/catch/restart, distribution can start a transition; its tactical value depends on teammate availability, opponent recovery and retention of the next action."
+      ],
+      "requiredEvidence": [
+        "Goalkeeper identity, event/action type, event order and period/time.",
+        "Validated goalkeeper and defender/attacker locations, pitch calibration, ball location and frame coverage for depth/angle/transition claims.",
+        "For distribution assessment, destination/receiver and next possession outcome; for communication, a source that actually records it."
+      ],
+      "analysisSteps": [
+        "Classify in-possession, defensive, transition or restart phase.",
+        "Locate ball, goalkeeper, defensive line, pressing attackers and available outlets if observed.",
+        "Describe the keeper action and defender support, then follow the result.",
+        "Separate measured position/action from interpretation of decision quality.",
+        "State missing views and avoid judging intent or blame."
+      ],
+      "limitations": [
+        "Event-only data cannot establish starting depth, angle, body orientation, communication or positioning quality.",
+        "Do not treat the goalkeeper as automatically creating a spare player or as solely responsible for transition outcomes.",
+        "Do not apply 11-a-side conclusions to futsal/beach soccer without code-specific rules and spatial context."
+      ]
+    },
+    {
+      "id": "set-piece-roles-and-second-phases",
+      "topic": "Set-piece roles, responsibilities and second phases",
+      "promptSummary": "Analyze each restart separately. For corners/free kicks identify delivery, runners, blockers, edge/short options and rest defence; for defending, inspect zones/markers, first contact, clearances and outlets. Track throw-in/goal-kick options and second-ball sequence. Require event/frame evidence; never infer assignments or a foul.",
+      "mechanisms": [
+        "Attacking corner: a delivery target may be combined with near/far-post, central, delayed or edge-of-box runners; blockers/screens and starting positions can alter defender sightlines. A short option can draw a defender or create a new crossing angle. Track who actually moved and where the delivery went.",
+        "Defending corner: zonal, player-to-player and hybrid structures distribute space/marking tasks differently. Inspect first-contact zones, player tracking, keeper action, edge-of-box coverage, short-corner response and the counter outlet. Do not judge a system from the goal alone.",
+        "Free kick: distinguish direct shot, cross/delivery, short combination and restart retention. Defenders may form a wall and manage runners; attackers may create decoys/blocking movements. Rules and referee decisions are canonical event/law matters, not tactical model rulings.",
+        "Throw-in: the thrower, short support, third-player option, line movement, long throw target and defensive pressure can form a local pattern. Location and restart speed matter. A long throw to the box requires first-contact, second-ball and transition-cover analysis.",
+        "Goal kick: goalkeeper, centre-backs, full-backs, pivots and forwards can form short build-up options or a direct target/second-ball structure. The opponent press determines the available route; do not assume one fixed intention.",
+        "Second phase begins after first contact/clearance: identify who regains, attacks the loose ball, protects the edge or prevents a counter. It is a new evidenced sequence, not part of an assumed routine.",
+        "Restart transition balance: retain enough players to protect central/wide counter routes while committing runners. The optimal balance is context-dependent and not inferable from formation alone."
+      ],
+      "requiredEvidence": [
+        "Canonical restart type/location, source event ID/order/time, delivery/first contact/clearance/outcome and cards/fouls only if source-recorded.",
+        "Validated player identities and synchronized positions for assignments, runs, zones, first/second contact, keeper action and rest defence.",
+        "Competition/rule context for any law interpretation; the current IFAB law source takes precedence."
+      ],
+      "analysisSteps": [
+        "Identify the restart and attacking/defending team; freeze selected time and event order.",
+        "Describe setup only if observed; classify marking/roles as observed or unknown.",
+        "Follow delivery, first contact, clearance and second phase separately.",
+        "Assess the next action and transition protection with evidence.",
+        "State whether the pattern is a source example or a PitchMind match observation."
+      ],
+      "limitations": [
+        "Do not infer an assigned marker, blocking intent, referee decision correctness or rehearsed routine from a single outcome.",
+        "Sparse tracking may show first contact but miss off-camera runners or assignments.",
+        "Set-piece rules vary by restart and competition; tactical explanation is not a ruling on legality."
+      ]
+    },
+    {
+      "id": "late-match-and-unusual-game-states",
+      "topic": "Late-match and unusual game-state adjustments",
+      "promptSummary": "Interpret late changes against validated score, period/clock, player count, substitutions, restart and opponent behavior. Protecting a lead, chasing a goal or playing after a dismissal may change risk and roles, but motive and causation are not proved by the state. Compare like phases and report time/source semantics.",
+      "mechanisms": [
+        "Protecting a lead can involve deeper occupation, safer circulation, counter outlets, substitutions or restart management; these are alternatives, not automatic consequences. Inspect whether the block/line actually changed and whether the opponent increased pressure.",
+        "Chasing a goal can involve additional box occupation, wider/deeper runs, quicker restarts or higher defensive positioning. Additional attackers can increase attacking options while reducing cover after a turnover; report both and the observed outcome.",
+        "After a dismissal, the team with fewer players may narrow, drop a forward into midfield or preserve a counter outlet; the opponent may stretch play and overload a side. Actual shape and role changes require observed positions and the dismissal event.",
+        "An injury stoppage, substitution, penalty, corner/free kick or long throw can reset organization and change immediate risk. Separate the restart phase from open-play before/after comparisons.",
+        "Added time and “last minute” require source-specific period/time semantics. A timestamp such as 90+4 is not automatically four minutes remaining. Stoppage-time allowance and match-clock representations differ.",
+        "Late substitution evaluation should use comparable pre/post phases, define the time window, record all simultaneous changes and stop at selected time. Report association rather than causal impact unless a valid causal study exists.",
+        "Risk is multi-dimensional: exposure behind the ball, central protection, counterpress/recovery coverage, set-piece commitment and time remaining. Do not collapse it to “attacking” or “defensive”."
+      ],
+      "requiredEvidence": [
+        "Canonical score, period, time semantics, dismissal/substitution/restart events and active roster at the selected time.",
+        "Time-aligned tracking/events for actual role/shape or behavior changes and opponent response.",
+        "Defined pre/post windows with sample size, phase mix, score/personnel/opponent context and all simultaneous changes."
+      ],
+      "analysisSteps": [
+        "Validate time period/clock and game state; do not translate provider time to minutes remaining without documented semantics.",
+        "Identify the state change and distinguish observed fact from possible tactical response.",
+        "Compare equivalent phases/windows and list confounders or missing observations.",
+        "Describe trade-offs and outcomes only through selected-time evidence.",
+        "Use “consistent with” or “followed by” for interpretation; never assert coach motive or causal impact from sequence alone."
+      ],
+      "limitations": [
+        "A late score, substitution, dismissal or foul does not reveal motive, instruction, fatigue, time-wasting intent or causality.",
+        "Small late-game samples and restart-heavy windows are not directly comparable with open-play periods.",
+        "Do not predict a result or claim a referee decision was correct from tactical context alone."
+      ]
     }
   ]
 }

@@ -1,0 +1,325 @@
+{
+  "schemaVersion": "1.0.0",
+  "catalogueScope": "Curated FIFA Training Centre knowledge references. Not exhaustive; article availability can change. No bulk article text or media is stored.",
+  "reviewedAt": "2026-10-17",
+  "entries": [
+    {
+      "id": "fifa-team-shape-metric",
+      "title": "EFI metric: team shape",
+      "url": "https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--team-shape.php",
+      "topics": [
+        "team-shape",
+        "formation",
+        "in-possession",
+        "out-of-possession"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup 2022 analysis; teams in possession and out of possession",
+      "sourceType": "performance-metric",
+      "publishedAt": "2022-11-11",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Defines a metric describing positional structures adopted in and out of possession.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-phases-of-play-metric",
+      "title": "EFI metric: phases of play",
+      "url": "https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--phases-of-play.php",
+      "topics": [
+        "phases",
+        "match-analysis"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup 2022 analysis; competition-wide",
+      "sourceType": "performance-metric",
+      "publishedAt": "2022-11-11",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Describes breaking ball-in-play time into phases for tactical analysis.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-scales-of-the-game",
+      "title": "Scales of the game: Using different lenses to improve player development",
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/training-framework/scales-of-the-game.php",
+      "topics": [
+        "team-unit-player",
+        "roles",
+        "overloads",
+        "2v1",
+        "rest-defence"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA Talent Coach Programme; illustrative FIFA U-17 World Cup match sequence",
+      "sourceType": "coaching-framework",
+      "publishedAt": "2024-08-27",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Connects team, unit and player analysis and illustrates changing numerical relationships.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-out-of-possession-team-organisation",
+      "title": "Team organisation out of possession",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/out-of-possession/team-organisation--out-of-possession-.php",
+      "topics": [
+        "defensive-shape",
+        "compactness",
+        "pressing",
+        "block-shift"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA match-analysis examples; competition context varies by clip",
+      "sourceType": "match-analysis",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Discusses collective defensive organization, width/depth and shifting.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-building-from-the-back",
+      "title": "Building from the back (Skinner)",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/building_from_the_back_skinner.php",
+      "topics": [
+        "build-up",
+        "formations",
+        "press-resistance",
+        "wide-channels"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "Elite practice session; 11-player team and opposition practice group",
+      "sourceType": "practice-session",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Uses a game scenario to examine building from the back and finding routes to progress.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-wide-attacking-patterns",
+      "title": "Developing wide attacking patterns",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/clubs-and-academies/english-academies/newcastle-u-15-developing-wide-attacking-patterns.php",
+      "topics": [
+        "wide-combinations",
+        "overlap",
+        "underlap",
+        "2v1"
+      ],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "Newcastle United U-15 academy practice",
+      "sourceType": "practice-session",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Practice examples for coordinated wide attacking actions and local combinations.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-creating-exploiting-overloads",
+      "title": "Creating and exploiting overloads",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/creating-and-exploiting-overloads.php",
+      "topics": [
+        "overloads",
+        "in-possession",
+        "unit-play"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "Elite practice; exact age/competition varies by session",
+      "sourceType": "practice-session",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Practice concepts for creating and using a local numerical/positional advantage.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-final-third-combination-play",
+      "title": "Combination play in the final third (Zamrat)",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/in-possession/combination-play-in-the-final-third.php",
+      "topics": [
+        "final-third",
+        "third-player",
+        "overlap",
+        "underlap",
+        "formation-shape"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "Academy practice; player group and exercise constraints are session-specific",
+      "sourceType": "practice-session",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Practice material showing how a nominal arrangement can adopt a different attacking structure.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-goalkeeper-build-up",
+      "title": "Goalkeepers’ build-up: supporting, receiving and passing",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/goalkeeper/goalkeepersbuildup.php",
+      "topics": [
+        "goalkeeper",
+        "build-up",
+        "transition"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA elite goalkeeping practice; FC Zürich youth coaching session",
+      "sourceType": "practice-session",
+      "publishedAt": "2022-01-14",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Covers goalkeeper support angles, receiving/passing under pressure and defensive transition positioning.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-goalkeeper-transition",
+      "title": "Goalkeeper positioning in transition from attack to defence",
+      "url": "https://www.fifatrainingcentre.com/en/game/individual-qualities/goalkeeping/goalkeeper-positioning-in-transition-from-attack-to-defence.php",
+      "topics": [
+        "goalkeeper",
+        "defensive-transition",
+        "high-line-cover"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA Club World Cup UAE 2021 match-analysis examples",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2022-05-31",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Examines goalkeeper position relative to the ball, last line and transition threat.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-transition-into-attack",
+      "title": "Keeping it compact and transitioning into attack",
+      "url": "https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-attacking/transition-into-attack.php",
+      "topics": [
+        "regain",
+        "counterattack",
+        "pressing",
+        "cover"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "Elite coach-education practice session",
+      "sourceType": "practice-session",
+      "publishedAt": "2022-07-12",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Describes coordinated pressure, support and forward options after regaining possession.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-passing-the-press",
+      "title": "Passing the press",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/transition-to-attacking/passing-the-press.php",
+      "topics": [
+        "counterpress",
+        "press-resistance",
+        "transition"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA match-analysis series; examples from tournament football",
+      "sourceType": "match-analysis",
+      "publishedAt": "2021-11-08",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Discusses retaining/progressing possession when opponents counterpress.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-attacking-corner-edge",
+      "title": "Attacking corners: Freeing the edge for attempts at goal",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/set-plays/corners/attacking-corners.php",
+      "topics": [
+        "set-pieces",
+        "corners",
+        "edge-of-box"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup Qatar 2022 match examples; Argentina",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2023-11-02",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Examines short-corner sequences used to create an edge-of-box shooting option.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-attacking-corner-train-blocker",
+      "title": "Attacking corners: The train and blocker",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/set-plays/corners/the-train-and-blocker.php",
+      "topics": [
+        "set-pieces",
+        "corners",
+        "runs",
+        "screening"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA tournament analysis; Senegal corner examples",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2024-03-05",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Describes one corner routine and its runner/blocker relationships as a source example.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-defending-corners",
+      "title": "Defending corners: Zonal or player-to-player?",
+      "url": "https://www.fifatrainingcentre.com/en/game/game-analysis/set-plays/corners/defending-corners-zonal-or-player-to-player.php",
+      "topics": [
+        "set-pieces",
+        "corners",
+        "zonal-marking",
+        "player-marking"
+      ],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "FIFA World Cup Qatar 2022 match examples",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2023-10-24",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Compares observed defensive corner organizations and specific opponent adaptations.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-long-throw-ins",
+      "title": "Player development trends: Readiness for long throw-ins",
+      "url": "https://www.fifatrainingcentre.com/en/game/tournaments/fu17wc/2025/part-3-player-development-trends.php",
+      "topics": [
+        "set-pieces",
+        "throw-ins",
+        "long-throws",
+        "second-ball"
+      ],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "FIFA U-17 World Cup Qatar 2025 tournament analysis",
+      "sourceType": "tournament-analysis",
+      "publishedAt": "2026-04-14",
+      "reviewedAt": "2026-10-17",
+      "abstract": "Reports long throw-in preparation and tactical use in a specific youth tournament.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-goalkeeper-1v1",
+      "title": "Goalkeeper 1v1s: The read, close, set, wait, attack framework",
+      "url": "https://www.fifatrainingcentre.com/en/game/tournaments/fu20wwc/2026/goalkeeper-1v1s-the-read-close-set-wait-attack-framework.php",
+      "topics": [
+        "goalkeeper",
+        "1v1",
+        "box-defence"
+      ],
+      "footballCode": "association-football-youth",
+      "ageCompetitionContext": "FIFA U-20 Women’s World Cup 2026 analysis",
+      "sourceType": "tournament-analysis",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Presents a context-specific framework for goalkeeper decisions in one-on-one situations.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    },
+    {
+      "id": "fifa-football-language",
+      "title": "Football Language",
+      "url": "https://www.fifatrainingcentre.com/en/resources-tools/football-language/index.php",
+      "topics": [
+        "football-vocabulary",
+        "event-language",
+        "on-ball",
+        "off-ball"
+      ],
+      "footballCode": "association-football",
+      "ageCompetitionContext": "FIFA terminology resource; scope depends on term/example",
+      "sourceType": "glossary",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Operational football vocabulary and examples; PitchMind canonical data contract remains authoritative.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce full article text, images or video. Source examples are not PitchMind match evidence."
+    }
+  ]
+}

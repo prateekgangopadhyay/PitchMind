@@ -218,3 +218,8 @@ The sources below are official football coaching or law resources used to define
 - [IFAB — Law 3: The Players](https://www.theifab.com/laws/2025-26/the-players/)
 - [IFAB — Law 7: The Duration of the Match](https://www.theifab.com/laws/latest/the-duration-of-the-match/)
 - [IFAB — Law 12: Fouls and Misconduct](https://www.theifab.com/laws/latest/fouls-and-misconduct/)
+
+
+## Extended playbooks and source catalogue
+
+Detailed formation matchups, phase-by-phase options, player-role complementarity, goalkeeper integration, set-piece responsibilities, and late-match states are documented in [Football tactical playbooks](FOOTBALL-TACTICAL-PLAYBOOKS.md). FIFA references and review metadata are recorded in the [structured FIFA article catalogue](fifa-training-centre-article-catalog.v1.json), with the scope and topic map in [FIFA Training Centre knowledge index](FIFA-TRAINING-CENTRE-KNOWLEDGE-INDEX.md). These are tactical knowledge references, not match facts or detector outputs.

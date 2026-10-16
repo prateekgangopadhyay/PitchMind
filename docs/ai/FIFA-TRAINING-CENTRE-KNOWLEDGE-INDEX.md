@@ -6,6 +6,11 @@ This index connects PitchMind's original tactical knowledge base to the public [
 
 The Training Centre is a large, changing library, not a finite article bundle. This is a curated topic map, not a claim that every current or future FIFA article has been ingested or reviewed. FIFA material is paraphrased and linked; do not copy full articles, drills, images or videos into PitchMind. The references describe general coaching concepts. They are not canonical match evidence and do not establish what happened in a PitchMind fixture.
 
+## Companion playbooks and machine-readable catalog
+
+- [Football tactical playbooks](FOOTBALL-TACTICAL-PLAYBOOKS.md) — matchups, phases, role fit, goalkeeper, set pieces and late-match states.
+- [Reviewed FIFA article catalogue](fifa-training-centre-article-catalog.v1.json) — topic, code, age/competition context, source type and direct link per entry.
+
 ## Training Centre topic map
 
 | FIFA section | Football knowledge represented | PitchMind use |

@@ -59,7 +59,9 @@
         "final-third-attack",
         "attacking-2v1",
         "formation-and-phase-shape",
-        "formation-player-combinations"
+        "formation-player-combinations",
+        "formation-matchups-and-adjustments",
+        "phase-by-phase-playbooks"
       ],
       "principles": [
         "Create width to stretch the opponent horizontally and depth to threaten space behind; distinguish intended occupation from measured position.",
@@ -104,7 +106,9 @@
         "transitions-rest-defence",
         "late-game-fouls",
         "formation-and-phase-shape",
-        "formation-player-combinations"
+        "formation-player-combinations",
+        "formation-matchups-and-adjustments",
+        "phase-by-phase-playbooks"
       ],
       "principles": [
         "A press is coordinated pressure intended to constrain an opponent's next action; proximity by one player alone is not a team press.",
@@ -149,7 +153,10 @@
         "transitions-rest-defence",
         "late-game-fouls",
         "formation-and-phase-shape",
-        "formation-player-combinations"
+        "formation-player-combinations",
+        "formation-matchups-and-adjustments",
+        "phase-by-phase-playbooks",
+        "set-piece-roles-and-second-phases"
       ],
       "principles": [
         "A defensive block is a coordinated set of players protecting space; infer one only from sufficiently broad, time-aligned player coverage.",
@@ -194,7 +201,9 @@
         "attacking-2v1",
         "late-game-fouls",
         "formation-and-phase-shape",
-        "formation-player-combinations"
+        "formation-player-combinations",
+        "player-role-fit-and-complementarity",
+        "goalkeeper-team-integration"
       ],
       "principles": [
         "A transition begins at a defined possession change or restart; do not start it at an arbitrary nearby event.",
@@ -239,7 +248,9 @@
         "game-state-risk",
         "late-game-fouls",
         "formation-and-phase-shape",
-        "formation-player-combinations"
+        "formation-player-combinations",
+        "set-piece-roles-and-second-phases",
+        "goalkeeper-team-integration"
       ],
       "principles": [
         "Classify the restart first: corner, free kick, throw-in, penalty or goal kick; do not assume the restart type from a nearby event.",
@@ -285,7 +296,9 @@
         "late-game-fouls",
         "transitions-rest-defence",
         "game-state-risk",
-        "formation-and-phase-shape"
+        "formation-and-phase-shape",
+        "late-match-and-unusual-game-states",
+        "phase-by-phase-playbooks"
       ],
       "principles": [
         "Match state is a time-indexed combination of score, period, remaining time, player availability and possession context; use only fields in the packet.",
