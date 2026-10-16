@@ -7,6 +7,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <ProjectReference Include="../../src/PitchMind.Api/PitchMind.Api.csproj" />
     <ProjectReference Include="../../src/PitchMind.Domain/PitchMind.Domain.csproj" />
+    <ProjectReference Include="../../src/PitchMind.Infrastructure/PitchMind.Infrastructure.csproj" />
     <ProjectReference Include="../PitchMind.TestFixtures/PitchMind.TestFixtures.csproj" />
   </ItemGroup>
 </Project>

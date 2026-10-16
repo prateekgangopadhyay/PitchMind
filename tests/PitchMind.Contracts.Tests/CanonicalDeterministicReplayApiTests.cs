@@ -16,7 +16,9 @@ using PitchMind.Domain.Analytics;
 using PitchMind.Domain.Events;
 using PitchMind.Domain.Match;
 using PitchMind.Domain.Simulation;
+using PitchMind.Infrastructure.Storage;
 using PitchMind.TestFixtures;
+using Npgsql;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
@@ -94,22 +96,88 @@ public sealed class CanonicalDeterministicReplayApiTests
         Assert.Equal("CANONICAL_DATA_INVALID", json.RootElement.GetProperty("code").GetString());
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(ReplayProjectionReader reader) =>
+    [PostgresReplayApiFact]
+    public async Task Deterministic_replay_over_postgres_excludes_later_canonical_goal()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES");
+        Assert.False(string.IsNullOrWhiteSpace(connectionString));
+        await using var dataSource = NpgsqlDataSource.Create(connectionString!);
+        await PostgresSchemaMigrator.ApplyAsync(dataSource, CancellationToken.None);
+
+        var matchId = MatchId.New();
+        var players = Enumerable.Range(1, 11)
+            .SelectMany(number => new[] { ($"home-{number}", "home"), ($"away-{number}", "away") }).ToArray();
+        var aggregate = new MatchAggregate(matchId, "home", "away", players,
+            players.Select(player => player.Item1), "synthetic-test-only");
+        var sourceHash = new string('b', 64);
+        await new PostgresMatchProjectionStore(dataSource).SaveMatchMetadataAsync(
+            new MatchSourceMetadata(matchId.Value, "replay-api-fixture-v1", "replay-api-test-source-v1", sourceHash,
+                "synthetic-test-only", 105m, 68m, ReplaySeed: aggregate.ReplaySeed), CancellationToken.None);
+        var writer = new PitchMind.Application.Matches.CanonicalMatchEventWriter(
+            new PostgresCanonicalUpdateStore(dataSource));
+
+        async Task Append(long sequence, int clock, MatchEventType type, string playerId, string outcome)
+        {
+            var matchEvent = MatchEvent.Create(Guid.NewGuid(), matchId, sequence, type, clock, 1,
+                DateTimeOffset.UnixEpoch.AddSeconds(clock));
+            await writer.AppendAsync(aggregate,
+                new SimulationEvent(matchEvent, "home", playerId, type.ToString(), outcome),
+                checked((int)sequence + 1), "replay-api-test-projector-v1", sourceHash, CancellationToken.None);
+        }
+
+        await Append(0, 0, MatchEventType.KickOff, "home-1", "started");
+        await Append(1, SelectedSeconds, MatchEventType.Pass, "home-2", "complete");
+        await Append(2, SelectedSeconds + 1, MatchEventType.Goal, "home-3", "scored");
+
+        using var factory = CreateFactory(postgresConnectionString: connectionString);
+        using var client = CreateClient(factory, "analyst");
+        using var beforeResponse = await client.GetAsync(
+            $"/api/v1/canonical/matches/{matchId}/replay/deterministic?atSeconds={SelectedSeconds}&canonicalRevision=2&limit=100");
+
+        var beforeBody = await beforeResponse.Content.ReadAsStringAsync();
+        Assert.True(beforeResponse.StatusCode == HttpStatusCode.OK,
+            $"Expected pre-goal replay success, got {(int)beforeResponse.StatusCode}: {beforeBody}");
+        using var beforeJson = JsonDocument.Parse(beforeBody);
+        var before = beforeJson.RootElement;
+        Assert.Equal(1, before.GetProperty("snapshot").GetProperty("throughSequence").GetInt64());
+        Assert.Equal(0, before.GetProperty("snapshot").GetProperty("homeScore").GetInt32());
+        Assert.Equal(2, before.GetProperty("events").GetProperty("items").GetArrayLength());
+        Assert.Equal(before.GetProperty("snapshot").GetProperty("stateSha256").GetString(),
+            before.GetProperty("replayedStateSha256").GetString());
+
+        using var afterResponse = await client.GetAsync(
+            $"/api/v1/canonical/matches/{matchId}/replay/deterministic?atSeconds={SelectedSeconds + 1}&canonicalRevision=3&limit=100");
+        var afterBody = await afterResponse.Content.ReadAsStringAsync();
+        Assert.True(afterResponse.StatusCode == HttpStatusCode.OK,
+            $"Expected post-goal replay success, got {(int)afterResponse.StatusCode}: {afterBody}");
+        using var afterJson = JsonDocument.Parse(afterBody);
+        Assert.Equal(1, afterJson.RootElement.GetProperty("snapshot").GetProperty("homeScore").GetInt32());
+        Assert.Equal(3, afterJson.RootElement.GetProperty("events").GetProperty("items").GetArrayLength());
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(ReplayProjectionReader? reader = null,
+        string? postgresConnectionString = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
             builder.UseSetting("Runtime:Profile", "local");
             builder.UseSetting("Identity:DevelopmentHeaderAuthEnabled", "true");
+            if (postgresConnectionString is not null)
+                builder.UseSetting("ConnectionStrings:PitchMind", postgresConnectionString);
             builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
                 new Dictionary<string, string?>
                 {
                     ["Runtime:Profile"] = "local",
-                    ["Identity:DevelopmentHeaderAuthEnabled"] = "true"
+                    ["Identity:DevelopmentHeaderAuthEnabled"] = "true",
+                    ["ConnectionStrings:PitchMind"] = postgresConnectionString ?? string.Empty
                 }));
             builder.ConfigureTestServices(services =>
             {
-                services.RemoveAll<IMatchProjectionReader>();
-                services.AddSingleton<IMatchProjectionReader>(reader);
+                if (reader is not null)
+                {
+                    services.RemoveAll<IMatchProjectionReader>();
+                    services.AddSingleton<IMatchProjectionReader>(reader);
+                }
                 services.AddAuthentication(options =>
                     {
                         options.DefaultAuthenticateScheme = "deterministic-replay-test";
@@ -228,5 +296,14 @@ public sealed class CanonicalDeterministicReplayApiTests
             return Task.FromResult(new PersistedMatchEventPage(Array.AsReadOnly(selectedEvents),
                 hasMore ? selectedEvents[^1].Sequence : null, hasMore));
         }
+    }
+}
+
+public sealed class PostgresReplayApiFactAttribute : FactAttribute
+{
+    public PostgresReplayApiFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PITCHMIND_TEST_POSTGRES")))
+            Skip = "Set PITCHMIND_TEST_POSTGRES to an isolated local PostgreSQL test database.";
     }
 }
