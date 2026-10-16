@@ -121,23 +121,30 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         const events = eventResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const insights = insightResult.page ?? { ...emptyContext, items: [], nextCursor: null, hasMore: false };
         const trackingFrames = frameResult.page;
-        const requiredPages = [snapshot, ...(eventResult.page ? [events] : []), ...(insightResult.page ? [insights] : [])];
-        const exactContext = requiredPages.every(item => item.matchId === matchId &&
+        const requiredPages = [snapshot, ...(eventResult.page ? [events] : []), ...(insightResult.page ? [insights] : []),
+          ...(trackingFrames ? [trackingFrames] : [])];
+        const watermarksSafe = requiredPages.every(item => Number.isSafeInteger(item.throughSequence) && item.throughSequence >= 0);
+        const exactContext = watermarksSafe && requiredPages.every(item => item.matchId === matchId &&
           item.canonicalRevision === snapshot.canonicalRevision && item.projectionRevision === snapshot.projectionRevision &&
           item.selectedTimeSeconds === selectedSeconds &&
           item.throughSequence === snapshot.throughSequence);
         const eventsSafe = events.items.every((event, index) =>
-          event.matchId === matchId && event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
+          event.matchId === matchId && Number.isSafeInteger(event.clockSeconds) && event.clockSeconds >= 0 &&
+          Number.isSafeInteger(event.sequence) && event.sequence >= 0 &&
+          event.clockSeconds <= selectedSeconds && event.sequence <= snapshot.throughSequence &&
           (index === 0 || events.items[index - 1].sequence < event.sequence));
         const insightsSafe = insights.items.every(insight => insight.matchId === matchId &&
           insight.canonicalRevision === snapshot.canonicalRevision && insight.projectionRevision === snapshot.projectionRevision &&
           insight.selectedTimeSeconds === selectedSeconds &&
+          Number.isSafeInteger(insight.throughSequence) && insight.throughSequence >= 0 &&
           insight.throughSequence <= snapshot.throughSequence);
         const framesSafe = trackingFrames === null || (trackingFrames.matchId === matchId &&
           trackingFrames.canonicalRevision === snapshot.canonicalRevision && trackingFrames.projectionRevision === snapshot.projectionRevision &&
           trackingFrames.selectedTimeSeconds === selectedSeconds &&
           trackingFrames.throughSequence === snapshot.throughSequence && trackingFrames.items.every(frame =>
-            frame.canonicalRevision > 0 && frame.canonicalRevision <= snapshot.canonicalRevision &&
+            Number.isSafeInteger(frame.canonicalRevision) && frame.canonicalRevision > 0 && frame.canonicalRevision <= snapshot.canonicalRevision &&
+            Number.isSafeInteger(frame.sequence) && frame.sequence >= 0 &&
+            Number.isSafeInteger(frame.clockSeconds) && frame.clockSeconds >= 0 &&
             frame.projectionRevision === snapshot.projectionRevision && frame.sourceSha256 === snapshot.sourceSha256 &&
             frame.clockSeconds === selectedSeconds && frame.sequence <= snapshot.throughSequence &&
             frame.frame.matchId === matchId && frame.frame.frameId === frame.frameId &&
