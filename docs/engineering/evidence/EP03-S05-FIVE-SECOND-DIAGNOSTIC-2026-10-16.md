@@ -1,7 +1,7 @@
 # EP03-S05 five-second diagnostic — 2026-10-16
 
-**Status:** Generator-only diagnostic; not ingestion verification or story acceptance.  
-**Code/profile commit:** `403a315f1e08589a6a11500cec9d138fa7877c75`.  
+**Status:** Generator-only diagnostic; not ingestion verification or story acceptance.
+**Code/profile commit:** `403a315f1e08589a6a11500cec9d138fa7877c75`.
 **Profile:** owner-approved for diagnostic use: one source match/partition, 5 seconds at 500 offered records/s, raw source event JSON with attached `playerPositions` unchanged, no standalone frame records, and stop at source exhaustion without repeating IDs/sequences.
 
 ## Observed result
