@@ -25,7 +25,7 @@ function useCanonicalFixtures() {
     setMoreError('');
     request<CanonicalMatchPage>('canonical/fixtures?limit=20', controller.signal)
       .then(result => { if (!controller.signal.aborted && generation === requestGeneration.current) { setPage(result); setError(''); } })
-      .catch(() => { if (!controller.signal.aborted && generation === requestGeneration.current) setError('Canonical match data is temporarily unavailable. No demo fixture has been substituted.'); })
+      .catch(() => { if (!controller.signal.aborted && generation === requestGeneration.current) setError('Match data is temporarily unavailable. No demo fixture has been substituted.'); })
       .finally(() => { if (!controller.signal.aborted && generation === requestGeneration.current) setLoading(false); });
     return () => {
       controller.abort();
@@ -92,14 +92,14 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
   if (route.kind === 'home') return <HomePage search={search} selectedSeconds={hasSelectedTime ? selectedSeconds : undefined} />;
 
   if (route.kind === 'teams') return <section className="content-page">
-    <PageHeading eyebrow="Teams" title={route.teamId ? 'Team profile' : 'Team overview'} question="What team pattern is supported by canonical match evidence?" />
-    <p className="page-state">Team directory and profile routes are not exposed by the current canonical API. This view does not infer team data from event payloads.</p>
+    <PageHeading eyebrow="Teams" title={route.teamId ? 'Team profile' : 'Team overview'} question="What team pattern is supported by the available match evidence?" />
+    <p className="page-state">Team profiles are not available yet. This view does not guess how a team plays.</p>
     <a className="primary-link" href={contextHref('/home', selectedMatchId, selectedSeconds, revision)}>Return to available matches</a>
   </section>;
 
   if (route.kind === 'players') return <section className="content-page">
     <PageHeading eyebrow="Players" title={route.playerId ? 'Player profile' : 'Player overview'} question="What contribution is recorded for this player?" />
-    <p className="page-state">Player directory and impact routes are not exposed by the current canonical API. No player metrics are inferred in this view.</p>
+    <p className="page-state">Player profiles are not available yet. No contribution or performance metric is guessed.</p>
     <a className="primary-link" href={contextHref('/home', selectedMatchId, selectedSeconds, revision)}>Return to available matches</a>
   </section>;
 
@@ -107,7 +107,7 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
 
   if (route.kind === 'analyst') return <section className="content-page">
     <PageHeading eyebrow="AI Analyst" title="Understand a match" question="Which evidence-supported moment would you like to explore?" />
-    <p className="page-state">Question answering is not connected to the current public API. Foundry candidate generation is not exposed here.</p>
+    <p className="page-state">Match questions are not available yet. You can still review the evidence recorded for a selected moment.</p>
     {selectedMatchId && <a className="primary-link" href={contextHref('/insights', selectedMatchId, selectedSeconds, revision)}>Inspect insights at {clock(selectedSeconds)}</a>}
     {!selectedMatchId && <a className="primary-link" href="/home">Choose a match</a>}
   </section>;
@@ -127,7 +127,7 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
   const visibleMatches = phaseFilter === 'all' ? matches : matches.filter(match => match.phase === phaseFilter);
   return <section className="content-page">
     <div className="home-heading-row">
-      <PageHeading eyebrow="Home · canonical fixtures" title="Choose a match" question="Explore persisted match state. Scores and phases come from the canonical service; no demo data is mixed into this list." />
+      <PageHeading eyebrow="Home · match library" title="Choose a match" question="Explore recorded matches. Scores and match phases come from each match record." />
       {!loading && !error && matches.length > 0 && <label className="phase-filter">Filter by phase
         <select aria-label="Filter matches by phase" value={phaseFilter} onChange={event => replacePhaseFilterContext(event.target.value)}>
           <option value="all">All phases</option>
@@ -137,33 +137,39 @@ function HomePage({ search, selectedSeconds }: { search: string; selectedSeconds
       {!loading && !error && page && <button className="refresh-matches" type="button" onClick={retry}>Refresh matches</button>}
     </div>
     {loading ? <PageState loading empty="" />
-      : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button type="button" onClick={retry}>Retry canonical service</button></div>
-        : matches.length === 0 ? <PageState loading={false} empty="No canonical matches are available yet." />
+      : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button type="button" onClick={retry}>Try loading matches again</button></div>
+        : matches.length === 0 ? <PageState loading={false} empty="No matches are available yet." />
           : visibleMatches.length === 0 ? <p className="page-state" role="status">{page?.hasMore
-            ? 'No match in this phase is in the loaded results. More persisted matches are available; select “More matches” to continue.'
-            : 'No persisted matches are available in this phase.'}</p>
+            ? 'No match in this phase is in the current list. Choose “More matches” to check the next results.'
+            : 'No matches are available in this phase.'}</p>
             : <>
-              <p className="match-count" role="status" aria-live="polite">{visibleMatches.length} persisted {visibleMatches.length === 1 ? 'match' : 'matches'}</p>
-              <div className="match-list" aria-label="Persisted matches">{visibleMatches.map(match => {
+              <p className="match-count" role="status" aria-live="polite">{visibleMatches.length} {visibleMatches.length === 1 ? 'match' : 'matches'}</p>
+              <ul className="match-list" aria-label="Matches">{visibleMatches.map(match => {
               const matchPath = `/matches/${encodeURIComponent(match.matchId)}`;
               const simulationLabel = provenanceLabel(match.provenance);
-              return <article className="match-card" key={match.matchId}>
-                <div className="match-card-copy">
-                  <div className="match-card-topline"><span className="badge">{simulationLabel}</span><span className="phase-tag">{phaseLabel(match.phase)}</span></div>
-                  <h2>Home side <span className="match-score">{match.homeScore}–{match.awayScore}</span> Away side</h2>
-                  <p>Latest persisted state · {clock(match.asOfSeconds)} · revision {match.canonicalRevision}</p>
-                  <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p>
-                  <p className="match-source">Source {match.provenance} · {match.algorithmVersion} · {match.sourceSha256.slice(0, 12)}</p>
-                </div>
-                <a className="primary-link" aria-label={`Open match ${match.matchId}`} href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
-              </article>;
-            })}</div>
+              return <li className="match-list-item" key={match.matchId}>
+                <article className="match-card">
+                  <div className="match-card-copy">
+                    <div className="match-card-topline"><span className="badge">{simulationLabel}</span><span className="phase-tag">{phaseLabel(match.phase)}</span></div>
+                    <h2>Home team <span className="match-score">{match.homeScore}–{match.awayScore}</span> Away team</h2>
+                    <p>Recorded at {clock(match.asOfSeconds)} · {phaseLabel(match.phase)}</p>
+                    <details className="match-source-details">
+                      <summary>Match and source details</summary>
+                      <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p>
+                      <p>Revision {match.canonicalRevision} · source {match.provenance} · algorithm {match.algorithmVersion}</p>
+                      <p>Source hash {match.sourceSha256}</p>
+                    </details>
+                  </div>
+                  <a className="primary-link" href={contextHref(matchPath, match.matchId, selectedSeconds ?? match.asOfSeconds, match.projectionRevision)}>Open match</a>
+                </article>
+              </li>;
+            })}</ul>
             </>}
     {!loading && !error && page?.hasMore && <div className="load-more-wrap">
       {moreError && <p className="error-copy" role="alert">{moreError}</p>}
       <button className="load-more" type="button" onClick={loadMore} disabled={loadingMore || !page.nextMatchId}>{loadingMore ? 'Loading more matches…' : 'More matches'}</button>
     </div>}
-    {!loading && !error && matches.length > 0 && <p className="home-contract-limit">Competition, team names, fixture summaries, and ranked key moments are not returned by the current canonical fixtures contract.</p>}
+    {!loading && !error && matches.length > 0 && <p className="home-contract-limit">Competition, team names, match summaries, and Key Moments are not available yet.</p>}
   </section>;
 }
 
@@ -200,27 +206,31 @@ function InsightPage({ route, matchId, selectedSeconds, revision }: {
           result.items.some(item => item.matchId !== matchId || item.canonicalRevision !== result.canonicalRevision ||
             item.projectionRevision !== result.projectionRevision || item.selectedTimeSeconds !== selectedSeconds ||
             item.throughSequence > result.throughSequence)) {
-          setError('The response does not match the selected match, time and revision.');
+          setError('This insight does not match the selected moment. Return to the match and choose another moment.');
           setPage(null);
           return;
         }
         setPage(result);
         setError('');
       })
-      .catch(() => { if (!controller.signal.aborted) { setPage(null); setError('Canonical insights are temporarily unavailable.'); } })
+      .catch(() => { if (!controller.signal.aborted) { setPage(null); setError('Insights are temporarily unavailable.'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [matchId, selectedSeconds, revision]);
   const items = page?.items.filter(item => !route.insightId || item.insightId === route.insightId) ?? [];
   return <section className="content-page">
     <PageHeading eyebrow="Insights" title="Evidence at this moment" question={`What recorded insight is available at ${clock(selectedSeconds)}?`} />
-    {!matchId ? <PageState loading={false} empty="Open a match first to inspect its selected-time insights." />
+    {!matchId ? <PageState loading={false} empty="Open a match first to explore insights from a selected moment." />
       : loading || error || !page ? <PageState loading={loading} error={error} empty="No insight is available at the selected time." />
         : items.length === 0 ? <PageState loading={false} empty={route.insightId ? 'This insight is not available at the selected time.' : 'No insight is available at the selected time.'} />
           : <div className="entity-grid">{items.map(insight => <article className="entity-card" key={insight.insightId}>
             <span className="badge">{insight.truthClass}</span><h2>{insight.summary}</h2>
-            <p>Selected {clock(insight.selectedTimeSeconds)} · revision {insight.canonicalRevision} · {insight.evidence.length} evidence reference(s)</p>
-            <ul className="evidence-list">{insight.evidence.map(item => <li key={`${item.kind}:${item.id}`}>{item.kind}: {item.id} · {item.relation}</li>)}</ul>
+            <p>Selected moment · {clock(insight.selectedTimeSeconds)}</p>
+            <details className="insight-source-details">
+              <summary>Evidence and source details</summary>
+              <p>Revision {insight.canonicalRevision} · {insight.evidence.length} source references</p>
+              <ul className="evidence-list">{insight.evidence.map(item => <li key={`${item.kind}:${item.id}`}>{item.kind}: {item.id} · {item.relation}</li>)}</ul>
+            </details>
             <a href={contextHref(`/matches/${encodeURIComponent(matchId)}`, matchId, selectedSeconds, insight.projectionRevision)}>Open selected match</a>
           </article>)}</div>}
   </section>;

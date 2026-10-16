@@ -7,7 +7,7 @@ import { contextHref, resolveRoute, selectedTimeFromSearch } from './routes';
 describe('Match experience', () => {
   it('renders the route shell and honest loading state without inventing match facts', () => {
     const markup = renderToStaticMarkup(createElement(App));
-    expect(markup).toContain('Canonical match data');
+    expect(markup).toContain('Match data with source details');
     expect(markup).toContain('Skip to main content');
     expect(markup).toContain('id="main-content"');
     expect(markup).toContain('aria-label="Main navigation"');
@@ -423,7 +423,7 @@ it('rejects events and insights with a different match, revision or selected-tim
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+    expect(container.textContent).toContain('This match data does not match the selected moment.');
     expect(container.textContent).not.toContain('foreign-event');
     expect(container.textContent).not.toContain('A mismatched revision insight');
   } finally {
@@ -463,7 +463,7 @@ it.each(['event-match-id', 'insight-revision'] as const)('rejects a canonical ro
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+    expect(container.textContent).toContain('This match data does not match the selected moment.');
     expect(container.textContent).not.toContain('wrong-event');
     expect(container.textContent).not.toContain('Must not be shown');
   } finally {
@@ -513,7 +513,7 @@ it.each(['frame-page-projection-revision', 'frame-item-projection-revision', 'ne
     const root = createRoot(container);
     try {
       await act(async () => { root.render(createElement(App)); });
-      expect(container.textContent).toContain('outside the selected match, time, revision, sequence or event cutoff');
+      expect(container.textContent).toContain('This match data does not match the selected moment.');
       expect(container.querySelector('svg[role="img"]')).toBeNull();
     } finally {
       await act(async () => root.unmount());
@@ -538,7 +538,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
   try {
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('Simulated EPL-context match');
-    expect(container.textContent).toContain('Home side 1–0 Away side');
+    expect(container.textContent).toContain('Home team 1–0 Away team');
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).toContain('Second half');
     const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(link => link.href.includes(firstId));
@@ -605,7 +605,7 @@ it('shows a clear canonical-unavailable state and retries without demo substitut
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('No demo fixture has been substituted');
     await act(async () => { container.querySelector('button')!.click(); });
-    expect(container.textContent).toContain('No canonical matches are available yet.');
+    expect(container.textContent).toContain('No matches are available yet.');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   } finally {
     await act(async () => root.unmount());
@@ -669,9 +669,9 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
     await act(async () => { root.render(createElement(App)); });
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     expect(phaseFilter.value).toBe('secondhalf');
-    expect(container.textContent).toContain('No match in this phase is in the loaded results.');
-    expect(container.textContent).toContain('More persisted matches are available');
-    expect(container.textContent).not.toContain('No persisted matches are available in this phase.');
+    expect(container.textContent).toContain('No match in this phase is in the current list.');
+    expect(container.textContent).toContain('Choose “More matches” to check the next results.');
+    expect(container.textContent).not.toContain('No matches are available in this phase.');
     await act(async () => { container.querySelector<HTMLButtonElement>('.load-more')!.click(); });
     expect(container.textContent).toContain(secondId);
     expect(container.textContent).not.toContain(firstId);
@@ -916,7 +916,7 @@ it('offers retry after required canonical summary failure without substituting d
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Canonical match data service is temporarily unavailable.');
+    expect(container.textContent).toContain('Match data service is temporarily unavailable.');
     await act(async () => { container.querySelector<HTMLButtonElement>('#canonical-match-retry')!.click(); });
     expect(container.textContent).toContain('Canonical revision 4');
     expect(summaryRequests).toBe(2);
