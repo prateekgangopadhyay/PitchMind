@@ -1,7 +1,7 @@
 # EP03-S01 candidate event identity evidence
 
 **Candidate code commit:** `5cf19afeef8220a0d49f8bd346a80106f47ffe35` (`fix(EP03-S01): derive event IDs from final sequence`).
-**Current main checked:** `02c6c5c08635ab822ab1c57174f9681a462311d8`.
+**Current main checked:** `72dc8187dd08092d392a1b5f437c3e0ffd6d0b6d`.
 **Status:** The candidate correction is not present in current `main`. This report records a historical candidate slice and the outstanding merge gap; it does not claim the correction was merged.
 
 ## Candidate change
