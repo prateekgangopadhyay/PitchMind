@@ -78,7 +78,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 _BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "ee59274bcd79a8318d4cff64ffdd452381e4271159d307d2161ce42e14fe361a"
-_API_SMOKE_SHA256 = "97642b73b6930a13730535b301d153d2d158ebfef234469a4ee26fd7bc0d4c01"
+_HTTP_SMOKE_SCRIPT_SHA256 = "97642b73b6930a13730535b301d153d2d158ebfef234469a4ee26fd7bc0d4c01"
 
 
 def validate_pipeline_policy(
@@ -356,7 +356,7 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
 def _assert_release_helpers(release_helpers: dict[str, str]) -> None:
     expected_hashes = {
         "scripts/validate_release_identity_inputs.py": _IDENTITY_VALIDATOR_SHA256,
-        "scripts/api-smoke.py": _API_SMOKE_SHA256,
+        "scripts/api-smoke.py": _HTTP_SMOKE_SCRIPT_SHA256,
     }
     if set(release_helpers) != set(expected_hashes):
         raise PipelinePolicyError("The release helper source set must remain on the reviewed allowlist")

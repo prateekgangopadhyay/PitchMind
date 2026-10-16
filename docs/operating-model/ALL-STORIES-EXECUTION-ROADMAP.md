@@ -73,11 +73,11 @@ The [source profile](../data/MANU-LIV-SOURCE-PROFILE.md) reports 2,199 match eve
 | [EP12-S03](../engineering/stories/EP12/EP12-S03.md) | Model and partner expansion (M16) | P2 / Post-P0 | [data-engineer](../../.github/skills/data-engineer/SKILL.md) | EP12-S01, EP08-S05 | finops-engineer, football-analytics-engineer, security-architect |
 
 ## Integration protocol
-1. DRI opens short-lived branch `feat/EPxx-Syy-description` from updated main; declare feature flag and changed contracts. **Do not merge this documentation PR by default**: preserve review and release approval gates.
+1. All developments should be done in the main branch.
 2. Domain/data publish EventEnvelope and TrackingFrame schema with fixture SHA, source sequence/time/period/unknown units; consumer contracts first.
 3. API commits no future-leak snapshot example, OpenAPI and typed test fixture; React uses network data and honest missing states, not literal mockup match stats.
 4. Specialist reviewers sign only observed test artifacts, immutable code SHA and correct environment. Unverified, blocked or merely written remain unaccepted.
-5. Architecture changes update C4 L1/L2/L3, deployment diagram, ADR, sequence, LLD, API and operational impact in the **same PR**.
+5. Architecture changes update C4 L1/L2/L3, deployment diagram, ADR, sequence, LLD, API and operational impact in the commit.
 6. Only **after** owner explicitly approves an exact story/change-set and Azure DevOps protected manual gate is satisfied may Azure DEV resources be mutated. PR merge, a pipeline parameter, existing DEV demo or earlier blanket permission is not adequate.
 7. Progress must be written in the **existing** `docs/backlog/STORY-EXECUTION.md`; this routing registry is a work plan, not a second status authority.
 

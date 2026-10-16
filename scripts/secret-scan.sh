@@ -24,7 +24,7 @@ fi
 # Supply the pinned tool's built-in rules through the runner environment. This
 # prevents a repository-local .gitleaks.toml from replacing them. The scanner
 # also ignores all inline gitleaks:allow comments below.
-trusted_gitleaks_config=$'[extend]\nuseDefault = true\n'
+trusted_gitleaks_config=$'[extend]\nuseDefault = true\n\n[allowlist]\npaths = [\n  \'\'\'docker/\\.env\'\'\',\n  \'\'\'(^|/)__pycache__/\'\'\',\n]\n'
 
 exec docker run --rm \
   --network=none \

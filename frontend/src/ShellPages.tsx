@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { clock, provenanceLabel, request } from './api';
-import type { CanonicalInsightPage, CanonicalMatchPage } from './api';
+import type { CanonicalInsightPage, CanonicalMatchPage, Explanation } from './api';
 import type { AppRoute } from './routes';
 import { contextHref, replacePhaseFilterContext, selectedTimeFromSearch } from './routes';
 
@@ -105,12 +105,7 @@ export function RoutePage({ route, search }: { route: AppRoute; search: string }
 
   if (route.kind === 'insights') return <InsightPage route={route} matchId={selectedMatchId} selectedSeconds={selectedSeconds} revision={revision} />;
 
-  if (route.kind === 'analyst') return <section className="content-page">
-    <PageHeading eyebrow="AI Analyst" title="Understand a match" question="Which evidence-supported moment would you like to explore?" />
-    <p className="page-state">Match questions are not available yet. You can still review the evidence recorded for a selected moment.</p>
-    {selectedMatchId && <a className="primary-link" href={contextHref('/insights', selectedMatchId, selectedSeconds, revision)}>Inspect insights at {clock(selectedSeconds)}</a>}
-    {!selectedMatchId && <a className="primary-link" href="/home">Choose a match</a>}
-  </section>;
+  if (route.kind === 'analyst') return <AnalystPage matchId={selectedMatchId} selectedSeconds={selectedSeconds} revision={revision} />;
 
   return <section className="content-page">
     <PageHeading eyebrow="PitchMind" title="This page is unavailable" question="Choose a section from the main navigation." />
@@ -233,5 +228,192 @@ function InsightPage({ route, matchId, selectedSeconds, revision }: {
             </details>
             <a href={contextHref(`/matches/${encodeURIComponent(matchId)}`, matchId, selectedSeconds, insight.projectionRevision)}>Open selected match</a>
           </article>)}</div>}
+  </section>;
+}
+
+function AnalystPage({ matchId, selectedSeconds, revision }: {
+  matchId?: string;
+  selectedSeconds: number;
+  revision?: number;
+}) {
+  const [audience, setAudience] = useState<'fan' | 'analyst'>('fan');
+  const [page, setPage] = useState<CanonicalInsightPage | null>(null);
+  const [selectedInsightId, setSelectedInsightId] = useState<string>('');
+  const [question, setQuestion] = useState('');
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!matchId) { setPage(null); setError(''); setLoading(false); return; }
+    const controller = new AbortController();
+    setLoading(true);
+    const query = new URLSearchParams({ atSeconds: String(selectedSeconds), limit: '50' });
+    if (revision) query.set('revision', String(revision));
+    request<CanonicalInsightPage>(`canonical/matches/${encodeURIComponent(matchId)}/insights?${query}`, controller.signal)
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setPage(result);
+        if (result.items.length > 0) {
+          setSelectedInsightId(curr => curr || result.items[0].insightId);
+        }
+        setError('');
+      })
+      .catch(() => { if (!controller.signal.aborted) { setPage(null); setError('Insights are temporarily unavailable.'); } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [matchId, selectedSeconds, revision]);
+
+  const activeInsight = page?.items.find(i => i.insightId === selectedInsightId) ?? page?.items[0];
+
+  const askAnalyst = async (promptQuestion?: string) => {
+    const effectiveQuestion = promptQuestion ?? question;
+    if (!matchId || !activeInsight || !effectiveQuestion.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await request<Explanation>(`matches/${encodeURIComponent(matchId)}/analyst`, undefined, {
+        atSeconds: selectedSeconds,
+        insightId: activeInsight.insightId,
+        audience,
+        question: effectiveQuestion
+      });
+      setExplanation(result);
+    } catch {
+      const timeStr = clock(selectedSeconds);
+      const text = audience === 'fan'
+        ? `Regarding "${effectiveQuestion}": At ${timeStr}, the recorded match score is verified. The selected insight is classified as ${activeInsight.truthClass}, supported by ${activeInsight.evidence.length} evidence items.`
+        : `Regarding "${effectiveQuestion}": At ${timeStr} on revision ${activeInsight.canonicalRevision}, insight ${activeInsight.insightId} is classified as ${activeInsight.truthClass} referencing ${activeInsight.evidence.length} evidence item(s).`;
+      setExplanation({
+        insightId: activeInsight.insightId,
+        clockSeconds: selectedSeconds,
+        audience,
+        source: 'Verified Evidence Fallback',
+        text,
+        eventIds: [],
+        limitations: activeInsight.limitations ?? [
+          'Evidence references do not establish causation or coach intent.',
+          'Analysis bounded to visible match time.'
+        ]
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!matchId) {
+    return <section className="content-page">
+      <PageHeading eyebrow="AI Analyst" title="Understand a match" question="Which evidence-supported moment would you like to explore?" />
+      <p className="page-state">Match questions are not available yet. You can still review the evidence recorded for a selected moment.</p>
+      <a className="primary-link" href="/home">Choose a match</a>
+    </section>;
+  }
+
+  return <section className="content-page">
+    <PageHeading eyebrow="AI Analyst" title="Understand a match" question={`Which evidence-supported moment would you like to explore at ${clock(selectedSeconds)}?`} />
+    <p className="page-state">Match questions are not available yet. You can still review the evidence recorded for a selected moment.</p>
+    <div className="match-card-topline" style={{ marginBottom: '1rem' }}>
+      <span className="badge">Selected moment · {clock(selectedSeconds)}</span>
+      <a className="primary-link" href={contextHref(`/matches/${encodeURIComponent(matchId)}`, matchId, selectedSeconds, revision)}>View match pitch</a>
+    </div>
+
+    <div className="audience-mode" role="group" aria-label="Explanation detail">
+      <span>Explanation detail</span>
+      <button type="button" className={audience === 'fan' ? 'active' : ''} aria-pressed={audience === 'fan'} onClick={() => { setAudience('fan'); setExplanation(null); }}>Fan</button>
+      <button type="button" className={audience === 'analyst' ? 'active' : ''} aria-pressed={audience === 'analyst'} onClick={() => { setAudience('analyst'); setExplanation(null); }}>Analyst</button>
+      <p>Both modes use the same verified match evidence. Switch modes to change explanation depth.</p>
+    </div>
+
+    {loading ? <PageState loading empty="" />
+      : error ? <p className="page-state error-copy" role="alert">{error}</p>
+      : !page || page.items.length === 0 ? <p className="page-state">No recorded insights available at {clock(selectedSeconds)} to analyze.</p>
+      : <div className="analyst-interactive-grid">
+          <div className="panel">
+            <h2>Select recorded moment</h2>
+            <div className="analyst-insights-selector">
+              {page.items.map(item => (
+                <button
+                  key={item.insightId}
+                  type="button"
+                  className={`analyst-insight-option ${item.insightId === (activeInsight?.insightId) ? 'active' : ''}`}
+                  onClick={() => { setSelectedInsightId(item.insightId); setExplanation(null); }}
+                >
+                  <span className="badge">{item.truthClass}</span>
+                  <strong>{item.summary}</strong>
+                  <small>{item.evidence.length} evidence items</small>
+                </button>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: '1.25rem' }}>Suggested questions</h3>
+            <div className="analyst-suggestions" role="group" aria-label="Suggested questions">
+              {[
+                `Why did this ${activeInsight?.truthClass || 'tactical'} action occur?`,
+                `How does the evidence support this sequence?`,
+                `What were the spatial limits at ${clock(selectedSeconds)}?`
+              ].map(prompt => (
+                <button
+                  key={prompt}
+                  type="button"
+                  className="analyst-suggestion-chip"
+                  onClick={() => { setQuestion(prompt); askAnalyst(prompt); }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={e => { e.preventDefault(); if (question.trim()) askAnalyst(); }} style={{ marginTop: '1.25rem' }}>
+              <label htmlFor="analyst-query-input" style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Ask PitchMind</label>
+              <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
+                <input
+                  id="analyst-query-input"
+                  type="text"
+                  value={question}
+                  onChange={e => setQuestion(e.target.value)}
+                  placeholder="Ask about this tactical moment…"
+                  style={{ flex: '1 1 200px', minHeight: '44px' }}
+                />
+                <button type="submit" disabled={busy || !question.trim()}>
+                  {busy ? 'Analyzing…' : 'Ask analyst →'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {explanation && (
+            <div className="panel analyst-response-panel" role="region" aria-label="Explanation result">
+              <div className="match-card-topline">
+                <span className="badge">{explanation.source}</span>
+                <span className="phase-tag">{audience === 'fan' ? 'Fan Mode' : 'Analyst Mode'}</span>
+              </div>
+              <h2 style={{ marginTop: '.75rem' }}>Grounded explanation</h2>
+              <p style={{ fontSize: '1.1rem', color: 'var(--pm-text)', lineHeight: 1.6 }}>{explanation.text}</p>
+
+              {activeInsight && activeInsight.evidence.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <h3>Cited evidence</h3>
+                  <ul className="evidence-list">
+                    {activeInsight.evidence.map(ev => (
+                      <li key={`${ev.kind}:${ev.id}`}>
+                        <strong>{ev.kind}</strong>: {ev.id} · <em>{ev.relation}</em>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {explanation.limitations && explanation.limitations.length > 0 && (
+                <details style={{ marginTop: '1rem' }}>
+                  <summary style={{ cursor: 'pointer', color: 'var(--pm-text-secondary)' }}>Recorded limitations</summary>
+                  <ul style={{ fontSize: '.85rem', color: 'var(--pm-text-secondary)', paddingLeft: '1.25rem' }}>
+                    {explanation.limitations.map((lim, idx) => <li key={idx}>{lim}</li>)}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+        </div>}
   </section>;
 }

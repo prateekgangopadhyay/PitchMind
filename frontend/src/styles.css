@@ -233,3 +233,60 @@ button, select { min-height: 44px; }
 
 .selected-time-explanation { margin: 1rem 0; }
 .selected-time-explanation p { max-width: 70ch; }
+
+.analyst-interactive-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr);
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+.analyst-insights-selector {
+  display: grid;
+  gap: .65rem;
+  margin: .75rem 0;
+}
+.analyst-insight-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .35rem;
+  width: 100%;
+  padding: .75rem 1rem;
+  border-radius: 8px;
+  text-align: left;
+  border: 1px solid var(--pm-border);
+  background: var(--pm-surface-raised);
+}
+.analyst-insight-option.active {
+  border-color: var(--pm-accent);
+  background: #113328;
+}
+.analyst-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: .65rem 0;
+}
+.analyst-suggestion-chip {
+  padding: .45rem .85rem;
+  font-size: .82rem;
+  border-radius: 999px;
+  background: var(--pm-surface-raised);
+  border: 1px solid var(--pm-border);
+  color: var(--pm-text);
+  touch-action: manipulation;
+}
+.analyst-suggestion-chip:hover {
+  border-color: var(--pm-accent);
+  color: var(--pm-accent);
+}
+.analyst-response-panel {
+  border: 1px solid var(--pm-border);
+  background: var(--pm-surface);
+  border-left: 3px solid var(--pm-accent);
+}
+@media (max-width: 900px) {
+  .analyst-interactive-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

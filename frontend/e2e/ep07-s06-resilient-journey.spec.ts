@@ -221,7 +221,7 @@ test('audience mode changes disclosure while preserving selected-time facts', as
   const truthClassText = await truthClass.innerText();
   await expect(score).toContainText('55:09');
   await expect(score).toContainText('1');
-  await expect(page.getByText(insightSummary)).toBeVisible();
+  await expect(page.getByText(insightSummary).first()).toBeVisible();
   await expect(page.getByText('Simulated EPL-context match')).toBeVisible();
 
   const audience = page.getByRole('group', { name: 'Explanation detail' });
@@ -233,7 +233,7 @@ test('audience mode changes disclosure while preserving selected-time facts', as
   expect(await score.innerText()).toBe(matchFacts);
   await expect(truthClass).toBeVisible();
   expect(await truthClass.innerText()).toBe(truthClassText);
-  await expect(page.getByText(insightSummary)).toBeVisible();
+  await expect(page.getByText(insightSummary).first()).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(overflow, 'the 320px match journey should not require horizontal page scrolling').toBe(false);
@@ -265,7 +265,7 @@ test('keeps canonical score available when optional reads, including AI-related 
 
   await expect(page.getByRole('region', { name: 'Match score' })).toContainText('55:09');
   await expect(page.getByText('Recorded events service is temporarily unavailable.')).toBeVisible();
-  await expect(page.getByText('Saved insights service is temporarily unavailable.')).toBeVisible();
+  await expect(page.getByText('Saved insights service is temporarily unavailable.').first()).toBeVisible();
   await expect(page.getByText('Observed tracking is unavailable from the canonical service at this selected time.')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
 });

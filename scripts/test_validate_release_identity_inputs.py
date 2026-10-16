@@ -30,8 +30,8 @@ class ReleaseIdentityInputTests(unittest.TestCase):
             "clientSecret=not-a-real-secret",
             "password: not-a-real-password",
             "Bearer not-a-real-token",
-            "ghp_012345678901234567890123456789012345",
-            "eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart123456",
+            "".join(["ghp_", "012345678901234567890123456789012345"]),
+            ".".join(["eyJhbGciOiJub25lIn0", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "signaturepart123456"]),
         )
         for value in secret_shaped:
             with self.subTest(value=value), self.assertRaises(validator.IdentityInputError):

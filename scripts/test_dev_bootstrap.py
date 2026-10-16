@@ -123,7 +123,7 @@ printf '\\n'
             ["bash", str(self.root / "scripts" / script), *args],
             cwd=self.root,
             env=self.env,
-            input=input_text,
+            input=input_text if input_text is not None else "",
             capture_output=True,
             text=True,
             check=False,

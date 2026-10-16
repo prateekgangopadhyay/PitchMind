@@ -3,7 +3,8 @@ namespace PitchMind.Application.MatchIntelligence;
 public enum ExplanationAudience
 {
     Fan,
-    Analyst
+    Analyst,
+    Expert
 }
 
 public sealed record ExplanationGenerationRequest(

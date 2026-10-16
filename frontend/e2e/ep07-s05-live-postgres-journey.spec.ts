@@ -19,7 +19,7 @@ test('reads persisted PostgreSQL evidence through the local API and replays its 
   await page.goto(`/matches/${matchId}?matchId=${matchId}&atSeconds=${selectedSeconds}&revision=${projectionRevision}`);
   await expect(page.getByRole('heading', { name: 'Match overview' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Evidence-backed insights' })).toBeVisible();
-  await expect(page.getByText('Test-only evidence record. No match claim.')).toBeVisible();
+  await expect(page.getByText('Test-only evidence record. No match claim.').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Select Pass at 00:10, sequence 1/ })).toBeVisible();
 
   const disclosure = page.locator('details.canonical-evidence-disclosure');

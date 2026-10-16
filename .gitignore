@@ -14,6 +14,10 @@ TestResults/
 *.local.json
 *.publishsettings
 *.tsbuildinfo
+*.pyc
+*.DS_Store
+.DS_Store
+frontend/test-results/
 
 # Local CodeGraph semantic graph/index outputs (not review or source evidence)
 /.codegraph/
