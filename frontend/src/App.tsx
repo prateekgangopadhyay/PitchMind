@@ -117,7 +117,7 @@ export function App() {
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <header className="site-header">
       <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home"><span aria-hidden="true">◈</span> PitchMind</a>
-      <span className="tag">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Canonical match data · Source labelled'}</span>
+      <span className="tag">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Match data with source details'}</span>
     </header>
     <nav className="main-navigation" aria-label="Main navigation">
       {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}

@@ -147,13 +147,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
         if (!exactContext || !eventsSafe || !insightsSafe || !framesSafe) {
           setView(null);
           setPlaying(false);
-          setError('Match data is outside the selected match, time, revision, sequence or event cutoff.');
+          setError('This match data does not match the selected moment. Return to the match list and try again.');
           return;
         }
         setView({ snapshot, events, insights, trackingFrames, trackingStatus: frameResult.status, keyMomentsStatus,
           eventsStatus: eventResult.status, insightsStatus: insightResult.status });
       })
-      .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Canonical match data')); } })
+      .catch(failure => { if (!controller.signal.aborted) { setView(null); setPlaying(false); setError(unavailableMessage(failure, 'Match data')); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [matchId, requestedRevision, requestedFrameId, requestedSourceRevision, selectedSeconds, retryCounter, realtimeMode]);
@@ -282,7 +282,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     {loading ? <p className="page-state" role="status">Loading the selected match revision…</p>
       : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button id="canonical-match-retry" type="button" onClick={() => { setFocusAfterLoad({ kind: 'retry' }); setLoading(true); setRetryCounter(value => value + 1); }}>Retry Match Data</button></div>
         : snapshot && view ? <>
-          <section className="scoreboard" aria-label="Canonical match score">
+          <section className="scoreboard" aria-label="Match score">
             <div className="team">Home</div><span className="score">{snapshot.homeScore}</span>
             <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{phaseLabel(snapshot.phase)}</small></div>
             <span className="score">{snapshot.awayScore}</span><div className="team">Away</div>

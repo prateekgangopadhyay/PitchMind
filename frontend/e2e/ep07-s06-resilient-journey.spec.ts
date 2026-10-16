@@ -200,7 +200,7 @@ test('does not display canonical pitch positions until tracking rights are appro
   await expect(pitch.getByText('Observed tracking is unavailable until the source is approved for canonical use. Positions are not estimated.')).toBeVisible();
   await expect(pitch.getByRole('img', { name: /Observed player and ball positions/ })).toHaveCount(0);
   await expect(pitch.getByRole('table', { name: /Pitch view coordinates/ })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Canonical match score' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Match score' })).toBeVisible();
 });
 
 async function openSelectedMatch(page: Page) {
@@ -214,7 +214,7 @@ test('audience mode changes disclosure while preserving selected-time facts', as
   await stubCanonicalMatch(page);
   await openSelectedMatch(page);
 
-  const score = page.getByRole('region', { name: 'Canonical match score' });
+  const score = page.getByRole('region', { name: 'Match score' });
   const matchFacts = await score.innerText();
   const truthClass = page.getByLabel('Insight category: observed');
   await expect(truthClass).toBeVisible();
@@ -263,7 +263,7 @@ test('keeps canonical score available when optional reads, including AI-related 
   await stubCanonicalMatch(page, { unavailable: ['events', 'insights', 'frames', 'key-moments'] });
   await openSelectedMatch(page);
 
-  await expect(page.getByRole('region', { name: 'Canonical match score' })).toContainText('55:09');
+  await expect(page.getByRole('region', { name: 'Match score' })).toContainText('55:09');
   await expect(page.getByText('Recorded events service is temporarily unavailable.')).toBeVisible();
   await expect(page.getByText('Saved insights service is temporarily unavailable.')).toBeVisible();
   await expect(page.getByText('Observed tracking is unavailable from the canonical service at this selected time.')).toBeVisible();
