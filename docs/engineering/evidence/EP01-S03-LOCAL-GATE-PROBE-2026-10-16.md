@@ -36,3 +36,14 @@ PR #295 was restacked onto current main `5f6f3367743bfac754d9b6ba7144091f1baed9a
 This is current-main LOCAL evidence only. No Azure DevOps pipeline was registered or queued; hosted execution, test-result publishing, GitHub required-check/branch-policy binding, hosted failure-to-block behavior, independent human review, and Product Owner acceptance remain unverified. No Azure command, resource change, or deployment occurred. EP01-S03 remains unaccepted.
 
 After the checks, main advanced to `60cad153ee0031262a94378df199068ad217a031` with a Product Owner ledger documentation update. The draft branch was rebased onto that current head; `src/`, `tests/`, and `pipelines/` remain byte-identical to the tested tree. The restack changes no implementation/test source and the above test results remain applicable to the current code tree.
+
+
+## Exact-tree rerun after current-main advance — 2026-10-16
+
+After PRs #309 and #303 advanced `main` to `cb11e216182b75e4b599b67d04268c83a9b37186`, the documentation-only PR was rebased to `8602cff71c6dc175eb833fffb40dea9872a12857`. Its `src/`, `tests/`, and `pipelines/` trees match that current main exactly. On this rebased tree:
+
+- The Release Architecture suite passed **30/30, 0 failed, 0 skipped**. The first sandboxed test-host attempt aborted before execution because loopback binding was denied; the rerun with local test-host permission passed.
+- `DeliberateGateFailureProbe` passed **1/1** with `PITCHMIND_GATE_FAILURE_PROBE` unset. With the variable set to `1`, it failed **1/1** and `dotnet test` returned exit code **1**, as intended.
+- The Council operating-model validator passed, and `git diff --check` passed.
+
+This closes the exact-tree gap identified in review for the local Architecture/probe evidence. It remains local evidence only: no full solution run, hosted Azure DevOps execution, required-check binding, or Product Owner acceptance is claimed. EP01-S03 remains unaccepted; no Azure operation occurred.
