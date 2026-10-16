@@ -122,7 +122,12 @@ export async function getHostAccessToken(): Promise<string | null> {
 export async function request<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
   const token = await getHostAccessToken();
   const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  } else if (typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
+    headers.set('X-Dev-Subject', 'local-analyst');
+    headers.set('X-Dev-Roles', 'analyst');
+  }
   const response = await fetch(`/api/v1/${path}`, {
     signal,
     headers,
