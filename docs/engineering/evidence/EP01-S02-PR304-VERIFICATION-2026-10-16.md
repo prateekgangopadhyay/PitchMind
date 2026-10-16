@@ -13,9 +13,10 @@
 - `git diff --check` — passed.
 - `dotnet restore PitchMind.slnx -p:NuGetAudit=false --disable-parallel` — passed for all projects.
 - `dotnet test PitchMind.slnx -c Release --no-restore -m:1 --disable-build-servers -p:NuGetAudit=false` — **522 passed, 0 failed, 38 skipped**. The skips are opt-in PostgreSQL tests (37 Infrastructure plus one API readiness test); no test database was configured. VSTest required permission for local test-host IPC sockets. The first sandboxed invocation was unable to bind those local sockets; it is not a test failure.
+- Read-only Docker inspection — PostgreSQL and Redis containers reported healthy, bound to `127.0.0.1:5432` and `127.0.0.1:6379`; mounts were `pitchmind_postgres_data:/var/lib/postgresql/data` and `pitchmind_redis_data:/data`. No Docker lifecycle, migration, or data inspection operation was run.
 
 The focused suite covers local credential validation/generation, loopback-only ports, local Docker target guards, PostgreSQL image/volume major compatibility, isolated project/volume names, and safe stop/reset behavior through controlled command stubs.
 
 ## Limits
 
-This run did not invoke `dev-up.sh`, start/stop/reset Docker services, or migrate or inspect volumes. A read-only Docker status probe was denied by the sandbox, so current container health was not observed here. The separate read-only host service status is recorded in [local service status](EP01-S02-LOCAL-STATUS-2026-10-16.md). The .NET suite does not substitute for fresh-machine bootstrap or PostgreSQL integration. Frontend suites, hosted CI, fresh-machine acceptance, independent human review, and Product Owner acceptance remain open. EP01-S02 remains unaccepted. No Azure resources or deployments were changed.
+This run did not invoke `dev-up.sh`, start/stop/reset Docker services, migrate or inspect database contents. The read-only container check proves current local health and loopback bindings only; it does not prove a fresh-machine start/restart path. The .NET suite does not substitute for PostgreSQL integration. Frontend suites, hosted CI, fresh-machine acceptance, independent human review, and Product Owner acceptance remain open. EP01-S02 remains unaccepted. No Azure resources or deployments were changed.
