@@ -56,6 +56,11 @@ stages:
         test -f docs/architecture/06-target-azure-hld.md
         test -f docs/architecture/07-football-analytics-detailed-lld.md
       displayName: Verify source-feed preflight and planning artifacts
+    - bash: |
+        set -euo pipefail
+        node scripts/validate_operating_model.mjs
+        node scripts/validate_operating_model.mjs --self-test
+      displayName: Verify story routing and DEV release gate structure
   - job: Backend
     displayName: .NET 10 build and tests
     steps:
@@ -98,10 +103,10 @@ stages:
 # Only a deliberately queued parameterized run may reach these stages. The default
 # validation-only main/PR pipeline CANNOT deploy. Owner approval for the exact story,
 # scope, resource diff, costs, SHA and rollback is mandatory BEFORE ACR push/DEV write.
-# ManualValidation and Azure DevOps Environment checks are defense in depth; their
-# existence does not prove owner-only approval. The ManualValidation task can be
-# resumed by users with Queue builds permission; constrain that permission and
-# protected Environment approvers to the repository owner before registering delivery.
+# Dedicated Azure DevOps Environments are approval hooks; their required checks,
+# approver lists and permissions are external configuration and must be independently
+# verified before this delivery path is enabled. ManualValidation below is an extra
+# pause only; it does NOT establish approver identity.
 - ${{ if eq(parameters.enableDevDelivery, true) }}:
   - stage: OwnerApprovalBeforeAzureMutation
     dependsOn: Validate
@@ -120,9 +125,20 @@ stages:
         env:
           PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
           PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
-    - job: AwaitExplicitOwnerApproval
+    - deployment: AwaitExplicitOwnerApproval
       dependsOn: ValidateReleaseIdentityInputs
       displayName: Review the approved change set before ACR push or DEV mutation
+      environment: pitchmind-release-authorization
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - bash: |
+                echo 'Protected environment approval completed; no Azure mutation occurs in this stage.'
+              displayName: Record pre-mutation authorization gate
+    - job: AwaitOwnerConsentRecord
+      dependsOn: AwaitExplicitOwnerApproval
+      displayName: Pause until exact change-set approval is recorded
       pool: server
       timeoutInMinutes: 1440
       steps:
@@ -131,10 +147,9 @@ stages:
         inputs:
           notifyUsers: ''
           instructions: |
-            STOP. Obtain and record explicit repository-owner approval for THIS story/change set.
-            Verify Git SHA, resource group/subscription, Bicep what-if, image plan,
-            migration, cost budget, ingress/security and rollback.
-            No approval => Reject. Protected Azure DevOps Environment checks remain mandatory.
+            This pause does not establish approver identity. Resume only after repository-owner
+            consent for this exact SHA, change scope, resource diff, cost estimate and rollback
+            has been recorded and the protected Environment approval has completed. Otherwise reject.
           onTimeout: reject
   - stage: BuildRelease
     dependsOn: OwnerApprovalBeforeAzureMutation
@@ -151,8 +166,19 @@ stages:
     dependsOn: BuildRelease
     condition: succeeded()
     jobs:
-    - job: AwaitDigestConfirmation
+    - deployment: AwaitDigestConfirmation
       displayName: Owner reconfirms the immutable image and DEV deployment
+      environment: pitchmind-release-digest-authorization
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - bash: |
+                echo 'Protected environment approval completed; digest and DEV change must match the approved release manifest.'
+              displayName: Record immutable digest authorization gate
+    - job: AwaitDigestConsentRecord
+      dependsOn: AwaitDigestConfirmation
+      displayName: Pause until immutable digest approval is recorded
       pool: server
       timeoutInMinutes: 1440
       steps:
@@ -161,10 +187,9 @@ stages:
         inputs:
           notifyUsers: ''
           instructions: |
-            STOP. Inspect the release manifest image digest published by BuildRelease.
-            Reconfirm the same explicit owner approval covers this digest and DEV impact.
-            Never treat the previous approval as blanket permission for other stories.
-            Approve only with recorded owner consent; otherwise Reject.
+            This pause does not establish approver identity. Resume only after repository-owner
+            consent for the exact immutable image digest and DEV impact has been recorded and the
+            protected digest Environment approval has completed. Otherwise reject.
           onTimeout: reject
   - stage: DeployDev
     dependsOn: OwnerApprovalOfReleaseDigest
