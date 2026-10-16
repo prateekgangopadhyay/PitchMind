@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+cd "$(dirname "$0")/.."
 # This script does not deploy. Requires authenticated Azure CLI and an existing resource group.
 if [[ ${1:-} != "--resource-group" || -z ${2:-} ]]; then
   echo "Usage: $0 --resource-group <existing-dev-resource-group>" >&2
