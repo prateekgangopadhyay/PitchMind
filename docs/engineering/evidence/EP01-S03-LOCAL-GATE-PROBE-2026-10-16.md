@@ -34,3 +34,5 @@ PR #295 was restacked onto current main `5f6f3367743bfac754d9b6ba7144091f1baed9a
 - `node scripts/validate_operating_model.mjs`, `node scripts/validate_operating_model.mjs --self-test`, and `git diff --check` passed.
 
 This is current-main LOCAL evidence only. No Azure DevOps pipeline was registered or queued; hosted execution, test-result publishing, GitHub required-check/branch-policy binding, hosted failure-to-block behavior, independent human review, and Product Owner acceptance remain unverified. No Azure command, resource change, or deployment occurred. EP01-S03 remains unaccepted.
+
+After the checks, main advanced to `60cad153ee0031262a94378df199068ad217a031` with a Product Owner ledger documentation update. The draft branch was rebased onto that current head; `src/`, `tests/`, and `pipelines/` remain byte-identical to the tested tree. The restack changes no implementation/test source and the above test results remain applicable to the current code tree.
