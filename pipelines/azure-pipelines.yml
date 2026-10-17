@@ -23,7 +23,7 @@ parameters:
   default: rg-pitchmind-dev-001
 - name: devAppName
   type: string
-  default: pm-dev-api
+  default: pm-dev-api-vnet
 - name: devVnetName
   type: string
   default: pm-dev-vnet
