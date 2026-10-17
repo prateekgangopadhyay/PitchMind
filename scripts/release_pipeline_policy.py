@@ -66,7 +66,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
     ),
     "Compile DEV/STAGE/PROD Bicep and check environment isolation (no deployment)": (
         None,
-        "bc4f1bc719c77ae6f85fe74adda462c6b369f18edd7a426ea1eae84da8ecee25",
+        "5ecd9946d83c321927d619bc94219d161dfe1aba74a4b005f4528bd8246d8934",
     ),
     "Run the deliberately failing test; its nonzero exit must fail Validate": (
         None,
@@ -77,8 +77,17 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 # reviewed alongside a command-level diff and the mutation tests.
 _BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
-_IDENTITY_VALIDATOR_SHA256 = "ee59274bcd79a8318d4cff64ffdd452381e4271159d307d2161ce42e14fe361a"
+_IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "97642b73b6930a13730535b301d153d2d158ebfef234469a4ee26fd7bc0d4c01"
+_PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
+    "scripts/private-dev-plan.sh": "07853bcc5d5dac5e4a1779ab67139e133703393d9630170a37c2ccc2142777b7",
+    "scripts/private-dev-deploy.sh": "afdbd9f7fb924998a10d9583a6a8d0f6765c20162ca4a613648d92ad612641dc",
+    "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
+    "scripts/validate_private_dev_whatif.py": "74f615eb3cb4553eebe292f2c6e6d8e52714ff8cabf959afd97e33378fe207d6",
+    "pipelines/templates/preview-private-dev.yml": "e5f25b62c3220e762583e5b403f0e4e32d4d555d1ba9bc6338e2113b368353b4",
+    "pipelines/templates/provision-private-dev.yml": "da53e22d664207465d36b281e26b0e7b0f02ebb591c04abcb2ef9a62c6e6e2a7",
+    "infra/private-dev-topology.bicep": "629c07442df9e3301a0d9698d7479673f9b203bf01f048a875a35a6760ce8ee8",
+}
 
 
 def validate_pipeline_policy(
@@ -107,6 +116,24 @@ def validate_pipeline_policy(
     )
     if delivery_parameter is None or delivery_parameter.get("type") != "boolean" or delivery_parameter.get("default") is not False:
         raise PipelinePolicyError("DEV delivery must remain a boolean default-off parameter")
+    for parameter_name in ("provisionPostgres", "provisionRedis"):
+        option = next(
+            (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
+            None,
+        )
+        if option is None or option.get("type") != "boolean" or option.get("default") is not False:
+            raise PipelinePolicyError(f"{parameter_name} must remain a boolean default-off resource option")
+    for parameter_name, expected_default in (
+        ("devInfrastructureServiceConnection", "unconfigured"),
+        ("devAcaSubnetCidr", ""),
+        ("devEstimatedMonthlyCost", ""),
+    ):
+        option = next(
+            (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
+            None,
+        )
+        if option is None or option.get("type") != "string" or option.get("default") != expected_default:
+            raise PipelinePolicyError(f"{parameter_name} must remain an explicit, fail-closed string input")
     for parameter_name in ("registryName", "devResourceGroup", "devAppName"):
         configured = [
             item for item in parameters
@@ -160,10 +187,14 @@ def validate_pipeline_policy(
     _require_manual_approval(
         digest_approval,
         job_name="AwaitDigestConfirmation",
-        depends_on=None,
+        depends_on="PreviewPrivateDevTopology",
         instruction_tokens=("release manifest image digest", "explicit owner approval"),
     )
-    _require_release_stage_shape(digest_approval, expected_jobs=("AwaitDigestConfirmation",))
+    _require_release_stage_shape(
+        digest_approval,
+        expected_jobs=("PreviewPrivateDevTopology", "AwaitDigestConfirmation"),
+    )
+    _require_private_dev_preview(digest_approval)
 
     validate_stage = validate_stages[0]
     referenced_templates = _find_values(validate_stage, "template")
@@ -185,10 +216,47 @@ def validate_pipeline_policy(
     _require_release_stage_shape(deploy_stage, expected_jobs=("Dev",))
     build_call = _find_one_template_call(build_release, "templates/build-image.yml")
     deploy_call = _find_one_template_call(deploy_stage, "templates/deploy-image.yml")
+    preview_call = _find_one_template_call(digest_approval, "templates/preview-private-dev.yml")
+    provision_call = _find_one_template_call(deploy_stage, "templates/provision-private-dev.yml")
     if build_call.get("parameters", {}).get("acrPushServiceConnection") != "${{ parameters.acrPushServiceConnection }}":
         raise PipelinePolicyError("BuildRelease must pass the dedicated ACR-push service connection")
     if deploy_call.get("parameters", {}).get("devDeploymentServiceConnection") != "${{ parameters.devDeploymentServiceConnection }}":
         raise PipelinePolicyError("DeployDev must pass the dedicated DEV deployment service connection")
+    expected_private_parameters = {
+        "devInfrastructureServiceConnection": "${{ parameters.devInfrastructureServiceConnection }}",
+        "registryName": "${{ parameters.registryName }}",
+        "resourceGroup": "${{ parameters.devResourceGroup }}",
+        "vnetName": "${{ parameters.devVnetName }}",
+        "acaSubnetName": "${{ parameters.devAcaSubnetName }}",
+        "acaSubnetCidr": "${{ parameters.devAcaSubnetCidr }}",
+        "postgresSubnetName": "${{ parameters.devPostgresSubnetName }}",
+        "postgresSubnetCidr": "${{ parameters.devPostgresSubnetCidr }}",
+        "provisionRedis": "${{ parameters.provisionRedis }}",
+        "redisName": "${{ parameters.devRedisName }}",
+        "redisSkuName": "${{ parameters.devRedisSkuName }}",
+        "redisPrivateEndpointSubnetName": "${{ parameters.devRedisPrivateEndpointSubnetName }}",
+        "redisPrivateDnsZoneName": "${{ parameters.devRedisPrivateDnsZoneName }}",
+        "redisPrivateEndpointName": "${{ parameters.devRedisPrivateEndpointName }}",
+        "postgresDnsZoneName": "${{ parameters.devPostgresDnsZoneName }}",
+        "appName": "${{ parameters.devAppName }}",
+        "environmentName": "${{ parameters.devEnvironmentName }}",
+        "provisionPostgres": "${{ parameters.provisionPostgres }}",
+        "postgresServerName": "${{ parameters.devPostgresServerName }}",
+        "postgresSkuTier": "${{ parameters.devPostgresSkuTier }}",
+        "postgresSkuName": "${{ parameters.devPostgresSkuName }}",
+        "postgresAdminObjectId": "${{ parameters.devPostgresAdminObjectId }}",
+        "postgresAdminPrincipalName": "${{ parameters.devPostgresAdminPrincipalName }}",
+        "postgresAdminPrincipalType": "${{ parameters.devPostgresAdminPrincipalType }}",
+        "estimatedMonthlyCost": "${{ parameters.devEstimatedMonthlyCost }}",
+    }
+    if preview_call.get("parameters") != expected_private_parameters:
+        raise PipelinePolicyError("The private DEV preview must receive the exact reviewed pipeline parameters")
+    expected_apply_parameters = {
+        key: value for key, value in expected_private_parameters.items()
+        if key != "estimatedMonthlyCost"
+    }
+    if provision_call.get("parameters") != expected_apply_parameters:
+        raise PipelinePolicyError("The private DEV apply must use the same reviewed target as its what-if")
 
     _assert_release_template(
         build_doc,
@@ -357,6 +425,7 @@ def _assert_release_helpers(release_helpers: dict[str, str]) -> None:
     expected_hashes = {
         "scripts/validate_release_identity_inputs.py": _IDENTITY_VALIDATOR_SHA256,
         "scripts/api-smoke.py": _HTTP_SMOKE_SCRIPT_SHA256,
+        **_PRIVATE_DEV_SOURCE_HASHES,
     }
     if set(release_helpers) != set(expected_hashes):
         raise PipelinePolicyError("The release helper source set must remain on the reviewed allowlist")
@@ -364,6 +433,21 @@ def _assert_release_helpers(release_helpers: dict[str, str]) -> None:
         actual_hash = hashlib.sha256(release_helpers[helper_path].encode("utf-8")).hexdigest()
         if actual_hash != expected_hash:
             raise PipelinePolicyError(f"Release helper {helper_path} changed without a reviewed policy pin")
+
+
+def _require_private_dev_preview(stage: dict[str, Any]) -> None:
+    jobs = _sequence(stage.get("jobs"), "digest approval jobs")
+    if not jobs or not isinstance(jobs[0], dict):
+        raise PipelinePolicyError("Digest approval must run the private DEV what-if before the gate")
+    job = jobs[0]
+    if set(job) != {"job", "displayName", "steps"} or job.get("job") != "PreviewPrivateDevTopology":
+        raise PipelinePolicyError("Digest approval must begin with the reviewed private DEV preview job")
+    steps = _sequence(job.get("steps"), "private DEV preview steps")
+    if len(steps) != 2 or steps[0] != {"checkout": "self"}:
+        raise PipelinePolicyError("Private DEV preview may contain only checkout and its reviewed template")
+    if not isinstance(steps[1], dict) or steps[1].get("template") != "templates/preview-private-dev.yml" or \
+            set(steps[1]) != {"template", "parameters"}:
+        raise PipelinePolicyError("Private DEV preview must call only the reviewed what-if template")
 
 
 def _require_manual_approval(
@@ -434,15 +518,22 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     expected = {
         "PITCHMIND_ACR_PUSH_SERVICE_CONNECTION": "${{ parameters.acrPushServiceConnection }}",
         "PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION": "${{ parameters.devDeploymentServiceConnection }}",
+        "PITCHMIND_DEV_INFRA_SERVICE_CONNECTION": "${{ parameters.devInfrastructureServiceConnection }}",
         "PITCHMIND_REGISTRY_NAME": "${{ parameters.registryName }}",
         "PITCHMIND_IMAGE_REPOSITORY": "pitchmind",
         "PITCHMIND_DEV_RESOURCE_GROUP": "${{ parameters.devResourceGroup }}",
         "PITCHMIND_DEV_APP_NAME": "${{ parameters.devAppName }}",
+        "PITCHMIND_DEV_VNET_NAME": "${{ parameters.devVnetName }}",
+        "PITCHMIND_DEV_ACA_SUBNET_NAME": "${{ parameters.devAcaSubnetName }}",
+        "PITCHMIND_DEV_POSTGRES_SUBNET_NAME": "${{ parameters.devPostgresSubnetName }}",
+        "PITCHMIND_DEV_REDIS_PE_SUBNET_NAME": "${{ parameters.devRedisPrivateEndpointSubnetName }}",
+        "PITCHMIND_DEV_ACA_SUBNET_CIDR": "${{ parameters.devAcaSubnetCidr }}",
+        "PITCHMIND_DEV_ESTIMATED_MONTHLY_COST": "${{ parameters.devEstimatedMonthlyCost }}",
     }
     if not isinstance(environment, dict) or any(environment.get(key) != value for key, value in expected.items()):
         raise PipelinePolicyError("The identity preflight must receive the distinct connection parameters")
     if set(environment) != set(expected):
-        raise PipelinePolicyError("The identity preflight environment may contain only the two reviewed identities")
+        raise PipelinePolicyError("The identity preflight environment may contain only the reviewed release inputs")
 
 
 def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[str, ...]) -> None:
@@ -462,6 +553,9 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         # agentless gate. Their detailed contents are checked separately.
         return
     if stage_name == "OwnerApprovalOfReleaseDigest":
+        if len(jobs) != 2 or jobs[0].get("job") != "PreviewPrivateDevTopology" or \
+                jobs[1].get("job") != "AwaitDigestConfirmation":
+            raise PipelinePolicyError("Digest approval must preview first and then pause for owner confirmation")
         return
     if stage_name == "BuildRelease":
         job = jobs[0]
@@ -496,17 +590,21 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         if not isinstance(deploy, dict) or set(deploy) != {"steps"}:
             raise PipelinePolicyError("DeployDev deployment may contain only the reviewed steps")
         steps = deploy.get("steps") if isinstance(deploy, dict) else None
-        if not isinstance(steps, list) or len(steps) != 2 or steps[0] != {"checkout": "self"}:
-            raise PipelinePolicyError("DeployDev may contain only checkout and the reviewed deployment template")
-        if not isinstance(steps[1], dict) or steps[1].get("template") != "templates/deploy-image.yml":
-            raise PipelinePolicyError("DeployDev may contain only the reviewed deployment template")
-        if set(steps[1]) != {"template", "parameters"}:
+        if not isinstance(steps, list) or len(steps) != 3 or steps[0] != {"checkout": "self"}:
+            raise PipelinePolicyError("DeployDev may contain only checkout, approved topology apply and image deployment")
+        if not isinstance(steps[1], dict) or steps[1].get("template") != "templates/provision-private-dev.yml" or \
+                not isinstance(steps[2], dict) or steps[2].get("template") != "templates/deploy-image.yml":
+            raise PipelinePolicyError("DeployDev must apply the reviewed topology before the reviewed image deployment")
+        if set(steps[1]) != {"template", "parameters"} or set(steps[2]) != {"template", "parameters"}:
             raise PipelinePolicyError("DeployDev template call may not contain unreviewed fields")
-        parameters = steps[1].get("parameters")
+        parameters = steps[2].get("parameters")
+        provision_parameters = steps[1].get("parameters")
         if not isinstance(parameters, dict) or set(parameters) != {
             "devDeploymentServiceConnection", "resourceGroup", "appName"
         }:
             raise PipelinePolicyError("DeployDev template parameters must remain on the reviewed allowlist")
+        if not isinstance(provision_parameters, dict) or "estimatedMonthlyCost" in provision_parameters:
+            raise PipelinePolicyError("DeployDev topology apply parameters must remain on the reviewed allowlist")
 
 
 def _assert_validation_step_shapes(node: Any, label: str) -> None:

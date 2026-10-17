@@ -60,3 +60,22 @@ The public edge shown above is a target option, not a configured route. The curr
 - If release delivery is explicitly configured, image publication and DEV deployment use distinct workload-federated Azure DevOps service connections. The publisher is scoped to the exact ACR (`AcrPush`); the deployer is scoped to the named Container App with the minimum reviewed update permission. The opt-in gate rejects missing or identically named connections. These are configuration requirements, not evidence that either connection exists or that its RBAC has been verified.
 - `ManualValidation@0` is a pause, not owner identity enforcement: users with pipeline Queue builds permission can resume or reject it ([Microsoft task documentation](https://learn.microsoft.com/en-us/azure/devops/pipelines/tasks/reference/manual-validation-v0?view=azure-pipelines)). Configure and verify owner-only queue permissions and protected Environment approvers before any DEV release; this repository has no evidence those controls are configured.
 - Retain immutable artifacts, minimum necessary access, separate migration and runtime identities, no local PostgreSQL/Ollama/Redis in cloud, and no claims that unavailable proof was executed.
+
+## Guarded DEV topology candidate (not deployed)
+
+`infra/private-dev-topology.bicep` is an opt-in alternative for the existing `pm-dev-vnet`. It creates a separate ACA environment on a newly delegated `container-apps` subnet while preserving public browser ingress through ACA; PostgreSQL remains private on the `postgres` delegated subnet. An optional Azure Managed Redis instance uses a Private Link endpoint in the existing `private-endpoints` subnet, `privatelink.redis.azure.net` DNS, TLS, and disabled public network access. PostgreSQL and Redis provisioning are separate default-off options. The shared private-endpoints subnet itself is not changed.
+
+```mermaid
+flowchart LR
+  Browser["Public browser"] --> ACAIngress["TLS-only ACA ingress"]
+  ACAIngress --> API["pm-dev-api-vnet / pm-dev-private-cae"]
+  subgraph VNet["Existing pm-dev-vnet"]
+    ACA["Delegated container-apps subnet /27+"] --> API
+    API -. "private DNS / VNet route" .-> PG[("Optional PostgreSQL Flexible Server\npostgres delegated subnet")]
+    API -. "Private Link + private DNS" .-> Redis[("Optional Azure Managed Redis\nprivate-endpoints subnet")]
+  end
+  ACR["Existing ACR / immutable digest"] --> ACA
+  ADO["Azure DevOps: default-off, what-if, owner gate, protected Environment"] --> ACA
+```
+
+The candidate deploys an app image and infrastructure but does not configure the app's PostgreSQL managed-identity grants, migration job, Redis Entra data-plane permissions, or Redis connection settings. Those connections are not represented as working application paths until the runtime code and end-to-end evidence are added. Redis's initial low-cost configuration has HA disabled; it is cache-only and does not provide the availability properties of a canonical store. Subnet CIDR/overlap, SKU/region capacity, RBAC, actual private DNS resolution, and connectivity remain to be verified when the owner explicitly runs the guarded pipeline.
