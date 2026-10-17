@@ -10,4 +10,20 @@ public sealed record QuarantineRecord(
     string? SourcePointer,
     string? PayloadHash,
     string Reason,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt)
+{
+    private readonly DateTimeOffset _observedAt = NormalizeTimestamp(ObservedAt);
+
+    public DateTimeOffset ObservedAt
+    {
+        get => _observedAt;
+        init => _observedAt = NormalizeTimestamp(value);
+    }
+
+    private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
+    {
+        var subMicroseconds = value.UtcTicks % TimeSpan.TicksPerMicrosecond;
+        if (subMicroseconds < 0) subMicroseconds += TimeSpan.TicksPerMicrosecond;
+        return value.AddTicks(-subMicroseconds);
+    }
+}

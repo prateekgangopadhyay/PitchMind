@@ -75,7 +75,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 }
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
-_BUILD_SCRIPT_SHA256 = "04319433ce7b3517a9e8fcbd660b696fdc8dfac2e3c5575ec004de0379e55a8a"
+_BUILD_SCRIPT_SHA256 = "fd64aeb45ab1a32ad8e04e7f4a93298c7d192bc5c7e60b74df80e6243fdfc79f"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "97642b73b6930a13730535b301d153d2d158ebfef234469a4ee26fd7bc0d4c01"
@@ -83,10 +83,10 @@ _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/private-dev-plan.sh": "07853bcc5d5dac5e4a1779ab67139e133703393d9630170a37c2ccc2142777b7",
     "scripts/private-dev-deploy.sh": "afdbd9f7fb924998a10d9583a6a8d0f6765c20162ca4a613648d92ad612641dc",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
-    "scripts/validate_private_dev_whatif.py": "74f615eb3cb4553eebe292f2c6e6d8e52714ff8cabf959afd97e33378fe207d6",
+    "scripts/validate_private_dev_whatif.py": "9ff240753bdea68fd8e05211573f2afdcc75195e3cc7ce31f54e5f86de862574",
     "pipelines/templates/preview-private-dev.yml": "e5f25b62c3220e762583e5b403f0e4e32d4d555d1ba9bc6338e2113b368353b4",
     "pipelines/templates/provision-private-dev.yml": "da53e22d664207465d36b281e26b0e7b0f02ebb591c04abcb2ef9a62c6e6e2a7",
-    "infra/private-dev-topology.bicep": "629c07442df9e3301a0d9698d7479673f9b203bf01f048a875a35a6760ce8ee8",
+    "infra/private-dev-topology.bicep": "29f448797b736ae631896e1694b155568f78f251ce9888b0731c12cf1512d07e",
 }
 
 

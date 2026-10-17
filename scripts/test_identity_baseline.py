@@ -268,8 +268,8 @@ class IdentityBaselineTests(unittest.TestCase):
                 1,
             ),
             "mutation step in preflight job": pipeline.replace(
-                "      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
-                "      - task: AzureCLI@2\n      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
+                "      - task: Bash@3\n        displayName: Require three separate release identities and reviewed network/cost inputs",
+                "      - task: AzureCLI@2\n      - task: Bash@3\n        displayName: Require three separate release identities and reviewed network/cost inputs",
                 1,
             ),
             "extra BuildRelease job": pipeline.replace(
