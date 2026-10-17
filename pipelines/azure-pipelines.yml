@@ -5,7 +5,7 @@ parameters:
   default: false
 - name: enableDevDelivery
   type: boolean
-  default: false
+  default: true
 - name: acrPushServiceConnection
   type: string
   default: unconfigured
