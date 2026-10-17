@@ -321,6 +321,9 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
           image: appImage
           env: [
             { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
+            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Development' }
+            { name: 'Runtime__Profile', value: 'local' }
+            { name: 'Identity__DevelopmentHeaderAuthEnabled', value: 'true' }
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           probes: [
@@ -329,7 +332,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
           ]
         }
       ]
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      scale: { minReplicas: 1, maxReplicas: 1 }
     }
   }
   tags: {
