@@ -36,7 +36,7 @@ Use for low-latency event-time processing, windowed tactical detection, backpres
 ## Stop and escalate
 **Blocking condition:** Stop publishing a time-window insight whose supporting records are incomplete, late or inconsistent.
 **Handoff:** Event Streaming for broker adapters; Football Analytics for conditions; Performance/SRE for tests.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use for low-latency event-time processing, windowed tactical detection, backpres
 
 **Mandatory deliverable:** Clock/cursor contract, ordered message test and measured lag. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
 
-**Handoff to:** event-streaming-engineer, lead-frontend-engineer, site-reliability-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
+**Handoff to:** event-streaming-engineer, lead-frontend-engineer, site-reliability-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Application releases follow the protected-main and successful-validation rule; a skill cannot authorize infrastructure mutations or STAGE/PROD releases.

@@ -37,7 +37,7 @@ Use for C4/ADR/docs maintenance, developer guides, API contracts, release report
 ## Stop and escalate
 **Blocking condition:** Stop misleading 'production-ready', 'real-time Azure' or 'AI-verified' claims without actual supporting evidence.
 **Handoff:** Principal Architect for diagram accuracy; Product/Football for narrative; SRE/DevOps for operational proof.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -45,4 +45,4 @@ Use for C4/ADR/docs maintenance, developer guides, API contracts, release report
 
 **Mandatory deliverable:** Drift check, docs index, changelog, evidence traceability with no false 'complete' claims. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** principal-software-architect, qa-architect, product-owner. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** principal-software-architect, qa-architect, product-owner. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.

@@ -20,7 +20,7 @@ Use when EP07 / EP08-S06 or related UI work needs deliberate information hierarc
 
 ## Existing product overrides
 
-PitchMind's `docs/design/PITCHMIND-DESIGN-SYSTEM.md`, seven screen contracts, current API and football provenance supersede upstream generic design recommendations. Keep **React 19 / Vite / TypeScript / existing CSS**, dark navy + emerald, meaningful hierarchy, one selected match time and canonical revision, sparse-tracking honesty, WCAG 2.2 AA, synthetic labels, evidence drill-down and lawful branding. Never add unapproved third-party scripts, fonts, icons, CSS frameworks or animation runtime. No Azure/DEV mutation or deployment without exact owner approval.
+PitchMind's `docs/design/PITCHMIND-DESIGN-SYSTEM.md`, seven screen contracts, current API and football provenance supersede upstream generic design recommendations. Keep **React 19 / Vite / TypeScript / existing CSS**, dark navy + emerald, meaningful hierarchy, one selected match time and canonical revision, sparse-tracking honesty, WCAG 2.2 AA, synthetic labels, evidence drill-down and lawful branding. Never add unapproved third-party scripts, fonts, icons, CSS frameworks or animation runtime. No infrastructure mutation without scoped owner approval; application releases follow protected-main review and required validation.
 
 ## Optional full upstream skill / CLI
 

@@ -11,11 +11,11 @@ Canonical rules:
 - Read code and evidence before asserting implemented, tested, deployed or production-ready. The offline synthetic API/DEV demo is not proof of a canonical cloud path.
 - Use fictional synthetic demonstration data with traceable provenance and lawful usage. New data/simulations inputs require validation; a filename is not source approval.
 - Apply security, accessibility, football review, budget, test and rollback requirements appropriate to the changed surface.
-- **Do not deploy stories to DEV without explicit, change-specific repository owner approval.** PR creation/merge is not authorization; STAGE/PROD need separate protected approvals.
+- Application releases deploy automatically to DEV only after a repository-owner-reviewed PR reaches protected `main` and all required Azure DevOps validation succeeds. PR runs validate only. Infrastructure mutations need scoped owner approval; STAGE/PROD need separate protected approvals.
 - Record status, precise evidence/commit/environment and design changes in the relevant existing docs. Do not invent test results or defer blockers silently.
 - Use [all 59 story dependency routes](../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) and [28-role registry](../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) to choose a DRI and independent reviewers; do not create a second status authority or fake engineer assignments.
 - The supplied source JSON at `data/simulations/manu-liv-match-dataset.json` is **profiled but not rights/football-certified**; player `heartRate` etc must not be treated as actual biometrics. No hardcoded football facts in C# / React; manifest and source-specific adapter required.
-- In Azure DevOps, DEV release parameters are disabled by default; *two mandatory manual gates plus a protected Environment* are required after obtaining the **owner's explicit change-specific approval**; a pipeline resume without that approval is still forbidden.
+- Azure DevOps automatically builds an immutable image and deploys it to DEV for successful commits to protected `main`. The release uses separate federated publisher/deployer identities and a protected target Environment. Keep PRs validation-only. Never automate infrastructure changes or STAGE/PROD promotion under this rule.
 
 ## EP07 / EP08-S06 — five discoverable design specialist skills
 
@@ -29,4 +29,4 @@ The application remains **React 19 + Vite + existing CSS**, not Next.js/Tailwind
 
 CodeGraph is an **optional advisory tool** for code-edit context, callers/dependencies, change impact and related tests. In a trusted agent worktree with the MCP server installed, prefer `codegraph_get_edit_context`, `codegraph_analyze_impact` and `codegraph_find_related_tests` before high-impact edits. Run `bash scripts/codegraph-pr-context.sh <exact-parent-ref>` for stacked PR blast-radius/test-gap analysis; never compare a child blindly against `main`. See [installation and boundaries](../docs/engineering/CODEGRAPH-INTEGRATION.md). If unavailable or slow, immediately continue using ordinary code inspection and real tests; CodeGraph must not block the critical path.
 
-Graph observations are not runtime test, CI, human approval or deployment evidence. GitHub Actions remain forbidden: **Azure DevOps alone runs CI/CD**. No Azure resource mutation or DEV deployment without exact change-specific owner approval.
+Graph observations are not runtime test, CI, human approval or deployment evidence. GitHub Actions remain forbidden: **Azure DevOps alone runs CI/CD**. No Azure infrastructure mutation without scoped owner approval; application DEV deployment follows the protected-main and required-validation rule.

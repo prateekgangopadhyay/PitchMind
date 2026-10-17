@@ -78,7 +78,8 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertIn("azureSubscription: ${{ parameters.devDeploymentServiceConnection }}", deploy_template)
         self.assertNotIn("azureServiceConnection", pipeline + build_template + deploy_template)
         self.assertIn("python3 scripts/validate_release_identity_inputs.py", pipeline)
-        self.assertIn("users with Queue builds permission", pipeline)
+        self.assertIn("refs/heads/main", pipeline)
+        self.assertNotIn("ManualValidation@0", pipeline)
 
     def test_key_vault_module_declares_rbac_without_local_grants(self):
         # This assertion is intentionally limited to the module itself; it is
@@ -181,104 +182,70 @@ class IdentityBaselineTests(unittest.TestCase):
                     pipeline, build_template, deploy_template, release_helper_overrides=overrides
                 )
 
-    def test_policy_mutations_reject_default_on_and_pull_request_delivery(self):
+    def test_policy_mutations_reject_pull_request_delivery_and_bypassed_stages(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
-
-        default_on = pipeline.replace("default: false", "default: true", 1)
-        with self.subTest(mutation="delivery default enabled"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(default_on, build_template, deploy_template)
 
         pr_eligible = pipeline.replace(
             "ne(variables['Build.Reason'], 'PullRequest')",
             "eq(variables['Build.Reason'], 'PullRequest')",
             1,
         )
-        with self.subTest(mutation="owner approval stage PR condition"), self.assertRaises(PipelinePolicyError):
+        with self.subTest(mutation="preflight accepts PR runs"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(pr_eligible, build_template, deploy_template)
 
-        pr_eligible_build = pipeline.replace(
+        pr_eligible_deploy = pipeline.replace(
             "ne(variables['Build.Reason'], 'PullRequest')",
             "eq(variables['Build.Reason'], 'PullRequest')",
-            2,
+            3,
         )
-        with self.subTest(mutation="build stage PR condition"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(pr_eligible_build, build_template, deploy_template)
+        with self.subTest(mutation="deployment accepts PR runs"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(pr_eligible_deploy, build_template, deploy_template)
 
         unguarded_deploy = pipeline.replace(
-            "  - stage: DeployDev\n    dependsOn: OwnerApprovalOfReleaseDigest",
-            "  - stage: DeployDev\n    dependsOn: Validate",
+            "  dependsOn: BuildRelease\n  condition:",
+            "  dependsOn: Validate\n  condition:",
             1,
         )
-        with self.subTest(mutation="DEV deployment bypasses guarded release chain"), self.assertRaises(PipelinePolicyError):
+        with self.subTest(mutation="DEV deployment bypasses image build"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(unguarded_deploy, build_template, deploy_template)
 
-        build_bypasses_approval = pipeline.replace(
-            "  - stage: BuildRelease\n    dependsOn: OwnerApprovalBeforeAzureMutation",
-            "  - stage: BuildRelease\n    dependsOn: Validate",
+        unguarded_build = pipeline.replace(
+            "  dependsOn: ReleasePreflight\n  condition:",
+            "  dependsOn: Validate\n  condition:",
             1,
         )
-        with self.subTest(mutation="image build bypasses pre-mutation owner approval"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(build_bypasses_approval, build_template, deploy_template)
+        with self.subTest(mutation="image build bypasses identity preflight"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(unguarded_build, build_template, deploy_template)
 
-        approval_bypasses_validation = pipeline.replace(
-            "  - stage: OwnerApprovalBeforeAzureMutation\n    dependsOn: Validate",
-            "  - stage: OwnerApprovalBeforeAzureMutation\n    dependsOn: BuildRelease",
+        manual_gate = pipeline.replace(
+            "- stage: DeployDev",
+            "- stage: ManualPause\n  jobs:\n  - job: Approval\n    steps:\n    - task: ManualValidation@0\n- stage: DeployDev",
             1,
         )
-        with self.subTest(mutation="pre-mutation approval bypasses validation"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(approval_bypasses_validation, build_template, deploy_template)
+        with self.subTest(mutation="manual gate inserted into auto-delivery flow"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(manual_gate, build_template, deploy_template)
 
-    def test_policy_requires_both_manual_approval_tasks(self):
-        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
-        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
-        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
-        task = "- task: ManualValidation@0"
-
-        before_push_missing = pipeline.replace(task, "- task: Bash@3", 1)
-        with self.subTest(mutation="pre-push approval task removed"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(before_push_missing, build_template, deploy_template)
-
-        digest_before, separator, digest_after = pipeline.rpartition(task)
-        self.assertTrue(separator)
-        digest_missing = digest_before + "- task: Bash@3" + digest_after
-        with self.subTest(mutation="digest approval task removed"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(digest_missing, build_template, deploy_template)
-
-        commented_approval = pipeline.replace(task, "# - task: ManualValidation@0", 1)
-        with self.subTest(mutation="approval task survives only as a comment"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(commented_approval, build_template, deploy_template)
-
-    def test_policy_rejects_extra_mutation_jobs_or_steps_around_release_approvals(self):
+    def test_policy_rejects_unreviewed_release_jobs_and_steps(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
 
         mutations = {
-            "extra preflight-stage job": pipeline.replace(
-                "    - job: AwaitExplicitOwnerApproval",
-                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitExplicitOwnerApproval",
+            "extra preflight job": pipeline.replace(
+                "  - job: ValidateReleaseIdentityInputs",
+                "  - job: UnauthorizedMutation\n    steps:\n    - task: AzureCLI@2\n  - job: ValidateReleaseIdentityInputs",
                 1,
             ),
-            "mutation step in preflight job": pipeline.replace(
-                "      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
-                "      - task: AzureCLI@2\n      - task: Bash@3\n        displayName: Require separate image-push and DEV-deployment identities",
+            "mutation task in preflight": pipeline.replace(
+                "    - task: Bash@3\n      displayName: Require separate image-push and DEV-deployment identities",
+                "    - task: AzureCLI@2\n    - task: Bash@3\n      displayName: Require separate image-push and DEV-deployment identities",
                 1,
             ),
             "extra BuildRelease job": pipeline.replace(
-                "    - job: Image\n      steps:",
-                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: Image\n      steps:",
-                1,
-            ),
-            "mutation step in BuildRelease image job": pipeline.replace(
-                "    - job: Image\n      steps:\n      - checkout: self",
-                "    - job: Image\n      steps:\n      - task: AzureCLI@2\n      - checkout: self",
-                1,
-            ),
-            "extra digest-approval job": pipeline.replace(
-                "    - job: AwaitDigestConfirmation",
-                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitDigestConfirmation",
+                "  - job: Image\n    steps:",
+                "  - job: UnauthorizedMutation\n    steps:\n    - task: AzureCLI@2\n  - job: Image\n    steps:",
                 1,
             ),
             "unreviewed DeployDev lifecycle hook": pipeline.replace(
@@ -291,26 +258,17 @@ class IdentityBaselineTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(PipelinePolicyError):
                 _validate_pipeline_policy(candidate, build_template, deploy_template)
 
-    def test_policy_mutations_reject_comment_only_release_guards(self):
+    def test_policy_rejects_missing_active_main_conditions(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
-
-        commented_opt_in = pipeline.replace(
-            "- ${{ if eq(parameters.enableDevDelivery, true) }}:",
-            "# - ${{ if eq(parameters.enableDevDelivery, true) }}:",
+        commented_condition = pipeline.replace(
+            "  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
+            "  # condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
             1,
         )
-        with self.subTest(mutation="opt-in expression exists only as a comment"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(commented_opt_in, build_template, deploy_template)
-
-        commented_conditions = pipeline.replace(
-            "    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
-            "    # condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))",
-            2,
-        )
-        with self.subTest(mutation="main and PR conditions exist only as comments"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(commented_conditions, build_template, deploy_template)
+        with self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(commented_condition, build_template, deploy_template)
 
     def test_policy_mutations_reject_swapped_or_reused_connection_wiring(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -404,21 +362,13 @@ class IdentityBaselineTests(unittest.TestCase):
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
 
-        direct_stage = pipeline.replace(
-            "- ${{ if eq(parameters.enableDevDelivery, true) }}:",
-            "- stage: DirectDeploy\n  jobs:\n  - job: Deploy\n    steps:\n    - task: AzureCLI@2\n- ${{ if eq(parameters.enableDevDelivery, true) }}:",
+        extra_stage = pipeline.replace(
+            "- stage: DeployDev",
+            "- stage: DirectDeploy\n  jobs:\n  - job: Deploy\n    steps:\n    - task: AzureCLI@2\n- stage: DeployDev",
             1,
         )
-        with self.subTest(mutation="new root delivery stage outside opt-in"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(direct_stage, build_template, deploy_template)
-
-        extra_guarded_stage = pipeline.replace(
-            "  - stage: OwnerApprovalBeforeAzureMutation",
-            "  - stage: UnreviewedRelease\n    jobs:\n    - job: Deploy\n      steps:\n      - task: AzureCLI@2\n  - stage: OwnerApprovalBeforeAzureMutation",
-            1,
-        )
-        with self.subTest(mutation="unrecognized release stage inside opt-in"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(extra_guarded_stage, build_template, deploy_template)
+        with self.subTest(mutation="unreviewed root delivery stage"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(extra_stage, build_template, deploy_template)
 
         mutation_in_validation = pipeline.replace(
             "- stage: Validate\n",

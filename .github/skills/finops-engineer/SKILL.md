@@ -36,7 +36,7 @@ Use for Azure resource selection, spend forecasting, Foundry token governance, s
 ## Stop and escalate
 **Blocking condition:** Escalate open-ended Foundry spend, unsupported regional SKUs or a provisioning plan without owner approval.
 **Handoff:** Azure Architect and Infra for topology; DevOps/SRE for limits; Product for scope tradeoffs.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use for Azure resource selection, spend forecasting, Foundry token governance, s
 
 **Mandatory deliverable:** Versioned cost assumptions, guardrail alarms, optional-service stop/go memo. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** azure-solution-architect, site-reliability-engineer, product-owner. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** azure-solution-architect, site-reliability-engineer, product-owner. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.

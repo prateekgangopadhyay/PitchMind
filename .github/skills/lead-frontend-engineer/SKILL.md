@@ -37,7 +37,7 @@ Use for React/Vite match pages, selected-time state, intelligent pitch, replay, 
 ## Stop and escalate
 **Blocking condition:** Block a visually impressive interface that fabricates positions, leaks future facts or leaves the evidence route inaccessible.
 **Handoff:** UX and Accessibility for review; Backend for contract; Football Analytics for copy; QA for end-to-end.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -55,4 +55,4 @@ Use for React/Vite match pages, selected-time state, intelligent pitch, replay, 
 
 ## Impeccable and Emil Kowalski design specialists (EP07 / EP08-S06)
 
-For changed user-facing React/Vite components, also consult [Impeccable](../impeccable/SKILL.md) for focused hierarchy/audit/polish/distill and [Emil design engineering](../emil-design-eng/SKILL.md) for interaction affordances, microinteractions and motion restraint. Both are distinct from the 28 accountable Council roles and complement—not replace—Taste, Vercel Web Guidelines or independent Awesome review. Follow `docs/design/FRONTEND-DESIGN-DELIVERY.md`; evaluate motion only where appropriate and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, existing CSS/React stack and exact owner approval for Azure DEV operations. No automatic upstream installers, new hooks or runtime libraries.
+For changed user-facing React/Vite components, also consult [Impeccable](../impeccable/SKILL.md) for focused hierarchy/audit/polish/distill and [Emil design engineering](../emil-design-eng/SKILL.md) for interaction affordances, microinteractions and motion restraint. Both are distinct from the 28 accountable Council roles and complement—not replace—Taste, Vercel Web Guidelines or independent Awesome review. Follow `docs/design/FRONTEND-DESIGN-DELIVERY.md`; evaluate motion only where appropriate and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, existing CSS/React stack and protected-main review for application releases and scoped owner approval for Azure infrastructure changes. No automatic upstream installers, new hooks or runtime libraries.

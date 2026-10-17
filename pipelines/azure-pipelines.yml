@@ -1,17 +1,14 @@
-# Azure DevOps is the only CI/CD orchestrator. DEV delivery activates after service-connection configuration.
+# Azure DevOps is the only CI/CD orchestrator. Validated commits to protected main deploy automatically to DEV.
 parameters:
 - name: runGateFailureProbe
   type: boolean
   default: false
-- name: enableDevDelivery
-  type: boolean
-  default: false
 - name: acrPushServiceConnection
   type: string
-  default: unconfigured
+  default: pitchmind-acr-publisher-wif
 - name: devDeploymentServiceConnection
   type: string
-  default: unconfigured
+  default: pitchmind-dev-deployer-wif
 - name: registryName
   type: string
   default: pmdev4iwntkatliy6sacr
@@ -117,95 +114,55 @@ stages:
     - checkout: self
     - template: templates/validate-infra.yml
 
-# Only a deliberately queued parameterized run may reach these stages. The default
-# validation-only main/PR pipeline CANNOT deploy. Owner approval for the exact story,
-# scope, resource diff, costs, SHA and rollback is mandatory BEFORE ACR push/DEV write.
-# ManualValidation and Azure DevOps Environment checks are defense in depth; their
-# existence does not prove owner-only approval. The ManualValidation task can be
-# resumed by users with Queue builds permission; constrain that permission and
-# protected Environment approvers to the repository owner before registering delivery.
-- ${{ if eq(parameters.enableDevDelivery, true) }}:
-  - stage: OwnerApprovalBeforeAzureMutation
-    dependsOn: Validate
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
-    jobs:
-    - job: ValidateReleaseIdentityInputs
-      pool:
-        vmImage: ubuntu-latest
-      steps:
-      - checkout: self
-      - task: Bash@3
-        displayName: Require separate image-push and DEV-deployment identities
-        inputs:
-          targetType: inline
-          script: python3 scripts/validate_release_identity_inputs.py
-        env:
-          PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
-          PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
-          PITCHMIND_REGISTRY_NAME: ${{ parameters.registryName }}
-          PITCHMIND_IMAGE_REPOSITORY: pitchmind
-          PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}
-          PITCHMIND_DEV_APP_NAME: ${{ parameters.devAppName }}
-    - job: AwaitExplicitOwnerApproval
-      dependsOn: ValidateReleaseIdentityInputs
-      displayName: Review the approved change set before ACR push or DEV mutation
-      pool: server
-      timeoutInMinutes: 1440
-      steps:
-      - task: ManualValidation@0
-        timeoutInMinutes: 1440
-        inputs:
-          notifyUsers: ''
-          instructions: |
-            STOP. Obtain and record explicit repository-owner approval for THIS story/change set.
-            Verify Git SHA, resource group/subscription, Bicep what-if, image plan,
-            migration, cost budget, ingress/security and rollback.
-            No approval => Reject. Protected Azure DevOps Environment checks remain mandatory.
-          onTimeout: reject
-  - stage: BuildRelease
-    dependsOn: OwnerApprovalBeforeAzureMutation
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
-    jobs:
-    - job: Image
-      steps:
-      - checkout: self
-      - template: templates/build-image.yml
-        parameters:
-          acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
-          registryName: ${{ parameters.registryName }}
-          imageRepository: pitchmind
-  - stage: OwnerApprovalOfReleaseDigest
-    dependsOn: BuildRelease
-    condition: succeeded()
-    jobs:
-    - job: AwaitDigestConfirmation
-      displayName: Owner reconfirms the immutable image and DEV deployment
-      pool: server
-      timeoutInMinutes: 1440
-      steps:
-      - task: ManualValidation@0
-        timeoutInMinutes: 1440
-        inputs:
-          notifyUsers: ''
-          instructions: |
-            STOP. Inspect the release manifest image digest published by BuildRelease.
-            Reconfirm the same explicit owner approval covers this digest and DEV impact.
-            Never treat the previous approval as blanket permission for other stories.
-            Approve only with recorded owner consent; otherwise Reject.
-          onTimeout: reject
-  - stage: DeployDev
-    dependsOn: OwnerApprovalOfReleaseDigest
-    condition: succeeded()
-    jobs:
-    - deployment: Dev
-      environment: pitchmind-dev
-      strategy:
-        runOnce:
-          deploy:
-            steps:
-            - checkout: self
-            - template: templates/deploy-image.yml
-              parameters:
-                devDeploymentServiceConnection: ${{ parameters.devDeploymentServiceConnection }}
-                resourceGroup: ${{ parameters.devResourceGroup }}
-                appName: ${{ parameters.devAppName }}
+- stage: ReleasePreflight
+  displayName: Validate automatic DEV release identity and target
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: ValidateReleaseIdentityInputs
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+    - task: Bash@3
+      displayName: Require separate image-push and DEV-deployment identities
+      inputs:
+        targetType: inline
+        script: python3 scripts/validate_release_identity_inputs.py
+      env:
+        PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
+        PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
+        PITCHMIND_REGISTRY_NAME: ${{ parameters.registryName }}
+        PITCHMIND_IMAGE_REPOSITORY: pitchmind
+        PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}
+        PITCHMIND_DEV_APP_NAME: ${{ parameters.devAppName }}
+- stage: BuildRelease
+  displayName: Build and publish immutable release image
+  dependsOn: ReleasePreflight
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: Image
+    steps:
+    - checkout: self
+    - template: templates/build-image.yml
+      parameters:
+        acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
+        registryName: ${{ parameters.registryName }}
+        imageRepository: pitchmind
+- stage: DeployDev
+  displayName: Automatically deploy main to DEV
+  dependsOn: BuildRelease
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - deployment: Dev
+    environment: pitchmind-dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - template: templates/deploy-image.yml
+            parameters:
+              devDeploymentServiceConnection: ${{ parameters.devDeploymentServiceConnection }}
+              resourceGroup: ${{ parameters.devResourceGroup }}
+              appName: ${{ parameters.devAppName }}

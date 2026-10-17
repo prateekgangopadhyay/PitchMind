@@ -20,5 +20,5 @@ Architecture documents explicitly distinguish **CURRENT OBSERVED**, **TARGET PRO
 3. Event Hubs partitions by matchId; consumers enforce unique EventId/sequence, at-least-once + idempotency and explicit gap/quarantine. No global exactly-once claim.
 4. PostgreSQL commits canonical facts+outbox transactionally; projections/search/Redis/SignalR never become football truth.
 5. Generated AI text is untrusted until independent evidence validation; deterministic fallback remains available.
-6. LOCAL Docker adapters; DEV/STAGE/PROD Azure-only. Deployment requires explicit repository-owner approval for **each DEV change set**, then Azure DevOps protected/manual gate.
+6. LOCAL Docker adapters; DEV/STAGE/PROD Azure-only. A validated commit merged through owner-protected `main` automatically deploys the application to DEV by immutable digest. PRs are validation-only; infrastructure changes and STAGE/PROD remain separately approved.
 7. Every PR that changes an architecture boundary must update the relevant C4/ADR, source contract, LLD, API, tests, threat model and runbook with proof and decision-maker. Never invent a "deployed" arrow because Bicep contains a resource.

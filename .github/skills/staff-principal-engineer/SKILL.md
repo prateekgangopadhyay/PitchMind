@@ -36,7 +36,7 @@ Use when decomposing HLD into LLD, coordinating multiple team lanes, reviewing i
 ## Stop and escalate
 **Blocking condition:** Stop concurrent work that invents incompatible canonical state, time or evidence formats.
 **Handoff:** Backend, frontend, data, streaming, infrastructure leads; QA for independently reproduced verification.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 

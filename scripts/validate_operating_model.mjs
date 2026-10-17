@@ -110,7 +110,7 @@ function check() {
     assert.ok(new RegExp(`^name:\\s*["']?${role.name}["']?\\s*$`, 'm').test(meta[1]), 'Invalid skill name ' + file);
     assert.ok(/^description:\s*.+$/m.test(meta[1]), 'Missing skill description ' + file);
     assert.ok(content.includes('## Role-specific story gate and executable evidence'), 'Role-specific proof missing ' + file);
-    assert.ok(content.includes('DEV'), 'Owner approval rule absent ' + file);
+    assert.ok(content.includes('DEV'), 'DEV delivery rule absent ' + file);
     seen.add(role.name);
   }
   for (const skill of design.skills) {
@@ -163,12 +163,15 @@ function check() {
   assert.ok(existsSync(path.join(root,'docs/data/MANU-LIV-SOURCE-PROFILE.md')), 'Missing source profiling');
   assert.ok(existsSync(path.join(root,'data/simulations/manu-liv-match-dataset.json')), 'Actual JSON not found');
   const pipeline=read('pipelines/azure-pipelines.yml');
-  assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
+  assert.ok(!pipeline.includes('enableDevDelivery') && !pipeline.includes('ManualValidation@0'),'Main-to-DEV delivery must not have an opt-in or manual pause');
+  assert.match(pipeline,/trigger:[\s\S]*?include:[\s\S]*?- main/,'Automatic deployment pipeline must trigger from main');
+  assert.match(pipeline,/- stage: ReleasePreflight[\s\S]*?dependsOn: Validate[\s\S]*?- stage: BuildRelease[\s\S]*?dependsOn: ReleasePreflight[\s\S]*?- stage: DeployDev[\s\S]*?dependsOn: BuildRelease/,'DEV delivery must validate, preflight, build and deploy in order');
+  for (const stage of ['ReleasePreflight','BuildRelease','DeployDev']) { const block=pipeline.split('- stage: '+stage+'\n')[1]?.split('\n- stage: ')[0]||''; assert.match(block,/refs\/heads\/main/,'DEV stage not restricted to main: '+stage); assert.match(block,/Build.Reason.*PullRequest/,'DEV stage not excluding PR: '+stage); }
   assertGateFailureProbe(pipeline);
   assertStackedPrTrigger(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
   assert.equal(counts.P0,49); assert.equal(counts.P1,7); assert.equal(counts.P2,3);
-  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
+  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:0};
 }
 
 if (process.argv.includes('--self-test')) {

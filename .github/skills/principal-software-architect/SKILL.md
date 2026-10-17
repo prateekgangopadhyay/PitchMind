@@ -38,7 +38,7 @@ Use when reviewing C4 diagrams, defining service boundaries, selecting patterns,
 ## Stop and escalate
 **Blocking condition:** Block conflicting canonical owners, unproven privacy/security topology or an Azure environment silently running local adapters.
 **Handoff:** Distinguished Engineer for high-blast-radius review; Staff Engineer and implementation leads for executable designs.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 

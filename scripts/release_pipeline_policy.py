@@ -1,4 +1,4 @@
-"""Structural checks for the opt-in Azure release path.
+"""Structural checks for validated main-branch automatic DEV release.
 
 These checks validate parsed repository YAML only. They do not prove Azure
 DevOps federation, RBAC, protected-environment configuration, or owner approval.
@@ -16,13 +16,7 @@ class PipelinePolicyError(ValueError):
     pass
 
 
-_OPT_IN = "${{ if eq(parameters.enableDevDelivery, true) }}"
-_DELIVERY_STAGES = (
-    "OwnerApprovalBeforeAzureMutation",
-    "BuildRelease",
-    "OwnerApprovalOfReleaseDigest",
-    "DeployDev",
-)
+_DELIVERY_STAGES = ("ReleasePreflight", "BuildRelease", "DeployDev")
 _VALIDATION_TEMPLATES = {
     "templates/validate-dotnet.yml",
     "templates/validate-frontend.yml",
@@ -101,69 +95,45 @@ def validate_pipeline_policy(
     if probe_parameter is not None and (probe_parameter.get("type") != "boolean" or probe_parameter.get("default") is not False):
         raise PipelinePolicyError("Gate failure probe must remain a boolean default-off parameter")
 
-    delivery_parameter = next(
-        (item for item in parameters if isinstance(item, dict) and item.get("name") == "enableDevDelivery"),
-        None,
-    )
-    if delivery_parameter is None or delivery_parameter.get("type") != "boolean" or delivery_parameter.get("default") is not False:
-        raise PipelinePolicyError("DEV delivery must remain a boolean default-off parameter")
-    for parameter_name in ("registryName", "devResourceGroup", "devAppName"):
-        configured = [
-            item for item in parameters
-            if isinstance(item, dict) and item.get("name") == parameter_name
-        ]
-        if len(configured) != 1 or configured[0].get("type") != "string":
-            raise PipelinePolicyError(f"{parameter_name} must remain a single queue-time string parameter")
+    if any(isinstance(item, dict) and item.get("name") == "enableDevDelivery" for item in parameters):
+        raise PipelinePolicyError("Main-to-DEV delivery must not be hidden behind a manual opt-in parameter")
+    expected_parameters = {
+        "acrPushServiceConnection": "pitchmind-acr-publisher-wif",
+        "devDeploymentServiceConnection": "pitchmind-dev-deployer-wif",
+        "registryName": "pmdev4iwntkatliy6sacr",
+        "devResourceGroup": "rg-pitchmind-dev-001",
+        "devAppName": "pm-dev-api",
+    }
+    for parameter_name, expected_default in expected_parameters.items():
+        configured = [item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name]
+        if len(configured) != 1 or configured[0].get("type") != "string" or configured[0].get("default") != expected_default:
+            raise PipelinePolicyError(f"{parameter_name} must remain bound to the reviewed DEV release target")
 
     stage_items = _sequence(pipeline_doc.get("stages"), "pipeline stages")
     validate_stages = [item for item in stage_items if isinstance(item, dict) and item.get("stage") == "Validate"]
-    conditional_items = [item for item in stage_items if isinstance(item, dict) and _OPT_IN in item]
-    if len(validate_stages) != 1 or len(conditional_items) != 1 or len(stage_items) != 2:
-        raise PipelinePolicyError("The pipeline may contain only Validate and one guarded release block")
-
-    guarded_stages = _sequence(conditional_items[0][_OPT_IN], "guarded release stages")
-    stage_names = [item.get("stage") for item in guarded_stages if isinstance(item, dict)]
-    if tuple(stage_names) != _DELIVERY_STAGES or len(stage_names) != len(guarded_stages):
-        raise PipelinePolicyError("The guarded block may contain only the approved release stages in order")
-    stages_by_name = {item["stage"]: item for item in guarded_stages}
+    stage_names = [item.get("stage") for item in stage_items if isinstance(item, dict)]
+    if len(validate_stages) != 1 or tuple(stage_names) != ("Validate", *_DELIVERY_STAGES) or len(stage_names) != len(stage_items):
+        raise PipelinePolicyError("The pipeline may contain only Validate and the ordered automatic DEV release stages")
+    stages_by_name = {item["stage"]: item for item in stage_items if isinstance(item, dict)}
 
     main_only_condition = (
         "and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), "
         "ne(variables['Build.Reason'], 'PullRequest'))"
     )
-    for stage_name in ("OwnerApprovalBeforeAzureMutation", "BuildRelease"):
+    for stage_name in _DELIVERY_STAGES:
         if stages_by_name[stage_name].get("condition") != main_only_condition:
-            raise PipelinePolicyError(f"{stage_name} must be restricted to main and exclude pull-request runs")
-    if stages_by_name["OwnerApprovalBeforeAzureMutation"].get("dependsOn") != "Validate":
-        raise PipelinePolicyError("Pre-mutation owner approval must depend on successful validation")
-    if stages_by_name["BuildRelease"].get("dependsOn") != "OwnerApprovalBeforeAzureMutation":
-        raise PipelinePolicyError("Image build/push must wait for pre-mutation owner approval")
+            raise PipelinePolicyError(f"{stage_name} must be restricted to validated main commits and exclude pull requests")
+    if stages_by_name["ReleasePreflight"].get("dependsOn") != "Validate":
+        raise PipelinePolicyError("Release identity preflight must depend on successful validation")
+    if stages_by_name["BuildRelease"].get("dependsOn") != "ReleasePreflight":
+        raise PipelinePolicyError("Image build/push must wait for the release identity preflight")
+    if stages_by_name["DeployDev"].get("dependsOn") != "BuildRelease":
+        raise PipelinePolicyError("DEV deployment must wait for the immutable image build")
+    if "ManualValidation@0" in _find_values(pipeline_doc, "task"):
+        raise PipelinePolicyError("Automatic main-to-DEV delivery must not include manual validation pauses")
 
-    digest_approval = stages_by_name["OwnerApprovalOfReleaseDigest"]
-    if digest_approval.get("dependsOn") != "BuildRelease" or digest_approval.get("condition") != "succeeded()":
-        raise PipelinePolicyError("Digest approval must run only after a successful guarded image build")
-    dev_deployment = stages_by_name["DeployDev"]
-    if dev_deployment.get("dependsOn") != "OwnerApprovalOfReleaseDigest" or dev_deployment.get("condition") != "succeeded()":
-        raise PipelinePolicyError("DEV deployment must depend on successful digest approval")
-
-    _require_manual_approval(
-        stages_by_name["OwnerApprovalBeforeAzureMutation"],
-        job_name="AwaitExplicitOwnerApproval",
-        depends_on="ValidateReleaseIdentityInputs",
-        instruction_tokens=("explicit repository-owner approval", "this story/change set"),
-    )
-    _require_identity_preflight(stages_by_name["OwnerApprovalBeforeAzureMutation"])
-    _require_release_stage_shape(
-        stages_by_name["OwnerApprovalBeforeAzureMutation"],
-        expected_jobs=("ValidateReleaseIdentityInputs", "AwaitExplicitOwnerApproval"),
-    )
-    _require_manual_approval(
-        digest_approval,
-        job_name="AwaitDigestConfirmation",
-        depends_on=None,
-        instruction_tokens=("release manifest image digest", "explicit owner approval"),
-    )
-    _require_release_stage_shape(digest_approval, expected_jobs=("AwaitDigestConfirmation",))
+    _require_identity_preflight(stages_by_name["ReleasePreflight"])
+    _require_release_stage_shape(stages_by_name["ReleasePreflight"], expected_jobs=("ValidateReleaseIdentityInputs",))
 
     validate_stage = validate_stages[0]
     referenced_templates = _find_values(validate_stage, "template")
@@ -366,45 +336,6 @@ def _assert_release_helpers(release_helpers: dict[str, str]) -> None:
             raise PipelinePolicyError(f"Release helper {helper_path} changed without a reviewed policy pin")
 
 
-def _require_manual_approval(
-    stage: dict[str, Any],
-    *,
-    job_name: str,
-    depends_on: str | None,
-    instruction_tokens: tuple[str, ...],
-) -> None:
-    jobs = _sequence(stage.get("jobs"), f"{stage.get('stage')} jobs")
-    approvals = [job for job in jobs if isinstance(job, dict) and job.get("job") == job_name]
-    if len(approvals) != 1:
-        raise PipelinePolicyError(f"{stage.get('stage')} must contain exactly one {job_name} approval job")
-    approval = approvals[0]
-    approval_fields = {"job", "displayName", "pool", "timeoutInMinutes", "steps"}
-    if depends_on is not None:
-        approval_fields.add("dependsOn")
-    if set(approval) != approval_fields:
-        raise PipelinePolicyError(f"{job_name} may contain only its reviewed approval fields")
-    if approval.get("pool") != "server":
-        raise PipelinePolicyError(f"{job_name} must be an agentless server-side approval")
-    if depends_on is not None and approval.get("dependsOn") != depends_on:
-        raise PipelinePolicyError(f"{job_name} must follow {depends_on}")
-    steps = _sequence(approval.get("steps"), f"{job_name} steps")
-    if len(steps) != 1:
-        raise PipelinePolicyError(f"{job_name} may contain only its manual approval task")
-    tasks = [step for step in steps if isinstance(step, dict) and step.get("task") == "ManualValidation@0"]
-    if len(tasks) != 1:
-        raise PipelinePolicyError(f"{job_name} must contain exactly one ManualValidation@0 task")
-    task = tasks[0]
-    if set(task) != {"task", "timeoutInMinutes", "inputs"}:
-        raise PipelinePolicyError(f"{job_name} manual approval task may contain only reviewed fields")
-    inputs = task.get("inputs")
-    instructions = inputs.get("instructions") if isinstance(inputs, dict) else None
-    if (task.get("timeoutInMinutes") != 1440 or not isinstance(inputs, dict) or
-            inputs.get("onTimeout") != "reject" or not isinstance(instructions, str) or
-            set(inputs) != {"notifyUsers", "instructions", "onTimeout"} or
-            any(token.casefold() not in instructions.casefold() for token in instruction_tokens)):
-        raise PipelinePolicyError(f"{job_name} must have an explicit, rejecting owner approval instruction")
-
-
 def _require_identity_preflight(stage: dict[str, Any]) -> None:
     jobs = _sequence(stage.get("jobs"), "pre-mutation approval jobs")
     matching_jobs = [job for job in jobs if isinstance(job, dict) and job.get("job") == "ValidateReleaseIdentityInputs"]
@@ -446,7 +377,7 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
 
 
 def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[str, ...]) -> None:
-    """Reject unreviewed jobs or steps that could run around the approval chain."""
+    """Reject unreviewed jobs or steps that could bypass the main-branch release sequence."""
     jobs = _sequence(stage.get("jobs"), f"{stage.get('stage')} jobs")
     if len(jobs) != len(expected_jobs) or any(not isinstance(job, dict) for job in jobs):
         raise PipelinePolicyError(f"{stage.get('stage')} may contain only its reviewed jobs")
@@ -455,13 +386,9 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         raise PipelinePolicyError(f"{stage.get('stage')} may contain only its reviewed jobs")
 
     stage_name = stage.get("stage")
-    if set(stage) != {"stage", "dependsOn", "condition", "jobs"}:
+    if set(stage) != {"stage", "displayName", "dependsOn", "condition", "jobs"}:
         raise PipelinePolicyError(f"{stage_name} may contain only reviewed stage fields")
-    if stage_name == "OwnerApprovalBeforeAzureMutation":
-        # The approval stage has a narrowly-scoped preflight followed by one
-        # agentless gate. Their detailed contents are checked separately.
-        return
-    if stage_name == "OwnerApprovalOfReleaseDigest":
+    if stage_name == "ReleasePreflight":
         return
     if stage_name == "BuildRelease":
         job = jobs[0]

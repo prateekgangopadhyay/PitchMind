@@ -12,7 +12,7 @@ The 28 portable GitHub Copilot Agent Skills live in [../../.github/skills](../..
 4. Staff + story DRI produce HLD/LLD, contracts, tests and a partitioned implementation plan.
 5. Implement locally on a feature branch; independent reviewers inspect code/tests and collect *observed* evidence.
 6. Create a reviewable PR. Merge/release only after the applicable gates and named decision authorities.
-7. **Ask the owner before every DEV story deployment.** No deployment/approval inference from earlier prototype activity.
+7. **Owner-reviewed PRs merged to protected `main` authorize automatic application releases to DEV after required checks pass.** Infrastructure changes and STAGE/PROD remain separately approved.
 
 Treat architecture documents as target intent, integration smoke as environment-scoped proof and clean pipeline output as build-scoped proof.
 ## Executable routing and validation (added)

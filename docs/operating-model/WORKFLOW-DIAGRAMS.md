@@ -13,8 +13,8 @@ flowchart LR
   E --> F["G5 Independent QA / Security / Football / Accessibility"]
   F -->|Fail| E
   F -->|Pass with evidence| G["G6 Immutable artifact + rollback + DEV preflight"]
-  G --> H{"Human owner explicitly approves this DEV story deploy?"}
-  H -->|No| STOP["Blocked: no DEV deploy"]
+  G --> H{"Protected main commit and required checks green?"}
+  H -->|No| STOP["Blocked: validation or branch policy failed"]
   H -->|Yes| I["G7 Azure DevOps deploy same digest to DEV"]
   I --> J{"Protected STAGE / PROD approval and certification?"}
   J -->|No| I
@@ -23,7 +23,7 @@ flowchart LR
   L -->|New change| A
 ```
 
-**Accountability:** Product Owner accepts product value; Principal Architect owns architecture decisions; a named story DRI implements; specialist gates provide independent safety and correctness checks; the **human repository owner** approves the individual DEV story deployment. Protected Azure DevOps Environment approvals additionally apply for STAGE/PROD. A PR/merge is never deployment consent.
+**Accountability:** Product Owner accepts product value; Principal Architect owns architecture decisions; a named story DRI implements; specialist gates provide independent safety and correctness checks; the **human repository owner** reviews changes through protected-main PR policy; a successful merge triggers the DEV application release automatically. Infrastructure changes remain separately approved. Protected Azure DevOps Environment approvals apply for STAGE/PROD.
 
 ## Delivery handoffs
 
@@ -41,8 +41,9 @@ flowchart TB
   X --> Q
   AI --> Q
   AZ --> Q
-  Q --> HU["Human owner DEV approval"]
-  HU --> OPS["SRE operate, measure, improve"]
+  Q --> MAIN["Owner-reviewed protected-main merge"]
+  MAIN --> DEV["Automatic DEV release by digest"]
+  DEV --> OPS["SRE operate, measure, improve"]
 ```
 
 Engage only the relevant specialist skills for a particular story, rather than requiring 28 simultaneous approvals.

@@ -37,7 +37,7 @@ Use for local bootstrap, build/test tooling, repository conventions, contributor
 ## Stop and escalate
 **Blocking condition:** Block claims that fresh setup works without a tested path or that local adapters satisfy Azure release gates.
 **Handoff:** DevOps for clean pipeline; Backend/Frontend for failing commands; Technical Writer for docs.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -45,4 +45,4 @@ Use for local bootstrap, build/test tooling, repository conventions, contributor
 
 **Mandatory deliverable:** Reproducible bootstrap scripts, smoke receipt, failure guide and tooling lockfiles. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** devops-architect, lead-backend-engineer, technical-writer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** devops-architect, lead-backend-engineer, technical-writer. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.

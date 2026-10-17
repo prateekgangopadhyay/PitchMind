@@ -52,11 +52,22 @@ flowchart TB
 
 The public edge shown above is a target option, not a configured route. The current candidate declares neither Front Door nor a public ACA ingress path. The existing offline demo's observed public ACA ingress does not prove reachability to the private canonical candidate.
 
-## Separation and approval
+## Automatic application delivery to DEV
+
+```mermaid
+flowchart LR
+  PR["Owner-reviewed GitHub PR"] --> CHECK["Azure DevOps Validate"]
+  CHECK -->|successful merge to protected main| PREFLIGHT["Release identity + fixed-target preflight"]
+  PREFLIGHT --> BUILD["Build once; publish immutable digest to ACR"]
+  BUILD --> DEPLOY["Deploy digest to pitchmind-dev"]
+  DEPLOY --> SMOKE["API smoke check"]
+  PR -. "PR runs stop after validation" .-> CHECK
+```
+
 - **LOCAL:** Docker Compose PostgreSQL and Redis with explicit local adapters; no live Azure token required for domain tests.
-- **DEV:** Azure-only integrated workload when the owner explicitly approves **each** change set, with a recorded subscription/region/resource diff, exact git SHA/digest, cost, migration, rollback and verification plan.
+- **DEV application release:** each successful commit merged by an owner-reviewed PR into protected `main` triggers Azure DevOps validation, release identity preflight, one immutable image build/push, Container App deployment by digest, and API smoke checks. PR validation is release-ineligible. Failed stages stop downstream delivery. This pipeline policy is implemented in source but does not prove external branch protection, Azure DevOps registration, service connections, role assignments, Environment configuration, or a successful cloud run.
+- **DEV infrastructure changes:** provisioning, Bicep application, role assignments, database/schema migration and other Azure resource mutations remain separate changes with scoped owner approval and reviewed what-if/cost/rollback evidence. Application auto-release does not authorize infrastructure mutation.
 - **STAGE/PROD:** separate Azure resources/data/identity, protected approvals, replay/correction golden tests, restore/recovery evidence and budgets.
-- Azure DevOps is CI/CD authority, GitHub hosts source. A passing PR, Bicep compile/what-if, a diagram or `enableDevDelivery=true` is **not** owner approval. DEV pipeline must require independent manual/protected gate before any Azure registry/service mutation.
-- If release delivery is explicitly configured, image publication and DEV deployment use distinct workload-federated Azure DevOps service connections. The publisher is scoped to the exact ACR (`AcrPush`); the deployer is scoped to the named Container App with the minimum reviewed update permission. The opt-in gate rejects missing or identically named connections. These are configuration requirements, not evidence that either connection exists or that its RBAC has been verified.
-- `ManualValidation@0` is a pause, not owner identity enforcement: users with pipeline Queue builds permission can resume or reject it ([Microsoft task documentation](https://learn.microsoft.com/en-us/azure/devops/pipelines/tasks/reference/manual-validation-v0?view=azure-pipelines)). Configure and verify owner-only queue permissions and protected Environment approvers before any DEV release; this repository has no evidence those controls are configured.
+- Azure DevOps is CI/CD authority, GitHub hosts source. Configure GitHub `main` branch protection to require PR review and all relevant Azure Pipeline checks; restrict direct pushes and bypass. The `pitchmind-dev` Environment must have no manual approval check if DEV application deployment is to be automatic. This repository cannot prove those external controls are configured.
+- Image publication and DEV deployment use distinct workload-federated Azure DevOps service connections: `pitchmind-acr-publisher-wif` scoped to the exact ACR (`AcrPush`) and `pitchmind-dev-deployer-wif` scoped to the named Container App with minimum reviewed update permission. The release preflight checks that the distinct expected connection names and exact DEV target are supplied; actual existence, federation and RBAC remain externally verified setup steps.
 - Retain immutable artifacts, minimum necessary access, separate migration and runtime identities, no local PostgreSQL/Ollama/Redis in cloud, and no claims that unavailable proof was executed.

@@ -56,7 +56,7 @@ Always include tests proving a forbidden claim or a duplicate input **does not**
 - Actual Azure network/RBAC/managed dependency check; Bicep what-if summary and cost delta.
 - Test links: clean CI, real database, end-to-end smoke, football/AI negatives, perf/resilience, security/accessibility.
 - Rollback artifact/digest and data rollback or forward-fix decision; runbook and monitoring/alerts.
-- Approval record: **explicit repository owner response approving this DEV deployment**, scope and time. STAGE/PROD additionally name their protected Environment approvers.
+- Application DEV authorization: owner-reviewed PR merge to protected `main` with required validation. Record the commit, immutable digest, deployment and smoke evidence. Infrastructure and STAGE/PROD changes require separate scoped owner/protected-environment approvals.
 - Post-deploy verification: Azure resource/revision, timestamp, smoke outcomes and exceptions.
 
 **Never pre-check a box or invent an Azure test result.**

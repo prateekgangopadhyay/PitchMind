@@ -78,7 +78,7 @@ The [source profile](../data/MANU-LIV-SOURCE-PROFILE.md) reports 2,199 match eve
 3. API commits no future-leak snapshot example, OpenAPI and typed test fixture; React uses network data and honest missing states, not literal mockup match stats.
 4. Specialist reviewers sign only observed test artifacts, immutable code SHA and correct environment. Unverified, blocked or merely written remain unaccepted.
 5. Architecture changes update C4 L1/L2/L3, deployment diagram, ADR, sequence, LLD, API and operational impact in the commit.
-6. Only **after** owner explicitly approves an exact story/change-set and Azure DevOps protected manual gate is satisfied may Azure DEV resources be mutated. PR merge, a pipeline parameter, existing DEV demo or earlier blanket permission is not adequate.
+6. Owner-reviewed PRs merged to protected `main` authorize automatic DEV application delivery after required validation. This covers application image release only; Azure infrastructure/resource mutations remain separately owner-approved. PRs never deploy.
 7. Progress must be written in the **existing** `docs/backlog/STORY-EXECUTION.md`; this routing registry is a work plan, not a second status authority.
 
 ## Clock, quality and delivery risk

@@ -36,7 +36,7 @@ Use for tactical detection, pitch coordinate transforms, xT/xG proposals, eviden
 ## Stop and escalate
 **Blocking condition:** Veto unsupported tactical certainty, reconstructed player velocities from sparse frames or unlicensed real-match claims.
 **Handoff:** DDD/backend for pure detector; AI and UX for permitted explanatory language; QA for independent goldens.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use for tactical detection, pitch coordinate transforms, xT/xG proposals, eviden
 
 **Mandatory deliverable:** Football concept dictionary, source realism verdict, positive/negative/insufficient goldens. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
 
-**Handoff to:** product-owner, domain-driven-design-specialist, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
+**Handoff to:** product-owner, domain-driven-design-specialist, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Application releases follow the protected-main and successful-validation rule; a skill cannot authorize infrastructure mutations or STAGE/PROD releases.

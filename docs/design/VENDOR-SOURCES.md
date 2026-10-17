@@ -1,6 +1,6 @@
 # Third-party design skill provenance and licensing
 
-All five are development-time Agent Skills / reference documents, **not frontend runtime dependencies**, npm packages or cloud services. Source commits are pinned for reproducible review; upgrade only with manual code/security/license scrutiny. The repository owner controls Azure DEV deployment independent of these skills.
+All five are development-time Agent Skills / reference documents, **not frontend runtime dependencies**, npm packages or cloud services. Source commits are pinned for reproducible review; upgrade only with manual code/security/license scrutiny. The repository owner authorizes application DEV releases through protected-main review; infrastructure changes remain separately approved.
 
 | Resource | Pinned upstream commit | Upstream license status | Vendored files and local changes |
 |---|---|---|---|

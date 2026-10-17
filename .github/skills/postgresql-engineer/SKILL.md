@@ -36,7 +36,7 @@ Use for canonical ledger design, transactions, schemas, indexing, migrations, da
 ## Stop and escalate
 **Blocking condition:** Block event corruption, unbounded schema privilege, partial canonical writes or an untestable migration.
 **Handoff:** DDD for ownership; Distributed Systems for outbox/inbox; Azure/SRE for managed database readiness.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use for canonical ledger design, transactions, schemas, indexing, migrations, da
 
 **Mandatory deliverable:** Physical migration/locking design, SQL integration proof and recovery receipt. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
 
-**Handoff to:** distributed-systems-engineer, data-engineer, site-reliability-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.
+**Handoff to:** distributed-systems-engineer, data-engineer, site-reliability-engineer. No claims of DEV integration from a diagram. Follow the protected-main and successful-validation release rule for application changes; live infrastructure mutations still need scoped owner approval.

@@ -24,7 +24,7 @@ Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monit
 5. Separate offline-demo resources from canonical infrastructure; avoid aliases that switch in-memory endpoints into Azure profiles.
 6. Check ACA network integration, PostgreSQL private DNS, ACR pull, Key Vault access, Event Hubs and Service Bus RBAC.
 7. Preserve reproducible state/parameters without committing real secrets or admin credentials.
-8. Require explicit owner permission before any DEV story deployment or live provisioning; never execute destructive what-if changes silently.
+8. Application commits to protected `main` are deployed automatically after validation. Require explicit owner permission before live infrastructure provisioning/policy changes; never execute destructive what-if changes silently.
 9. Produce the deliverables below, record risks/assumptions and route independent reviewers.
 10. Give an explicit PASS / CHANGES REQUIRED / BLOCKED verdict **only for checks actually performed**. No fabricated build, Azure, model or deployment results.
 
@@ -37,7 +37,7 @@ Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monit
 ## Stop and escalate
 **Blocking condition:** Stop unapproved cloud mutation, public exposure by default or assumed private connectivity.
 **Handoff:** Azure Solution Architect for topology; DevOps for pipeline; Security/FinOps for controls.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -45,4 +45,4 @@ Use for Bicep modules, environment parameters, VNet/DNS, managed identity, monit
 
 **Mandatory deliverable:** IaC modules, parameters/identity matrix, diff receipt and rollback plan. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
 
-**Handoff to:** azure-solution-architect, devops-architect, security-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
+**Handoff to:** azure-solution-architect, devops-architect, security-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Application releases follow the protected-main and successful-validation rule; a skill cannot authorize infrastructure mutations or STAGE/PROD releases.

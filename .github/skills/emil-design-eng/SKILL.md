@@ -12,7 +12,7 @@ This file includes the **original MIT-licensed** Emil Kowalski design-engineerin
 3. Prioritize small, purposeful microinteractions, button feedback, predictable dialogs, focus return, hover/focus equivalence, ease-out entry/shorter exit, interruptible CSS transforms/opacity and `prefers-reduced-motion`. Prefer existing CSS and the product's 120–220ms motion budget; **no decorative motion**.
 4. Never invent football facts, positions, xG/xT, player metrics, score or time. Match, selected time, revision and source evidence must remain synchronized; LIVE updates never overwrite historical selection.
 5. Use this skill for concrete UX decisions and scoped animation/interaction critique on EP07 and EP08-S06 PRs alongside Taste, Impeccable, Vercel guidelines and independent Awesome audit. Record actual screenshot/browser/a11y/test evidence only. If the change has no motion or microinteraction implications, state `not applicable`.
-6. This skill is **guidance only**: no external execution, installation, Azure changes, merging or waiver of human/football/security/release signoff. Explicit change-specific owner approval remains mandatory for Azure DEV mutations.
+6. This skill is **guidance only**: no external execution, installation, Azure changes, merging or waiver of human/football/security/release signoff. Protected-main review authorizes automatic application DEV releases; explicit change-specific approval remains mandatory for Azure infrastructure mutations.
 
 ---
 

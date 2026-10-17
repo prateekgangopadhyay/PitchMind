@@ -36,7 +36,7 @@ Use for telemetry schema evolution, source ingestion, fixture governance, data q
 ## Stop and escalate
 **Blocking condition:** Stop use of unauthorized real-match data or events with missing identity/time/coordinate semantics.
 **Handoff:** Football Analytics for semantics; Event Streaming for ingress; PostgreSQL for canonical tables.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use for telemetry schema evolution, source ingestion, fixture governance, data q
 
 **Mandatory deliverable:** Real source mapping dictionary, approved fixture manifest, ingestion/provenance test reports. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
 
-**Handoff to:** football-analytics-engineer, postgresql-engineer, domain-driven-design-specialist. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.
+**Handoff to:** football-analytics-engineer, postgresql-engineer, domain-driven-design-specialist. No claims of DEV integration from a diagram. Follow the protected-main and successful-validation release rule for application changes; live infrastructure mutations still need scoped owner approval.

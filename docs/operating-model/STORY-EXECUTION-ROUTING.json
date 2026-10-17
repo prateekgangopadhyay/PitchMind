@@ -1290,5 +1290,5 @@
       "workPacket": "docs/engineering/stories/EP12/EP12-S03.md"
     }
   ],
-  "approvalInterpretation": "For every story, any planned deployment or Azure DEV mutation requires explicit owner approval of that exact change; false is never acceptable because some stories are noncloud."
+  "approvalInterpretation": "For application releases, an owner-reviewed PR merged to protected main with required checks green authorizes automatic DEV delivery. Infrastructure mutations and STAGE/PROD releases require separate scoped approvals; false is never acceptable because some stories are noncloud."
 }

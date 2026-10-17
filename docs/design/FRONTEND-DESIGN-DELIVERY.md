@@ -22,7 +22,7 @@
 - **Accessible journey:** WCAG 2.2 AA target, keyboard and screen-reader alternative to pitch and slider; no color-only meaning; reduced motion; valid labels and focus management.
 - **Secure UI:** user session, roles and API errors from real BFF contracts; no Foundry secrets in browser; truthful stale/offline indicators.
 - **Rights:** only rights-cleared assets; generic club iconography until official EPL/club marks are licensed.
-- **Delivery:** Azure DEV changes require explicit owner approval for the exact change set. All five design skills are design-time resources only; the story's Product Owner remains responsible for acceptance.
+- **Delivery:** Application DEV releases follow protected-main review and required validation; Azure infrastructure changes require scoped owner approval. All five design skills are design-time resources only; the story's Product Owner remains responsible for acceptance.
 
 ## Evidence template for each screen
 

@@ -36,7 +36,7 @@ Use when changing trust boundaries, Entra identity, IAM, network exposure, data 
 ## Stop and escalate
 **Blocking condition:** Block material identity/network exposure, missing authorization or secrets in source/pipeline.
 **Handoff:** AppSec for code tests; Azure Infra for network/RBAC; DevOps for credential-free pipelines.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use when changing trust boundaries, Entra identity, IAM, network exposure, data 
 
 **Mandatory deliverable:** Threat model with trust zones, data classification, deny matrix and safety sign-off. Attach exact story ID, current source hash, affected HLD/LLD/contract, actual negative tests, review and blockers to the story register, separating observed and target.
 
-**Handoff to:** application-security-engineer, azure-solution-architect, data-engineer. No claims of DEV integration from a diagram. Wait for owner approval of each exact Azure DEV deployment.
+**Handoff to:** application-security-engineer, azure-solution-architect, data-engineer. No claims of DEV integration from a diagram. Follow the protected-main and successful-validation release rule for application changes; live infrastructure mutations still need scoped owner approval.

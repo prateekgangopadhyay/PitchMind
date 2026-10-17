@@ -1,3 +1,5 @@
+> **Superseded delivery policy:** This dated local evidence describes the former opt-in/manual-gate pipeline. [ADR-015](../adr/ADR-015-main-to-dev-automatic-delivery.md) supersedes its application DEV approval workflow; automatic delivery is still not an observed Azure DevOps run.
+
 # EP02-S05 local cost and release guardrails
 
 ## Evidence status

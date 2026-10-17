@@ -11,7 +11,7 @@
 5. PostgreSQL is canonical; Event Hubs ingests, Service Bus commands, SignalR broadcasts; Redis/search are rebuildable. At-least-once with idempotence; never assert cross-system exactly-once.
 6. LOCAL uses Docker and local adapters. DEV/STAGE/PROD use Azure services only. GitHub hosts source; Azure DevOps exclusively builds, validates and releases.
 7. Security, privacy, accessibility, observability, resilience, cost and documentation are built into designs rather than final-stage additions.
-8. **User/owner permission is required before deploying stories to DEV**; STAGE/PROD additionally require protected-environment approvals. If pipeline automation conflicts, keep the deploy disabled and raise the conflict. Creating a PR is not permission to merge or deploy.
+8. **A repository-owner-reviewed PR merged to protected `main`, with required checks green, authorizes automatic application deployment to DEV.** PR validation never deploys. Azure DevOps builds once, deploys by immutable digest, then runs smoke checks. Infrastructure mutations remain separately owner-approved; STAGE/PROD require their own protected approvals.
 9. The existing synthetic-only DEV demonstration is not proof of canonical cloud functionality. No service is called active because it appears in Bicep or a C4 diagram.
 10. The engineering council is advisory; human owners retain responsibility. Specialists must make uncertainty, dissent and missing evidence visible.
 
@@ -21,7 +21,7 @@
 - **Architecture authority:** Principal Architect is architecture DRI; Distinguished Engineer is independent reviewer for high-blast-radius or irreversible decisions; Staff/Principal Engineer drives cross-team executable design and integrates contracts. New ADR needed for major tradeoffs.
 - **Implementation authority:** Story DRI (usually lead backend or frontend) owns code, tests, scope, blockers and demonstration; domain/data/infra specialists own their bounded interfaces. The DRI may not self-certify production safety.
 - **Independent controls:** Security/AppSec, SRE, QA, Accessibility, Football Analytics and FinOps have domain-specific blocking gates with concrete reproduction/evidence; conflicts are escalated to Product Owner + Principal Architect and cannot override an unsafe gate by silence.
-- **Release authority:** DevOps runs pipeline mechanics; service owner provides operational sign-off; **repository owner explicitly authorizes DEV deployment**; protected Azure DevOps Environment approval controls STAGE/PROD.
+- **Release authority:** DevOps runs pipeline mechanics; owner-reviewed protected-main merge authorizes application DEV release; infrastructure changes need scoped owner approval; protected Azure DevOps Environment approval controls STAGE/PROD.
 - **Single accountable owner per story and release;** multiple consulted skills, never a 28-person required PR approval queue.
 
 ### Specialist engagement routing
@@ -47,8 +47,8 @@
 | G3 Ready | Product Owner + story DRI | Definition of Ready: owner, estimate, dependencies, examples, interface owners, acceptance cases, plan for evidence | Dependency unknown, unlicensed input, claimed implementation unverified |
 | G4 Implementation / PR | Story DRI | Small feature branch/PR, code, local unit/integration/property/contract tests, telemetry, docs, threat delta, toggles and reversibility | Undeclared architectural bypass or unjustified test omission |
 | G5 Independent validation | QA + security/football/accessibility as applicable | Azure DevOps clean build + test receipts; adversarial goldens; data correctness, latency and failure injection; reviewers independent of author | CI not observed, unsupported claim, unresolved P0 accessibility/security flaw |
-| G6 Integrated / DEV-ready | SRE + DevOps + service DRI | Immutable image/artifact digest, schema compatibility, Bicep what-if, managed identity/private DNS checks, synthetic end-to-end smoke plan, rollback and budget limit | Missing cloud dependencies, disabled privacy/security gate, absent rollback, uncertain owner approval |
-| G7 DEV deploy | **Repository owner** approves; DevOps executes | Explicit recorded approval for this story/change **before** any DEV deployment; approved pipeline deploy by digest; real health + match golden + negative smoke links | No owner approval; automatic main→DEV could deploy without consent |
+| G6 Integrated / DEV-ready | SRE + DevOps + service DRI | Immutable image/artifact digest, schema compatibility, Bicep what-if, managed identity/private DNS checks, synthetic end-to-end smoke plan, rollback and budget limit | Missing cloud dependencies, disabled privacy/security gate, absent rollback, missing main protection or required validation |
+| G7 DEV deploy | DevOps executes automatically after protected-main merge | Successful required checks; distinct federated identities; immutable image digest; health/smoke evidence and rollback path | Unprotected main, failed checks, missing identities, or failed smoke |
 | G8 STAGE/PROD promotion | Owner + protected Azure DevOps Environment approvers | Same immutable digest, migration compatibility, resilience/performance/security/backup cert, SLO/cost review, canary/rollback, environment approval | Rebuild on promotion, missing independent review or live verification |
 | G9 Operate / learn | SRE + Product Owner | Observability dashboards, incident runbook, post-deploy golden, product feedback, error-budget review, follow-up work, docs currency | Silent failure, unowned alarms or undocumented behavior |
 
@@ -97,7 +97,7 @@ Each test result records command, runner/environment, commit SHA, dataset+schema
 
 **Dissent protocol:** specialist cites a contract/invariant, proposed violating change, concrete failure case and safer option. DRI proposes resolution; unresolved P0/security/truth issues pause merge/deploy. Record ADR for durable disagreements.
 
-**Deployment change control:** PR merge, infrastructure what-if, provisioning, paid service creation, identity/RBAC mutation, DEV release, STAGE and PROD release are distinct actions. No inferred permission. For DEV story deployment obtain the owner's affirmative approval referencing change scope, digest and rollback; if no answer, do not deploy.
+**Deployment change control:** PR merge, infrastructure what-if, provisioning, paid service creation, identity/RBAC mutation, DEV release, STAGE and PROD release are distinct actions. No inferred permission. For application DEV releases, the owner-reviewed merge to protected `main` is the authorization; deployment follows only successful required checks and uses an immutable digest. Azure infrastructure mutations remain separately owner-approved.
 
 ## 8. Measures and cadences
 
@@ -107,7 +107,7 @@ Metrics: lead time for change, deployment frequency, failed change rate, time to
 
 ## 9. Skill orchestration
 
-Each role under ../../.github/skills/ is a **task-loaded capability**, not a pretend human employee. Prompt it using a story ID and artifacts. Skills read this model and the source ADRs before giving recommendations. The Principal Architect identifies required reviewers; Product Owner names a single DRI; QA verifies evidence; owner retains deployment approval. Skills cannot silently alter canonical football policy, approve themselves, or assert external execution they did not observe.
+Each role under ../../.github/skills/ is a **task-loaded capability**, not a pretend human employee. Prompt it using a story ID and artifacts. Skills read this model and the source ADRs before giving recommendations. The Principal Architect identifies required reviewers; Product Owner names a single DRI; QA verifies evidence; owner controls application releases through protected-main review and retains separate approval for infrastructure mutations and STAGE/PROD. Skills cannot silently alter canonical football policy, approve themselves, or assert external execution they did not observe.
 ## 10. Original EPL-context source and zero-hardcoded-data transition
 
 The Manchester United–Liverpool candidate JSON (2,199 events) was structurally profiled; its raw clock maximum is 5,761, which is 96:01 only under an unverified seconds interpretation. The repository owner confirmed synthetic provenance and redistribution permission on 2026-10-10. Independent rights/privacy review remains pending, as do coordinate units/orientation, clock and period/stoppage semantics, roster/correction rules, player metric definitions and football realism. Do not expose heartRate-like fields as actual measured player health data. Source normalization must preserve original event IDs and 1-based sequence alongside canonical 0-based sequence. This candidate is separate from EP03-S01's fictional seeded 90-minute acceptance fixture. See [simulation admission gates](SIMULATION-DATA-ADMISSION.md).

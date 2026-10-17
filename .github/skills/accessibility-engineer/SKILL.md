@@ -36,7 +36,7 @@ Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders
 ## Stop and escalate
 **Blocking condition:** Block core 'Why?' evidence paths inaccessible to keyboard or assistive tech.
 **Handoff:** UX and Frontend for design/remediation; QA for regression gate.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,11 +44,11 @@ Use when evaluating UI semantics, keyboard, pitch visualizations, replay sliders
 
 **Mandatory deliverable:** Axe/manual assistive-technology checks, defect evidence, acceptance. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** lead-frontend-engineer, ui-ux-engineer, qa-architect. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** lead-frontend-engineer, ui-ux-engineer, qa-architect. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.
 
 ## Web Design Guidelines and visual quality coordination
 For each EP07/EP08-S06 PR, independently use [Web Design Guidelines](../web-design-guidelines/SKILL.md) (fresh official criteria or labeled offline fallback), then review [Taste](../design-taste-frontend/SKILL.md) motion/font/layout decisions and [Awesome](../awesome-design-audit/SKILL.md) anti-slop/premium scores for accessibility regressions. Treat WCAG 2.2 AA, genuine keyboard/screen-reader evidence, focus restoration, reduced motion, 320px reflow, pitch text equivalents and non-color-only markers as **non-waivable release blockers**; a high aesthetic score cannot trump usability. Submit `file:line` findings, actual AT runs/versions and remedial proof using [frontend workflow](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md).
 
 ## Impeccable and Emil Kowalski design specialists (EP07 / EP08-S06)
 
-For changed user-facing React/Vite components, also consult [Impeccable](../impeccable/SKILL.md) for focused hierarchy/audit/polish/distill and [Emil design engineering](../emil-design-eng/SKILL.md) for interaction affordances, microinteractions and motion restraint. Both are distinct from the 28 accountable Council roles and complement—not replace—Taste, Vercel Web Guidelines or independent Awesome review. Follow `docs/design/FRONTEND-DESIGN-DELIVERY.md`; evaluate motion only where appropriate and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, existing CSS/React stack and exact owner approval for Azure DEV operations. No automatic upstream installers, new hooks or runtime libraries.
+For changed user-facing React/Vite components, also consult [Impeccable](../impeccable/SKILL.md) for focused hierarchy/audit/polish/distill and [Emil design engineering](../emil-design-eng/SKILL.md) for interaction affordances, microinteractions and motion restraint. Both are distinct from the 28 accountable Council roles and complement—not replace—Taste, Vercel Web Guidelines or independent Awesome review. Follow `docs/design/FRONTEND-DESIGN-DELIVERY.md`; evaluate motion only where appropriate and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, existing CSS/React stack and protected-main review for application releases and scoped owner approval for Azure infrastructure changes. No automatic upstream installers, new hooks or runtime libraries.

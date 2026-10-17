@@ -22,26 +22,26 @@ Use for Azure DevOps Pipelines, branch validation, immutable image delivery, env
 4. Establish actual registered pipeline, GitHub endpoint, federated AzureRM service connection and independent test-result publishing before marking CI verified.
 5. Build once; attach image digest, source SHA, schema/fixture/test manifest, SBOM and evidence; promote same digest.
 6. Keep failing tests, security checks and environment protection from being bypassed by placeholders.
-7. Existing enableDevDelivery is opt-in; **do not activate automatic DEV story delivery without explicit owner approval for each deploy**.
+7. Every successful commit to owner-protected `main` automatically releases its immutable image to DEV after all validation and identity preflight stages pass. PR builds validate only; they never publish or deploy. Do not bypass required review/checks. Configure the DEV Environment without manual approval pauses; keep STAGE/PROD protected.
 8. STAGE/PROD require protected Azure DevOps Environments, migration compatibility, rollback and measured smoke.
 9. Produce the deliverables below, record risks/assumptions and route independent reviewers.
 10. Give an explicit PASS / CHANGES REQUIRED / BLOCKED verdict **only for checks actually performed**. No fabricated build, Azure, model or deployment results.
 
 ## Required deliverables
 - Pipeline/branch protection design and observed execution evidence ledger.
-- Release manifest and approval/rollback workflow by digest.
+- Release manifest, protected-main authorization, automatic DEV rollback workflow by digest.
 - A concise decision record: requirement → changed component/contract → test ID → exact evidence link/commit/environment or **unverified** → owner.
 - Positive, negative and degraded examples, including impact on time consistency, security, deterministic truth and local-vs-Azure profiles where applicable.
 
 ## Stop and escalate
-**Blocking condition:** Stop unapproved DEV automation, mutable-tag release, cross-environment image rebuild or invented green run.
+**Blocking condition:** Stop an unreviewed/unvalidated main commit, mutable-tag release, cross-environment image rebuild or invented green run. Application auto-release is authorized by protected-main merge; infra changes and STAGE/PROD remain separately approved.
 **Handoff:** DX for reproducible CI, Azure Infra for target, Security for federation, SRE for smoke.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
-**Primary epics:** EP01, EP02, EP10, EP11. **Gate to enforce:** Do not equate enableDevDelivery=true, PR merge or pipeline run with owner consent; demand change-scoped owner approval AND protected/manual Azure DevOps gate before DEV apply.
+**Primary epics:** EP01, EP02, EP10, EP11. **Gate to enforce:** DEV app release runs only from a validated commit on owner-protected `main`; PR runs cannot publish/deploy. Do not add an application-release pause after main. Require scoped approval for Azure infrastructure mutations and protected approvals for STAGE/PROD.
 
 **Mandatory deliverable:** Immutable artifact/release manifest, CI result, approval record and rollback evidence. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
 
-**Handoff to:** site-reliability-engineer, security-architect, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
+**Handoff to:** site-reliability-engineer, security-architect, qa-architect. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Application releases follow the protected-main and successful-validation rule; a skill cannot authorize infrastructure mutations or STAGE/PROD releases.

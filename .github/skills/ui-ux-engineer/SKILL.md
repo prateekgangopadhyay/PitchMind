@@ -36,7 +36,7 @@ Use for product information architecture, match screen redesign, visual hierarch
 ## Stop and escalate
 **Blocking condition:** Reject an attractive design that obscures sources, time, simulation status or unsupported certainty.
 **Handoff:** Product for priorities; Football Analytics for claims; Frontend/Accessibility for implementation.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,7 +44,7 @@ Use for product information architecture, match screen redesign, visual hierarch
 
 **Mandatory deliverable:** Seven-screen questions, Figma/mockup delta, data dependency map and mobile behavior. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** product-owner, accessibility-engineer, lead-frontend-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** product-owner, accessibility-engineer, lead-frontend-engineer. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.
 
 ## Mandatory five-skill UI review cycle — EP07 / EP08-S06
 For materially changed user-facing UI, use the cross-cutting specialists in this order:
@@ -54,4 +54,4 @@ For materially changed user-facing UI, use the cross-cutting specialists in this
 4. [Vercel Web Design Guidelines](../web-design-guidelines/SKILL.md) audits changed TSX/CSS/HTML, records `file:line` findings and checks focus, forms and responsiveness. Label an offline guideline fallback explicitly.
 5. [Awesome Design audit](../awesome-design-audit/SKILL.md) independently scores the eight anti-slop areas and premium 40/30/20/10 rubric from actual screenshots. Remediate the top three defects and re-inspect.
 
-Document before/after desktop/tablet/mobile views and unanswered blockers per [frontend delivery protocol](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md). The five specialists are distinct from the 28 accountable Council roles (33 discoverable directories total); they guide design review and do not own story acceptance. The Product Owner retains story acceptance responsibility. This review supplements football/product acceptance and actual accessibility tests; it never substitutes for them. Follow the delivery protocol and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, React/Vite/TypeScript/existing CSS and exact owner approval for Azure DEV operations. No automatic upstream installers, binaries, hooks or runtime libraries.
+Document before/after desktop/tablet/mobile views and unanswered blockers per [frontend delivery protocol](../../../docs/design/FRONTEND-DESIGN-DELIVERY.md). The five specialists are distinct from the 28 accountable Council roles (33 discoverable directories total); they guide design review and do not own story acceptance. The Product Owner retains story acceptance responsibility. This review supplements football/product acceptance and actual accessibility tests; it never substitutes for them. Follow the delivery protocol and mark browser, reduced-motion, keyboard/screen-reader and screenshot checks not actually executed as **unverified**. Preserve product truth, selected time/revision, WCAG 2.2 AA, React/Vite/TypeScript/existing CSS and protected-main review for application releases and scoped owner approval for Azure infrastructure changes. No automatic upstream installers, binaries, hooks or runtime libraries.

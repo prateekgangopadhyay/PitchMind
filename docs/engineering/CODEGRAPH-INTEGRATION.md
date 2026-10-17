@@ -43,7 +43,7 @@ The script resolves a locally installed engine (or an explicitly configured `COD
 - GitHub is source control. **Azure DevOps is the sole CI/CD orchestrator.** Do not copy CodeGraph's vendor-provided GitHub Actions workflow into this repository: `pipelines/azure-pipelines.yml` explicitly rejects `.github/workflows`.
 - CodeGraph is opt-in, **not** a new required Azure DevOps gate. No third-party install or external model invocation is added to CI; adding CodeGraph to Azure DevOps later requires a separately reviewed, supply-chain-pinned, nonblocking validation change.
 - Never let automated PR context output grant approval, merge a draft, mark any story accepted, publish football facts or authorize release.
-- LOCAL uses Docker/locally installed tooling. DEV/STAGE/PROD use approved Azure services only. **No Azure DEV deployment or resource mutation without exact, change-specific owner approval**; protected release gates remain in force.
+- LOCAL uses Docker/locally installed tooling. DEV/STAGE/PROD use approved Azure services only. **Application DEV deployment follows protected-main review and required validation; Azure infrastructure mutations still require exact, scoped owner approval.**
 
 ## Pilot / operational checks
 

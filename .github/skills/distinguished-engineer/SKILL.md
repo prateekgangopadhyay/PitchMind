@@ -36,7 +36,7 @@ Use for irreversible architecture choices, major scalability risks, correctness 
 ## Stop and escalate
 **Blocking condition:** Escalate irreversible data loss, unsupported truth claims or architecture that cannot be restored or explained.
 **Handoff:** Principal Architect to record ADR; domain/security/SRE reviewers to enforce specialist gates.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 

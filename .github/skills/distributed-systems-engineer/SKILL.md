@@ -36,7 +36,7 @@ Use when designing cross-process consistency, outbox/inbox, deduplication, order
 ## Stop and escalate
 **Blocking condition:** Block silent canonical reordering, lost committed outbox work or double score application.
 **Handoff:** PostgreSQL for transaction semantics; Event Streaming for broker behavior; SRE for resilience.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 

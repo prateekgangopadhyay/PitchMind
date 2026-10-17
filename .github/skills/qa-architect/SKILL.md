@@ -36,7 +36,7 @@ Use when planning test strategy, validating acceptance, certifying story complet
 ## Stop and escalate
 **Blocking condition:** Reject acceptance based on screenshots, docs, scaffolds or a passing /health alone.
 **Handoff:** Product Owner for acceptance; domain and specialist reviewers for signoff; SRE/DevOps for integrated evidence.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,7 +44,7 @@ Use when planning test strategy, validating acceptance, certifying story complet
 
 **Mandatory deliverable:** Traceable golden, negative, degraded and E2E evidence matrix with real execution results. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 
-**Handoff to:** football-analytics-engineer, accessibility-engineer, performance-engineer. Never self-certify story acceptance or bypass the owner-specific Azure DEV deployment approval.
+**Handoff to:** football-analytics-engineer, accessibility-engineer, performance-engineer. Never self-certify story acceptance or bypass protected-main review, required validation, or separate infrastructure/environment approvals.
 
 ## Five-skill frontend quality gate
 For UI stories EP07-S01..S06 and EP08-S06, require a documented five-skill review in this order: [Taste](../design-taste-frontend/SKILL.md) for focused screen refinement; [Impeccable](../impeccable/SKILL.md) for hierarchy critique, audit and polish; [Emil design engineering](../emil-design-eng/SKILL.md) for interactions and motion/accessibility; [Vercel Web Design Guidelines](../web-design-guidelines/SKILL.md) for changed TSX/CSS/HTML findings with `file:line` and freshness state; and [Awesome Design audit](../awesome-design-audit/SKILL.md) for independent scoring of actual desktop/mobile/error screenshots after iteration. Confirm real Node/React test results, selected-time no-lookahead, WCAG keyboard/AT, source-fed facts and no counterfeit EPL media. Record exceptions explicitly in the existing story register. These 5 cross-cutting specialists complement the 28 accountable Council roles (33 discoverable skill directories total); they do not own acceptance. The Product Owner remains responsible for story acceptance. Do not accept based on screenshot score alone. Preserve React 19/Vite/TypeScript/existing CSS. Impeccable remains a local advisory adapter: do not install upstream CLI binaries or hooks, and do not add runtime libraries without review.

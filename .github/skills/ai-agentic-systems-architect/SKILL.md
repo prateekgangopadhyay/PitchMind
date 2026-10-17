@@ -36,7 +36,7 @@ Use when implementing Microsoft Foundry model interactions, evidence tools, agen
 ## Stop and escalate
 **Blocking condition:** Block model-written canonical data, unsupported claims and AI availability as a prerequisite for scoreboard/replay.
 **Handoff:** Football Analytics for evidence, AppSec for tool security, FinOps/SRE for budgets and degradation.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
@@ -44,4 +44,4 @@ Use when implementing Microsoft Foundry model interactions, evidence tools, agen
 
 **Mandatory deliverable:** Agent state machine, tool allowlist, evaluated failure cases and traceable model costs. Record exact EPxx-Syy, actual data/rights/fixture evidence, altered API/ADR/C4 contract, observed test receipts and blockers in the story register.
 
-**Handoff to:** football-analytics-engineer, application-security-engineer, finops-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Explicit repository-owner permission is required before each DEV deployment; a skill cannot grant that permission.
+**Handoff to:** football-analytics-engineer, application-security-engineer, finops-engineer. Unknown source semantics and Azure dependencies block acceptance rather than inviting assumptions. Application releases follow the protected-main and successful-validation rule; a skill cannot authorize infrastructure mutations or STAGE/PROD releases.

@@ -36,7 +36,7 @@ Use when building .NET API/BFF endpoints, application ports, canonical match rea
 ## Stop and escalate
 **Blocking condition:** Stop release if returned score, evidence or explanation can refer to different timestamps or unsupported facts.
 **Handoff:** DDD/PostgreSQL for state; Frontend for consumers; AppSec for authorization; QA for contracts.
-**Nondelegable rule:** Do not merge or deploy on an assumed approval. Ask the repository owner for **explicit approval before each DEV story deployment**; STAGE/PROD have separate protected approvals. Never describe a target-only adapter as implemented.
+**Nondelegable rule:** Do not merge or deploy on an assumed approval. Treat an owner-reviewed PR merged to protected `main`, with required validation green, as authorization for that commit's automatic application release to DEV; STAGE/PROD need separate protected approvals. Never describe a target-only adapter as implemented.
 
 ## Role-specific story gate and executable evidence
 
