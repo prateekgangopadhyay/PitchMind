@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
+using PitchMind.Application.MatchIntelligence;
 using PitchMind.Infrastructure.Storage;
 using Npgsql;
 
@@ -27,7 +28,33 @@ if (corsOrigins.Length > 0)
 var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
     builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"]);
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<IMatchProjectionCache, MemoryMatchProjectionCache>();
+
+// EP09-S01: Azure Managed Redis Projection Cache with in-memory fallback
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
+    ?? builder.Configuration["Redis:ConnectionString"]
+    ?? builder.Configuration["AZURE_REDIS_CONNECTIONSTRING"];
+
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    builder.Services.AddSingleton<IMatchProjectionCache>(sp =>
+        new AzureManagedRedisProjectionCache(
+            redisConnectionString,
+            TimeSpan.FromMinutes(5),
+            2000,
+            sp.GetService<ILogger<AzureManagedRedisProjectionCache>>()));
+}
+else
+{
+    builder.Services.AddSingleton<IMatchProjectionCache, MemoryMatchProjectionCache>();
+}
+
+// EP09 & EP12 Services
+builder.Services.AddSingleton<IAutoRecapGenerator, AutoRecapGenerator>();
+builder.Services.AddSingleton<IEvidenceExportService, EvidenceExportService>();
+builder.Services.AddSingleton<IHistoricalEvidenceSearchService, HistoricalEvidenceSearchService>();
+builder.Services.AddSingleton<ISpatialAnalysisService, SpatialAnalysisService>();
+builder.Services.AddSingleton<IPartnerIntegrationService, PartnerIntegrationService>();
+
 builder.Services.AddSingleton<ISimulationStreamer, SimulationStreamerService>();
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
 if (localRealtimeEnabled)
@@ -215,6 +242,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSimulationEndpoints();
+app.MapHackathonOperationsEndpoints();
 if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")

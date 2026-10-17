@@ -495,12 +495,12 @@ select {
 
 .main-navigation a:hover {
   color: var(--pm-text);
-  border-color: #315361;
+  border-bottom-color: #315361;
 }
 
 .main-navigation a[aria-current="page"] {
   color: var(--pm-accent);
-  border-color: var(--pm-accent);
+  border-bottom-color: var(--pm-accent);
 }
 
 #main-content {
