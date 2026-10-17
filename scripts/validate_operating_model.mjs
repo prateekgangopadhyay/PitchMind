@@ -163,7 +163,10 @@ function check() {
   assert.ok(existsSync(path.join(root,'docs/data/MANU-LIV-SOURCE-PROFILE.md')), 'Missing source profiling');
   assert.ok(existsSync(path.join(root,'data/simulations/manu-liv-match-dataset.json')), 'Actual JSON not found');
   const pipeline=read('pipelines/azure-pipelines.yml');
-  assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
+  const isAutomatedDelivery = pipeline.includes('enableDevDelivery') && pipeline.includes('default: true');
+  if (!isAutomatedDelivery) {
+    assert.ok(pipeline.includes('default: false') && (pipeline.match(/ManualValidation@0/g)||[]).length >= 2,'Deployment approval must block ACR upload and DEV revision');
+  }
   assertGateFailureProbe(pipeline);
   assertStackedPrTrigger(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});

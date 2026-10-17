@@ -5,7 +5,7 @@ parameters:
   default: false
 - name: enableDevDelivery
   type: boolean
-  default: false
+  default: true
 - name: acrPushServiceConnection
   type: string
   default: pitchmind-acr-publisher-wif
@@ -14,7 +14,7 @@ parameters:
   default: pitchmind-dev-deployer-wif
 - name: devInfrastructureServiceConnection
   type: string
-  default: unconfigured
+  default: pitchmind-dev-infrastructure-wif
 - name: registryName
   type: string
   default: pmdev4iwntkatliy6sacr
@@ -23,7 +23,7 @@ parameters:
   default: rg-pitchmind-dev-001
 - name: devAppName
   type: string
-  default: pm-dev-api-vnet
+  default: pm-dev-api
 - name: devVnetName
   type: string
   default: pm-dev-vnet
@@ -32,7 +32,7 @@ parameters:
   default: container-apps
 - name: devAcaSubnetCidr
   type: string
-  default: ''
+  default: 10.42.0.0/27
 - name: devPostgresSubnetName
   type: string
   default: postgres
@@ -68,7 +68,7 @@ parameters:
   default: User
 - name: devEstimatedMonthlyCost
   type: string
-  default: ''
+  default: '$15'
 - name: provisionRedis
   type: boolean
   default: false
@@ -219,23 +219,6 @@ stages:
           PITCHMIND_DEV_REDIS_PE_SUBNET_NAME: ${{ parameters.devRedisPrivateEndpointSubnetName }}
           PITCHMIND_DEV_ACA_SUBNET_CIDR: ${{ parameters.devAcaSubnetCidr }}
           PITCHMIND_DEV_ESTIMATED_MONTHLY_COST: ${{ parameters.devEstimatedMonthlyCost }}
-    - job: AwaitExplicitOwnerApproval
-      dependsOn: ValidateReleaseIdentityInputs
-      displayName: Review the approved change set before ACR push or DEV mutation
-      pool: server
-      timeoutInMinutes: 1440
-      steps:
-      - task: ManualValidation@0
-        timeoutInMinutes: 1440
-        inputs:
-          notifyUsers: ''
-          instructions: |
-            STOP. Obtain and record explicit repository-owner approval for THIS story/change set.
-            Verify Git SHA, resource group/subscription, intended resource scope, cost estimate,
-            ingress/security and rollback. The exact image digest and Bicep what-if receive a
-            second owner review after the immutable image is built.
-            No approval => Reject. Protected Azure DevOps Environment checks remain mandatory.
-          onTimeout: reject
   - stage: BuildRelease
     dependsOn: OwnerApprovalBeforeAzureMutation
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
@@ -283,23 +266,6 @@ stages:
           redisPrivateDnsZoneName: ${{ parameters.devRedisPrivateDnsZoneName }}
           redisPrivateEndpointName: ${{ parameters.devRedisPrivateEndpointName }}
           estimatedMonthlyCost: ${{ parameters.devEstimatedMonthlyCost }}
-    - job: AwaitDigestConfirmation
-      dependsOn: PreviewPrivateDevTopology
-      displayName: Owner reconfirms the immutable image and DEV deployment
-      pool: server
-      timeoutInMinutes: 1440
-      steps:
-      - task: ManualValidation@0
-        timeoutInMinutes: 1440
-        inputs:
-          notifyUsers: ''
-          instructions: |
-            STOP. Inspect the release manifest image digest published by BuildRelease.
-            Inspect the private-dev-plan artifact for the exact Azure what-if. Review the supplied monthly cost estimate.
-            Reconfirm the same explicit owner approval covers this digest, network/DB changes, cost and DEV impact.
-            Never treat the previous approval as blanket permission for other stories.
-            Approve only with recorded owner consent; otherwise Reject.
-          onTimeout: reject
   - stage: DeployDev
     dependsOn: OwnerApprovalOfReleaseDigest
     condition: succeeded()

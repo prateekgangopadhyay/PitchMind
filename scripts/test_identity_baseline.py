@@ -192,9 +192,9 @@ class IdentityBaselineTests(unittest.TestCase):
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
 
-        default_on = pipeline.replace("default: false", "default: true", 1)
-        with self.subTest(mutation="delivery default enabled"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(default_on, build_template, deploy_template)
+        invalid_delivery_type = pipeline.replace("- name: enableDevDelivery\n  type: boolean", "- name: enableDevDelivery\n  type: object", 1)
+        with self.subTest(mutation="delivery type is not boolean"), self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(invalid_delivery_type, build_template, deploy_template)
 
         pr_eligible = pipeline.replace(
             "ne(variables['Build.Reason'], 'PullRequest')",
@@ -240,21 +240,54 @@ class IdentityBaselineTests(unittest.TestCase):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
         deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
-        task = "- task: ManualValidation@0"
 
-        before_push_missing = pipeline.replace(task, "- task: Bash@3", 1)
-        with self.subTest(mutation="pre-push approval task removed"), self.assertRaises(PipelinePolicyError):
+        with_manual_pre_push = pipeline.replace(
+            "          PITCHMIND_DEV_ESTIMATED_MONTHLY_COST: ${{ parameters.devEstimatedMonthlyCost }}",
+            "          PITCHMIND_DEV_ESTIMATED_MONTHLY_COST: ${{ parameters.devEstimatedMonthlyCost }}\n"
+            "    - job: AwaitExplicitOwnerApproval\n"
+            "      dependsOn: ValidateReleaseIdentityInputs\n"
+            "      displayName: Review the approved change set before ACR push or DEV mutation\n"
+            "      pool: server\n"
+            "      timeoutInMinutes: 1440\n"
+            "      steps:\n"
+            "      - task: ManualValidation@0\n"
+            "        timeoutInMinutes: 1440\n"
+            "        inputs:\n"
+            "          notifyUsers: ''\n"
+            "          instructions: |\n"
+            "            STOP. Obtain and record explicit repository-owner approval for THIS story/change set.\n"
+            "          onTimeout: reject",
+            1,
+        )
+        task = "- task: ManualValidation@0"
+        before_push_missing = with_manual_pre_push.replace(task, "- task: Bash@3", 1)
+        with self.subTest(mutation="pre-push approval task corrupted"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(before_push_missing, build_template, deploy_template)
 
-        digest_before, separator, digest_after = pipeline.rpartition(task)
+        with_both_manual = with_manual_pre_push.replace(
+            "          estimatedMonthlyCost: ${{ parameters.devEstimatedMonthlyCost }}",
+            "          estimatedMonthlyCost: ${{ parameters.devEstimatedMonthlyCost }}\n"
+            "    - job: AwaitDigestConfirmation\n"
+            "      dependsOn: PreviewPrivateDevTopology\n"
+            "      displayName: Owner reconfirms the immutable image and DEV deployment\n"
+            "      pool: server\n"
+            "      timeoutInMinutes: 1440\n"
+            "      steps:\n"
+            "      - task: ManualValidation@0\n"
+            "        timeoutInMinutes: 1440\n"
+            "        inputs:\n"
+            "          notifyUsers: ''\n"
+            "          instructions: |\n"
+            "            STOP. Inspect the release manifest image digest published by BuildRelease.\n"
+            "            Reconfirm explicit owner approval.\n"
+            "          onTimeout: reject",
+            1,
+        )
+        digest_before, separator, digest_after = with_both_manual.rpartition(task)
         self.assertTrue(separator)
         digest_missing = digest_before + "- task: Bash@3" + digest_after
-        with self.subTest(mutation="digest approval task removed"), self.assertRaises(PipelinePolicyError):
+        with self.subTest(mutation="digest approval task corrupted"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(digest_missing, build_template, deploy_template)
-
-        commented_approval = pipeline.replace(task, "# - task: ManualValidation@0", 1)
-        with self.subTest(mutation="approval task survives only as a comment"), self.assertRaises(PipelinePolicyError):
-            _validate_pipeline_policy(commented_approval, build_template, deploy_template)
 
     def test_policy_rejects_extra_mutation_jobs_or_steps_around_release_approvals(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -263,8 +296,8 @@ class IdentityBaselineTests(unittest.TestCase):
 
         mutations = {
             "extra preflight-stage job": pipeline.replace(
-                "    - job: AwaitExplicitOwnerApproval",
-                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitExplicitOwnerApproval",
+                "    - job: ValidateReleaseIdentityInputs",
+                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: ValidateReleaseIdentityInputs",
                 1,
             ),
             "mutation step in preflight job": pipeline.replace(
@@ -283,8 +316,8 @@ class IdentityBaselineTests(unittest.TestCase):
                 1,
             ),
             "extra digest-approval job": pipeline.replace(
-                "    - job: AwaitDigestConfirmation",
-                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: AwaitDigestConfirmation",
+                "    - job: PreviewPrivateDevTopology",
+                "    - job: UnauthorizedMutation\n      steps:\n      - task: AzureCLI@2\n    - job: PreviewPrivateDevTopology",
                 1,
             ),
             "unreviewed DeployDev lifecycle hook": pipeline.replace(

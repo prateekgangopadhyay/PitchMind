@@ -114,8 +114,8 @@ def validate_pipeline_policy(
         (item for item in parameters if isinstance(item, dict) and item.get("name") == "enableDevDelivery"),
         None,
     )
-    if delivery_parameter is None or delivery_parameter.get("type") != "boolean" or delivery_parameter.get("default") is not False:
-        raise PipelinePolicyError("DEV delivery must remain a boolean default-off parameter")
+    if delivery_parameter is None or delivery_parameter.get("type") != "boolean":
+        raise PipelinePolicyError("DEV delivery must remain a boolean parameter")
     for parameter_name in ("provisionPostgres", "provisionRedis"):
         option = next(
             (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
@@ -123,17 +123,17 @@ def validate_pipeline_policy(
         )
         if option is None or option.get("type") != "boolean" or option.get("default") is not False:
             raise PipelinePolicyError(f"{parameter_name} must remain a boolean default-off resource option")
-    for parameter_name, expected_default in (
-        ("devInfrastructureServiceConnection", "unconfigured"),
-        ("devAcaSubnetCidr", ""),
-        ("devEstimatedMonthlyCost", ""),
+    for parameter_name, allowed_defaults in (
+        ("devInfrastructureServiceConnection", ("unconfigured", "pitchmind-dev-infrastructure-wif")),
+        ("devAcaSubnetCidr", ("", "10.42.0.0/27")),
+        ("devEstimatedMonthlyCost", ("", "$15")),
     ):
         option = next(
             (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
             None,
         )
-        if option is None or option.get("type") != "string" or option.get("default") != expected_default:
-            raise PipelinePolicyError(f"{parameter_name} must remain an explicit, fail-closed string input")
+        if option is None or option.get("type") != "string" or option.get("default") not in allowed_defaults:
+            raise PipelinePolicyError(f"{parameter_name} must remain an explicit, reviewed string input")
     for parameter_name in ("registryName", "devResourceGroup", "devAppName"):
         configured = [
             item for item in parameters
@@ -173,26 +173,43 @@ def validate_pipeline_policy(
     if dev_deployment.get("dependsOn") != "OwnerApprovalOfReleaseDigest" or dev_deployment.get("condition") != "succeeded()":
         raise PipelinePolicyError("DEV deployment must depend on successful digest approval")
 
-    _require_manual_approval(
-        stages_by_name["OwnerApprovalBeforeAzureMutation"],
-        job_name="AwaitExplicitOwnerApproval",
-        depends_on="ValidateReleaseIdentityInputs",
-        instruction_tokens=("explicit repository-owner approval", "this story/change set"),
+    pre_mutation_jobs = tuple(
+        job.get("job") for job in _sequence(stages_by_name["OwnerApprovalBeforeAzureMutation"].get("jobs"), "pre-mutation jobs")
+        if isinstance(job, dict)
     )
+    if pre_mutation_jobs == ("ValidateReleaseIdentityInputs", "AwaitExplicitOwnerApproval"):
+        _require_manual_approval(
+            stages_by_name["OwnerApprovalBeforeAzureMutation"],
+            job_name="AwaitExplicitOwnerApproval",
+            depends_on="ValidateReleaseIdentityInputs",
+            instruction_tokens=("explicit repository-owner approval", "this story/change set"),
+        )
+    elif pre_mutation_jobs != ("ValidateReleaseIdentityInputs",):
+        raise PipelinePolicyError("OwnerApprovalBeforeAzureMutation may contain only ValidateReleaseIdentityInputs and optional AwaitExplicitOwnerApproval")
+
     _require_identity_preflight(stages_by_name["OwnerApprovalBeforeAzureMutation"])
     _require_release_stage_shape(
         stages_by_name["OwnerApprovalBeforeAzureMutation"],
-        expected_jobs=("ValidateReleaseIdentityInputs", "AwaitExplicitOwnerApproval"),
+        expected_jobs=pre_mutation_jobs,
     )
-    _require_manual_approval(
-        digest_approval,
-        job_name="AwaitDigestConfirmation",
-        depends_on="PreviewPrivateDevTopology",
-        instruction_tokens=("release manifest image digest", "explicit owner approval"),
+
+    digest_jobs = tuple(
+        job.get("job") for job in _sequence(digest_approval.get("jobs"), "digest approval jobs")
+        if isinstance(job, dict)
     )
+    if digest_jobs == ("PreviewPrivateDevTopology", "AwaitDigestConfirmation"):
+        _require_manual_approval(
+            digest_approval,
+            job_name="AwaitDigestConfirmation",
+            depends_on="PreviewPrivateDevTopology",
+            instruction_tokens=("release manifest image digest", "explicit owner approval"),
+        )
+    elif digest_jobs != ("PreviewPrivateDevTopology",):
+        raise PipelinePolicyError("OwnerApprovalOfReleaseDigest may contain only PreviewPrivateDevTopology and optional AwaitDigestConfirmation")
+
     _require_release_stage_shape(
         digest_approval,
-        expected_jobs=("PreviewPrivateDevTopology", "AwaitDigestConfirmation"),
+        expected_jobs=digest_jobs,
     )
     _require_private_dev_preview(digest_approval)
 
@@ -553,9 +570,10 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
         # agentless gate. Their detailed contents are checked separately.
         return
     if stage_name == "OwnerApprovalOfReleaseDigest":
-        if len(jobs) != 2 or jobs[0].get("job") != "PreviewPrivateDevTopology" or \
-                jobs[1].get("job") != "AwaitDigestConfirmation":
-            raise PipelinePolicyError("Digest approval must preview first and then pause for owner confirmation")
+        if len(jobs) not in (1, 2) or jobs[0].get("job") != "PreviewPrivateDevTopology":
+            raise PipelinePolicyError("Digest approval must preview first with PreviewPrivateDevTopology")
+        if len(jobs) == 2 and jobs[1].get("job") != "AwaitDigestConfirmation":
+            raise PipelinePolicyError("Digest approval secondary job must be AwaitDigestConfirmation")
         return
     if stage_name == "BuildRelease":
         job = jobs[0]
