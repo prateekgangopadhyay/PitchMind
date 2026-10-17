@@ -68,7 +68,7 @@ az deployment group what-if \
     redisPrivateEndpointSubnetName="$PITCHMIND_DEV_REDIS_PE_SUBNET_NAME" \
     redisPrivateDnsZoneName="$PITCHMIND_DEV_REDIS_DNS_ZONE_NAME" \
     redisPrivateEndpointName="$PITCHMIND_DEV_REDIS_PE_NAME" \
-  --result-format FullResourcePayloads --output json \
+  --no-pretty-print --result-format FullResourcePayloads --output json \
   > "$PITCHMIND_PLAN_DIRECTORY/what-if.json"
 
 python3 scripts/validate_private_dev_whatif.py "$PITCHMIND_PLAN_DIRECTORY/what-if.json"

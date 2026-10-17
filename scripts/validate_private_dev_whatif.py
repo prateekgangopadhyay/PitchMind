@@ -49,7 +49,10 @@ def main() -> int:
         changes = load_changes(sys.argv[1])
         for change in changes:
             change_type = str(change.get("changeType", "")).casefold()
-            resource_type = str(change.get("resourceType", "")).casefold()
+            resource_type = str(
+                change.get("resourceType")
+                or (change.get("after") or change.get("before") or {}).get("type", "")
+            ).casefold()
             if change_type == "delete":
                 raise ValueError(f"Refusing a plan that deletes {change.get('resourceId', 'an Azure resource')}")
             if change_type not in {"create", "modify", "ignore", "nochange", "deploy"}:
