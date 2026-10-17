@@ -121,7 +121,7 @@ resource registryPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if 
   name: guid(registry.id, pullIdentity.id, 'AcrPull')
   scope: registry
   properties: {
-    principalId: pullIdentity.properties.principalId
+    principalId: pullIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   }
@@ -288,7 +288,6 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2025-07-01' = i
     story: 'EP02-S04'
     topology: 'existing-vnet-public-app-private-data'
   }
-  dependsOn: [containerAppsSubnet]
 }
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopology) {
@@ -339,7 +338,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
     story: 'EP02-S04'
     imageDigestDeployment: 'true'
   }
-  dependsOn: [registryPull, containerEnvironment]
+  dependsOn: [registryPull]
 }
 
 output containerAppsEnvironmentId string = deployPrivateDevTopology ? containerEnvironment!.id : ''
