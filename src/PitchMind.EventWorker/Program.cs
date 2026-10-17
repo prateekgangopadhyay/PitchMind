@@ -23,6 +23,8 @@ else
 {
     AzureEventWorkerConfiguration.ValidateRuntimeProfile(profile);
     AzureEventWorkerConfiguration.AddAzureOutboxDispatch(builder.Services, builder.Configuration);
+    if (builder.Configuration.GetValue<bool>("CandidateFeed:Enabled"))
+        AzureEventWorkerConfiguration.AddAzureCandidateFeedConsumer(builder.Services, builder.Configuration);
     if (AzureEventWorkerConfiguration.IsProjectionConsumerEnabled(builder.Configuration))
         AzureEventWorkerConfiguration.AddAzureProjectionConsumer(builder.Services, builder.Configuration);
     builder.Services.AddHostedService<Worker>();

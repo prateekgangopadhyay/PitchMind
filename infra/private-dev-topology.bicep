@@ -46,6 +46,9 @@ param redisSkuName string = 'Balanced_B0'
 param redisPrivateEndpointSubnetName string = 'private-endpoints'
 param redisPrivateDnsZoneName string = 'privatelink.redis.azure.net'
 param redisPrivateEndpointName string = 'pm-dev-redis-pe'
+param eventHubsNamespaceName string = 'pm-dev-eh'
+param candidateEventHubName string = 'candidate-match-events'
+param candidateEventHubConsumerGroup string = 'pitchmind-candidate-worker'
 
 resource network 'Microsoft.Network/virtualNetworks@2024-05-01' existing = {
   name: vnetName
@@ -110,6 +113,26 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: registryName
+}
+
+// Candidate raw events are isolated from the existing projection-telemetry hub.
+resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
+  name: eventHubsNamespaceName
+}
+
+resource candidateEventHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = if (deployPrivateDevTopology) {
+  parent: eventHubsNamespace
+  name: candidateEventHubName
+  properties: {
+    partitionCount: 4
+    messageRetentionInDays: 7
+  }
+}
+
+resource candidateEventHubConsumerGroupResource 'Microsoft.EventHub/namespaces/eventhubs/consumergroups@2024-01-01' = if (deployPrivateDevTopology) {
+  parent: candidateEventHub
+  name: candidateEventHubConsumerGroup
+  properties: {}
 }
 
 resource pullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployPrivateDevTopology) {
@@ -323,7 +346,8 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Development' }
             { name: 'Runtime__Profile', value: 'local' }
-            { name: 'Identity__DevelopmentHeaderAuthEnabled', value: 'true' }
+            // The DEV Container App is reachable outside the developer machine; never trust caller-supplied identity headers.
+            { name: 'Identity__DevelopmentHeaderAuthEnabled', value: 'false' }
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           probes: [
