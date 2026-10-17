@@ -5,13 +5,13 @@ parameters:
   default: false
 - name: enableDevDelivery
   type: boolean
-  default: true
+  default: false
 - name: acrPushServiceConnection
   type: string
-  default: unconfigured
+  default: pitchmind-acr-publisher-wif
 - name: devDeploymentServiceConnection
   type: string
-  default: unconfigured
+  default: pitchmind-dev-deployer-wif
 - name: devInfrastructureServiceConnection
   type: string
   default: unconfigured
