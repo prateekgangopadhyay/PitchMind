@@ -13,3 +13,5 @@ Accepted as **target decisions**, pending executable verification:
 - [ADR-009 — Separate canonical BFF from offline demo routes](ADR-009-canonical-bff-boundary.md)
 - [ADR-010 — API identity, role boundaries and local synthetic access](ADR-010-api-identity-and-abuse-controls.md)
 - [ADR-012 — Bounded claim-gated explanation handoffs](ADR-012-bounded-agent-handoffs.md)
+- [ADR-013 — Evidence-bounded tactical agent profiles](ADR-013-tactical-agent-profiles.md)
+- [ADR-014 — Separate tactical-knowledge RAG from canonical match evidence](ADR-014-football-knowledge-rag.md)
