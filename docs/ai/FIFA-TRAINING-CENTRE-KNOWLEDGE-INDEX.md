@@ -10,7 +10,7 @@ The Training Centre is a large, changing library, not a finite article bundle. T
 
 - [Football domain knowledge atlas](FOOTBALL-DOMAIN-KNOWLEDGE-ATLAS.md) — cross-source reference for laws, phases, formations, roles, goalkeeper play, restarts, development and match-analysis evidence.
 - [Football tactical playbooks](FOOTBALL-TACTICAL-PLAYBOOKS.md) — matchups, phases, role fit, goalkeeper, set pieces and late-match states.
-- [Reviewed article catalogue](fifa-training-centre-article-catalog.v1.json) — 43 curated FIFA, IFAB, UEFA, FA and research references with topic, code, age/competition context, source type, review date and direct link.
+- [Reviewed article catalogue](fifa-training-centre-article-catalog.v1.json) — 45 curated FIFA, IFAB, UEFA, FA and research references with topic, code, age/competition context, source type, review date and direct link. New references cover progression through thirds and official field markings.
 
 The catalog is intentionally curated rather than a mirror or full crawl of FIFA's changing library. General-law claims use IFAB; competition trend claims use the relevant UEFA/FIFA season and competition; empirical claims link to research and retain sample limits. The atlas paraphrases sources in original language and does not ingest entire pages or media. See [knowledge provenance and AI evidence limits](FOOTBALL-DOMAIN-KNOWLEDGE-ATLAS.md#purpose-and-source-discipline).
 

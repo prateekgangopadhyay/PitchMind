@@ -63,6 +63,22 @@ module vault './modules/key-vault.bicep' = if (enableDevFoundation && environmen
   }
 }
 
+module signalRService './modules/signalr.bicep' = if (enableDevFoundation && environment == 'dev') {
+  name: 'devSignalR'
+  params: {
+    location: location
+    name: take('${prefix}-${suffix}-sigr', 50)
+  }
+}
+
+module aiFoundryService './modules/ai-foundry.bicep' = if (enableDevFoundation && environment == 'dev') {
+  name: 'devAiFoundry'
+  params: {
+    location: location
+    accountName: take(replace('${prefix}${suffix}ai', '-', ''), 24)
+  }
+}
+
 output containerAppsEnvironmentId string = apps.outputs.environmentId
 output registryLoginServer string = registry.outputs.loginServer
 output eventHubNamespace string = eventHubs.outputs.namespaceName
@@ -71,4 +87,6 @@ output storageAccountName string = storage.outputs.accountName
 output devNetworkId string = enableDevFoundation && environment == 'dev' ? network!.outputs.vnetId : ''
 output devPostgresSubnetId string = enableDevFoundation && environment == 'dev' ? network!.outputs.postgresSubnetId : ''
 output devKeyVaultName string = enableDevFoundation && environment == 'dev' ? vault!.outputs.vaultName : ''
+output devSignalRHostName string = enableDevFoundation && environment == 'dev' ? signalRService!.outputs.hostName : ''
+output devAiFoundryEndpoint string = enableDevFoundation && environment == 'dev' ? aiFoundryService!.outputs.endpoint : ''
 output advancedAnalyticsEnabled bool = enableAdvancedAnalytics

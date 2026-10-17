@@ -17,7 +17,9 @@ public enum MatchRealtimeAccessStatus { Forbidden, NotFound, Allowed }
 public sealed record MatchRealtimeAccessDecision(MatchRealtimeAccessStatus Status,
     SelectedMatchProjection? Projection = null);
 
-public sealed class MatchRealtimeAccessPolicy(IMatchProjectionReader projections) : IMatchRealtimeAccessPolicy
+public sealed class MatchRealtimeAccessPolicy(
+    IMatchProjectionReader projections,
+    ISimulationStreamer? simulationStreamer = null) : IMatchRealtimeAccessPolicy
 {
     private static readonly string[] ReadRoles = ["fan", "analyst", "admin"];
 
@@ -28,11 +30,28 @@ public sealed class MatchRealtimeAccessPolicy(IMatchProjectionReader projections
             !ReadRoles.Any(principal.IsInRole))
             return new(MatchRealtimeAccessStatus.Forbidden);
 
-        var projection = await projections.GetForApiAtAsync(new MatchId(matchId), 5400, null, null, cancellationToken)
-            .ConfigureAwait(false);
-        return projection is null
-            ? new(MatchRealtimeAccessStatus.NotFound)
-            : new(MatchRealtimeAccessStatus.Allowed, projection);
+        if (simulationStreamer is not null)
+        {
+            var simProjection = simulationStreamer.GetProjection(matchId);
+            if (simProjection is not null)
+                return new(MatchRealtimeAccessStatus.Allowed, simProjection);
+        }
+
+        try
+        {
+            var projection = await projections.GetForApiAtAsync(new MatchId(matchId), 5400, null, null, cancellationToken)
+                .ConfigureAwait(false);
+            return projection is null
+                ? new(MatchRealtimeAccessStatus.NotFound)
+                : new(MatchRealtimeAccessStatus.Allowed, projection);
+        }
+        catch (CanonicalReadUnavailableException) when (simulationStreamer is not null)
+        {
+            var simProjection = simulationStreamer.GetProjection(matchId);
+            return simProjection is null
+                ? new(MatchRealtimeAccessStatus.NotFound)
+                : new(MatchRealtimeAccessStatus.Allowed, simProjection);
+        }
     }
 }
 

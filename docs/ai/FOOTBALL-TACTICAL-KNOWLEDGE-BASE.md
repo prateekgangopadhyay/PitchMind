@@ -90,6 +90,52 @@ Before making a spatial or movement claim, validate all of the following:
 
 If any item is unknown, step down in specificity. Say “the sequence progressed into the wide area” only if the event classification supports that; do not say “the winger moved 12 metres into the left half-space” from uncalibrated coordinates. A snapshot can describe a snapshot. A movement trend needs multiple aligned observations. Sparse frames cannot establish acceleration or velocity.
 
+### Pitch regions: team-relative 18-zone model
+
+PitchMind adopts the user-supplied **18-zone vocabulary**, version `pitch-regions-18-v1`, as a project convention. It is a 6-by-3 map: six bands from a team's own goal toward the opponent goal, each split into the left, central and right channel. Number the cells in increasing length order and, within each band, left-to-right as viewed by an attacker facing the opponent's goal:
+
+| Length band | Left channel | Central channel | Right channel | Tactical reference |
+| --- | ---: | ---: | ---: | --- |
+| Deep defensive | 1 | 2 | 3 | Own defensive line and first build-up |
+| Defensive midfield | 4 | 5 | 6 | Screen, outlet and first transition |
+| Central midfield | 7 | 8 | 9 | Circulation, tempo and switches |
+| Attacking midfield | 10 | 11 | 12 | Between-line pockets and half-space access |
+| High attacking | 13 | 14 | 15 | Wide creativity; Zone 14 is the central pocket just outside the box |
+| Deep attacking | 16 | 17 | 18 | Byline/corner-side access; Zone 17 is the central penalty-box reference |
+
+The complete per-zone semantics are defined in [`data/domain/pitch-regions-18-v1.json`](../../data/domain/pitch-regions-18-v1.json) and summarized here for authoring/review:
+
+| Zone | Name | Tactical function / interpretation |
+| ---: | --- | --- |
+| 1 | Deep defensive left | Primary left-back defensive territory to contain the opposing wide attacker; can also support a safer first build-up along the touchline. |
+| 2 | Deep defensive center | Central area directly in front of the team's own goal. Prioritize goal protection, secure clearance, or low-risk build-up involving centre-backs and goalkeeper. |
+| 3 | Deep defensive right | Primary right-back defensive territory to contain the opposing left-sided attacker and limit delivery from that side. |
+| 4 | Defensive midfield left | Left-sided transition outlet for a full-back or dropping midfielder to escape central pressure and advance possession. |
+| 5 | Defensive midfield center | Potential number-six anchor and screen in front of centre-backs; can disrupt central counters and offer a first central outlet. |
+| 6 | Defensive midfield right | Right-sided transition outlet that can widen the first build-up and stretch the opponent's initial press. |
+| 7 | Central midfield left | Left central-midfield transition area where a winger may link deeper or a progressive midfielder may carry play forward. |
+| 8 | Central midfield center | Central circulation area for tempo control, connecting defence to attack, and switching play toward either flank. |
+| 9 | Central midfield right | Right central-midfield circulation area for retaining possession and changing the angle of attack. |
+| 10 | Attacking midfield left | Left half-space entry reference where an inverted winger or attacking midfielder may receive between the opposing full-back and centre-back. |
+| 11 | Attacking midfield center | Central link pocket for receiving on the half-turn and connecting deeper midfield to the final attacking line. |
+| 12 | Attacking midfield right | Right half-space entry reference where a creative player may receive between the opposing full-back and centre-back and connect into the box. |
+| 13 | High attacking left | Wide creative area for an overlapping full-back or winger to deliver a cross or cutback; can also support an inside run. |
+| 14 | High attacking center (Zone 14 reference) | Central creative pocket immediately outside the opposition penalty area. A receiver may draw a centre-back forward and create space behind, depending on defensive cover and movement. |
+| 15 | High attacking right | Wide creative area for a winger to isolate a defender, cut inside where suitable, or for a full-back to deliver toward the far post. |
+| 16 | Deep attacking left | Left byline/corner-side area used to pin the defence deep, seek a restart, or deliver a low cross/cutback across goal. |
+| 17 | Deep attacking center (Zone 17 reference) | Central penalty-box reference where attackers may time runs and defenders protect goal-facing space. The legal penalty-area polygon is a separate calibrated overlay; no goal-frequency claim is implied. |
+| 18 | Deep attacking right | Right byline/corner-side area used to pin the defence deep, seek a restart, or deliver a low cross/cutback across goal. |
+
+The supplied descriptions are the intended tactical gloss: Zones 1/4/7/10/13/16 are the left flank and left half-spaces; 2/5/8/11/14/17 form the central spine; and 3/6/9/12/15/18 form the right flank and right half-spaces. In particular, Zone 5 is the defensive-midfield anchor area, Zone 8 the central-midfield engine room, Zones 10/12 left/right half-space entry areas, Zone 13/15 high wide areas, and Zones 16/18 deep wide/byline areas.
+
+Normalize only after validating source semantics: `x_att` runs from the team's own goal toward the opponent goal and `y_att` runs from the attacking team's left touchline to its right. The 6-by-3 diagram gives stable zone identities, but **do not assume its bands are equal metres or equal percentages**. Define and version the actual cut-lines in a coordinate manifest before computing zone membership. Left/right are attack-relative and mirror in stadium coordinates when ends change. A raw `x/y`, `pitchX/pitchY`, or apparent `0–100` range does not establish units, origin, axes, or attack direction.
+
+The names Zone 14 and Zone 17 are useful tactical references, not official FIFA/IFAB numbered markings. Preserve formal geometry as separate, calibrated overlays: in particular, Zone 17 is the project's central penalty-box reference, while the IFAB penalty-area polygon defines the exact legal marking. Zone 14 can be refined as a versioned subregion just outside that polygon; Zones 16/18 can be annotated with corner/byline geometry. Do not infer any of these exact shapes from the zone number alone. IFAB Law 1 defines the field markings, including the goal area and penalty area dimensions ([IFAB Law 1: The Field of Play](https://www.theifab.com/laws/latest/the-field-of-play/)).
+
+A zone hit describes location under this version; it does not by itself prove progression, penetration, pressure, danger, intent, control, or advantage. For each derived result record the model and boundary version, team/direction, source frame/event IDs, selected-time bound, players included, coverage, and whether location was measured or derived. For a local overload state the exact zone/corridor, time and nearby covering opponents. Do not combine players from different frames into a simultaneous numerical relation, or call a zone change a line break without evidence of the pass/carry and opponent-line relation.
+
+The candidate Manchester United–Liverpool feed still has unverified coordinate units, dimensions, axes, origin and direction. `pitch-regions-18-v1` is documented vocabulary only until an approved mapping and zone boundary manifest exist; do not assign that feed's observed values to these zones or convert them to metres yet.
+
 ### How to describe dynamics clearly
 
 Use a compact sequence:
@@ -213,6 +259,14 @@ State the trade-off for either side: bypassing a line can create an advantage if
 Treat transition as a short, distinct interval following a validated regain or loss, with a declared start event and end condition. Preserve source event ID, sequence and period/clock semantics. Analyse initial reaction, nearest pressure, cover/screen, forward or safe outlet, opponent recovery, next possession phase and outcome. FIFA distinguishes the in-possession and out-of-possession phases and treats the reaction immediately after loss/regain as tactically significant ([FIFA: Defensive transitions](https://www.fifatrainingcentre.com/en/practice/elite-sessions/transition-to-defending/defensive-transitions.php), [FIFA: Core principles of play](https://www.fifatrainingcentre.com/en/game/game-analysis/landing-page-core-principles.php)).
 
 After a regain, distinguish an immediate counterattack from secure possession followed by an organized attack. A counterattack claim needs evidence of rapid forward exploitation while the opponent is disorganized; a long pass or later goal alone is insufficient. After a loss, distinguish counterpressing from delaying the ball and recovering shape. If first pressure is bypassed, inspect recovery runs and protection of central access. Do not infer an instruction or intent from the sequence. Compare alternatives and state if the feed is too sparse to identify the transition.
+
+### Defender caught high during an attacking transition
+
+If a defender is observed in an advanced attacking zone (for example, a full-back overlapping into Zone 13/15 or a centre-back joining a late set-piece attack) when possession is lost, treat the exposed space behind that player as a **transition-risk hypothesis**, not proof that the player caused a chance or failed their role. Check the loss location, opponent's first action and forward lane, defender's distance and goal-side position, recovery path, pace/pressure on the ball carrier, remaining back-line cover, pivot position, far-side narrowing, and goalkeeper depth. A defender may be unable to recover before an opponent reaches the box if the counter is direct and the cover is late or outnumbered; with a delayed carrier, a screened central lane, or a spare covering defender, the same starting position may be recoverable.
+
+Possible team responses, depending on observed shape, include the nearest forward counterpressing or delaying the carrier, a centre-back dropping to protect the central route, the pivot screening the direct pass, the far-side defender narrowing to cover depth, and the goalkeeper adjusting to a through-ball threat. A team can reduce exposure before the loss by retaining a staggered rest defence (for example, defenders plus a pivot behind/beside the attack), but committing fewer players forward may reduce box occupation and attacking options. Describe which response occurred and the trade-off; do not prescribe a universal formation or attribute blame/intent from the outcome.
+
+Useful explanation format: “At the turnover, [identified defender] was in [validated zone] while [covering players] were [observed positions]. The opponent [first action] attacked [validated channel]. [Cover/recovery] [did/did not] arrive before [next event]. This left [specific route/space] available; [alternative explanation or missing tracking].” If coordinates, identities, timestamps or frame coverage are missing, limit the statement to the event sequence and do not claim the defender could not track back.
 
 ## 7. Chance creation and prevention patterns
 

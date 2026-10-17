@@ -13,7 +13,12 @@ import {
   getSimulatedMatch,
   loginSimulated,
   loginWithGoogleSimulated,
-  setStoredAuthSession
+  setStoredAuthSession,
+  getSimulationStreamStatus,
+  startSimulationStream,
+  stopSimulationStream,
+  stepSimulationStream,
+  analyzeSimulationMoment
 } from './api';
 import type {
   CanonicalInsightPage,
@@ -25,7 +30,8 @@ import type {
   TacticalInsightDetailData,
   AnalystScreenData,
   SimulatedMatchData,
-  AuthSession
+  AuthSession,
+  SimulationStreamStatus
 } from './api';
 import type { AppRoute } from './routes';
 import { contextHref, replacePhaseFilterContext, selectedTimeFromSearch } from './routes';
@@ -285,7 +291,7 @@ export function MatchHeaderBanner({
           <div className="hero-observed-content-left">
             <span className="hero-observed-pill">
               <span className="observed-bars-icon" aria-hidden="true">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
               </span>
               <span>OBSERVED</span>
             </span>
@@ -317,8 +323,6 @@ export function WelcomePage() {
   const previewData = data;
 
   useEffect(() => {
-    const isTestEnv = typeof globalThis !== 'undefined' && Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
-    if (isTestEnv) return;
     const controller = new AbortController();
     getAuthPreview(controller.signal)
       .then(res => { if (res && res.headline) setData(res); })
@@ -357,6 +361,20 @@ export function WelcomePage() {
       setBusy(false);
     }
   };
+
+  if (!previewData) {
+    return (
+      <section className="content-page">
+        <PageHeading
+          eyebrow="Football intelligence, grounded in evidence"
+          title="Welcome to PitchMind"
+          question="Find a match and inspect the evidence behind each view."
+        />
+        <p className="page-state">Sign-in is not configured in this local preview.</p>
+        <a className="primary-link" href="/home">Check match availability</a>
+      </section>
+    );
+  }
 
   return (
     <section className="content-page welcome-screen-root">
@@ -650,20 +668,13 @@ export function WelcomePage() {
             </div>
           </div>
 
-          <div className="welcome-explore-row">
-            <span className="welcome-explore-text">Find a match and inspect the evidence behind each view.</span>
-            <a className="primary-link welcome-check-availability" href="/home">Check match availability</a>
-          </div>
         </div>
 
         {/* Right Column: Floating Sign In Card */}
         <div className="welcome-right-col">
           <div className="welcome-auth-card">
             <div className="auth-card-brand">
-              <svg className="auth-brand-logo" viewBox="0 0 28 28" width="36" height="36" fill="none" aria-hidden="true">
-                <path d="M4 14L14 4L24 14L14 24L4 14Z" fill="#4aefac" />
-                <path d="M14 9L19 14L14 19L9 14L14 9Z" fill="#07131c" />
-              </svg>
+              <img className="auth-brand-logo" src="/brand/pitchmind-symbol.svg" width="36" height="36" alt="" aria-hidden="true" />
               <h2>PitchMind</h2>
             </div>
 
@@ -761,6 +772,7 @@ export function WelcomePage() {
                   className="auth-google-btn"
                   onClick={handleGoogleSignIn}
                   disabled={busy}
+                  aria-label="Continue with Google using the demo sign-in flow"
                 >
                   <svg className="google-g-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -768,51 +780,88 @@ export function WelcomePage() {
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
-                  <span>Sign in with Google</span>
+                  <span>Google</span>
+                  <small className="provider-option-status">Demo</small>
                 </button>
 
-                <button type="button" className="auth-sso-btn">
+                <button type="button" className="auth-provider-btn" disabled aria-label="Apple sign-in coming soon">
+                  <svg className="provider-brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04c-2.04.027-3.91 1.183-4.961 3.014c-2.117 3.675-.546 9.103 1.519 12.09c1.013 1.454 2.208 3.09 3.792 3.039c1.52-.065 2.09-.987 3.935-.987c1.831 0 2.35.987 3.96.948c1.637-.026 2.676-1.48 3.676-2.948c1.156-1.688 1.636-3.325 1.662-3.415c-.039-.013-3.182-1.221-3.22-4.857c-.026-3.04 2.48-4.494 2.597-4.559c-1.429-2.09-3.623-2.324-4.39-2.376c-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83c-1.207.052-2.662.805-3.532 1.818c-.78.896-1.454 2.338-1.273 3.714c1.338.104 2.715-.688 3.559-1.701z" />
+                  </svg>
+                  <span>Apple</span>
+                  <small className="provider-option-status">Soon</small>
+                </button>
+
+                <button type="button" className="auth-provider-btn" disabled aria-label="Microsoft Entra ID sign-in coming soon">
                   <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
                     <rect x="1" y="1" width="9" height="9" fill="#f25022" />
                     <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
                     <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
                     <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
                   </svg>
-                  <span>Continue with Microsoft</span>
+                  <span>Microsoft</span>
+                  <small className="provider-option-status">Soon</small>
                   <span className="sr-only">Sign in with Microsoft Entra ID</span>
+                </button>
+
+                <button type="button" className="auth-provider-btn" disabled aria-label="X sign-in coming soon">
+                  <svg className="provider-brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+                  </svg>
+                  <span>X</span>
+                  <small className="provider-option-status">Soon</small>
+                </button>
+
+                <button type="button" className="auth-provider-btn" disabled aria-label="GitHub sign-in coming soon">
+                  <svg className="provider-brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12z" />
+                  </svg>
+                  <span>GitHub</span>
+                  <small className="provider-option-status">Soon</small>
+                </button>
+
+                <button type="button" className="auth-provider-btn" disabled aria-label="Facebook sign-in coming soon">
+                  <svg className="provider-brand-icon" viewBox="0 0 512 512" aria-hidden="true">
+                    <path fill="#0866FF" d="M504 256C504 119 393 8 256 8S8 119 8 256c0 123.78 90.69 226.38 209.25 245V327.69h-63V256h63v-54.64c0-62.15 37-96.48 93.67-96.48 27.14 0 55.52 4.84 55.52 4.84v61h-31.27c-30.81 0-40.42 19.12-40.42 38.73V256h68.78l-11 71.69h-57.78V501C413.31 482.38 504 379.78 504 256z" />
+                  </svg>
+                  <span>Facebook</span>
+                  <small className="provider-option-status">Soon</small>
                 </button>
               </div>
             </form>
-          </div>
 
-          {/* Bottom 3 Trust Cards outside the auth card matching 01-login.webp */}
-          <div className="auth-trust-badges-grid">
-            <div className="trust-col">
-              <span className="trust-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </span>
-              <strong>Secure sign-in</strong>
-              <small>Your data is protected with enterprise-grade security.</small>
+            <div className="auth-trust-badges-grid">
+              <div className="trust-col">
+                <span className="trust-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                </span>
+                <strong>Secure sign-in</strong>
+                <small>Your data is protected with enterprise-grade security.</small>
+              </div>
+              <div className="trust-col">
+                <span className="trust-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </span>
+                <strong>Role-based access</strong>
+                <small>Tailored access for analysts, coaches and club staff.</small>
+              </div>
+              <div className="trust-col">
+                <span className="trust-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+                  </svg>
+                </span>
+                <strong>Evidence-backed AI</strong>
+                <small>Insights you can trust, linked to on-pitch evidence.</small>
+              </div>
             </div>
-            <div className="trust-col">
-              <span className="trust-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-              </span>
-              <strong>Role-based access</strong>
-              <small>Tailored access for analysts, coaches and club staff.</small>
-            </div>
-            <div className="trust-col">
-              <span className="trust-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2">
-                  <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
-                </svg>
-              </span>
-              <strong>Evidence-backed AI</strong>
-              <small>Insights you can trust, linked to on-pitch evidence.</small>
+
+            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+              <a className="primary-link" href="/home">Check match availability</a>
             </div>
           </div>
         </div>
@@ -1698,7 +1747,7 @@ export function MatchPage({
             <div className="panel-header-row">
               <div className="panel-title-with-badge">
                 <span className="panel-icon-db" aria-hidden="true">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>
                 </span>
                 <h3>Evidence</h3>
               </div>
@@ -3304,6 +3353,10 @@ export function AnalystPage({
   const [question, setQuestion] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'Match' | 'Arsenal' | 'Man City' | 'Players'>('Match');
   const [evidenceFilter, setEvidenceFilter] = useState('All');
+  const [streamStatus, setStreamStatus] = useState<SimulationStreamStatus | null>(null);
+  const [aiAnalysisText, setAiAnalysisText] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const currentAnalyst = analystData;
 
   useEffect(() => {
@@ -3313,24 +3366,85 @@ export function AnalystPage({
     getAnalystOverview(controller.signal)
       .then(res => { if (res && res.conversation) setAnalystData(res); })
       .catch(() => { });
+    getSimulationStreamStatus(controller.signal)
+      .then(status => setStreamStatus(status))
+      .catch(() => { });
     return () => controller.abort();
   }, []);
+
+  const handleToggleStream = () => {
+    if (streamStatus?.isStreaming) {
+      stopSimulationStream().then(setStreamStatus).catch(() => { });
+    } else {
+      startSimulationStream().then(setStreamStatus).catch(() => { });
+    }
+  };
+
+  const handleStepStream = () => {
+    stepSimulationStream().then(setStreamStatus).catch(() => { });
+  };
+
+  const handleAskAnalyst = (qText: string) => {
+    setIsAnalyzing(true);
+    setAiError(null);
+    analyzeSimulationMoment({
+      insightId: 'arsenal-press-city',
+      atSeconds: selectedSeconds || streamStatus?.currentClockSeconds || 4044,
+      audience: 'analyst'
+    })
+      .then(res => {
+        setAiAnalysisText(res.text);
+        setIsAnalyzing(false);
+      })
+      .catch((err: any) => {
+        setIsAnalyzing(false);
+        const msg = err?.detail || err?.title || err?.message || 'Azure AI Foundry configuration is strictly required in DEV. Configure Foundry:Endpoint and Foundry:Deployment to enable AI model tactical analysis.';
+        setAiError(msg);
+      });
+  };
 
   return (
     <section className="content-page analyst-page-root">
       <PageHeading eyebrow="AI Analyst" title="Understand a match" question="Ask tactical questions supported by match evidence." />
-      <p className="page-state">Match questions are not available yet. You can still review the evidence recorded for a selected moment.</p>
+
+      {/* DEV Simulation Stream & SignalR Live Bar */}
+      <div className="simulation-stream-control-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'rgba(15, 23, 42, 0.75)', border: '1px solid rgba(52, 211, 153, 0.3)', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: streamStatus?.isStreaming ? '#10b981' : '#64748b' }}></span>
+          <strong style={{ fontSize: '0.875rem' }}>{streamStatus?.isStreaming ? 'DEV Simulation Stream: ACTIVE' : 'DEV Simulation Stream: READY'}</strong>
+        </div>
+        <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+          Seq: {streamStatus?.currentSequence ?? 120} · Clock: {clock(streamStatus?.currentClockSeconds ?? 4044)} · SignalR Hub: <code>/hubs/matches</code>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="btn-stream-action"
+            onClick={handleToggleStream}
+            style={{ padding: '0.35rem 0.75rem', borderRadius: '0.375rem', background: streamStatus?.isStreaming ? '#dc2626' : '#059669', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}
+          >
+            {streamStatus?.isStreaming ? 'Pause Stream' : 'Play Simulation Stream'}
+          </button>
+          <button
+            type="button"
+            className="btn-stream-action"
+            onClick={handleStepStream}
+            style={{ padding: '0.35rem 0.75rem', borderRadius: '0.375rem', background: '#334155', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.8rem' }}
+          >
+            Step Frame ›
+          </button>
+        </div>
+      </div>
+
       {/* Top Match Scoreboard Banner */}
       <MatchHeaderBanner
         competition="Premier League · Matchweek 12"
         stadium="Emirates Stadium"
         homeName="Arsenal"
         homeFormation="4 - 3 - 3"
-        homeScore={2}
-        awayScore={1}
-        awayName="Manchester City"
-        awayFormation="4 - 2 - 3 - 1"
-        clock="67:24"
+        homeScore={streamStatus?.homeScore ?? 2}
+        awayScore={streamStatus?.awayScore ?? 1}
+        clock={clock(streamStatus?.currentClockSeconds ?? 4044)}
         period="Second Half"
       />
 
@@ -3382,7 +3496,10 @@ export function AnalystPage({
                 key={p}
                 type="button"
                 className={`try-asking-chip ${idx === 0 ? 'highlight' : ''}`}
-                onClick={() => setQuestion(p)}
+                onClick={() => {
+                  setQuestion(p);
+                  handleAskAnalyst(p);
+                }}
               >
                 {p} ›
               </button>
@@ -3517,6 +3634,49 @@ export function AnalystPage({
                 </div>
               </div>
             </div>
+
+            {/* Dynamic AI Status / Error / Response */}
+            {isAnalyzing && (
+              <div className="chat-bubble-row analyst-row">
+                <div className="analyst-response-card-mockup" style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div className="analyst-avatar-badge" style={{ animation: 'pulse 1.5s infinite' }}>✨</div>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '0.9rem', color: '#38bdf8' }}>Analyzing Match Telemetry...</strong>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Evaluating spatial tracking data and tactical indicators.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {aiError && (
+              <div className="chat-bubble-row analyst-row">
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '0.75rem', padding: '1rem', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', color: '#f87171', fontWeight: 600, fontSize: '0.875rem' }}>
+                    <span>⚠️</span>
+                    <span>Tactical Intelligence Model Status</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.825rem', color: '#fca5a5', lineHeight: 1.5 }}>{aiError}</p>
+                </div>
+              </div>
+            )}
+
+            {aiAnalysisText && (
+              <div className="chat-bubble-row analyst-row">
+                <div className="analyst-response-card-mockup">
+                  <div className="analyst-avatar-badge">✨</div>
+                  <div className="analyst-card-body">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <span className="copilot-trust-pill" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                        ✓ Grounded Telemetry Model
+                      </span>
+                    </div>
+                    <p className="analyst-core-paragraph" style={{ whiteSpace: 'pre-line' }}>
+                      {aiAnalysisText}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bottom Chat Input Bar */}
@@ -3525,7 +3685,10 @@ export function AnalystPage({
               className="copilot-input-form"
               onSubmit={e => {
                 e.preventDefault();
-                setQuestion('');
+                if (question.trim()) {
+                  handleAskAnalyst(question.trim());
+                  setQuestion('');
+                }
               }}
             >
               <button type="button" className="attach-paperclip-btn" aria-label="Attach clip">📎</button>

@@ -131,10 +131,7 @@ export function App() {
     <header className="site-header">
       <div className="header-brand-nav-group">
         <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home">
-          <svg className="brand-logo-svg" viewBox="0 0 28 28" width="22" height="22" fill="none" aria-hidden="true">
-            <path d="M4 14L14 4L24 14L14 24L4 14Z" fill="#4aefac" fillOpacity="0.9"/>
-            <path d="M14 9L19 14L14 19L9 14L14 9Z" fill="#07131c"/>
-          </svg>
+          <img className="brand-logo-image" src="/brand/pitchmind-symbol.svg" width="32" height="32" alt="" aria-hidden="true" />
           <span className="brand-name">PitchMind</span>
         </a>
         {route.kind !== 'welcome' && (

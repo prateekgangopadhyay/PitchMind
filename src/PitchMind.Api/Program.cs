@@ -26,10 +26,12 @@ if (corsOrigins.Length > 0)
 }
 var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
     builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"]);
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IMatchProjectionCache, MemoryMatchProjectionCache>();
+builder.Services.AddSingleton<ISimulationStreamer, SimulationStreamerService>();
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
 if (localRealtimeEnabled)
 {
-    builder.Services.AddSignalR();
     builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
     builder.Services.AddSingleton<IOutboxPublisher, SignalRRealtimeCursorPublisher>();
 }

@@ -15,10 +15,16 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = ROOT / "src/PitchMind.AgentWorker/Agents/football-tactical-knowledge-base.v1.json"
 DEFAULT_CATALOGUE = ROOT / "docs/ai/fifa-training-centre-article-catalog.v1.json"
+DEFAULT_REGIONS = ROOT / "data/domain/pitch-regions-18-v1.json"
 DEFAULT_OUTPUT = ROOT / "data/ai-search/football-tactical-knowledge-seed.jsonl"
 MAX_CHARS = 4_000
 TOPIC_MAP = {
     "team-shape": ("team-movement", "formation-and-phase-shape"),
+    "pitch-region": ("spatial-evidence",),
+    "pitch-dimension": ("spatial-evidence",),
+    "field-marking": ("spatial-evidence",),
+    "thirds": ("spatial-evidence", "in-possession-progression"),
+    "half-space": ("spatial-evidence", "team-movement"),
     "formation": ("formation-and-phase-shape", "formation-matchups-and-adjustments"),
     "phases": ("phase-by-phase-playbooks",),
     "phase": ("phase-by-phase-playbooks",),
@@ -72,6 +78,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--catalogue", type=Path, default=DEFAULT_CATALOGUE)
+    parser.add_argument("--regions", type=Path, default=DEFAULT_REGIONS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
     document = json.loads(args.input.read_text(encoding="utf-8"))
@@ -95,6 +102,33 @@ def main() -> None:
                 "sourceType": "pitchmind-curated-knowledge-card",
                 "version": document["schemaVersion"],
             })
+
+    regions = json.loads(args.regions.read_text(encoding="utf-8"))
+    if regions.get("schemaVersion") != "1.0.0" or regions.get("modelId") != "pitch-regions-18-v1":
+        raise ValueError("Unsupported pitch-region model")
+    if not isinstance(regions.get("zones"), list) or len(regions["zones"]) != 18:
+        raise ValueError("The pitch-region model must define exactly 18 zones")
+    region_numbers: set[int] = set()
+    for zone in regions["zones"]:
+        number = zone.get("number")
+        zone_id = zone.get("id", "")
+        if not isinstance(number, int) or number in region_numbers or zone_id != f"zone-{number:02d}":
+            raise ValueError(f"Invalid or duplicate pitch zone: {zone_id!r}")
+        region_numbers.add(number)
+        records.append({
+            "id": f"pitch-{zone_id}",
+            "topicId": "spatial-evidence",
+            "title": f"PitchMind Zone {number}: {zone['name']}",
+            "content": (f"PitchMind {regions['modelId']} tactical vocabulary. {zone['tacticalMeaning']} "
+                        f"Band: {zone['lengthBand']}; channel: {zone['channel']}; viewed {zone['teamRelativeView']}. "
+                        f"Boundary status: {zone['boundaryStatus']}. {zone['interpretationLimit']} "
+                        "This is general domain knowledge, not evidence about a selected match."),
+            "sourceUri": None,
+            "sourceType": "pitchmind-curated-pitch-region",
+            "version": regions["modelId"],
+        })
+    if region_numbers != set(range(1, 19)):
+        raise ValueError("Pitch-zone numbering must cover 1 through 18 exactly")
 
     catalogue = json.loads(args.catalogue.read_text(encoding="utf-8"))
     if catalogue.get("schemaVersion") != "1.0.0" or not isinstance(catalogue.get("entries"), list):
@@ -132,7 +166,7 @@ def main() -> None:
     with args.output.open("w", encoding="utf-8", newline="\n") as output:
         for record in records:
             output.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-    print(f"Prepared {len(records)} bounded knowledge documents from {len(document['cards'])} curated cards and {len(catalogue['entries'])} reviewed source references at {args.output}")
+    print(f"Prepared {len(records)} bounded knowledge documents from {len(document['cards'])} curated cards, {len(regions['zones'])} pitch regions, and {len(catalogue['entries'])} reviewed source references at {args.output}")
 
 
 if __name__ == "__main__":

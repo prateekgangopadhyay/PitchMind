@@ -36,6 +36,17 @@ Describe **initial approach → opponent response → observed adjustment → sp
 
 ## 2. Phase-by-phase playbooks
 
+### 18-zone field reference
+
+Use `pitch-regions-18-v1`: left/central/right columns are Zones 1/2/3 in the deep defensive band, 4/5/6 in defensive midfield, 7/8/9 in central midfield, 10/11/12 in attacking midfield, 13/14/15 in the high attacking band and 16/17/18 in the deep attacking band. Zone 14 is the central pocket outside the box; Zone 17 is the central penalty-box reference. This is a PitchMind tactical vocabulary, not official FIFA/IFAB numbering. The coordinate manifest must define real cut-lines; legal penalty/goal-area polygons remain separate overlays. Do not assign the candidate MANU-LIV feed to zones until its coordinate units, axes, origin, dimensions and attack direction are validated.
+The zone-by-zone names and tactical definitions are maintained in [`data/domain/pitch-regions-18-v1.json`](../../data/domain/pitch-regions-18-v1.json).
+
+### Defender caught high as possession turns over
+
+Treat an advanced defender at the moment of loss as a possible counter channel, then test the whole transition: who has the ball, whether the carrier can advance unpressured, the defender's goal-side position and recovery distance, the nearest centre-back, pivot and far-side cover, and the goalkeeper's starting depth. A high full-back in Zone 13/15 can leave a wide lane; a centre-back high at a set piece can leave central depth. Either may recover if a teammate delays the carrier or protects the route. A counter is more dangerous when it is direct, the first defender is bypassed and remaining cover cannot protect the goal-facing route, but the zone alone cannot establish that outcome.
+
+Potential responses include counterpress/delay by the nearest attacker, a centre-back dropping centrally, a pivot screening a forward pass, far-side defenders narrowing, or the goalkeeper adjusting for a through ball. A staggered rest defence reduces some exposure but can mean fewer attackers in the box. Identify the response visible in the evidence and report the attacking trade-off. Avoid blaming the advanced defender or asserting they “could not get back” unless time-aligned tracking shows the route, speed, cover and outcome. With event-only evidence, describe the turnover and subsequent actions without off-ball conclusions.
+
 FIFA's [phases-of-play framework](https://www.fifatrainingcentre.com/en/fwc2022/efi-metrics/efi-metric--phases-of-play.php) breaks ball-in-play time into phases; [scales of the game](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/training-framework/scales-of-the-game.php) connects team, unit, and player interactions. PitchMind should use a phase label as context, then explain the specific action sequence.
 
 ### Build-up against a high press

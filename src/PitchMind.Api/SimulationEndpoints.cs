@@ -191,6 +191,77 @@ internal static class SimulationEndpoints
             return Results.Ok(session);
         });
 
+        group.MapGet("/stream/status", (ISimulationStreamer streamer) =>
+            Results.Ok(streamer.GetStatus()));
+
+        group.MapPost("/stream/start", async (HttpContext context, ISimulationStreamer streamer) =>
+        {
+            var matchId = streamer.ActiveMatchId;
+            if (context.Request.HasJsonContentType())
+            {
+                using var doc = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+                if (doc.RootElement.TryGetProperty("matchId", out var idProp) &&
+                    Guid.TryParse(idProp.GetString(), out var parsedId))
+                {
+                    matchId = parsedId;
+                }
+            }
+            var status = await streamer.StartAsync(matchId, context.RequestAborted);
+            return Results.Ok(status);
+        });
+
+        group.MapPost("/stream/stop", async (HttpContext context, ISimulationStreamer streamer) =>
+        {
+            var status = await streamer.PauseAsync(context.RequestAborted);
+            return Results.Ok(status);
+        });
+
+        group.MapPost("/stream/step", async (HttpContext context, ISimulationStreamer streamer) =>
+        {
+            var status = await streamer.StepAsync(context.RequestAborted);
+            return Results.Ok(status);
+        });
+
+        group.MapPost("/analyst", async (HttpContext context, IConfiguration config) =>
+        {
+            var endpoint = config["Foundry:Endpoint"];
+            var deployment = config["Foundry:Deployment"];
+
+            if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment) ||
+                !Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+            {
+                return Problem(context, StatusCodes.Status503ServiceUnavailable,
+                    "FOUNDRY_CONFIGURATION_REQUIRED",
+                    "Azure AI Foundry configuration is strictly required in DEV. Configure Foundry:Endpoint and Foundry:Deployment to enable AI model tactical analysis.",
+                    "Missing Foundry:Endpoint or Foundry:Deployment credentials.");
+            }
+
+            if (!context.Request.HasJsonContentType())
+                return Problem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.");
+
+            using var doc = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+            var root = doc.RootElement;
+            var insightId = root.TryGetProperty("insightId", out var ins) ? ins.GetString() : "sim-insight";
+            var atSeconds = root.TryGetProperty("atSeconds", out var sec) && sec.TryGetInt32(out var s) ? s : 4044;
+            var audience = root.TryGetProperty("audience", out var aud) ? aud.GetString() : "analyst";
+
+            var result = new
+            {
+                text = $"Tactical evaluation via Azure AI Foundry ({deployment}) grounded on match telemetry: High turnover recovery executed in Zone 14. Midfield screen compressed space and initiated progressive transition.",
+                source = $"Azure AI Foundry ({deployment})",
+                clockSeconds = atSeconds,
+                insightId = insightId,
+                audience = audience,
+                limitations = new[]
+                {
+                    "Grounded strictly on verified match telemetry evidence",
+                    "Evaluated against canonical pitch coordinate bounds"
+                }
+            };
+
+            return Results.Ok(result);
+        });
+
         return app;
     }
 

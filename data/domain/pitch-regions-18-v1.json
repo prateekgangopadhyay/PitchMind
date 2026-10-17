@@ -1,0 +1,217 @@
+{
+  "schemaVersion": "1.0.0",
+  "modelId": "pitch-regions-18-v1",
+  "status": "documented-tactical-vocabulary-boundaries-unapproved",
+  "authorityNote": "PitchMind project convention based on the user-provided 18-region descriptions; not official FIFA or IFAB numbered zones.",
+  "orientation": {
+    "length": "own goal toward opponent goal",
+    "width": "attacking team left to right as viewed by a player facing the opponent goal",
+    "numbering": "six increasing length bands; each band numbered left, central, right"
+  },
+  "geometryPolicy": {
+    "coordinateSemantics": "unverified for candidate MANU-LIV synthetic feed",
+    "cutLines": "Do not assume equal metres or normalized percentages. Define and version in an approved coordinate manifest before classifying points.",
+    "formalMarkings": "IFAB penalty/goal area, penalty mark/arc, goalmouth, and corner-area geometry are separately calibrated overlays; Zone 14/17 labels do not replace legal polygons."
+  },
+  "zones": [
+    {
+      "id": "zone-01",
+      "number": 1,
+      "name": "Deep defensive left",
+      "lengthBand": "deep-defensive",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Primary left-back defensive territory to contain the opposing wide attacker; can also support a safer first build-up along the touchline.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-02",
+      "number": 2,
+      "name": "Deep defensive center",
+      "lengthBand": "deep-defensive",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Central area directly in front of the team's own goal. Prioritize goal protection, secure clearance, or low-risk build-up involving centre-backs and goalkeeper.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-03",
+      "number": 3,
+      "name": "Deep defensive right",
+      "lengthBand": "deep-defensive",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Primary right-back defensive territory to contain the opposing left-sided attacker and limit delivery from that side.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-04",
+      "number": 4,
+      "name": "Defensive midfield left",
+      "lengthBand": "defensive-midfield",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Left-sided transition outlet for a full-back or dropping midfielder to escape central pressure and advance possession.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-05",
+      "number": 5,
+      "name": "Defensive midfield center",
+      "lengthBand": "defensive-midfield",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Potential number-six anchor and screen in front of centre-backs; can disrupt central counters and offer a first central outlet.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-06",
+      "number": 6,
+      "name": "Defensive midfield right",
+      "lengthBand": "defensive-midfield",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Right-sided transition outlet that can widen the first build-up and stretch the opponent's initial press.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-07",
+      "number": 7,
+      "name": "Central midfield left",
+      "lengthBand": "central-midfield",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Left central-midfield transition area where a winger may link deeper or a progressive midfielder may carry play forward.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-08",
+      "number": 8,
+      "name": "Central midfield center",
+      "lengthBand": "central-midfield",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Central circulation area for tempo control, connecting defence to attack, and switching play toward either flank.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-09",
+      "number": 9,
+      "name": "Central midfield right",
+      "lengthBand": "central-midfield",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Right central-midfield circulation area for retaining possession and changing the angle of attack.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-10",
+      "number": 10,
+      "name": "Attacking midfield left",
+      "lengthBand": "attacking-midfield",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Left half-space entry reference where an inverted winger or attacking midfielder may receive between the opposing full-back and centre-back.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-11",
+      "number": 11,
+      "name": "Attacking midfield center",
+      "lengthBand": "attacking-midfield",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Central link pocket for receiving on the half-turn and connecting deeper midfield to the final attacking line.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-12",
+      "number": 12,
+      "name": "Attacking midfield right",
+      "lengthBand": "attacking-midfield",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Right half-space entry reference where a creative player may receive between the opposing full-back and centre-back and connect into the box.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-13",
+      "number": 13,
+      "name": "High attacking left",
+      "lengthBand": "high-attacking",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Wide creative area for an overlapping full-back or winger to deliver a cross or cutback; can also support an inside run.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-14",
+      "number": 14,
+      "name": "High attacking center (Zone 14 reference)",
+      "lengthBand": "high-attacking",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Central creative pocket immediately outside the opposition penalty area. A receiver may draw a centre-back forward and create space behind, depending on defensive cover and movement.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-15",
+      "number": 15,
+      "name": "High attacking right",
+      "lengthBand": "high-attacking",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Wide creative area for a winger to isolate a defender, cut inside where suitable, or for a full-back to deliver toward the far post.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-16",
+      "number": 16,
+      "name": "Deep attacking left",
+      "lengthBand": "deep-attacking",
+      "channel": "left",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Left byline/corner-side area used to pin the defence deep, seek a restart, or deliver a low cross/cutback across goal.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-17",
+      "number": 17,
+      "name": "Deep attacking center (Zone 17 reference)",
+      "lengthBand": "deep-attacking",
+      "channel": "central",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Central penalty-box reference where attackers may time runs and defenders protect goal-facing space. The legal penalty-area polygon is a separate calibrated overlay; no goal-frequency claim is implied.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    },
+    {
+      "id": "zone-18",
+      "number": 18,
+      "name": "Deep attacking right",
+      "lengthBand": "deep-attacking",
+      "channel": "right",
+      "teamRelativeView": "attacker-facing-opponent-goal",
+      "tacticalMeaning": "Right byline/corner-side area used to pin the defence deep, seek a restart, or deliver a low cross/cutback across goal.",
+      "boundaryStatus": "requires-approved-coordinate-manifest",
+      "interpretationLimit": "A zone label is location vocabulary; it does not alone establish role, pressure, danger, intent, advantage, or outcome."
+    }
+  ],
+  "tacticalTransitionNote": "If a defender is advanced when possession is lost, the space behind may be exposed. Whether the defender can recover depends on the counter carrier/action, pressure, recovery route, goal-side position, centre-back/pivot/far-side cover, and goalkeeper depth. Treat this as a conditional risk hypothesis; the advanced zone alone does not prove error, inability to recover, or a clear chance."
+}

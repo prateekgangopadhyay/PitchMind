@@ -647,6 +647,32 @@
       "reviewedAt": "2026-10-17",
       "abstract": "Breaks a counterattack into regain, forward progress, off-ball movement and final action while noting exposure after attacking restarts.",
       "rightsAndUse": "Public source link; source examples do not establish events or intention in a PitchMind match."
+    },
+    {
+      "id": "fifa-progressing-through-thirds",
+      "title": "Progressing through the thirds",
+      "url": "https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/progressing-through-the-thirds.php",
+      "topics": ["pitch-regions", "thirds", "progression", "overloads", "build-up"],
+      "footballCode": "association-football-training-practice",
+      "ageCompetitionContext": "FIFA Talent Coach Programme practice; pitch thirds and player constraints are exercise-specific",
+      "sourceType": "coaching-practice",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Uses pitch thirds and central/final zones to coach coordinated progression through pressure; the zones describe this exercise and are not a universal match-data schema.",
+      "rightsAndUse": "Public source link; original short paraphrase only. Do not reproduce the session plan or media, and do not treat exercise boundaries as canonical pitch regions."
+    },
+    {
+      "id": "ifab-law-1-field-of-play",
+      "title": "Law 1: The Field of Play",
+      "url": "https://www.theifab.com/laws/latest/the-field-of-play/",
+      "topics": ["field-markings", "pitch-dimensions", "penalty-area", "goal-area", "pitch-regions"],
+      "footballCode": "association-football-11v11",
+      "ageCompetitionContext": "Association-football Laws of the Game; verify the edition and permitted competition modifications for the match",
+      "sourceType": "official-laws",
+      "publishedAt": null,
+      "reviewedAt": "2026-10-17",
+      "abstract": "Defines official field dimensions and markings, including the goal area and penalty area; these physical markings are distinct from tactical analysis grids.",
+      "rightsAndUse": "Link to the current official Law. Paraphrase only; verify the applicable edition and competition modifications."
     }
   ]
 }

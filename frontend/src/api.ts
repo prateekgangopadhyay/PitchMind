@@ -508,6 +508,53 @@ export function loginSimulated(credentials: { email: string; password: string },
   });
 }
 
+export interface SimulationStreamStatus {
+  matchId: string;
+  isStreaming: boolean;
+  currentClockSeconds: number;
+  currentSequence: number;
+  canonicalRevision: number;
+  eventsCount: number;
+  homeScore: number;
+  awayScore: number;
+  leadingInsight: string | null;
+}
+
+export function getSimulationStreamStatus(signal?: AbortSignal): Promise<SimulationStreamStatus> {
+  return request<SimulationStreamStatus>('simulation/stream/status', signal);
+}
+
+export function startSimulationStream(matchId?: string, signal?: AbortSignal): Promise<SimulationStreamStatus> {
+  return request<SimulationStreamStatus>('simulation/stream/start', signal, { matchId });
+}
+
+export function stopSimulationStream(signal?: AbortSignal): Promise<SimulationStreamStatus> {
+  return request<SimulationStreamStatus>('simulation/stream/stop', signal, {});
+}
+
+export function stepSimulationStream(signal?: AbortSignal): Promise<SimulationStreamStatus> {
+  return request<SimulationStreamStatus>('simulation/stream/step', signal, {});
+}
+
+export interface SimulationAnalystRequest {
+  insightId: string;
+  atSeconds: number;
+  audience?: string;
+}
+
+export interface SimulationAnalystResponse {
+  text: string;
+  source: string;
+  clockSeconds: number;
+  insightId: string;
+  audience: string;
+  limitations: string[];
+}
+
+export function analyzeSimulationMoment(payload: SimulationAnalystRequest, signal?: AbortSignal): Promise<SimulationAnalystResponse> {
+  return request<SimulationAnalystResponse>('simulation/analyst', signal, payload);
+}
+
 const AUTH_STORAGE_KEY = 'pitchmind_auth_session';
 const AUTH_EVENT = 'pitchmind:authchange';
 

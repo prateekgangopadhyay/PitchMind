@@ -60,7 +60,7 @@ public static class TacticalAgentCatalog
 
     private static IReadOnlyDictionary<string, TacticalAgentProfile> Load()
     {
-        var assembly = Assembly.GetExecutingAssembly();
+        var assembly = typeof(TacticalAgentCatalog).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
             .SingleOrDefault(name => name.EndsWith(ResourceSuffix, StringComparison.Ordinal));
         if (resourceName is null)
@@ -100,7 +100,7 @@ public static class TacticalAgentCatalog
 
     private static IReadOnlyDictionary<string, TacticalKnowledgeCard> LoadKnowledgeBase()
     {
-        var assembly = Assembly.GetExecutingAssembly();
+        var assembly = typeof(TacticalAgentCatalog).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
             .SingleOrDefault(name => name.EndsWith(KnowledgeResourceSuffix, StringComparison.Ordinal));
         if (resourceName is null)

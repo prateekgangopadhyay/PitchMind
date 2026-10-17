@@ -9,7 +9,8 @@ public static class RuntimeProfileGuard
 {
     public static void Validate(string environmentName, string? runtimeProfile)
     {
-        if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) &&
+        if ((string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(runtimeProfile, "dev", StringComparison.OrdinalIgnoreCase)) &&
             string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -25,12 +26,13 @@ public static class RuntimeProfileGuard
         }
 
         throw new InvalidOperationException(
-            "Use Runtime:Profile=local only in Development, or Runtime:Profile=azure in Development, Staging, or Production.");
+            "Use Runtime:Profile=local or dev in Development, or Runtime:Profile=azure in Development, Staging, or Production.");
     }
 
     public static void ConfigureLocalServices(IServiceCollection services, string? runtimeProfile)
     {
-        if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(runtimeProfile, "dev", StringComparison.OrdinalIgnoreCase))
             services.AddSingleton<IMatchEventStore, InMemoryMatchEventStore>();
     }
 }

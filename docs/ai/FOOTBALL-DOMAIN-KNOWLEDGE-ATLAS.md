@@ -36,6 +36,14 @@ For each possession sequence, ask:
 - Does the observed action change territory, create an option, produce a shot/restart, retain possession or lose the ball?
 - What is not observable: scan, body shape, communication, assignment, intent, pressure quality or instruction?
 
+### Pitch regions and spatial vocabulary
+
+PitchMind's project convention `pitch-regions-18-v1` organizes the field into six length bands crossed with left, central and right channels. Its row-major numbering, from an attacker-facing view, is 1–3 deep defensive, 4–6 defensive midfield, 7–9 central midfield, 10–12 attacking midfield, 13–15 high attacking and 16–18 deep attacking. The central spine is 2/5/8/11/14/17; Zone 14 is the central pocket immediately outside the box and Zone 17 is the central penalty-box reference. Left/right columns contain 1/4/7/10/13/16 and 3/6/9/12/15/18 respectively.
+
+This is PitchMind's named tactical vocabulary, not official FIFA/IFAB numbering. The exact normalized cut-lines must be versioned in a coordinate manifest; do not assume equal metre widths or infer legal markings from a zone label. Keep the IFAB goal/penalty areas as calibrated geometric overlays, since Zone 17's tactical label does not replace the exact penalty-area polygon. “Half-space,” byline, cut-back zone and box-entry can likewise have separately versioned boundaries. FIFA uses thirds/zones in coaching exercises whose boundaries may be adapted to the drill ([FIFA: Progressing through the thirds](https://www.fifatrainingcentre.com/en/practice/talent-coach-programme/build-and-progress/progressing-through-the-thirds.php)); IFAB Law 1 remains the source for formal field markings ([IFAB Law 1](https://www.theifab.com/laws/latest/the-field-of-play/)).
+
+Before assigning a match location to a cell, validate source units, origin, axes, pitch dimensions, team identity and attack direction for the period. Then preserve the model version, source IDs/frame IDs, time bound, observed-player coverage and classification method. A cell classification says where the ball/player was under that convention; it does not independently establish danger, line-breaking, pressure, quality or intent. Because the current synthetic candidate's coordinate semantics remain unverified, this grid is documented vocabulary and is not yet authorized for classifying that feed.
+
 ### In possession
 
 Common principles include creating length and width, separating opponents, positioning between/around lines, supporting the ball, progressing through/around/over pressure, switching play, combining with a third player, carrying to commit a defender, and occupying the box and rebound areas. These are options, not a mandatory sequence. A safe recycle may be better supported than a forced forward pass when the lane, timing or rest-defence evidence is absent.

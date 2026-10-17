@@ -3584,7 +3584,8 @@ a[href*='#open-player'] {
   flex-shrink: 0 !important;
 }
 
-.brand-logo-svg {
+.brand-logo-svg,
+.brand-logo-image {
   filter: drop-shadow(0 0 10px rgba(74, 239, 172, 0.65)) !important;
 }
 
@@ -4228,21 +4229,30 @@ a[href*='#open-player'] {
 .welcome-split-layout {
   display: grid !important;
   grid-template-columns: minmax(0, 1.45fr) minmax(420px, 480px) !important;
-  gap: 3.5rem !important;
-  align-items: start !important;
+  gap: 10rem !important;
+  align-items: stretch !important;
   width: 100% !important;
-  max-width: 1540px !important;
+  /* max-width: 1540px !important; */
   margin: 0 auto !important;
 }
 
 .welcome-left-col {
   min-width: 0 !important;
-  width: 100% !important;
+  width: 75% !important;
 }
 
 .welcome-right-col {
+  display: flex !important;
+  flex-direction: column !important;
   width: 100% !important;
   max-width: 480px !important;
+}
+
+.welcome-auth-card {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
 }
 
 .synthetic-view-pill {
@@ -4254,7 +4264,7 @@ a[href*='#open-player'] {
 }
 
 .welcome-hero-headline {
-  font-size: 3.1rem !important;
+  font-size: 5rem !important;
   font-weight: 800 !important;
   line-height: 1.15 !important;
   letter-spacing: -0.025em !important;
@@ -4523,7 +4533,7 @@ a[href*='#open-player'] {
 
 .auth-heading {
   margin: 0 0 0.4rem 0 !important;
-  font-size: 1.35rem !important;
+  font-size: 1.5rem !important;
   font-weight: 800 !important;
   color: #fff !important;
   letter-spacing: -0.01em !important;
@@ -4535,6 +4545,29 @@ a[href*='#open-player'] {
   color: var(--pm-text-secondary) !important;
   margin: 0 0 1.5rem 0 !important;
   line-height: 1.45 !important;
+}
+
+.welcome-auth-card .auth-card-brand {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.welcome-auth-card .auth-brand-logo {
+  width: 60px !important;
+  height: 60px !important;
+}
+
+.welcome-auth-card .auth-card-brand h2 {
+  font-size: 4rem !important;
+}
+
+.welcome-auth-card .auth-heading {
+  font-size: 1.5rem !important;
+  text-align: center !important;
+}
+
+.welcome-auth-card .auth-subtext {
+  text-align: center !important;
 }
 
 .auth-form-fields,
@@ -4695,26 +4728,72 @@ input[type="checkbox"] {
 }
 
 .auth-social-buttons-stack {
-  display: flex !important;
-  flex-direction: column !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   gap: 0.65rem !important;
 }
 
 .auth-google-btn {
   display: flex !important;
   align-items: center !important;
-  justify-content: center !important;
-  gap: 0.75rem !important;
+  justify-content: flex-start !important;
+  gap: 0.6rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 48px !important;
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   color: #0f172a !important;
   border-radius: 8px !important;
-  padding: 0.75rem !important;
-  font-size: 0.88rem !important;
+  padding: 0.65rem 0.75rem !important;
+  font-size: 0.84rem !important;
   font-weight: 700 !important;
   cursor: pointer !important;
   transition: all 140ms ease !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+.auth-provider-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0.6rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 48px !important;
+  padding: 0.65rem 0.75rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 8px !important;
+  background: rgba(15, 35, 48, 0.8) !important;
+  color: var(--pm-text) !important;
+  font-size: 0.84rem !important;
+  font-weight: 650 !important;
+  text-align: left !important;
+  opacity: 0.78 !important;
+  cursor: not-allowed !important;
+}
+
+.provider-brand-icon {
+  display: block !important;
+  width: 20px !important;
+  height: 20px !important;
+  flex: 0 0 20px !important;
+  color: #fff !important;
+}
+
+.provider-option-status {
+  margin-left: auto !important;
+  color: var(--pm-text-secondary) !important;
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+}
+
+.auth-provider-note {
+  margin: 0.75rem 0 0 !important;
+  color: var(--pm-text-secondary) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.45 !important;
 }
 
 .auth-google-btn:hover:not(:disabled) {
@@ -4722,6 +4801,12 @@ input[type="checkbox"] {
   border-color: #cbd5e1 !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.auth-google-btn:focus-visible,
+.auth-provider-btn:focus-visible {
+  outline: 2px solid var(--pm-accent) !important;
+  outline-offset: 2px !important;
 }
 
 .auth-sso-btn {
@@ -4749,9 +4834,9 @@ input[type="checkbox"] {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
   gap: 0.85rem !important;
-  margin-top: 1.25rem !important;
-  padding-top: 0 !important;
-  border-top: none !important;
+  margin-top: auto !important;
+  padding-top: 1.25rem !important;
+  border-top: 1px solid rgba(74, 239, 172, 0.16) !important;
 }
 
 .trust-col {
@@ -8849,7 +8934,7 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
-.deployment-version-banner > span {
+.deployment-version-banner>span {
   color: var(--pm-accent);
   font-size: 0.62rem;
   font-weight: 700;
@@ -8890,33 +8975,4 @@ input[type="checkbox"] {
   vertical-align: middle !important;
   flex-shrink: 0 !important;
   transition: transform 0.18s ease;
-}
-
-.welcome-explore-row {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 1rem !important;
-  margin-top: 1.25rem !important;
-  padding: 0.85rem 1.15rem !important;
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 8px !important;
-}
-
-.welcome-explore-text {
-  font-size: 0.82rem !important;
-  color: var(--pm-text-secondary) !important;
-}
-
-.welcome-check-availability {
-  font-size: 0.82rem !important;
-  font-weight: 600 !important;
-  color: #4aefac !important;
-  text-decoration: none !important;
-  white-space: nowrap !important;
-}
-
-.welcome-check-availability:hover {
-  text-decoration: underline !important;
 }

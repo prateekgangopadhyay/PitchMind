@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">PitchMind monochrome evidence path symbol</title>
+  <path d="M10 40V8h15c9 0 14 4.8 14 12s-5 12-14 12H10" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m17 25 6-6 6 3 5-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="17" cy="25" r="2.15" fill="currentColor"/>
+  <circle cx="23" cy="19" r="2.15" fill="currentColor"/>
+  <circle cx="29" cy="22" r="2.15" fill="currentColor"/>
+  <path d="m34 16-1 4-3-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
