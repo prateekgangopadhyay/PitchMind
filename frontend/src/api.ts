@@ -146,7 +146,9 @@ export interface AuthPreviewData {
   featuredMatch: {
     matchId: string;
     homeTeam: string;
+    homeLogo?: string;
     awayTeam: string;
+    awayLogo?: string;
     homeScore: number;
     awayScore: number;
     clock: string;
@@ -166,10 +168,13 @@ export interface EplHubData {
   eyebrow: string;
   title: string;
   subtitle: string;
+  clubLogos?: Record<string, string>;
   heroMatch: {
     matchId: string;
     homeTeam: string;
+    homeLogo?: string;
     awayTeam: string;
+    awayLogo?: string;
     homeScore: number;
     awayScore: number;
     clock: string;
@@ -182,21 +187,27 @@ export interface EplHubData {
   otherLiveMatches: Array<{
     matchId: string;
     homeTeam: string;
+    homeLogo?: string;
+    homeFormation?: string;
     awayTeam: string;
+    awayLogo?: string;
+    awayFormation?: string;
     homeScore: number;
     awayScore: number;
     clock: string;
     status: string;
+    stadium?: string;
     statHighlight: string;
     momentum: number[];
   }>;
   whatMattersNow: Array<{
     rank: number;
     title: string;
-    summary: string;
-    metric: string;
-    badge: string;
-    matchId: string;
+    summary?: string;
+    metric?: string;
+    badge?: string;
+    matchId?: string;
+    matchTag?: string;
   }>;
   keyMoments: Array<{
     id: string;
@@ -205,13 +216,16 @@ export interface EplHubData {
     description: string;
     player: string;
     team: string;
+    teamLogo?: string;
     mechanism: string;
     xG: number;
     matchId: string;
+    matchTag?: string;
   }>;
   leagueSnapshot: Array<{
     rank: number;
     team: string;
+    logo?: string;
     played: number;
     won: number;
     drawn: number;
@@ -222,7 +236,9 @@ export interface EplHubData {
   }>;
   upcomingFixtures: Array<{
     homeTeam: string;
+    homeLogo?: string;
     awayTeam: string;
+    awayLogo?: string;
     kickOff: string;
     date: string;
     stadium: string;
@@ -234,6 +250,7 @@ export interface TeamProfileData {
   id: string;
   name: string;
   shortName: string;
+  logo?: string;
   formation: string;
   leagueRank: number;
   points: number;
@@ -302,6 +319,7 @@ export interface PlayerIntelligenceData {
   number: number;
   role: string;
   club: string;
+  teamLogo?: string;
   nationality: string;
   age: number;
   minutesPlayed: number;
@@ -400,6 +418,8 @@ export interface AuthSession {
     email: string;
     role: string;
     permissions: string[];
+    avatarUrl?: string;
+    provider?: 'google' | 'email';
   };
 }
 
@@ -423,11 +443,144 @@ export function getTacticalInsightDetail(insightId?: string, signal?: AbortSigna
   return request<TacticalInsightDetailData>(`simulation/insights/${insightId ? encodeURIComponent(insightId) : 'arsenal-press-city'}`, signal);
 }
 
+export interface SimulatedMatchData {
+  matchId: string;
+  homeTeam: string;
+  homeLogo?: string;
+  homeFormation: string;
+  awayTeam: string;
+  awayLogo?: string;
+  awayFormation: string;
+  homeScore: number;
+  awayScore: number;
+  clock: string;
+  period: string;
+  stadium: string;
+  competition: string;
+  leadingInsight: string;
+  intelligentPitch: {
+    title: string;
+    subtitle: string;
+    homePlayers: Array<{ number: number; name: string; role: string; x: number; y: number; isRegainHero?: boolean }>;
+    awayPlayers: Array<{ number: number; name: string; role: string; x: number; y: number }>;
+    pressureTrap?: { x: number; y: number; label: string };
+    recentRegain?: { x: number; y: number; label: string };
+    dangerZones?: Array<{ x: number; y: number; width: number; height: number }>;
+  };
+  timeline: Array<{ clock: string; type: string; team: string; detail: string; icon: string; highlight?: boolean }>;
+  whyItMatters: string[];
+  evidence: {
+    highRegains: { value: number; label: string };
+    fieldTilt: { value: number; label: string };
+    lineBreaksPrevented: { value: number; label: string };
+    note: string;
+  };
+  aiAnalyst: string;
+  keyMoment: {
+    clock: string;
+    title: string;
+    description: string;
+    classifications: string[];
+  };
+  sequenceReplay: Array<{ step: number; title: string; active?: boolean }>;
+}
+
+export function getSimulatedMatch(matchId?: string, signal?: AbortSignal): Promise<SimulatedMatchData> {
+  return request<SimulatedMatchData>(matchId ? `simulation/matches/${encodeURIComponent(matchId)}` : 'simulation/match', signal);
+}
+
 export function getAnalystOverview(signal?: AbortSignal): Promise<AnalystScreenData> {
   return request<AnalystScreenData>('simulation/analyst/overview', signal);
 }
 
 export function loginSimulated(credentials: { email: string; password: string }, signal?: AbortSignal): Promise<AuthSession> {
-  return request<AuthSession>('simulation/auth/login', signal, credentials);
+  return request<AuthSession>('simulation/auth/login', signal, credentials).then(session => {
+    const enriched: AuthSession = {
+      ...session,
+      user: {
+        ...session.user,
+        avatarUrl: DEFAULT_ANALYST_AVATAR,
+        provider: 'email'
+      }
+    };
+    setStoredAuthSession(enriched);
+    return enriched;
+  });
 }
+
+const AUTH_STORAGE_KEY = 'pitchmind_auth_session';
+const AUTH_EVENT = 'pitchmind:authchange';
+
+export const DEFAULT_ANALYST_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><defs><linearGradient id='bgGrad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%23064e3b'/><stop offset='100%25' stop-color='%23022c22'/></linearGradient><linearGradient id='skinGrad' x1='0%25' y1='0%25' x2='0%25' y2='100%25'><stop offset='0%25' stop-color='%23f6d0b1'/><stop offset='100%25' stop-color='%23e2b28c'/></linearGradient><linearGradient id='jacketGrad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' stop-color='%231e293b'/><stop offset='100%25' stop-color='%230f172a'/></linearGradient></defs><circle cx='48' cy='48' r='48' fill='url(%23bgGrad)'/><circle cx='48' cy='48' r='47' fill='none' stroke='%2334d399' stroke-width='2' stroke-opacity='0.4'/><path d='M20 92c0-15.46 12.54-28 28-28s28 12.54 28 28z' fill='url(%23jacketGrad)'/><path d='M44 64h8v12h-8z' fill='%2334d399' fill-opacity='0.8'/><path d='M48 68l-8 24h16z' fill='%230f172a'/><circle cx='48' cy='40' r='18' fill='url(%23skinGrad)'/><path d='M30 36c2-12 12-16 22-14 8 2 14 8 14 14-4-5-10-7-18-6-7 1-12 4-18 6z' fill='%231e293b'/><rect x='36' y='36' width='10' height='7' rx='2' fill='none' stroke='%230f172a' stroke-width='1.5'/><rect x='50' y='36' width='10' height='7' rx='2' fill='none' stroke='%230f172a' stroke-width='1.5'/><line x1='46' y1='39' x2='50' y2='39' stroke='%230f172a' stroke-width='1.5'/><path d='M42 50c3 2 9 2 12 0' stroke='%23c28e67' stroke-width='2' stroke-linecap='round' fill='none'/></svg>";
+
+let cachedRawAuth: string | null = null;
+let cachedAuthSession: AuthSession | null = null;
+
+export function getStoredAuthSession(): AuthSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (raw === cachedRawAuth) {
+      return cachedAuthSession;
+    }
+    cachedRawAuth = raw;
+    cachedAuthSession = raw ? (JSON.parse(raw) as AuthSession) : null;
+    return cachedAuthSession;
+  } catch {
+    cachedRawAuth = null;
+    cachedAuthSession = null;
+    return null;
+  }
+}
+
+export function setStoredAuthSession(session: AuthSession | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (session) {
+      const raw = JSON.stringify(session);
+      cachedRawAuth = raw;
+      cachedAuthSession = session;
+      localStorage.setItem(AUTH_STORAGE_KEY, raw);
+    } else {
+      cachedRawAuth = null;
+      cachedAuthSession = null;
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+    window.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: session }));
+  } catch {}
+}
+
+export function subscribeAuth(onChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  window.addEventListener(AUTH_EVENT, onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(AUTH_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+export function loginWithGoogleSimulated(): Promise<AuthSession> {
+  const session: AuthSession = {
+    success: true,
+    token: `pm-google-${Date.now()}`,
+    authenticatedAt: new Date().toISOString(),
+    user: {
+      name: 'Prateek Gangopadhyay',
+      email: 'prateek.gangopadhyay@gmail.com',
+      role: 'Lead Tactical Analyst',
+      permissions: ['MatchRead', 'MatchReplay', 'AnalystAction', 'TeamProfileRead', 'FullIntelligence'],
+      avatarUrl: DEFAULT_ANALYST_AVATAR,
+      provider: 'google'
+    }
+  };
+  setStoredAuthSession(session);
+  return Promise.resolve(session);
+}
+
+export function logoutSimulated(): void {
+  setStoredAuthSession(null);
+}
+
+
 

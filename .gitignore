@@ -18,6 +18,8 @@ TestResults/
 *.DS_Store
 .DS_Store
 frontend/test-results/
+docs/design/screenshots
+**/evidence/
 
 # Local CodeGraph semantic graph/index outputs (not review or source evidence)
 /.codegraph/

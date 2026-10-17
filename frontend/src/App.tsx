@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { clock, getHostAccessToken, request } from './api';
+import { clock, DEFAULT_ANALYST_AVATAR, getHostAccessToken, getStoredAuthSession, logoutSimulated, request, subscribeAuth } from './api';
 import type { Evidence, Explanation, Fixture, Insight, MatchEvent, Snapshot } from './api';
 import { RoutePage } from './ShellPages';
 import { CanonicalMatchPage } from './CanonicalMatchPage';
@@ -91,7 +91,10 @@ function MatchExperience({ expectedMatchId, initialSeconds, replay }: { expected
 }
 
 export function App() {
-  const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/');
+  const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/home');
+  const authSession = useSyncExternalStore(subscribeAuth, getStoredAuthSession, () => null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
   const separator = location.indexOf('?');
   const pathname = separator === -1 ? location : location.slice(0, separator);
   const search = separator === -1 ? '' : location.slice(separator);
@@ -103,7 +106,7 @@ export function App() {
   const realtimeMode = params.get('mode') === 'live' || selectedSeconds === undefined ? 'LIVE' : 'HISTORICAL';
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
-  const matchPath = matchId ? `/matches/${encodeURIComponent(matchId)}` : '/home';
+  const matchPath = matchId && !matchId.startsWith('sim-') ? `/matches/${encodeURIComponent(matchId)}` : '/matches';
   const links = [
     { label: 'Home', path: '/home', active: route.kind === 'home' },
     { label: 'Match', path: matchPath, active: route.kind === 'matches' || route.kind === 'demo-match' },
@@ -113,17 +116,115 @@ export function App() {
     { label: 'AI Analyst', path: '/analyst', active: route.kind === 'analyst' }
   ];
   const contextMode = realtimeMode === 'LIVE' ? 'live' : undefined;
+
+  const activeUser = authSession?.user ?? {
+    name: 'Prateek Gangopadhyay',
+    email: 'prateek.gangopadhyay@gmail.com',
+    role: 'Lead Tactical Analyst',
+    permissions: ['MatchRead', 'MatchReplay', 'AnalystAction'],
+    avatarUrl: DEFAULT_ANALYST_AVATAR,
+    provider: 'google' as const
+  };
+
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <header className="site-header">
-      <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home"><span aria-hidden="true">◈</span> PitchMind</a>
-      <span className="tag">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Match data with source details'}</span>
+      <div className="header-brand-nav-group">
+        <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home">
+          <svg className="brand-logo-svg" viewBox="0 0 28 28" width="22" height="22" fill="none" aria-hidden="true">
+            <path d="M4 14L14 4L24 14L14 24L4 14Z" fill="#4aefac" fillOpacity="0.9"/>
+            <path d="M14 9L19 14L14 19L9 14L14 9Z" fill="#07131c"/>
+          </svg>
+          <span className="brand-name">PitchMind</span>
+        </a>
+        {route.kind !== 'welcome' && (
+          <nav className="main-navigation" aria-label="Main navigation">
+            {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
+          </nav>
+        )}
+      </div>
+      {route.kind === 'welcome' ? (
+        <div className="welcome-header-auth-cta">
+          <span className="new-to-pitchmind">New to PitchMind?</span>
+          <span role="button" tabIndex={0} className="btn-request-access">Request access</span>
+        </div>
+      ) : (
+        <div className="header-right-controls">
+          <span role="button" tabIndex={0} className="header-icon-btn" aria-label="Search" title="Search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </span>
+          <div className="league-selector-pill">
+            <svg className="league-crest-symbol-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2.2" aria-hidden="true">
+              <path d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M4 22h16M10 14.66V17c0 .55-.45 1-1 1H7v2h10v-2h-2c-.55 0-1-.45-1-1v-2.34M12 2a8 8 0 0 0-8 8c0 4.42 5 7.6 8 10 3-2.4 8-5.58 8-10a8 8 0 0 0-8-8z"/>
+            </svg>
+            <span className="league-name-text">Premier League</span>
+            <span className="dropdown-caret">▾</span>
+          </div>
+          <div className="live-status-pill">
+            <span className="pulse-dot"></span>
+            <span>Live</span>
+          </div>
+          <span role="button" tabIndex={0} className="header-icon-btn" aria-label="Settings" title="Settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span>
+
+          {/* Logged in analyst user info with profile picture in right corner */}
+          <div className="header-user-profile-group">
+            <div className="header-user-info-text">
+              <span className="header-user-name">{activeUser.name}</span>
+              <span className="header-user-role">{activeUser.role}</span>
+            </div>
+            <div
+              className="header-user-avatar-btn"
+              role="button"
+              tabIndex={0}
+              title={`${activeUser.name} · ${activeUser.role} (${activeUser.email})`}
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowUserMenu(!showUserMenu); } }}
+              aria-haspopup="true"
+              aria-expanded={showUserMenu}
+            >
+              <img
+                src={activeUser.avatarUrl || DEFAULT_ANALYST_AVATAR}
+                alt={`${activeUser.name} profile`}
+                className="header-user-avatar-image"
+              />
+              <span className="user-online-pip" aria-hidden="true"></span>
+            </div>
+
+            {showUserMenu && (
+              <div className="header-user-popover-menu" role="menu">
+                <div className="popover-user-summary">
+                  <img src={activeUser.avatarUrl || DEFAULT_ANALYST_AVATAR} alt="" className="popover-avatar" />
+                  <div className="popover-meta">
+                    <strong>{activeUser.name}</strong>
+                    <small>{activeUser.email}</small>
+                    <span className="popover-provider-pill">{activeUser.provider === 'google' ? 'Google Account' : 'Analyst Account'}</span>
+                  </div>
+                </div>
+                <div className="popover-menu-divider"></div>
+                <button
+                  type="button"
+                  className="popover-signout-btn"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    logoutSimulated();
+                    window.history.pushState({}, '', '/welcome');
+                    window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <DeploymentVersionBanner />
+      <span className="tag sr-only">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Match data with source details'}</span>
     </header>
-    <nav className="main-navigation" aria-label="Main navigation">
-      {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
-    </nav>
     <main id="main-content" tabIndex={-1}>
-      {route.kind === 'matches' && matchId
+      {route.kind === 'matches' && matchId && !matchId.startsWith('sim-')
         ? <RealtimeAuthProvider getAccessToken={getHostAccessToken}>
           {/* Preserve replay state as the selected revision changes between seconds. */}
           <CanonicalMatchPage key={`${matchId}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
@@ -131,9 +232,19 @@ export function App() {
         </RealtimeAuthProvider>
         : route.kind === 'demo-match'
           ? <MatchExperience key={`${route.matchId ?? ''}:${route.replay}`} expectedMatchId={route.matchId} initialSeconds={selectedAtSeconds} replay={route.replay} />
-        : route.kind === 'matches'
-          ? <RoutePage route={{ kind: 'home' }} search={search} />
         : <RoutePage route={route} search={search} />}
     </main>
+  </div>;
+}
+
+function DeploymentVersionBanner() {
+  const revision = import.meta.env.VITE_DEPLOYMENT_VERSION?.trim() || 'local';
+  const buildId = import.meta.env.VITE_BUILD_ID?.trim();
+  const label = revision === 'local' ? 'Local · unversioned' : `${revision.slice(0, 12)}${buildId ? ` · build ${buildId}` : ''}`;
+  const details = `Deployment version ${revision}${buildId ? `, build ${buildId}` : ''}`;
+
+  return <div className="deployment-version-banner" role="group" aria-label={details} title={details}>
+    <span aria-hidden="true">Deployment</span>
+    <code>{label}</code>
   </div>;
 }

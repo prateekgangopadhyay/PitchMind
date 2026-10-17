@@ -33,6 +33,24 @@ internal static class SimulationEndpoints
             return Results.Json(element, contentType: "application/json");
         });
 
+        group.MapGet("/match", (HttpContext context) =>
+        {
+            var data = GetSimulationData();
+            if (data == null || !data.RootElement.TryGetProperty("match", out var element))
+                return Problem(context, StatusCodes.Status503ServiceUnavailable, "SIMULATION_UNAVAILABLE", "Simulation data is unavailable.");
+
+            return Results.Json(element, contentType: "application/json");
+        });
+
+        group.MapGet("/matches/{matchId}", (string matchId, HttpContext context) =>
+        {
+            var data = GetSimulationData();
+            if (data == null || !data.RootElement.TryGetProperty("match", out var element))
+                return Problem(context, StatusCodes.Status503ServiceUnavailable, "SIMULATION_UNAVAILABLE", "Simulation data is unavailable.");
+
+            return Results.Json(element, contentType: "application/json");
+        });
+
         group.MapGet("/teams", (HttpContext context) =>
         {
             var data = GetSimulationData();

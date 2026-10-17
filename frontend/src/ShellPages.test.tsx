@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement, act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
-import { RoutePage } from './ShellPages';
+import { RoutePage, ClubCrest } from './ShellPages';
 
 describe('welcome information architecture', () => {
   it('leads to match availability without implying a fixture is already available in static markup', () => {
@@ -213,6 +213,36 @@ describe('welcome information architecture', () => {
     } finally {
       await act(async () => root.unmount());
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('renders actual club logos instead of icon shields', async () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(createElement('div', null, [
+          createElement(ClubCrest, { key: 'ars', name: 'Arsenal' }),
+          createElement(ClubCrest, { key: 'mci', name: 'Manchester City' }),
+          createElement(ClubCrest, { key: 'liv', name: 'Liverpool', logoUrl: '/crests/liverpool.svg' }),
+          createElement(ClubCrest, { key: 'che', name: 'Chelsea', className: 'test-crest' })
+        ]));
+      });
+
+      const images = container.querySelectorAll<HTMLImageElement>('img.club-crest-img');
+      expect(images.length).toBe(4);
+      expect(images[0].getAttribute('src')).toBe('/crests/arsenal.svg');
+      expect(images[0].getAttribute('alt')).toBe('Arsenal crest');
+      expect(images[1].getAttribute('src')).toBe('/crests/manchester-city.svg');
+      expect(images[2].getAttribute('src')).toBe('/crests/liverpool.svg');
+      expect(images[3].getAttribute('src')).toBe('/crests/chelsea.svg');
+      expect(images[3].classList.contains('test-crest')).toBe(true);
+
+      // Verify no generic shield SVG is rendered when logo is available
+      const shields = container.querySelectorAll('svg.club-crest-svg');
+      expect(shields.length).toBe(0);
+    } finally {
+      await act(async () => root.unmount());
     }
   });
 });

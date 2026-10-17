@@ -3,6 +3,10 @@ WORKDIR /web
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG VITE_DEPLOYMENT_VERSION=local
+ARG VITE_BUILD_ID=
+ENV VITE_DEPLOYMENT_VERSION=$VITE_DEPLOYMENT_VERSION
+ENV VITE_BUILD_ID=$VITE_BUILD_ID
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

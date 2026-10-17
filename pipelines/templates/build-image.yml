@@ -24,7 +24,10 @@ steps:
       tag="$(Build.SourceVersion)"
       loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
       az acr login --name "$registry" --output none
-      docker build --platform linux/amd64 --file docker/Dockerfile --tag "$loginServer/$repository:$tag" .
+      docker build --platform linux/amd64 --file docker/Dockerfile \
+        --build-arg VITE_DEPLOYMENT_VERSION="$tag" \
+        --build-arg VITE_BUILD_ID="$(Build.BuildId)" \
+        --tag "$loginServer/$repository:$tag" .
       docker push "$loginServer/$repository:$tag"
       digest=$(az acr repository show --name "$registry" --image "$repository:$tag" --query digest -o tsv)
       loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
