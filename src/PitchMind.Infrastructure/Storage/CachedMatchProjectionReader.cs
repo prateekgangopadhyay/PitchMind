@@ -72,8 +72,7 @@ public sealed class CachedMatchProjectionReader(
         if (!Matches(projection, matchId, canonicalRevision, selectedSeconds, algorithmVersion))
             throw new InvalidDataException("Canonical reader returned a projection outside the requested cache identity.");
 
-        var envelope = new CacheEnvelope(matchId.ToString(), canonicalRevision, selectedSeconds, algorithmVersion, projection);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions);
+        var bytes = SerializeCacheValue(projection, selectedSeconds);
         if (bytes.Length <= MaximumCacheEntryBytes)
         {
             try
@@ -126,12 +125,23 @@ public sealed class CachedMatchProjectionReader(
         return $"pitchmind:projection:v1:{matchId.Value:N}:{canonicalRevision}:{selectedSeconds}:{encodedAlgorithm}";
     }
 
+    internal static byte[] SerializeCacheValue(SelectedMatchProjection projection) =>
+        SerializeCacheValue(projection, projection.AsOfClockSeconds);
+
+    private static byte[] SerializeCacheValue(SelectedMatchProjection projection, int selectedSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        var envelope = new MatchProjectionCacheEnvelope(projection.State.MatchId, projection.CanonicalRevision,
+            selectedSeconds, projection.AlgorithmVersion, projection);
+        return JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions);
+    }
+
     private static SelectedMatchProjection? TryRead(byte[] value, MatchId matchId, long canonicalRevision,
         int selectedSeconds, string algorithmVersion)
     {
         try
         {
-            var envelope = JsonSerializer.Deserialize<CacheEnvelope>(value, JsonOptions);
+            var envelope = JsonSerializer.Deserialize<MatchProjectionCacheEnvelope>(value, JsonOptions);
             if (envelope is null || envelope.MatchId != matchId.ToString() || envelope.CanonicalRevision != canonicalRevision ||
                 envelope.SelectedTimeSeconds != selectedSeconds || envelope.AlgorithmVersion != algorithmVersion ||
                 !Matches(envelope.Projection, matchId, canonicalRevision, selectedSeconds, algorithmVersion)) return null;
@@ -164,6 +174,7 @@ public sealed class CachedMatchProjectionReader(
         catch { /* A corrupt entry is ignored even when eviction is temporarily unavailable. */ }
     }
 
-    private sealed record CacheEnvelope(string MatchId, long CanonicalRevision, int SelectedTimeSeconds,
-        string AlgorithmVersion, SelectedMatchProjection Projection);
 }
+
+internal sealed record MatchProjectionCacheEnvelope(string MatchId, long CanonicalRevision,
+    int SelectedTimeSeconds, string AlgorithmVersion, SelectedMatchProjection Projection);
