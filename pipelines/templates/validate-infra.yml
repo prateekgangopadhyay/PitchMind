@@ -3,6 +3,7 @@ steps:
     set -euo pipefail
     az bicep version
     az bicep build --file infra/main.bicep --outfile "$(Agent.TempDirectory)/pitchmind-main.json"
+    az bicep build --file infra/private-dev-topology.bicep --outfile "$(Agent.TempDirectory)/pitchmind-private-dev.json"
     for params in infra/environments/*.bicepparam; do
       az bicep build-params --file "$params" --outfile "$(Agent.TempDirectory)/$(basename "$params").json"
     done

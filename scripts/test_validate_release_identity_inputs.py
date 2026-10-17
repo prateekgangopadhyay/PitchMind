@@ -14,14 +14,14 @@ spec.loader.exec_module(validator)
 
 class ReleaseIdentityInputTests(unittest.TestCase):
     def test_accepts_distinct_configured_connections(self):
-        self.assertIsNone(validator.validate("pitchmind-acr-push", "pitchmind-dev-deploy"))
+        self.assertIsNone(validator.validate("pitchmind-acr-push", "pitchmind-dev-deploy", "pitchmind-dev-infra"))
 
     def test_rejects_same_connection_even_with_case_differences(self):
         with self.assertRaisesRegex(validator.IdentityInputError, "must be distinct"):
-            validator.validate("PitchMind-Release", "pitchmind-release")
+            validator.validate("PitchMind-Release", "pitchmind-release", "pitchmind-infra")
 
     def test_rejects_empty_or_placeholder_connections(self):
-        for values in ((None, "deploy"), ("push", "  "), ("unconfigured", "deploy"), ("push", "UNCONFIGURED")):
+        for values in ((None, "deploy", "infra"), ("push", "  ", "infra"), ("unconfigured", "deploy", "infra"), ("push", "deploy", "UNCONFIGURED")):
             with self.subTest(values=values), self.assertRaises(validator.IdentityInputError):
                 validator.validate(*values)
 
@@ -35,15 +35,15 @@ class ReleaseIdentityInputTests(unittest.TestCase):
         )
         for value in secret_shaped:
             with self.subTest(value=value), self.assertRaises(validator.IdentityInputError):
-                validator.validate(value, "pitchmind-dev-deploy")
+                validator.validate(value, "pitchmind-dev-deploy", "pitchmind-dev-infra")
 
     def test_accepts_valid_release_resource_names(self):
         self.assertIsNone(validator.validate_release_resource_inputs(
-            "pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api"
+            "pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api-vnet"
         ))
 
     def test_rejects_shell_injection_and_invalid_release_resource_names(self):
-        good = ("pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api")
+        good = ("pmdev4iwntkatliy6sacr", "pitchmind", "rg-pitchmind-dev-001", "pm-dev-api-vnet")
         cases = (
             ("pmdev4iwntkatliy6sacr'; touch /tmp/pwned; #", *good[1:]),
             (good[0], "pitchmind'; echo injected", *good[2:]),
@@ -59,7 +59,20 @@ class ReleaseIdentityInputTests(unittest.TestCase):
     def test_rejects_valid_syntax_for_an_unapproved_dev_target(self):
         with self.assertRaisesRegex(validator.IdentityInputError, "approved DEV target"):
             validator.validate_release_resource_inputs(
-                "pmdev4iwntkatliy6sacr", "pitchmind", "rg-another-project-dev", "pm-dev-api"
+                "pmdev4iwntkatliy6sacr", "pitchmind", "rg-another-project-dev", "pm-dev-api-vnet"
+            )
+
+    def test_rejects_private_dev_connection_reuse(self):
+        with self.assertRaisesRegex(validator.IdentityInputError, "must be distinct"):
+            validator.validate("publisher", "deployer", "PUBLISHER")
+
+    def test_private_dev_inputs_require_reviewed_vnet_and_cost(self):
+        self.assertIsNone(validator.validate_private_dev_inputs(
+            "pm-dev-vnet", "container-apps", "postgres", "private-endpoints", "10.42.3.0/27", "Estimate reviewed: $100/month"
+        ))
+        with self.assertRaises(validator.IdentityInputError):
+            validator.validate_private_dev_inputs(
+                "pm-dev-vnet", "container-apps", "postgres", "private-endpoints", "", "Estimate reviewed"
             )
 
 

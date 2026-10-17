@@ -25,16 +25,22 @@ _APPROVED_RELEASE_TARGET = {
     "registry_name": "pmdev4iwntkatliy6sacr",
     "image_repository": "pitchmind",
     "resource_group": "rg-pitchmind-dev-001",
-    "app_name": "pm-dev-api",
+    "app_name": "pm-dev-api-vnet",
+}
+_APPROVED_PRIVATE_DEV_TARGET = {
+    "vnet_name": "pm-dev-vnet",
+    "aca_subnet_name": "container-apps",
+    "postgres_subnet_name": "postgres",
+    "redis_pe_subnet_name": "private-endpoints",
 }
 
 
 def _validate_connection_name(value: str | None) -> str:
     if not isinstance(value, str):
-        raise IdentityInputError("Both release service connections must be configured")
+        raise IdentityInputError("All three release service connections must be configured")
     normalized = value.strip()
     if not normalized or normalized.casefold() == "unconfigured":
-        raise IdentityInputError("Both release service connections must be configured")
+        raise IdentityInputError("All three release service connections must be configured")
     if _SECRET_PREFIX.search(normalized) or _JWT.fullmatch(normalized):
         raise IdentityInputError("Service connection inputs must be names, not secret-shaped credentials")
     if not _SERVICE_CONNECTION_NAME.fullmatch(normalized):
@@ -42,11 +48,12 @@ def _validate_connection_name(value: str | None) -> str:
     return normalized
 
 
-def validate(acr_push: str | None, dev_deploy: str | None) -> None:
+def validate(acr_push: str | None, dev_deploy: str | None, dev_infra: str | None) -> None:
     acr_name = _validate_connection_name(acr_push)
     deploy_name = _validate_connection_name(dev_deploy)
-    if acr_name.casefold() == deploy_name.casefold():
-        raise IdentityInputError("Image-push and DEV-deployment service connections must be distinct")
+    infra_name = _validate_connection_name(dev_infra)
+    if len({acr_name.casefold(), deploy_name.casefold(), infra_name.casefold()}) != 3:
+        raise IdentityInputError("Image-push, DEV-deployment, and infrastructure service connections must be distinct")
 
 
 def _validate_resource_input(value: str | None, *, label: str, pattern: re.Pattern[str], max_length: int) -> str:
@@ -77,20 +84,51 @@ def validate_release_resource_inputs(
         raise IdentityInputError("Release resource names must match the approved DEV target")
 
 
+def validate_private_dev_inputs(
+    vnet_name: str | None,
+    aca_subnet_name: str | None,
+    postgres_subnet_name: str | None,
+    redis_pe_subnet_name: str | None,
+    aca_subnet_cidr: str | None,
+    estimated_monthly_cost: str | None,
+) -> None:
+    actual = {
+        "vnet_name": vnet_name,
+        "aca_subnet_name": aca_subnet_name,
+        "postgres_subnet_name": postgres_subnet_name,
+        "redis_pe_subnet_name": redis_pe_subnet_name,
+    }
+    if actual != _APPROVED_PRIVATE_DEV_TARGET:
+        raise IdentityInputError("Private DEV network names must match the reviewed VNet target")
+    if not isinstance(aca_subnet_cidr, str) or not aca_subnet_cidr.strip():
+        raise IdentityInputError("A reviewed, non-overlapping ACA subnet CIDR is required")
+    if not isinstance(estimated_monthly_cost, str) or not estimated_monthly_cost.strip() or estimated_monthly_cost == "UNESTIMATED":
+        raise IdentityInputError("A reviewed monthly cost estimate is required")
+
+
 def main() -> int:
     try:
         validate(os.environ.get("PITCHMIND_ACR_PUSH_SERVICE_CONNECTION"),
-                 os.environ.get("PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION"))
+                 os.environ.get("PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION"),
+                 os.environ.get("PITCHMIND_DEV_INFRA_SERVICE_CONNECTION"))
         validate_release_resource_inputs(
             os.environ.get("PITCHMIND_REGISTRY_NAME"),
             os.environ.get("PITCHMIND_IMAGE_REPOSITORY"),
             os.environ.get("PITCHMIND_DEV_RESOURCE_GROUP"),
             os.environ.get("PITCHMIND_DEV_APP_NAME"),
         )
+        validate_private_dev_inputs(
+            os.environ.get("PITCHMIND_DEV_VNET_NAME"),
+            os.environ.get("PITCHMIND_DEV_ACA_SUBNET_NAME"),
+            os.environ.get("PITCHMIND_DEV_POSTGRES_SUBNET_NAME"),
+            os.environ.get("PITCHMIND_DEV_REDIS_PE_SUBNET_NAME"),
+            os.environ.get("PITCHMIND_DEV_ACA_SUBNET_CIDR"),
+            os.environ.get("PITCHMIND_DEV_ESTIMATED_MONTHLY_COST"),
+        )
     except IdentityInputError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    print("PASS: distinct service connections and safe release resource names are configured")
+    print("PASS: three distinct service connections and reviewed private DEV inputs are configured")
     return 0
 
 

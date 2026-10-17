@@ -1,4 +1,4 @@
-# Azure DevOps is the only CI/CD orchestrator. DEV delivery activates after service-connection configuration.
+# Azure DevOps is the only CI/CD orchestrator. DEV delivery remains explicitly opt-in.
 parameters:
 - name: runGateFailureProbe
   type: boolean
@@ -12,6 +12,9 @@ parameters:
 - name: devDeploymentServiceConnection
   type: string
   default: unconfigured
+- name: devInfrastructureServiceConnection
+  type: string
+  default: unconfigured
 - name: registryName
   type: string
   default: pmdev4iwntkatliy6sacr
@@ -20,7 +23,70 @@ parameters:
   default: rg-pitchmind-dev-001
 - name: devAppName
   type: string
-  default: pm-dev-api
+  default: pm-dev-api-vnet
+- name: devVnetName
+  type: string
+  default: pm-dev-vnet
+- name: devAcaSubnetName
+  type: string
+  default: container-apps
+- name: devAcaSubnetCidr
+  type: string
+  default: ''
+- name: devPostgresSubnetName
+  type: string
+  default: postgres
+- name: devPostgresSubnetCidr
+  type: string
+  default: 10.42.1.0/24
+- name: devPostgresDnsZoneName
+  type: string
+  default: pm-dev-private.postgres.database.azure.com
+- name: devEnvironmentName
+  type: string
+  default: pm-dev-private-cae
+- name: provisionPostgres
+  type: boolean
+  default: false
+- name: devPostgresServerName
+  type: string
+  default: pitchmind-postgresql-dev
+- name: devPostgresSkuTier
+  type: string
+  default: Burstable
+- name: devPostgresSkuName
+  type: string
+  default: ''
+- name: devPostgresAdminObjectId
+  type: string
+  default: ''
+- name: devPostgresAdminPrincipalName
+  type: string
+  default: ''
+- name: devPostgresAdminPrincipalType
+  type: string
+  default: User
+- name: devEstimatedMonthlyCost
+  type: string
+  default: ''
+- name: provisionRedis
+  type: boolean
+  default: false
+- name: devRedisName
+  type: string
+  default: pm-dev-redis
+- name: devRedisSkuName
+  type: string
+  default: Balanced_B0
+- name: devRedisPrivateEndpointSubnetName
+  type: string
+  default: private-endpoints
+- name: devRedisPrivateDnsZoneName
+  type: string
+  default: privatelink.redis.azure.net
+- name: devRedisPrivateEndpointName
+  type: string
+  default: pm-dev-redis-pe
 trigger:
   branches:
     include:
@@ -135,17 +201,24 @@ stages:
       steps:
       - checkout: self
       - task: Bash@3
-        displayName: Require separate image-push and DEV-deployment identities
+        displayName: Require three separate release identities and reviewed network/cost inputs
         inputs:
           targetType: inline
           script: python3 scripts/validate_release_identity_inputs.py
         env:
           PITCHMIND_ACR_PUSH_SERVICE_CONNECTION: ${{ parameters.acrPushServiceConnection }}
           PITCHMIND_DEV_DEPLOY_SERVICE_CONNECTION: ${{ parameters.devDeploymentServiceConnection }}
+          PITCHMIND_DEV_INFRA_SERVICE_CONNECTION: ${{ parameters.devInfrastructureServiceConnection }}
           PITCHMIND_REGISTRY_NAME: ${{ parameters.registryName }}
           PITCHMIND_IMAGE_REPOSITORY: pitchmind
           PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.devResourceGroup }}
           PITCHMIND_DEV_APP_NAME: ${{ parameters.devAppName }}
+          PITCHMIND_DEV_VNET_NAME: ${{ parameters.devVnetName }}
+          PITCHMIND_DEV_ACA_SUBNET_NAME: ${{ parameters.devAcaSubnetName }}
+          PITCHMIND_DEV_POSTGRES_SUBNET_NAME: ${{ parameters.devPostgresSubnetName }}
+          PITCHMIND_DEV_REDIS_PE_SUBNET_NAME: ${{ parameters.devRedisPrivateEndpointSubnetName }}
+          PITCHMIND_DEV_ACA_SUBNET_CIDR: ${{ parameters.devAcaSubnetCidr }}
+          PITCHMIND_DEV_ESTIMATED_MONTHLY_COST: ${{ parameters.devEstimatedMonthlyCost }}
     - job: AwaitExplicitOwnerApproval
       dependsOn: ValidateReleaseIdentityInputs
       displayName: Review the approved change set before ACR push or DEV mutation
@@ -158,8 +231,9 @@ stages:
           notifyUsers: ''
           instructions: |
             STOP. Obtain and record explicit repository-owner approval for THIS story/change set.
-            Verify Git SHA, resource group/subscription, Bicep what-if, image plan,
-            migration, cost budget, ingress/security and rollback.
+            Verify Git SHA, resource group/subscription, intended resource scope, cost estimate,
+            ingress/security and rollback. The exact image digest and Bicep what-if receive a
+            second owner review after the immutable image is built.
             No approval => Reject. Protected Azure DevOps Environment checks remain mandatory.
           onTimeout: reject
   - stage: BuildRelease
@@ -178,7 +252,39 @@ stages:
     dependsOn: BuildRelease
     condition: succeeded()
     jobs:
+    - job: PreviewPrivateDevTopology
+      displayName: Review Azure what-if for the release digest
+      steps:
+      - checkout: self
+      - template: templates/preview-private-dev.yml
+        parameters:
+          devInfrastructureServiceConnection: ${{ parameters.devInfrastructureServiceConnection }}
+          registryName: ${{ parameters.registryName }}
+          resourceGroup: ${{ parameters.devResourceGroup }}
+          vnetName: ${{ parameters.devVnetName }}
+          acaSubnetName: ${{ parameters.devAcaSubnetName }}
+          acaSubnetCidr: ${{ parameters.devAcaSubnetCidr }}
+          postgresSubnetName: ${{ parameters.devPostgresSubnetName }}
+          postgresSubnetCidr: ${{ parameters.devPostgresSubnetCidr }}
+          postgresDnsZoneName: ${{ parameters.devPostgresDnsZoneName }}
+          appName: ${{ parameters.devAppName }}
+          environmentName: ${{ parameters.devEnvironmentName }}
+          provisionPostgres: ${{ parameters.provisionPostgres }}
+          postgresServerName: ${{ parameters.devPostgresServerName }}
+          postgresSkuTier: ${{ parameters.devPostgresSkuTier }}
+          postgresSkuName: ${{ parameters.devPostgresSkuName }}
+          postgresAdminObjectId: ${{ parameters.devPostgresAdminObjectId }}
+          postgresAdminPrincipalName: ${{ parameters.devPostgresAdminPrincipalName }}
+          postgresAdminPrincipalType: ${{ parameters.devPostgresAdminPrincipalType }}
+          provisionRedis: ${{ parameters.provisionRedis }}
+          redisName: ${{ parameters.devRedisName }}
+          redisSkuName: ${{ parameters.devRedisSkuName }}
+          redisPrivateEndpointSubnetName: ${{ parameters.devRedisPrivateEndpointSubnetName }}
+          redisPrivateDnsZoneName: ${{ parameters.devRedisPrivateDnsZoneName }}
+          redisPrivateEndpointName: ${{ parameters.devRedisPrivateEndpointName }}
+          estimatedMonthlyCost: ${{ parameters.devEstimatedMonthlyCost }}
     - job: AwaitDigestConfirmation
+      dependsOn: PreviewPrivateDevTopology
       displayName: Owner reconfirms the immutable image and DEV deployment
       pool: server
       timeoutInMinutes: 1440
@@ -189,7 +295,8 @@ stages:
           notifyUsers: ''
           instructions: |
             STOP. Inspect the release manifest image digest published by BuildRelease.
-            Reconfirm the same explicit owner approval covers this digest and DEV impact.
+            Inspect the private-dev-plan artifact for the exact Azure what-if. Review the supplied monthly cost estimate.
+            Reconfirm the same explicit owner approval covers this digest, network/DB changes, cost and DEV impact.
             Never treat the previous approval as blanket permission for other stories.
             Approve only with recorded owner consent; otherwise Reject.
           onTimeout: reject
@@ -204,6 +311,32 @@ stages:
           deploy:
             steps:
             - checkout: self
+            - template: templates/provision-private-dev.yml
+              parameters:
+                devInfrastructureServiceConnection: ${{ parameters.devInfrastructureServiceConnection }}
+                resourceGroup: ${{ parameters.devResourceGroup }}
+                registryName: ${{ parameters.registryName }}
+                vnetName: ${{ parameters.devVnetName }}
+                acaSubnetName: ${{ parameters.devAcaSubnetName }}
+                acaSubnetCidr: ${{ parameters.devAcaSubnetCidr }}
+                postgresSubnetName: ${{ parameters.devPostgresSubnetName }}
+                postgresSubnetCidr: ${{ parameters.devPostgresSubnetCidr }}
+                postgresDnsZoneName: ${{ parameters.devPostgresDnsZoneName }}
+                appName: ${{ parameters.devAppName }}
+                environmentName: ${{ parameters.devEnvironmentName }}
+                provisionPostgres: ${{ parameters.provisionPostgres }}
+                postgresServerName: ${{ parameters.devPostgresServerName }}
+                postgresSkuTier: ${{ parameters.devPostgresSkuTier }}
+                postgresSkuName: ${{ parameters.devPostgresSkuName }}
+                postgresAdminObjectId: ${{ parameters.devPostgresAdminObjectId }}
+                postgresAdminPrincipalName: ${{ parameters.devPostgresAdminPrincipalName }}
+                postgresAdminPrincipalType: ${{ parameters.devPostgresAdminPrincipalType }}
+                provisionRedis: ${{ parameters.provisionRedis }}
+                redisName: ${{ parameters.devRedisName }}
+                redisSkuName: ${{ parameters.devRedisSkuName }}
+                redisPrivateEndpointSubnetName: ${{ parameters.devRedisPrivateEndpointSubnetName }}
+                redisPrivateDnsZoneName: ${{ parameters.devRedisPrivateDnsZoneName }}
+                redisPrivateEndpointName: ${{ parameters.devRedisPrivateEndpointName }}
             - template: templates/deploy-image.yml
               parameters:
                 devDeploymentServiceConnection: ${{ parameters.devDeploymentServiceConnection }}

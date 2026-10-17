@@ -32,7 +32,13 @@ def _validate_pipeline_policy(
         validation_templates.update(validation_template_overrides)
     release_helpers = {
         path: (ROOT / path).read_text()
-        for path in ("scripts/validate_release_identity_inputs.py", "scripts/api-smoke.py")
+        for path in (
+            "scripts/validate_release_identity_inputs.py", "scripts/api-smoke.py",
+            "scripts/private-dev-plan.sh", "scripts/private-dev-deploy.sh",
+            "scripts/validate_private_dev_network.py", "scripts/validate_private_dev_whatif.py",
+            "pipelines/templates/preview-private-dev.yml", "pipelines/templates/provision-private-dev.yml",
+            "infra/private-dev-topology.bicep",
+        )
     }
     if release_helper_overrides:
         release_helpers.update(release_helper_overrides)

@@ -1,0 +1,88 @@
+parameters:
+- name: devInfrastructureServiceConnection
+  type: string
+- name: registryName
+  type: string
+- name: resourceGroup
+  type: string
+- name: vnetName
+  type: string
+- name: acaSubnetName
+  type: string
+- name: acaSubnetCidr
+  type: string
+- name: postgresSubnetName
+  type: string
+- name: postgresSubnetCidr
+  type: string
+- name: postgresDnsZoneName
+  type: string
+- name: appName
+  type: string
+- name: environmentName
+  type: string
+- name: provisionPostgres
+  type: boolean
+- name: postgresServerName
+  type: string
+- name: postgresSkuTier
+  type: string
+- name: postgresSkuName
+  type: string
+- name: postgresAdminObjectId
+  type: string
+- name: postgresAdminPrincipalName
+  type: string
+- name: postgresAdminPrincipalType
+  type: string
+- name: provisionRedis
+  type: boolean
+- name: redisName
+  type: string
+- name: redisSkuName
+  type: string
+- name: redisPrivateEndpointSubnetName
+  type: string
+- name: redisPrivateDnsZoneName
+  type: string
+- name: redisPrivateEndpointName
+  type: string
+steps:
+- download: current
+  artifact: release
+- download: current
+  artifact: private-dev-plan
+- task: AzureCLI@2
+  displayName: Provision the reviewed VNet-connected DEV topology
+  env:
+    PITCHMIND_DEV_RESOURCE_GROUP: ${{ parameters.resourceGroup }}
+    PITCHMIND_DEV_REGISTRY_NAME: ${{ parameters.registryName }}
+    PITCHMIND_DEV_VNET_NAME: ${{ parameters.vnetName }}
+    PITCHMIND_DEV_ACA_SUBNET_NAME: ${{ parameters.acaSubnetName }}
+    PITCHMIND_DEV_ACA_SUBNET_CIDR: ${{ parameters.acaSubnetCidr }}
+    PITCHMIND_DEV_POSTGRES_SUBNET_NAME: ${{ parameters.postgresSubnetName }}
+    PITCHMIND_DEV_POSTGRES_SUBNET_CIDR: ${{ parameters.postgresSubnetCidr }}
+    PITCHMIND_DEV_POSTGRES_DNS_ZONE_NAME: ${{ parameters.postgresDnsZoneName }}
+    PITCHMIND_DEV_APP_NAME: ${{ parameters.appName }}
+    PITCHMIND_DEV_ENVIRONMENT_NAME: ${{ parameters.environmentName }}
+    PITCHMIND_DEV_PROVISION_POSTGRES: ${{ parameters.provisionPostgres }}
+    PITCHMIND_DEV_POSTGRES_SERVER_NAME: ${{ parameters.postgresServerName }}
+    PITCHMIND_DEV_POSTGRES_SKU_TIER: ${{ parameters.postgresSkuTier }}
+    PITCHMIND_DEV_POSTGRES_SKU_NAME: ${{ parameters.postgresSkuName }}
+    PITCHMIND_DEV_POSTGRES_ADMIN_OBJECT_ID: ${{ parameters.postgresAdminObjectId }}
+    PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_NAME: ${{ parameters.postgresAdminPrincipalName }}
+    PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_TYPE: ${{ parameters.postgresAdminPrincipalType }}
+    PITCHMIND_DEV_PROVISION_REDIS: ${{ parameters.provisionRedis }}
+    PITCHMIND_DEV_REDIS_NAME: ${{ parameters.redisName }}
+    PITCHMIND_DEV_REDIS_SKU_NAME: ${{ parameters.redisSkuName }}
+    PITCHMIND_DEV_REDIS_PE_SUBNET_NAME: ${{ parameters.redisPrivateEndpointSubnetName }}
+    PITCHMIND_DEV_REDIS_DNS_ZONE_NAME: ${{ parameters.redisPrivateDnsZoneName }}
+    PITCHMIND_DEV_REDIS_PE_NAME: ${{ parameters.redisPrivateEndpointName }}
+    PITCHMIND_RELEASE_MANIFEST: $(Pipeline.Workspace)/release/manifest.json
+    PITCHMIND_APPROVED_PLAN: $(Pipeline.Workspace)/private-dev-plan/what-if.json
+    PITCHMIND_BUILD_ID: $(Build.BuildId)
+  inputs:
+    azureSubscription: ${{ parameters.devInfrastructureServiceConnection }}
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: bash scripts/private-dev-deploy.sh
