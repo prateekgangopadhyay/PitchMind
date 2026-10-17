@@ -29,12 +29,13 @@ public sealed class OutboxDispatchWorkerTests
     {
         var calls = 0;
         var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var worker = new OutboxDispatchWorker(_ =>
+        var worker = new OutboxDispatchWorker(async token =>
         {
             if (Interlocked.Increment(ref calls) == 1)
                 throw new InvalidOperationException("test-only dispatch failure");
             retried.TrySetResult();
-            return Task.FromResult(OutboxDispatchResult.NoMessage);
+            await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
+            return OutboxDispatchResult.NoMessage;
         }, NullLogger<OutboxDispatchWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
