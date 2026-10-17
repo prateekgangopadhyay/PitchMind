@@ -1,0 +1,574 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "9801531314789404563"
+    }
+  },
+  "parameters": {
+    "deployPrivateDevTopology": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Must remain false unless the repository owner approves the exact DEV plan and immutable image digest."
+      }
+    },
+    "provisionPostgres": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy a new Entra-only PostgreSQL Flexible Server in the delegated subnet. Leave false when PostgreSQL is managed separately."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "pm-dev-vnet"
+    },
+    "acaSubnetName": {
+      "type": "string",
+      "defaultValue": "container-apps"
+    },
+    "acaSubnetCidr": {
+      "type": "string",
+      "metadata": {
+        "description": "Must be a free, non-overlapping range in the existing VNet. Workload profiles require /27 or larger."
+      }
+    },
+    "postgresSubnetName": {
+      "type": "string",
+      "defaultValue": "postgres"
+    },
+    "postgresSubnetCidr": {
+      "type": "string",
+      "defaultValue": "10.42.1.0/24"
+    },
+    "postgresDnsZoneName": {
+      "type": "string",
+      "defaultValue": "pm-dev-private.postgres.database.azure.com"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "pm-dev-logs"
+    },
+    "registryName": {
+      "type": "string",
+      "defaultValue": "pmdev4iwntkatliy6sacr"
+    },
+    "appName": {
+      "type": "string",
+      "defaultValue": "pm-dev-api-vnet"
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "pm-dev-private-cae"
+    },
+    "appImage": {
+      "type": "string"
+    },
+    "postgresServerName": {
+      "type": "string",
+      "defaultValue": "pitchmind-postgresql-dev"
+    },
+    "postgresSkuTier": {
+      "type": "string",
+      "defaultValue": "Burstable",
+      "allowedValues": [
+        "Burstable",
+        "GeneralPurpose",
+        "MemoryOptimized"
+      ]
+    },
+    "postgresSkuName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Choose only after dated region availability and cost review. Required when provisionPostgres is true."
+      }
+    },
+    "postgresVersion": {
+      "type": "string",
+      "defaultValue": "16",
+      "allowedValues": [
+        "16",
+        "17"
+      ]
+    },
+    "postgresStorageSizeGB": {
+      "type": "int",
+      "defaultValue": 32,
+      "minValue": 32,
+      "maxValue": 16384
+    },
+    "postgresBackupRetentionDays": {
+      "type": "int",
+      "defaultValue": 7,
+      "minValue": 7,
+      "maxValue": 35
+    },
+    "postgresAdminObjectId": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "postgresAdminPrincipalName": {
+      "type": "string",
+      "defaultValue": ""
+    },
+    "postgresAdminPrincipalType": {
+      "type": "string",
+      "defaultValue": "User",
+      "allowedValues": [
+        "User",
+        "Group",
+        "ServicePrincipal"
+      ]
+    },
+    "provisionRedis": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Create a new Azure Managed Redis instance and private endpoint. Leave false until SKU and cost are approved."
+      }
+    },
+    "redisName": {
+      "type": "string",
+      "defaultValue": "pm-dev-redis"
+    },
+    "redisSkuName": {
+      "type": "string",
+      "defaultValue": "Balanced_B0",
+      "allowedValues": [
+        "Balanced_B0"
+      ],
+      "metadata": {
+        "description": "Azure Managed Redis SKU; verify regional availability and current cost before opting in."
+      }
+    },
+    "redisPrivateEndpointSubnetName": {
+      "type": "string",
+      "defaultValue": "private-endpoints"
+    },
+    "redisPrivateDnsZoneName": {
+      "type": "string",
+      "defaultValue": "privatelink.redis.azure.net"
+    },
+    "redisPrivateEndpointName": {
+      "type": "string",
+      "defaultValue": "pm-dev-redis-pe"
+    }
+  },
+  "resources": [
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('postgresSubnetName'))]",
+      "properties": {
+        "addressPrefix": "[parameters('postgresSubnetCidr')]",
+        "delegations": [
+          {
+            "name": "postgres-flexible-server",
+            "properties": {
+              "serviceName": "Microsoft.DBforPostgreSQL/flexibleServers"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), parameters('acaSubnetName'))]",
+      "properties": {
+        "addressPrefix": "[parameters('acaSubnetCidr')]",
+        "defaultOutboundAccess": true,
+        "delegations": [
+          {
+            "name": "container-apps-environment",
+            "properties": {
+              "serviceName": "Microsoft.App/environments"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[parameters('postgresDnsZoneName')]",
+      "location": "global"
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', parameters('postgresDnsZoneName'), format('{0}-link', parameters('environmentName')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', parameters('postgresDnsZoneName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-pull', parameters('appName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName'))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "apiVersion": "2024-08-01",
+      "name": "[parameters('postgresServerName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('postgresSkuName')]",
+        "tier": "[parameters('postgresSkuTier')]"
+      },
+      "properties": {
+        "authConfig": {
+          "activeDirectoryAuth": "Enabled",
+          "passwordAuth": "Disabled",
+          "tenantId": "[tenant().tenantId]"
+        },
+        "backup": {
+          "backupRetentionDays": "[parameters('postgresBackupRetentionDays')]",
+          "geoRedundantBackup": "Disabled"
+        },
+        "highAvailability": {
+          "mode": "Disabled"
+        },
+        "network": {
+          "delegatedSubnetResourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('postgresSubnetName'))]",
+          "privateDnsZoneArmResourceId": "[resourceId('Microsoft.Network/privateDnsZones', parameters('postgresDnsZoneName'))]",
+          "publicNetworkAccess": "Disabled"
+        },
+        "storage": {
+          "storageSizeGB": "[parameters('postgresStorageSizeGB')]",
+          "autoGrow": "Disabled"
+        },
+        "version": "[parameters('postgresVersion')]"
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP02-S01",
+        "topology": "existing-vnet-private"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', parameters('postgresDnsZoneName'), format('{0}-link', parameters('environmentName')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', parameters('postgresDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('postgresSubnetName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', parameters('postgresServerName'), parameters('postgresAdminObjectId'))]",
+      "properties": {
+        "principalName": "[parameters('postgresAdminPrincipalName')]",
+        "principalType": "[parameters('postgresAdminPrincipalType')]",
+        "tenantId": "[tenant().tenantId]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', parameters('postgresServerName'), 'pitchmind')]",
+      "properties": {
+        "charset": "UTF8",
+        "collation": "en_US.utf8"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Cache/redisEnterprise",
+      "apiVersion": "2025-07-01",
+      "name": "[parameters('redisName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('redisSkuName')]"
+      },
+      "properties": {
+        "encryption": {},
+        "highAvailability": "Disabled",
+        "minimumTlsVersion": "1.2",
+        "publicNetworkAccess": "Disabled"
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "topology": "private-endpoint"
+      }
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Cache/redisEnterprise/databases",
+      "apiVersion": "2025-07-01",
+      "name": "[format('{0}/{1}', parameters('redisName'), 'default')]",
+      "properties": {
+        "clientProtocol": "Encrypted",
+        "clusteringPolicy": "OSSCluster",
+        "evictionPolicy": "VolatileLRU",
+        "modules": [],
+        "port": 10000
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[parameters('redisPrivateDnsZoneName')]",
+      "location": "global"
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', parameters('redisPrivateDnsZoneName'), format('{0}-redis-link', parameters('environmentName')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', parameters('redisPrivateDnsZoneName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[parameters('redisPrivateEndpointName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('redisPrivateEndpointSubnetName'))]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('{0}-connection', parameters('redisName'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]",
+              "groupIds": [
+                "redisEnterprise"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('redisPrivateEndpointName'), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "redis",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', parameters('redisPrivateDnsZoneName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', parameters('redisPrivateDnsZoneName'), format('{0}-redis-link', parameters('environmentName')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', parameters('redisPrivateDnsZoneName'))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', parameters('redisPrivateEndpointName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2025-07-01",
+      "name": "[parameters('environmentName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').primarySharedKey]"
+          }
+        },
+        "vnetConfiguration": {
+          "infrastructureSubnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('acaSubnetName'))]",
+          "internal": false
+        },
+        "publicNetworkAccess": "Enabled",
+        "workloadProfiles": [
+          {
+            "name": "Consumption",
+            "workloadProfileType": "Consumption"
+          }
+        ]
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP02-S04",
+        "topology": "existing-vnet-public-app-private-data"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('acaSubnetName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "api",
+              "image": "[parameters('appImage')]",
+              "env": [
+                {
+                  "name": "ASPNETCORE_URLS",
+                  "value": "http://+:8080"
+                }
+              ],
+              "resources": {
+                "cpu": "[json('0.25')]",
+                "memory": "0.5Gi"
+              },
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 30
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 8080
+                  },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": 0,
+            "maxReplicas": 1
+          }
+        }
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP02-S04",
+        "imageDigestDeployment": "true"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "containerAppsEnvironmentId": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), '')]"
+    },
+    "containerAppName": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), parameters('appName'), '')]"
+    },
+    "containerAppFqdn": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), reference(resourceId('Microsoft.App/containerApps', parameters('appName')), '2024-03-01').configuration.ingress.fqdn, '')]"
+    },
+    "postgresServerFqdn": {
+      "type": "string",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres')), reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName')), '2024-08-01').fullyQualifiedDomainName, '')]"
+    },
+    "redisHostName": {
+      "type": "string",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionRedis')), reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, '')]"
+    },
+    "redisPort": {
+      "type": "int",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionRedis')), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, 0)]"
+    }
+  }
+}

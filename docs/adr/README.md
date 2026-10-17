@@ -15,3 +15,4 @@ Accepted as **target decisions**, pending executable verification:
 - [ADR-012 — Bounded claim-gated explanation handoffs](ADR-012-bounded-agent-handoffs.md)
 - [ADR-013 — Evidence-bounded tactical agent profiles](ADR-013-tactical-agent-profiles.md)
 - [ADR-014 — Separate tactical-knowledge RAG from canonical match evidence](ADR-014-football-knowledge-rag.md)
+- [ADR-015 — Event Hubs ingress and post-commit fan-out](ADR-015-event-hubs-ingress-and-post-commit-fanout.md)

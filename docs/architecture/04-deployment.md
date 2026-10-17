@@ -30,11 +30,14 @@ flowchart TB
     API --> PG[("PostgreSQL delegated VNet access")]
     API --> Signal["Azure SignalR authorized groups"]
     Worker["ACA EventWorker managed identity"] --> PG
-    Worker --> EH["Event Hubs private link"]
+    EH["Event Hubs ingress private link"] --> Worker
+    PG --> Outbox["Committed transactional outbox"]
+    Outbox --> Fanout["Outbox dispatcher"]
+    Fanout --> Redis["Azure Managed Redis private link"]
+    Fanout --> Signal
     Worker --> SB["Service Bus private link"]
     Agent["ACA AgentWorker read-only evidence role"] --> PG
     Agent --> Foundry["Foundry approved model / private network as supported"]
-    Worker -. "optional" .-> Redis["Azure Managed Redis private link"]
     Agent --> KV["Key Vault / managed identities"]
     Feeder -. "Blob private endpoint + DNS (candidate)" .-> FEED
     Agent -. "Key Vault private endpoint + DNS (candidate)" .-> KV

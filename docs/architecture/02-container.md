@@ -46,28 +46,29 @@ The LOCAL dispatcher is inherited from EP06-S02 and is registered only when the 
 flowchart LR
   Web["React client"] --> Ingress["TLS ingress to ACA (optional Front Door/WAF)"]
   Ingress --> BFF["ASP.NET Core API / BFF, Azure Container Apps"]
-  Web <-. "live cursor" .-> Signal["Azure SignalR"]
-  BFF --> Signal
+  Web <-. "live cursor" .-> AzureSignal["Azure SignalR"]
+  BFF --> AzureSignal
   BFF --> PG[("Azure PostgreSQL Flexible Server — canonical")]
-  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulated feed producer"]
-  Sim --> Candidate["Bounded raw candidate replay; noncanonical"]
-  Candidate --> Mapper["Reviewed source mapper + football validation"]
-  Mapper --> Admission["Canonical admission transaction"]
-  Admission --> PG
-  PG --> Outbox["Transactional outbox intent + assigned revision"]
-  Outbox --> Dispatcher["ACA EventWorker: leased PostgreSQL outbox dispatcher"]
-  Dispatcher -->|ProjectionPublishedV1; partition key matchId| EH["Azure Event Hubs (at-least-once)"]
-  EH --> Worker["Opt-in EventWorker projection consumer"]
-  Worker --> PG["PostgreSQL inbox + cursor + rebuildable snapshot"]
-  Worker --> Blob["Azure Blob Event Hubs checkpoint"]
-  API -. "LOCAL only: cursor notification" .-> Signal["Local SignalR"]
-  Dispatcher -. "future adapter" .-> Bus["Azure Service Bus commands / DLQ"]
+  JSON["Approved synthetic JSON + versioned manifest"] --> Sim["ACA simulation/feed producer"]
+  Sim -->|ordered, source-bound ingress envelope; matchId partition key| EH["Azure Event Hubs ingress (at-least-once)"]
+  EH --> Worker["ACA EventWorker: validate, deduplicate, map/admit per partition"]
+  Worker -->|atomic canonical event + projection + outbox transaction| PG
+  Worker -->|checkpoint only after PostgreSQL commit or durable quarantine| Blob["Azure Blob Event Hubs checkpoint"]
+  PG --> Outbox["PostgreSQL transactional outbox; committed with canonical facts"]
+  Outbox --> Dispatcher["Independent at-least-once outbox fan-out"]
+  Dispatcher --> CacheWriter["Revision-guarded Redis projection writer"]
+  Dispatcher --> CursorPublisher["Cursor-only realtime publisher"]
+  CacheWriter --> Redis["Azure Managed Redis (rebuildable)"]
+  CursorPublisher --> AzureSignal
+  AzureSignal -->|match / revision / sequence cursor only| Web
+  Web -->|snapshot and backfill reads| BFF
+  BFF -. "LOCAL only: cursor notification" .-> LocalSignal["Local ASP.NET Core SignalR"]
+  Dispatcher -. "separate command path" .-> Bus["Azure Service Bus commands / DLQ"]
   Bus --> Agent["ACA AgentWorker: bounded evidence tools"]
   Agent --> PG
   Agent --> Foundry["Microsoft Foundry (candidate explanation)"]
   Agent --> Guard["Independent claim validator"]
   Guard --> PG
-  BFF -. "optional rebuildable cache" .-> Redis["Azure Managed Redis (P1)"]
   Bus -. "optional recap" .-> Functions["Azure Functions (P1)"]
   Functions --> Blob["Azure Blob Storage"]
   PG -. "optional indexed copy" .-> Search["Azure AI Search (P2)"]
@@ -75,9 +76,9 @@ flowchart LR
   BFF -. "OTel" .-> Monitor["Azure Monitor / Application Insights"]
 ```
 
-**Non-negotiable contract:** raw source candidates are never published directly to the canonical telemetry channel. PostgreSQL assigns each admitted per-match `canonicalRevision` atomically with the record and outbox intent. Event Hubs is **at-least-once** telemetry; service-side `MatchId + EventId + Sequence + payload hash` and PostgreSQL transaction establish correctness. Service Bus is asynchronous command transport, not an event-ledger replacement. SignalR carries revision/cursor notifications, not canonical truth. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
+**Non-negotiable contract:** Event Hubs is the first durable cloud ingress for source-bound simulation events, but ingress envelopes remain candidates until validated and admitted. The EventWorker validates ordering/idempotency and commits each canonical event, projection revision, and PostgreSQL outbox intent in one transaction; it checkpoints Event Hubs only after that commit (or durable quarantine). The outbox is downstream of canonical commit, not a pre-database write. Independent, idempotent outbox consumers update revision-guarded cache entries and publish SignalR cursors after commit; cache failure cannot block or replace canonical truth. SignalR carries only match/revision/sequence cursors, and the UI fetches canonical snapshots/backfill through the BFF. Service Bus is asynchronous command transport, not an event-ledger replacement. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
-**Implemented adapter boundary (code only):** `EventWorker` leases only committed PostgreSQL outbox rows, validates the exact `ProjectionPublishedV1` payload, and sends its original JSON to Event Hubs with the stable outbox ID and `matchId` partition key. The Azure host requires `Runtime:Profile=azure`, Event Hubs namespace/name, a password-free PostgreSQL connection string, TLS verification, and managed identity for both services. The opt-in EventProcessorClient consumer validates broker metadata and payload, writes a payload-bound inbox receipt and rebuildable snapshot in PostgreSQL, advances the partition cursor, then advances the Azure Blob SDK checkpoint. Permanent invalid envelopes/metadata/projection states are written to the sanitized `consumer_projection_poison` table before a poison-aware cursor and Blob checkpoint advance; a corrected replay can replace the poison cursor at the same broker sequence. Schema v13 adds this poison ledger/cursor state to v11 checkpoints and v12 inbox/snapshot tables. Local SignalR remains an API-local adapter. This code has local automated evidence only; poison replay tooling and Blob checkpoint reset procedure, runtime grants, Azure connection, resource, hosted consumer runtime, and deployment have not been verified.
+**Observed code versus target:** current `EventWorker` code does the reverse of the requested ingress flow: it leases committed PostgreSQL outbox rows and publishes `ProjectionPublishedV1` to Event Hubs; its opt-in consumer persists an inbox/snapshot and advances a Blob checkpoint. It does not ingest simulation source events into canonical PostgreSQL or fan them out to Redis/Azure SignalR. `SimulationStreamerService` also advances an in-process demo projection and broadcasts directly to the local hub. The target above is not implemented or cloud-verified; a source-envelope contract, canonical admission path, Azure SignalR adapter and parallel post-commit cache/realtime dispatch remain required.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 

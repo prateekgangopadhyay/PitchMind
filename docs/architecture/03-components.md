@@ -89,18 +89,18 @@ flowchart TB
     Explain["Grounded explanation policy"]
     Candidate["Untrusted explanation candidate port"]
     Ports["IEventLedger / IMatchProjectionStore / IOutbox / IModelClient / IRealtimeNotifier"]
-    CanonicalPorts["ICanonicalUpdateStore / IOutboxPublisher / consumer inbox"]
+    CanonicalPorts["ICanonicalUpdateStore / IIngressEventPublisher / IOutboxPublisher / consumer inbox"]
   end
   subgraph Infra["PitchMind.Infrastructure — Azure/local adapters"]
     Feed["JSON source adapter / manifest"]
     Pg["PostgreSQL schema / checkpoint / outbox"]
-    EventHubs["Event Hubs publisher/consumer"]
+    EventHubs["Event Hubs ingress"]
     Bus["Service Bus + DLQ"]
     Hub["Azure SignalR"]
     Cache["Redis (optional)"]
   end
   BFF["Thin API / role + selected-time guards"] --> Query
-  EventWorker2["Azure EventWorker outbox host"] --> OutboxDispatcher
+  EventWorker2["Azure EventWorker ingress consumer + post-commit dispatcher"] --> Validate
   subgraph AgentWorker["PitchMind.AgentWorker — host and Foundry adapter"]
     AgentWorker2["Worker host (no request/message consumer)"] --> FoundryAdapter["Bounded Foundry candidate adapter"]
     FoundryAdapter --> TacticalRetriever["Profile-filtered tactical RAG; max 3 passages"]
@@ -108,13 +108,13 @@ flowchart TB
   TacticalRetriever -. "Development adapter" .-> EmbeddedKnowledge["Embedded cards; local lexical rank"]
   TacticalRetriever -. "Azure profile; not provisioned" .-> AzureKnowledgeIndex["Azure AI Search hybrid/semantic index"]
   AgentWorker2 --> Explain
-  Feed -. "raw candidate only; never canonical publication" .-> MapSource["Reviewed source mapper"]
+  Feed --> EventHubs
+  EventHubs --> EventWorker2
+  EventWorker2 --> MapSource["Reviewed source mapper"]
   MapSource --> Validate
-  Validate --> Admission["PostgreSQL canonical admission + revision + outbox in one transaction"]
-  EventHubs --> ProjectionConsumer["Opt-in EventWorker projection consumer"]
-  ProjectionConsumer --> ConsumerInbox["PostgreSQL inbox + rebuildable snapshot + cursor"]
-  ProjectionConsumer --> BlobCheckpoint["Azure Blob Event Hubs checkpoint"]
-  ConsumerInbox -. "read-model only; canonical facts unchanged" .-> Facts
+  Validate --> Admission["PostgreSQL transaction: canonical event + projection + outbox"]
+  Admission --> Pg
+  EventWorker2 -->|after PostgreSQL commit or durable quarantine| BlobCheckpoint["Azure Blob Event Hubs checkpoint"]
   Facts --> Project --> MatchId
   Project --> Detect --> Rules
   Detect --> Evidence
@@ -123,19 +123,18 @@ flowchart TB
   FoundryAdapter --> Candidate
   Pg -. "implements" .-> Ports
   Pg -. "implements canonical update ports" .-> CanonicalPorts
-  Pg -. "leases outbox rows" .-> OutboxDispatcher["PostgresOutboxDispatcher"]
-  OutboxDispatcher -. "publishes through" .-> PublisherPort["IOutboxPublisher"]
-  PublisherPort --> EventHubPublisher2["EventHubOutboxPublisher: validates shared ProjectionPublishedV1; stable message ID; matchId partition"] --> AzureEH["Azure Event Hubs"]
-  AzureEH --> ProjectionConsumer["EventWorker projection consumer"]
-  ProjectionConsumer --> PgConsumer["PostgreSQL inbox + rebuildable snapshot + cursor"]
-  ProjectionConsumer --> BlobCheckpoint["Azure Blob Event Hubs checkpoint"]
-  Pg -. "implements consumer inbox" .-> CanonicalPorts
+  Pg -. "leases committed outbox rows" .-> OutboxDispatcher["Post-commit outbox dispatcher"]
+  OutboxDispatcher --> CacheWriter["Revision-guarded cache update"] --> Cache
+  OutboxDispatcher -. "cursor only" .-> Hub
+  Pg -. "implements canonical transaction and inbox" .-> CanonicalPorts
   Bus -. "implements" .-> Ports
   Hub -. "implements" .-> Ports
   FoundryAdapter -. "HTTPS with managed identity; no live call verified" .-> FoundryService
   FoundryService["Azure AI Foundry endpoint (configured target only)"]
   Cache -. "optional" .-> Ports
 ```
+
+This is the requested **target ingress flow**, not the currently implemented EventWorker flow. Event Hubs is the first durable cloud ingress. A consumer validates and admits each record; PostgreSQL commits the canonical event/projection and an outbound outbox intent atomically. After commit, idempotent outbox deliveries may update Redis and publish SignalR cursors independently. SignalR never carries canonical facts; the browser reads those from the BFF/PostgreSQL path. Do not place an outgoing transactional outbox before its canonical database transaction; if an additional inbound staging store is needed, model it as an inbox/staging ledger and make Event Hubs checkpointing conditional on durable processing.
 
 ## Runtime, data and code invariants
 - Pure Domain may not depend on Application, Infrastructure, Azure SDK, Npgsql or React. Infrastructure handles JSON source vocabulary, clock/units conversion, source record pointers, nullable coordinates and bad input quarantine.
