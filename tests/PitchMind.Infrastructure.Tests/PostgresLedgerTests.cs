@@ -1910,16 +1910,19 @@ public sealed class PostgresLedgerTests
         await RegisterSourceAsync(source, update);
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
 
-        var publisher = new DelayedPublisher(TimeSpan.FromMilliseconds(300));
+        var publisher = new BlockingPublisher();
+        var leaseDuration = TimeSpan.FromMilliseconds(400);
         var firstDispatch = new PostgresOutboxDispatcher(source, publisher,
-            leaseDuration: TimeSpan.FromMilliseconds(60)).DispatchOneAsync(CancellationToken.None);
+            leaseDuration: leaseDuration).DispatchOneAsync(CancellationToken.None);
         await publisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(180);
+        await Task.Delay(TimeSpan.FromMilliseconds(650));
 
         var competingPublisher = new CountingPublisher();
         Assert.Equal(OutboxDispatchResult.NoMessage,
             await new PostgresOutboxDispatcher(source, competingPublisher).DispatchOneAsync(CancellationToken.None));
         Assert.Equal(0, competingPublisher.Publications);
+
+        publisher.Release.TrySetResult();
         Assert.Equal(OutboxDispatchResult.Published, await firstDispatch);
     }
 
