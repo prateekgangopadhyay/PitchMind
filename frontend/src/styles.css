@@ -3615,9 +3615,10 @@ a[href*='#open-player'] {
 
 .main-navigation a[aria-current="page"] {
   color: #fff !important;
-  background: var(--pm-surface-raised) !important;
+  background: transparent !important;
   font-weight: 600 !important;
   border-bottom: 2px solid #4aefac !important;
+  border-radius: 0 !important;
 }
 
 .header-right-controls {
@@ -3894,15 +3895,29 @@ a[href*='#open-player'] {
    STADIUM HERO SCOREBOARD BANNER (MatchHeaderBanner)
    ========================================================================= */
 .mockup-hero-match-card {
-  background: linear-gradient(90deg, rgba(7, 19, 28, 0.96) 0%, rgba(7, 19, 28, 0.75) 50%, rgba(7, 19, 28, 0.25) 100%),
+  background: linear-gradient(90deg, rgba(7, 19, 28, 0.96) 0%, rgba(7, 19, 28, 0.8) 50%, rgba(7, 19, 28, 0.4) 100%),
     url('/stadium-bg.jpg') right 20% / cover no-repeat !important;
   border: 1px solid rgba(74, 239, 172, 0.22) !important;
   border-radius: 12px !important;
   position: relative !important;
   overflow: hidden !important;
   padding: 1.5rem 2rem !important;
-  margin-bottom: 1.5rem !important;
+  margin-bottom: 0.85rem !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+.stadium-perspective-img {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: 100% !important;
+  width: auto !important;
+  max-width: 48% !important;
+  object-fit: cover !important;
+  opacity: 0.38 !important;
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.8) 40%, black 100%) !important;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.8) 40%, black 100%) !important;
+  pointer-events: none !important;
 }
 
 .stadium-hero-watermark-text {
@@ -3912,16 +3927,17 @@ a[href*='#open-player'] {
   font-size: 0.65rem !important;
   font-weight: 800 !important;
   letter-spacing: 0.18em !important;
-  color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.25) !important;
   display: flex !important;
   flex-direction: column !important;
   text-align: right !important;
   pointer-events: none !important;
+  z-index: 2 !important;
 }
 
 .stadium-hero-watermark-text small {
   font-size: 0.55rem !important;
-  color: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.18) !important;
   margin-top: 2px !important;
 }
 
@@ -3939,9 +3955,9 @@ a[href*='#open-player'] {
 }
 
 .hero-live-pill {
-  background: rgba(230, 57, 70, 0.2) !important;
-  border: 1px solid rgba(230, 57, 70, 0.5) !important;
-  color: #ff6b77 !important;
+  background: rgba(74, 239, 172, 0.15) !important;
+  border: 1px solid rgba(74, 239, 172, 0.4) !important;
+  color: #4aefac !important;
   border-radius: 20px !important;
   padding: 3px 10px !important;
   font-size: 0.72rem !important;
@@ -3961,6 +3977,8 @@ a[href*='#open-player'] {
   grid-template-columns: 1fr auto 1fr !important;
   align-items: center !important;
   gap: 2rem !important;
+  position: relative !important;
+  z-index: 2 !important;
 }
 
 .hero-club-side {
@@ -4023,10 +4041,11 @@ a[href*='#open-player'] {
 
 .hero-clock-time {
   display: block !important;
-  font-size: 1.15rem !important;
+  font-size: 1.45rem !important;
   font-weight: 800 !important;
   color: #4aefac !important;
   font-family: ui-monospace, monospace !important;
+  letter-spacing: -0.02em !important;
 }
 
 .hero-clock-period {
@@ -4037,46 +4056,100 @@ a[href*='#open-player'] {
   margin-top: 2px !important;
 }
 
+/* Standalone Observed Banner Strip (03-match.webp) */
+.hero-observed-banner-card {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background: var(--pm-surface) !important;
+  border: 1px solid var(--pm-border) !important;
+  border-radius: 10px !important;
+  padding: 0.85rem 1.35rem !important;
+  margin-bottom: 1.25rem !important;
+  gap: 1.25rem !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+}
+
+.hero-observed-content-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  flex: 1 !important;
+}
+
+.hero-observed-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(74, 239, 172, 0.12) !important;
+  border: 1px solid rgba(74, 239, 172, 0.35) !important;
+  color: #4aefac !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.observed-bars-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.hero-observed-headline-text {
+  margin: 0 !important;
+  font-size: 0.96rem !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.35 !important;
+}
+
+.hero-observed-action-btn {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 20px !important;
+  padding: 6px 16px !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  transition: all 160ms ease-out !important;
+}
+
+.hero-observed-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: #4aefac !important;
+  color: #4aefac !important;
+  transform: translateY(-1px) !important;
+}
+
 .hero-leading-insight-strip {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  margin-top: 1.5rem !important;
-  padding-top: 1rem !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-}
-
-.insight-lead-left {
-  display: flex !important;
-  align-items: center !important;
-  gap: 0.65rem !important;
-}
-
-.insight-lead-icon {
-  font-size: 1rem !important;
-}
-
-.insight-lead-text {
-  font-size: 0.88rem !important;
-  color: #cbd5e1 !important;
-  margin: 0 !important;
 }
 
 .hero-action-pill-btn {
-  background: var(--pm-accent) !important;
-  color: #07131c !important;
+  background: transparent !important;
+  color: #4aefac !important;
+  border: 1px solid #4aefac !important;
   font-weight: 700 !important;
-  border: none !important;
   border-radius: 20px !important;
   padding: 6px 18px !important;
   font-size: 0.82rem !important;
   cursor: pointer !important;
   white-space: nowrap !important;
-  transition: transform 140ms ease-out !important;
+  transition: all 140ms ease-out !important;
 }
 
 .hero-action-pill-btn:hover {
-  transform: scale(1.03) !important;
+  background: rgba(74, 239, 172, 0.15) !important;
+  box-shadow: 0 0 16px rgba(74, 239, 172, 0.3) !important;
+  transform: translateY(-1px) !important;
 }
 
 /* =========================================================================
@@ -4154,10 +4227,11 @@ a[href*='#open-player'] {
 
 .welcome-split-layout {
   display: grid !important;
-  grid-template-columns: minmax(0, 1.42fr) minmax(460px, 500px) !important;
-  gap: 15rem !important;
+  grid-template-columns: minmax(0, 1.45fr) minmax(420px, 480px) !important;
+  gap: 3.5rem !important;
   align-items: start !important;
   width: 100% !important;
+  max-width: 1540px !important;
   margin: 0 auto !important;
 }
 
@@ -4168,7 +4242,7 @@ a[href*='#open-player'] {
 
 .welcome-right-col {
   width: 100% !important;
-  max-width: 500px !important;
+  max-width: 480px !important;
 }
 
 .synthetic-view-pill {
@@ -4180,11 +4254,12 @@ a[href*='#open-player'] {
 }
 
 .welcome-hero-headline {
-  font-size: 6.1rem !important;
-  font-weight: 900 !important;
-  line-height: 1.16 !important;
-  letter-spacing: -0.03em !important;
-  margin: 0 0 0.75rem 0 !important;
+  font-size: 3.1rem !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em !important;
+  margin: 0 0 0.85rem 0 !important;
+  max-width: 24ch !important;
   color: #fff !important;
 }
 
@@ -5238,8 +5313,9 @@ input[type="checkbox"] {
 }
 
 .team-toggle-pill.active {
-  background: #e63946 !important;
-  color: #fff !important;
+  background: #4aefac !important;
+  color: #07131c !important;
+  font-weight: 700 !important;
 }
 
 .intelligent-pitch-canvas-wrap {
@@ -5247,22 +5323,28 @@ input[type="checkbox"] {
   overflow: hidden !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   margin: 0.75rem 0 !important;
+  background: #081d11 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
 }
 
 .intelligent-pitch-svg {
   width: 100% !important;
   height: auto !important;
+  aspect-ratio: 105 / 68 !important;
   display: block !important;
+  user-select: none !important;
 }
 
 .intelligent-pitch-legend {
   display: flex !important;
   flex-wrap: wrap !important;
   align-items: center !important;
-  gap: 0.85rem !important;
+  justify-content: space-between !important;
+  gap: 0.65rem !important;
   font-size: 0.72rem !important;
   color: var(--pm-text-secondary) !important;
-  margin-top: 0.5rem !important;
+  margin-top: 0.65rem !important;
+  padding: 0.25rem 0.25rem 0 !important;
 }
 
 .intelligent-pitch-legend span {
@@ -5279,10 +5361,12 @@ input[type="checkbox"] {
 
 .red-dot {
   background: #e63946 !important;
+  box-shadow: 0 0 6px rgba(230, 57, 70, 0.6) !important;
 }
 
 .blue-dot {
-  background: #3b82f6 !important;
+  background: #38bdf8 !important;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6) !important;
 }
 
 .green-dot {
@@ -5300,13 +5384,13 @@ input[type="checkbox"] {
 }
 
 .pressure-box {
-  background: rgba(230, 57, 70, 0.4) !important;
-  border: 1px solid #e63946 !important;
+  background: rgba(239, 68, 68, 0.3) !important;
+  border: 1px solid #ef4444 !important;
 }
 
 .danger-box {
-  background: rgba(200, 120, 60, 0.4) !important;
-  border: 1px solid rgba(200, 120, 60, 0.8) !important;
+  background: rgba(245, 158, 11, 0.3) !important;
+  border: 1px solid rgba(251, 191, 36, 0.8) !important;
 }
 
 .halo-ring {
@@ -5314,6 +5398,7 @@ input[type="checkbox"] {
   height: 10px !important;
   border-radius: 50% !important;
   border: 2px solid #4aefac !important;
+  box-shadow: 0 0 6px rgba(74, 239, 172, 0.5) !important;
 }
 
 .timeline-filter-pills-row {
@@ -5330,6 +5415,7 @@ input[type="checkbox"] {
   padding: 3px 10px !important;
   font-size: 0.72rem !important;
   cursor: pointer !important;
+  transition: all 140ms ease-out !important;
 }
 
 .timeline-tab-pill.active {
@@ -5353,11 +5439,14 @@ input[type="checkbox"] {
   border: 1px solid var(--pm-border) !important;
   border-radius: 6px !important;
   padding: 0.65rem 0.75rem !important;
+  transition: all 160ms ease-out !important;
 }
 
 .timeline-event-card-item.highlight-green {
   border-color: #4aefac !important;
-  background: rgba(74, 239, 172, 0.08) !important;
+  background: rgba(74, 239, 172, 0.1) !important;
+  border-left: 3px solid #4aefac !important;
+  box-shadow: 0 0 16px rgba(74, 239, 172, 0.08) !important;
 }
 
 .evt-minute-tag {
@@ -5497,17 +5586,30 @@ input[type="checkbox"] {
   text-align: center !important;
 }
 
+.ev-metric-top {
+  display: flex !important;
+  align-items: baseline !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  margin-bottom: 2px !important;
+}
+
 .ev-num {
   font-size: 1.35rem !important;
   font-weight: 800 !important;
   color: #4aefac !important;
-  display: block !important;
+  display: inline-block !important;
+  line-height: 1 !important;
 }
 
-.ev-icon {
-  font-size: 0.9rem !important;
-  margin: 2px 0 !important;
+.ev-gauge-svg {
   display: inline-block !important;
+  vertical-align: middle !important;
+}
+
+.ev-icon-svg {
+  display: inline-block !important;
+  vertical-align: middle !important;
 }
 
 .ev-metric-box small {
@@ -5566,18 +5668,30 @@ input[type="checkbox"] {
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
+  overflow: hidden !important;
+}
+
+.hero-km-img-thumb {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 6px !important;
 }
 
 .hero-km-clock {
   position: absolute !important;
   top: 4px !important;
   left: 4px !important;
-  background: rgba(0, 0, 0, 0.6) !important;
+  background: rgba(0, 0, 0, 0.7) !important;
   color: #4aefac !important;
   font-size: 0.7rem !important;
   font-weight: 700 !important;
   padding: 1px 5px !important;
   border-radius: 4px !important;
+  z-index: 2 !important;
 }
 
 .hero-km-play-btn {
@@ -5591,6 +5705,8 @@ input[type="checkbox"] {
   align-items: center !important;
   justify-content: center !important;
   font-size: 0.75rem !important;
+  position: relative !important;
+  z-index: 2 !important;
 }
 
 .hero-km-content-col {
@@ -5641,6 +5757,24 @@ input[type="checkbox"] {
   color: var(--pm-text-secondary) !important;
 }
 
+.tag-pill-badge.tag-green {
+  background: rgba(74, 239, 172, 0.12) !important;
+  color: #4aefac !important;
+  border-color: rgba(74, 239, 172, 0.3) !important;
+}
+
+.tag-pill-badge.tag-blue {
+  background: rgba(56, 189, 248, 0.12) !important;
+  color: #38bdf8 !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+.tag-pill-badge.tag-purple {
+  background: rgba(192, 132, 252, 0.12) !important;
+  color: #c084fc !important;
+  border-color: rgba(192, 132, 252, 0.3) !important;
+}
+
 .sequence-steps-strip {
   display: flex !important;
   align-items: center !important;
@@ -5667,22 +5801,45 @@ input[type="checkbox"] {
 
 .seq-step-card.active-border {
   border-color: #4aefac !important;
+  box-shadow: 0 0 14px rgba(74, 239, 172, 0.25) !important;
 }
 
 .seq-step-thumb {
+  position: relative !important;
   width: 100% !important;
-  height: 52px !important;
+  height: 56px !important;
   background: linear-gradient(135deg, #0e2a1b, #112836) !important;
   border-radius: 4px !important;
+  overflow: hidden !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   margin-bottom: 0.35rem !important;
 }
 
+.seq-step-img {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+}
+
 .seq-play-icon {
-  font-size: 0.75rem !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  position: relative !important;
+  z-index: 2 !important;
+  font-size: 0.65rem !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  border-radius: 50% !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .seq-step-title {
@@ -5832,9 +5989,10 @@ input[type="checkbox"] {
 }
 
 .team-subtab-btn.active {
-  background: var(--pm-surface-raised) !important;
-  color: #fff !important;
-  border-color: #4aefac !important;
+  background: rgba(74, 239, 172, 0.12) !important;
+  color: #4aefac !important;
+  border-color: rgba(74, 239, 172, 0.4) !important;
+  font-weight: 700 !important;
 }
 
 .team-row1-grid {
@@ -6119,6 +6277,26 @@ input[type="checkbox"] {
   align-items: center !important;
   gap: 0.5rem !important;
   font-size: 0.75rem !important;
+}
+
+.kp-avatar-wrap {
+  width: 32px !important;
+  height: 40px !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  background: #092015 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.kp-avatar-photo {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
 }
 
 .kp-avatar-circle {
@@ -6420,6 +6598,25 @@ input[type="checkbox"] {
   align-items: center !important;
   justify-content: space-between !important;
   gap: 1.5rem !important;
+}
+
+.player-photo-container {
+  position: relative !important;
+  width: 130px !important;
+  height: 120px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.player-hero-photo {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  border-radius: 10px !important;
+  filter: drop-shadow(0 0 16px rgba(74, 239, 172, 0.45)) !important;
+  display: block !important;
 }
 
 .player-avatar-large {

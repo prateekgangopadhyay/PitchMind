@@ -238,72 +238,67 @@ export function MatchHeaderBanner({
   onButtonClick?: () => void;
 }) {
   return (
-    <div className="mockup-hero-match-card">
-      <div className="hero-match-stadium-backdrop" aria-hidden="true">
-        <div className="stadium-perspective-pitch">
-          <div className="stadium-floodlights-glow"></div>
+    <>
+      <div className="mockup-hero-match-card">
+        <div className="hero-match-stadium-backdrop" aria-hidden="true">
+          <img src="/match/stadium-inset.webp" alt="" className="stadium-perspective-img" />
+          <div className="stadium-hero-watermark-text">
+            <span>SYNTHETIC EPL</span>
+            <span>INTELLIGENCE VIEW</span>
+            <small>{tagline}</small>
+          </div>
         </div>
-        <div className="stadium-hero-watermark-text">
-          <span>SYNTHETIC EPL</span>
-          <span>INTELLIGENCE VIEW</span>
-          <small>{tagline}</small>
+
+        <div className="hero-match-content-overlay">
+          <span className="sr-only">{competition} at {stadium}</span>
+          <div className="hero-scoreboard-row">
+            <div className="hero-club-side hero-club-left">
+              <ClubCrest name={homeName} logoUrl={homeLogo} className="hero-club-crest" />
+              <div className="hero-club-meta">
+                <h2 className="hero-club-name">{homeName}</h2>
+                <span className="hero-club-formation">{homeFormation}</span>
+              </div>
+            </div>
+
+            <div className="hero-score-center">
+              <span className="hero-score-num">{homeScore}</span>
+              <div className="hero-clock-box">
+                <span className="hero-clock-time">{clock}</span>
+                <span className="hero-clock-period">{period}</span>
+              </div>
+              <span className="hero-score-num">{awayScore}</span>
+            </div>
+
+            <div className="hero-club-side hero-club-right">
+              <div className="hero-club-meta text-right">
+                <h2 className="hero-club-name">{awayName}</h2>
+                <span className="hero-club-formation">{awayFormation}</span>
+              </div>
+              <ClubCrest name={awayName} logoUrl={awayLogo} className="hero-club-crest" />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="hero-match-content-overlay">
-        <div className="hero-match-topline">
-          <div className="hero-live-badge-group">
-            <span className="hero-live-pill">
-              <span className="pulse-dot"></span> LIVE
-            </span>
-            <span className="hero-venue-text">{stadium} · {competition}</span>
-          </div>
-        </div>
-
-        <div className="hero-scoreboard-row">
-          <div className="hero-club-side hero-club-left">
-            <ClubCrest name={homeName} logoUrl={homeLogo} className="hero-club-crest" />
-            <div className="hero-club-meta">
-              <h2 className="hero-club-name">{homeName}</h2>
-              <span className="hero-club-formation">{homeFormation}</span>
-            </div>
-          </div>
-
-          <div className="hero-score-center">
-            <span className="hero-score-num">{homeScore}</span>
-            <div className="hero-clock-box">
-              <span className="hero-clock-time">{clock}</span>
-              <span className="hero-clock-period">{period}</span>
-            </div>
-            <span className="hero-score-num">{awayScore}</span>
-          </div>
-
-          <div className="hero-club-side hero-club-right">
-            <div className="hero-club-meta text-right">
-              <h2 className="hero-club-name">{awayName}</h2>
-              <span className="hero-club-formation">{awayFormation}</span>
-            </div>
-            <ClubCrest name={awayName} logoUrl={awayLogo} className="hero-club-crest" />
-          </div>
-        </div>
-
-        {leadingInsight && (
-          <div className="hero-leading-insight-strip">
-            <div className="insight-lead-left">
-              <span className="insight-lead-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2.5"><path d="M18 20V10M12 20V4M6 20v-6" /></svg>
+      {leadingInsight && (
+        <div className="hero-observed-banner-card hero-leading-insight-strip">
+          <div className="hero-observed-content-left">
+            <span className="hero-observed-pill">
+              <span className="observed-bars-icon" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               </span>
-              <p className="insight-lead-text">{leadingInsight}</p>
-            </div>
-            {buttonText && (
-              <button type="button" className="hero-action-pill-btn" onClick={onButtonClick}>
-                {buttonText} →
-              </button>
-            )}
+              <span>OBSERVED</span>
+            </span>
+            <p className="hero-observed-headline-text">{leadingInsight}</p>
           </div>
-        )}
-      </div>
-    </div>
+          {buttonText && (
+            <button type="button" className="hero-observed-action-btn" onClick={onButtonClick}>
+              {buttonText} →
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1301,6 +1296,22 @@ export function MatchPage({
     return () => controller.abort();
   }, [matchId]);
 
+  const rawEvents = [
+    { clock: "67'", type: "Pass", team: "Arsenal", detail: "Ødegaard to Saka down right flank", icon: "➔", isKey: false },
+    { clock: "65'", type: "Turnover", team: "Man City", detail: "Rodri loses possession under pressure", icon: "⟳", isKey: false },
+    { clock: "64'", type: "Key Moment", team: "Arsenal", detail: "High regain leads to shot (wide)", icon: "★", isKey: true, highlight: true },
+    { clock: "63'", type: "Shot", team: "Arsenal", detail: "Martinelli shot from edge of box (wide)", icon: "⚽", isKey: false },
+    { clock: "61'", type: "Intercepted Pass", team: "Man City", detail: "Silva's through ball intercepted", icon: "⇥", isKey: false }
+  ];
+
+  const visibleEvents = rawEvents.filter(evt => {
+    if (timelineFilter === 'All') return true;
+    if (timelineFilter === 'Key Moments') return evt.type === 'Key Moment';
+    if (timelineFilter === 'Shots') return evt.type === 'Shot';
+    if (timelineFilter === 'Passes') return evt.type === 'Pass' || evt.type === 'Intercepted Pass';
+    return true;
+  });
+
   return (
     <section className="content-page match-page-root">
       {/* Top Scoreboard Banner */}
@@ -1330,14 +1341,20 @@ export function MatchPage({
         <div className="match-intelligent-pitch-panel">
           <div className="panel-header-row">
             <div className="panel-title-with-badge">
-              <span className="panel-icon-pitch">⚽</span>
+              <span className="panel-icon-pitch" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2.2">
+                  <rect x="2" y="3" width="20" height="18" rx="2" />
+                  <line x1="12" y1="3" x2="12" y2="21" />
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+              </span>
               <div>
                 <h3>Intelligent Pitch</h3>
                 <small className="panel-subcaption">Live positions, pressure, passing lanes and danger zones</small>
               </div>
             </div>
 
-            <div className="team-toggle-btn-group">
+            <div className="team-toggle-btn-group" role="group" aria-label="Tactical team overlay focus">
               <button
                 type="button"
                 className={`team-toggle-pill ${selectedTeam === 'Arsenal' ? 'active' : ''}`}
@@ -1355,60 +1372,244 @@ export function MatchPage({
             </div>
           </div>
 
-          {/* Full SVG Pitch */}
+          {/* Full Broadcast-Quality SVG Pitch */}
           <div className="intelligent-pitch-canvas-wrap">
-            <svg className="intelligent-pitch-svg" viewBox="0 0 100 68" role="img" aria-label="Intelligent tactical pitch view">
+            <svg
+              className="intelligent-pitch-svg"
+              viewBox="0 0 105 68"
+              role="img"
+              aria-label="Intelligent tactical pitch view showing live positions, pressure trap, passing lanes and danger zones"
+            >
               <defs>
-                <linearGradient id="matchPitchGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#123d24" />
-                  <stop offset="100%" stopColor="#0b2817" />
+                {/* Rich turf gradients and lighting */}
+                <linearGradient id="matchPitchTurf" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0b2818" />
+                  <stop offset="50%" stopColor="#0e3520" />
+                  <stop offset="100%" stopColor="#092214" />
                 </linearGradient>
+
+                <radialGradient id="pitchFloodlightGlow" cx="50%" cy="45%" r="65%">
+                  <stop offset="0%" stopColor="#1a5a35" stopOpacity="0.5" />
+                  <stop offset="60%" stopColor="#0b2a1a" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="#031008" stopOpacity="0.8" />
+                </radialGradient>
+
+                {/* Hatched patterns */}
+                <pattern id="hatchPressureTrap" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                  <line x1="0" y1="0" x2="0" y2="4" stroke="#ef4444" strokeWidth="0.8" strokeOpacity="0.45" />
+                </pattern>
+
+                <pattern id="hatchDangerCone" width="4" height="4" patternTransform="rotate(-45 0 0)" patternUnits="userSpaceOnUse">
+                  <line x1="0" y1="0" x2="0" y2="4" stroke="#f59e0b" strokeWidth="0.75" strokeOpacity="0.35" />
+                </pattern>
+
+                {/* Arrowhead markers for passing lanes */}
+                <marker id="passArrowWhite" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                  <polygon points="0 0.6, 4.5 2.5, 0 4.4" fill="rgba(255, 255, 255, 0.75)" />
+                </marker>
+                <marker id="passArrowGreen" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                  <polygon points="0 0.6, 4.5 2.5, 0 4.4" fill="#4aefac" />
+                </marker>
+                <marker id="passArrowBlue" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                  <polygon points="0 0.6, 4.5 2.5, 0 4.4" fill="#38bdf8" />
+                </marker>
+
+                {/* Filters */}
+                <filter id="playerShadow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="0" dy="0.8" stdDeviation="0.6" floodColor="#000" floodOpacity="0.65" />
+                </filter>
+                <filter id="regainRingGlow" x="-60%" y="-60%" width="220%" height="220%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="#4aefac" floodOpacity="0.7" />
+                </filter>
               </defs>
-              <rect width="100" height="68" fill="url(#matchPitchGrad)" />
-              <rect x="2" y="2" width="96" height="64" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
-              <line x1="50" y1="2" x2="50" y2="66" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
-              <circle cx="50" cy="34" r="9" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
-              <circle cx="50" cy="34" r="0.8" fill="#fff" />
-              <rect x="2" y="16" width="16" height="36" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
-              <rect x="82" y="16" width="16" height="36" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8" />
 
-              {/* Pressure Trap Cone */}
-              <polygon points="68,14 86,16 80,32 64,26" fill="rgba(230,57,70,0.35)" stroke="#e63946" strokeWidth="0.8" />
-              <text x="75" y="21" fontSize="2.8" fontWeight="bold" fill="#ff7b88" textAnchor="middle">PRESSURE TRAP</text>
+              {/* Base Turf */}
+              <rect width="105" height="68" fill="url(#matchPitchTurf)" />
 
-              {/* Danger Zones */}
-              <rect x="74" y="34" width="12" height="26" fill="rgba(180,100,50,0.22)" stroke="rgba(200,120,60,0.6)" strokeWidth="0.6" />
+              {/* 12 Vertical Mown Grass Bands */}
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(i => (
+                <rect
+                  key={i}
+                  x={i * 8.75}
+                  y="0"
+                  width="8.75"
+                  height="68"
+                  fill={i % 2 === 0 ? 'rgba(255, 255, 255, 0.025)' : 'rgba(0, 0, 0, 0.04)'}
+                />
+              ))}
 
-              {/* Dashed Passing Lanes */}
-              <line x1="42" y1="36" x2="62" y2="22" stroke="rgba(255,255,255,0.5)" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
-              <line x1="38" y1="48" x2="58" y2="52" stroke="rgba(255,255,255,0.5)" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
-              <line x1="68" y1="36" x2="80" y2="44" stroke="rgba(255,255,255,0.5)" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
+              {/* Floodlight Glow */}
+              <rect width="105" height="68" fill="url(#pitchFloodlightGlow)" />
 
-              {/* Red Dots (Arsenal) */}
-              <circle cx="8" cy="34" r="2.2" fill="#e63946" /><text x="8" y="35" fontSize="1.8" fill="#fff" textAnchor="middle">1</text>
-              <circle cx="24" cy="18" r="2.2" fill="#e63946" /><text x="24" y="19" fontSize="1.8" fill="#fff" textAnchor="middle">35</text>
-              <circle cx="20" cy="32" r="2.2" fill="#e63946" /><text x="20" y="33" fontSize="1.8" fill="#fff" textAnchor="middle">6</text>
-              <circle cx="20" cy="50" r="2.2" fill="#e63946" /><text x="20" y="51" fontSize="1.8" fill="#fff" textAnchor="middle">4</text>
-              <circle cx="34" cy="45" r="2.2" fill="#e63946" /><text x="34" y="46" fontSize="1.8" fill="#fff" textAnchor="middle">29</text>
-              <circle cx="30" cy="60" r="2.2" fill="#e63946" /><text x="30" y="61" fontSize="1.8" fill="#fff" textAnchor="middle">8</text>
-              <circle cx="58" cy="52" r="2.2" fill="#e63946" /><text x="58" y="53" fontSize="1.8" fill="#fff" textAnchor="middle">1</text>
-              {/* Highlight halo */}
-              <circle cx="58" cy="52" r="5" fill="none" stroke="#4aefac" strokeWidth="1.2" />
-              <text x="66" y="54" fontSize="2.2" fontWeight="bold" fill="#4aefac">RECENT REGAIN</text>
-              <circle cx="68" cy="18" r="2.2" fill="#e63946" /><text x="68" y="19" fontSize="1.8" fill="#fff" textAnchor="middle">11</text>
-              <circle cx="66" cy="74" r="2.2" fill="#e63946" /><text x="66" y="75" fontSize="1.8" fill="#fff" textAnchor="middle">11</text>
+              {/* Regulation Pitch Markings */}
+              <g fill="none" stroke="rgba(255, 255, 255, 0.42)" strokeWidth="0.55">
+                {/* Touchlines & Goal lines */}
+                <rect x="4" y="4" width="97" height="60" rx="0.5" />
 
-              {/* Blue Dots (Man City) */}
-              <circle cx="92" cy="34" r="2.2" fill="#3b82f6" /><text x="92" y="35" fontSize="1.8" fill="#fff" textAnchor="middle">31</text>
-              <circle cx="78" cy="20" r="2.2" fill="#3b82f6" /><text x="78" y="21" fontSize="1.8" fill="#fff" textAnchor="middle">9</text>
-              <circle cx="76" cy="48" r="2.2" fill="#3b82f6" /><text x="76" y="49" fontSize="1.8" fill="#fff" textAnchor="middle">2</text>
-              <circle cx="66" cy="36" r="2.2" fill="#3b82f6" /><text x="66" y="37" fontSize="1.8" fill="#fff" textAnchor="middle">20</text>
-              <circle cx="62" cy="20" r="2.2" fill="#3b82f6" /><text x="62" y="21" fontSize="1.8" fill="#fff" textAnchor="middle">9</text>
-              <circle cx="48" cy="38" r="2.2" fill="#3b82f6" /><text x="48" y="39" fontSize="1.8" fill="#fff" textAnchor="middle">16</text>
-              <circle cx="42" cy="22" r="2.2" fill="#3b82f6" /><text x="42" y="23" fontSize="1.8" fill="#fff" textAnchor="middle">47</text>
-              <circle cx="78" cy="34" r="2.2" fill="#3b82f6" /><text x="78" y="35" fontSize="1.8" fill="#fff" textAnchor="middle">24</text>
-              <circle cx="38" cy="62" r="2.2" fill="#3b82f6" /><text x="38" y="63" fontSize="1.8" fill="#fff" textAnchor="middle">15</text>
-              <circle cx="28" cy="58" r="2.2" fill="#3b82f6" /><text x="28" y="59" fontSize="1.8" fill="#fff" textAnchor="middle">3</text>
+                {/* Halfway Line */}
+                <line x1="52.5" y1="4" x2="52.5" y2="64" />
+
+                {/* Center Circle & Spot */}
+                <circle cx="52.5" cy="34" r="9.15" />
+                <circle cx="52.5" cy="34" r="0.75" fill="rgba(255, 255, 255, 0.85)" stroke="none" />
+
+                {/* Corner Arcs */}
+                <path d="M 4 6 A 2 2 0 0 0 6 4" />
+                <path d="M 4 62 A 2 2 0 0 1 6 64" />
+                <path d="M 101 6 A 2 2 0 0 1 99 4" />
+                <path d="M 101 62 A 2 2 0 0 0 99 64" />
+
+                {/* Left Penalty Area & 6-Yard Box */}
+                <rect x="4" y="13.84" width="16.5" height="40.32" />
+                <rect x="4" y="24.84" width="5.5" height="18.32" />
+                <circle cx="15" cy="34" r="0.75" fill="rgba(255, 255, 255, 0.85)" stroke="none" />
+                <path d="M 20.5 27.5 A 9.15 9.15 0 0 1 20.5 40.5" />
+                <rect x="1.8" y="30.34" width="2.2" height="7.32" stroke="rgba(255, 255, 255, 0.25)" strokeWidth="0.4" />
+
+                {/* Right Penalty Area & 6-Yard Box */}
+                <rect x="84.5" y="13.84" width="16.5" height="40.32" />
+                <rect x="95.5" y="24.84" width="5.5" height="18.32" />
+                <circle cx="90" cy="34" r="0.75" fill="rgba(255, 255, 255, 0.85)" stroke="none" />
+                <path d="M 84.5 27.5 A 9.15 9.15 0 0 0 84.5 40.5" />
+                <rect x="101" y="30.34" width="2.2" height="7.32" stroke="rgba(255, 255, 255, 0.25)" strokeWidth="0.4" />
+              </g>
+
+              {/* TACTICAL OVERLAYS */}
+              {/* 1. PRESSURE TRAP ZONE */}
+              <g className="tactical-pressure-trap">
+                <polygon
+                  points="68 7, 91 8.5, 85 27, 65 21"
+                  fill="rgba(239, 68, 68, 0.22)"
+                  stroke="#ef4444"
+                  strokeWidth="0.75"
+                  strokeDasharray="1.6 1.6"
+                />
+                <polygon
+                  points="68 7, 91 8.5, 85 27, 65 21"
+                  fill="url(#hatchPressureTrap)"
+                />
+                <text x="78" y="14.5" fill="#f87171" fontSize="2.8" fontWeight="800" textAnchor="middle" letterSpacing="0.08em">
+                  PRESSURE
+                </text>
+                <text x="78" y="18" fill="#f87171" fontSize="2.8" fontWeight="800" textAnchor="middle" letterSpacing="0.08em">
+                  TRAP
+                </text>
+              </g>
+
+              {/* 2. DANGER ZONES */}
+              <g className="tactical-danger-cones">
+                {/* Upper danger zone */}
+                <path
+                  d="M 72 26 L 86 24 A 13 13 0 0 1 84 39 L 71 31 Z"
+                  fill="rgba(245, 158, 11, 0.22)"
+                  stroke="rgba(251, 191, 36, 0.8)"
+                  strokeWidth="0.65"
+                  strokeDasharray="1.5 1.5"
+                />
+                <path
+                  d="M 72 26 L 86 24 A 13 13 0 0 1 84 39 L 71 31 Z"
+                  fill="url(#hatchDangerCone)"
+                />
+
+                {/* Lower danger zone */}
+                <path
+                  d="M 68 53 L 84 47 A 13 13 0 0 1 81 63 L 68 57 Z"
+                  fill="rgba(245, 158, 11, 0.22)"
+                  stroke="rgba(251, 191, 36, 0.8)"
+                  strokeWidth="0.65"
+                  strokeDasharray="1.5 1.5"
+                />
+                <path
+                  d="M 68 53 L 84 47 A 13 13 0 0 1 81 63 L 68 57 Z"
+                  fill="url(#hatchDangerCone)"
+                />
+              </g>
+
+              {/* 3. RECENT REGAIN HALO */}
+              <g className="tactical-recent-regain" filter="url(#regainRingGlow)">
+                <circle cx="60" cy="37" r="6.2" fill="none" stroke="#4aefac" strokeWidth="0.6" strokeDasharray="1.2 1.2" opacity="0.6" />
+                <circle cx="60" cy="37" r="4.6" fill="none" stroke="#4aefac" strokeWidth="0.8" opacity="0.85" />
+                <circle cx="60" cy="37" r="3.2" fill="rgba(74, 239, 172, 0.22)" stroke="#4aefac" strokeWidth="1.2" />
+              </g>
+              <text x="69" y="38" fill="#4aefac" fontSize="2.5" fontWeight="800" letterSpacing="0.06em">
+                RECENT REGAIN
+              </text>
+
+              {/* 4. PASSING LANES */}
+              <g className="tactical-passing-lanes">
+                <line x1="23.2" y1="20.5" x2="20.8" y2="29.5" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowWhite)" />
+                <line x1="20" y1="34.5" x2="20" y2="47.5" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowWhite)" />
+                <line x1="22.2" y1="52" x2="27.5" y2="56" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowWhite)" />
+                <line x1="22.5" y1="32.5" x2="56" y2="36.5" stroke="#4aefac" strokeWidth="0.65" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowGreen)" />
+                <line x1="62" y1="35" x2="68.5" y2="18.5" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowWhite)" />
+                <line x1="62" y1="39" x2="66.5" y2="53.5" stroke="rgba(255, 255, 255, 0.55)" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowWhite)" />
+
+                {/* City Pressured Lanes */}
+                <line x1="72.8" y1="22.5" x2="73.8" y2="29.5" stroke="#38bdf8" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowBlue)" />
+                <line x1="50.2" y1="24.8" x2="55.8" y2="28.2" stroke="#38bdf8" strokeWidth="0.55" strokeDasharray="1.2 1.2" markerEnd="url(#passArrowBlue)" />
+              </g>
+
+              {/* 5. ARSENAL PLAYERS */}
+              <g className="arsenal-players" filter="url(#playerShadow)">
+                {[
+                  { num: '1', x: 9, y: 34 },
+                  { num: '35', x: 24, y: 18 },
+                  { num: '6', x: 20, y: 32 },
+                  { num: '4', x: 20, y: 50 },
+                  { num: '29', x: 34, y: 45 },
+                  { num: '8', x: 30, y: 58 },
+                  { num: '41', x: 60, y: 37 },
+                  { num: '11', x: 70, y: 16 },
+                  { num: '7', x: 68, y: 56 }
+                ].map(p => (
+                  <g key={`ars-${p.num}`}>
+                    <circle cx={p.x} cy={p.y} r="2.3" fill="#e63946" stroke="#ffffff" strokeWidth="0.35" />
+                    <text
+                      x={p.x}
+                      y={p.y}
+                      fontSize="1.85"
+                      fontWeight="800"
+                      fill="#ffffff"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontFamily="system-ui, -apple-system, sans-serif"
+                    >
+                      {p.num}
+                    </text>
+                  </g>
+                ))}
+              </g>
+
+              {/* 6. MANCHESTER CITY PLAYERS */}
+              <g className="mancity-players" filter="url(#playerShadow)">
+                {[
+                  { num: '31', x: 95, y: 34 },
+                  { num: '9', x: 73, y: 20 },
+                  { num: '24', x: 74, y: 32 },
+                  { num: '2', x: 76, y: 48 },
+                  { num: '20', x: 58, y: 30 },
+                  { num: '47', x: 48, y: 23 },
+                  { num: '16', x: 44, y: 38 },
+                  { num: '3', x: 28, y: 54 },
+                  { num: '15', x: 38, y: 62 }
+                ].map(p => (
+                  <g key={`mcfc-${p.num}`}>
+                    <circle cx={p.x} cy={p.y} r="2.3" fill="#38bdf8" stroke="#ffffff" strokeWidth="0.35" />
+                    <text
+                      x={p.x}
+                      y={p.y}
+                      fontSize="1.85"
+                      fontWeight="800"
+                      fill="#ffffff"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontFamily="system-ui, -apple-system, sans-serif"
+                    >
+                      {p.num}
+                    </text>
+                  </g>
+                ))}
+              </g>
             </svg>
           </div>
 
@@ -1446,13 +1647,7 @@ export function MatchPage({
           </div>
 
           <div className="timeline-events-vertical-list">
-            {[
-              { clock: "67'", type: "Pass", team: "Arsenal", detail: "Ødegaard to Saka down right flank", icon: "➔" },
-              { clock: "65'", type: "Turnover", team: "Man City", detail: "Rodri loses possession under pressure", icon: "⟳" },
-              { clock: "64'", type: "Key Moment", team: "Arsenal", detail: "High regain leads to shot (wide)", icon: "★", highlight: true },
-              { clock: "63'", type: "Shot", team: "Arsenal", detail: "Martinelli shot from edge of box (wide)", icon: "⚽" },
-              { clock: "61'", type: "Intercepted Pass", team: "Man City", detail: "Silva's through ball intercepted", icon: "⇥" }
-            ].map((evt, idx) => (
+            {visibleEvents.map((evt, idx) => (
               <div key={idx} className={`timeline-event-card-item ${evt.highlight ? 'highlight-green' : ''}`}>
                 <span className="evt-minute-tag">{evt.clock}</span>
                 <span className="evt-action-icon">{evt.icon}</span>
@@ -1474,7 +1669,12 @@ export function MatchPage({
           {/* Why it matters */}
           <div className="matters-panel-card">
             <div className="panel-header-row">
-              <h3>Why it matters</h3>
+              <div className="panel-title-with-badge">
+                <span className="panel-icon-bars" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2.5"><path d="M18 20V10M12 20V4M6 20v-6" /></svg>
+                </span>
+                <h3>Why it matters</h3>
+              </div>
               <span className="classification-pill">• DERIVED</span>
             </div>
             <div className="matters-numbered-points">
@@ -1496,26 +1696,40 @@ export function MatchPage({
           {/* Evidence */}
           <div className="evidence-panel-card">
             <div className="panel-header-row">
-              <h3>Evidence</h3>
+              <div className="panel-title-with-badge">
+                <span className="panel-icon-db" aria-hidden="true">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                </span>
+                <h3>Evidence</h3>
+              </div>
               <span className="classification-pill green">• OBSERVED</span>
             </div>
 
             <div className="evidence-metrics-triple-grid">
               <div className="ev-metric-box">
-                <span className="ev-num">8</span>
-                <span className="ev-icon">📊</span>
+                <div className="ev-metric-top">
+                  <span className="ev-num">8</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4aefac" strokeWidth="2.5" className="ev-icon-svg"><path d="M18 20V10M12 20V4M6 20v-6" /></svg>
+                </div>
                 <small>High regains in final third</small>
               </div>
 
               <div className="ev-metric-box">
-                <span className="ev-num">68%</span>
-                <span className="ev-gauge-circle">◔</span>
+                <div className="ev-metric-top">
+                  <span className="ev-num">68%</span>
+                  <svg width="20" height="20" viewBox="0 0 36 36" className="ev-gauge-svg" aria-hidden="true">
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.5" />
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#4aefac" strokeWidth="3.5" strokeDasharray="88" strokeDashoffset="28" strokeLinecap="round" transform="rotate(-90 18 18)" />
+                  </svg>
+                </div>
                 <small>Field tilt towards Arsenal</small>
               </div>
 
               <div className="ev-metric-box">
-                <span className="ev-num">5</span>
-                <span className="ev-icon">🛡️</span>
+                <div className="ev-metric-top">
+                  <span className="ev-num">5</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" className="ev-icon-svg"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                </div>
                 <small>Line breaks prevented</small>
               </div>
             </div>
@@ -1556,8 +1770,9 @@ export function MatchPage({
 
           <div className="hero-key-moment-card">
             <div className="hero-km-thumb-col">
+              <img src="/match/key-moment-64.webp" alt="High regain tactical action" className="hero-km-img-thumb" />
               <span className="hero-km-clock">64'</span>
-              <div className="hero-km-play-btn">▶</div>
+              <div className="hero-km-play-btn" aria-hidden="true">▶</div>
             </div>
             <div className="hero-km-content-col">
               <div className="hero-km-title-row">
@@ -1567,9 +1782,9 @@ export function MatchPage({
               <h4>High regain leads to shot (wide)</h4>
               <p>Arsenal win the ball in the final third, quickly combine and get a shot away from the edge of the box.</p>
               <div className="hero-km-badges-row">
-                <span className="tag-pill-badge">Observed</span>
-                <span className="tag-pill-badge">Derived</span>
-                <span className="tag-pill-badge">Explained</span>
+                <span className="tag-pill-badge tag-green">Observed</span>
+                <span className="tag-pill-badge tag-blue">Derived</span>
+                <span className="tag-pill-badge tag-purple">Explained</span>
               </div>
             </div>
           </div>
@@ -1590,19 +1805,20 @@ export function MatchPage({
 
           <div className="sequence-steps-strip">
             {[
-              { step: 1, title: "1. High press", active: true },
-              { step: 2, title: "2. Ball regain", active: false },
-              { step: 3, title: "3. Quick transition", active: false },
-              { step: 4, title: "4. Shot (wide)", active: false }
+              { step: 1, title: "1. High press", img: "/match/step-1-high-press.webp", active: true },
+              { step: 2, title: "2. Ball regain", img: "/match/step-2-ball-regain.webp", active: false },
+              { step: 3, title: "3. Quick transition", img: "/match/step-3-quick-transition.webp", active: false },
+              { step: 4, title: "4. Shot (wide)", img: "/match/step-4-shot.webp", active: false }
             ].map((st, i) => (
               <div key={st.step} className="seq-step-wrapper">
                 <div className={`seq-step-card ${st.active ? 'active-border' : ''}`}>
                   <div className="seq-step-thumb">
-                    <span className="seq-play-icon">▶</span>
+                    <img src={st.img} alt={st.title} className="seq-step-img" />
+                    <span className="seq-play-icon" aria-hidden="true">▶</span>
                   </div>
                   <span className="seq-step-title">{st.title}</span>
                 </div>
-                {i < 3 && <span className="seq-step-arrow">›</span>}
+                {i < 3 && <span className="seq-step-arrow" aria-hidden="true">›</span>}
               </div>
             ))}
           </div>
@@ -2025,14 +2241,16 @@ export function TeamsPage({
 
           <div className="key-players-avatar-list">
             {[
-              { num: 8, name: "M. Ødegaard", pos: "AM", role: "Creates, connects and controls tempo.", stat: "0.42 xA per 90", rank: "3rd" },
-              { num: 7, name: "B. Saka", pos: "RW", role: "Primary wide threat and chance creator.", stat: "0.58 xA per 90", rank: "2nd" },
-              { num: 41, name: "D. Rice", pos: "CM", role: "Drives transitions and defensive stability.", stat: "2.3 Ball recoveries per 90", rank: "1st" },
-              { num: 6, name: "Gabriel", pos: "CB", role: "Leads defensive structure and aerial dominance.", stat: "4.1 Duels won per 90", rank: "2nd" },
-              { num: 11, name: "G. Martinelli", pos: "LW", role: "Direct running and chance creation from the left.", stat: "0.38 xA per 90", rank: "4th" }
+              { num: 8, name: "M. Ødegaard", pos: "AM", role: "Creates, connects and controls tempo.", stat: "0.42 xA per 90", rank: "3rd", avatar: "/players/odegaard.webp" },
+              { num: 7, name: "B. Saka", pos: "RW", role: "Primary wide threat and chance creator.", stat: "0.58 xA per 90", rank: "2nd", avatar: "/players/saka.webp" },
+              { num: 41, name: "D. Rice", pos: "CM", role: "Drives transitions and defensive stability.", stat: "2.3 Ball recoveries per 90", rank: "1st", avatar: "/players/rice.webp" },
+              { num: 6, name: "Gabriel", pos: "CB", role: "Leads defensive structure and aerial dominance.", stat: "4.1 Duels won per 90", rank: "2nd", avatar: "/players/gabriel.webp" },
+              { num: 11, name: "G. Martinelli", pos: "LW", role: "Direct running and chance creation from the left.", stat: "0.38 xA per 90", rank: "4th", avatar: "/players/martinelli.webp" }
             ].map(p => (
               <div key={p.num} className="key-player-item-row">
-                <div className="kp-avatar-circle">{p.num}</div>
+                <div className="kp-avatar-wrap">
+                  <img src={p.avatar} alt={p.name} className="kp-avatar-photo" />
+                </div>
                 <div className="kp-info-col">
                   <div className="kp-name-line">
                     <strong>{p.name}</strong>
@@ -2235,9 +2453,11 @@ export function PlayersPage({
         <div className="player-header-main-flex">
           {/* Player Photo with mint glow */}
           <div className="player-photo-container">
-            <div className="player-avatar-large">
-              <span className="player-jersey-number">7</span>
-            </div>
+            <img
+              src="/players/saka-hero.webp"
+              alt="Bukayo Saka"
+              className="player-hero-photo"
+            />
           </div>
 
           {/* Player Meta Details */}
