@@ -112,6 +112,64 @@ public sealed class CachedMatchProjectionReaderTests
         Assert.Equal(projection.StateSha256, rebuilt.StateSha256);
     }
 
+    [Fact]
+    public async Task CommittedProjectionOutboxPrewarmsExactRevisionCacheEntry()
+    {
+        var (matchId, projection) = CreateProjection();
+        var cache = new TestCache();
+        var messageId = Guid.NewGuid();
+        var state = JsonSerializer.SerializeToElement(projection.State, JsonOptions);
+        var payload = JsonSerializer.Serialize(new
+        {
+            messageId,
+            matchId = Guid.Parse(projection.State.MatchId),
+            canonicalRevision = projection.CanonicalRevision,
+            projectionRevision = projection.ProjectionRevision,
+            sequence = projection.AsOfSequence,
+            clockSeconds = projection.AsOfClockSeconds,
+            algorithmVersion = projection.AlgorithmVersion,
+            sourceSha256 = projection.SourceSha256,
+            stateSha256 = projection.StateSha256,
+            state
+        }, JsonOptions);
+
+        await new ProjectionOutboxCachePublisher(cache).PublishAsync(messageId, payload, CancellationToken.None);
+
+        var key = CachedMatchProjectionReader.BuildKey(matchId, projection.CanonicalRevision,
+            projection.AsOfClockSeconds, projection.AlgorithmVersion);
+        Assert.Contains(key, cache.Values.Keys);
+        var reader = new CachedMatchProjectionReader(new TestProjectionReader(projection), cache);
+        var cached = await reader.GetAtCanonicalRevisionAsync(matchId, projection.CanonicalRevision,
+            projection.AsOfClockSeconds, projection.AlgorithmVersion, CancellationToken.None);
+        AssertProjection(projection, cached);
+    }
+
+    [Fact]
+    public async Task OutboxCachePublisherRejectsStateMetadataMismatch()
+    {
+        var (_, projection) = CreateProjection();
+        var cache = new TestCache();
+        var messageId = Guid.NewGuid();
+        var state = JsonSerializer.SerializeToElement(projection.State, JsonOptions);
+        var payload = JsonSerializer.Serialize(new
+        {
+            messageId,
+            matchId = Guid.NewGuid(),
+            canonicalRevision = projection.CanonicalRevision,
+            projectionRevision = projection.ProjectionRevision,
+            sequence = projection.AsOfSequence,
+            clockSeconds = projection.AsOfClockSeconds,
+            algorithmVersion = projection.AlgorithmVersion,
+            sourceSha256 = projection.SourceSha256,
+            stateSha256 = projection.StateSha256,
+            state
+        }, JsonOptions);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new ProjectionOutboxCachePublisher(cache).PublishAsync(messageId, payload, CancellationToken.None));
+        Assert.Empty(cache.Values);
+    }
+
     private static (MatchId MatchId, SelectedMatchProjection Projection) CreateProjection()
     {
         var matchId = MatchId.New();

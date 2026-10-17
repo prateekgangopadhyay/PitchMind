@@ -60,7 +60,13 @@ builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPol
 if (localRealtimeEnabled)
 {
     builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
-    builder.Services.AddSingleton<IOutboxPublisher, SignalRRealtimeCursorPublisher>();
+    builder.Services.AddSingleton<SignalRRealtimeCursorPublisher>();
+    builder.Services.AddSingleton<ProjectionOutboxCachePublisher>();
+    builder.Services.AddSingleton<IOutboxPublisher>(services => new ParallelOutboxPublisher(
+    [
+        services.GetRequiredService<ProjectionOutboxCachePublisher>(),
+        services.GetRequiredService<SignalRRealtimeCursorPublisher>()
+    ]));
 }
 else
 {
