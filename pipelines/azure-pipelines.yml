@@ -5,7 +5,7 @@ parameters:
   default: false
 - name: enableDevDelivery
   type: boolean
-  default: true
+  default: false
 - name: acrPushServiceConnection
   type: string
   default: pitchmind-acr-publisher-wif
@@ -14,7 +14,7 @@ parameters:
   default: pitchmind-dev-deployer-wif
 - name: devInfrastructureServiceConnection
   type: string
-  default: pitchmind-dev-infrastructure-wif
+  default: unconfigured
 - name: registryName
   type: string
   default: pmdev4iwntkatliy6sacr
