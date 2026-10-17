@@ -5,6 +5,8 @@ import { RoutePage } from './ShellPages';
 import { CanonicalMatchPage } from './CanonicalMatchPage';
 import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
 import { contextHref, currentLocation, replaceCurrentMatchContext, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
+import { CandidateLiveMatchPage } from './CandidateLiveMatchPage';
+import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 
 function MatchExperience({ expectedMatchId, initialSeconds, replay }: { expectedMatchId?: string; initialSeconds: number; replay: boolean }) {
   const contextVersion = useRef(0);
@@ -99,6 +101,7 @@ export function App() {
   const pathname = separator === -1 ? location : location.slice(0, separator);
   const search = separator === -1 ? '' : location.slice(separator);
   const route = resolveRoute(pathname);
+  const candidateStream = useCandidateStreamStatus(route.kind !== 'welcome');
   const params = new URLSearchParams(search);
   const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined : params.get('matchId') ?? undefined;
   const selectedSeconds = params.has('atSeconds') ? selectedTimeFromSearch(search) : undefined;
@@ -110,6 +113,7 @@ export function App() {
   const links = [
     { label: 'Home', path: '/home', active: route.kind === 'home' },
     { label: 'Match', path: matchPath, active: route.kind === 'matches' || route.kind === 'demo-match' },
+    { label: 'Live match', path: '/candidate-live', active: route.kind === 'candidate-live' },
     { label: 'Teams', path: '/teams', active: route.kind === 'teams' },
     { label: 'Players', path: '/players', active: route.kind === 'players' },
     { label: 'Insights', path: '/insights', active: route.kind === 'insights' },
@@ -157,10 +161,15 @@ export function App() {
             <span className="league-name-text">Premier League</span>
             <span className="dropdown-caret">▾</span>
           </div>
-          <div className="live-status-pill">
-            <span className="pulse-dot"></span>
-            <span>Live</span>
-          </div>
+          <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
+            aria-pressed={candidateStream.status?.isStreaming ?? false}
+            aria-label={candidateStream.status?.isStreaming ? 'Pause candidate live simulation' : 'Resume candidate live simulation'}
+            title={candidateStream.error || (candidateStream.status?.isStreaming ? 'Pause live simulation' : 'Resume live simulation')}
+            disabled={candidateStream.pending || !candidateStream.status?.matchId}
+            onClick={() => { void toggleCandidateStream(); }}>
+            <span className="live-status-dot" aria-hidden="true"></span>
+            <span>{candidateStream.status?.isStreaming ? 'Live · Pause' : candidateStream.status ? 'Live · Resume' : 'Live unavailable'}</span>
+          </button>
           <span role="button" tabIndex={0} className="header-icon-btn" aria-label="Settings" title="Settings">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </span>
@@ -221,7 +230,8 @@ export function App() {
       <span className="tag sr-only">{route.kind === 'demo-match' ? 'Simulated match · Demo fixture' : 'Match data with source details'}</span>
     </header>
     <main id="main-content" tabIndex={-1}>
-      {route.kind === 'matches' && matchId && !matchId.startsWith('sim-')
+      {route.kind === 'candidate-live' ? <CandidateLiveMatchPage />
+      : route.kind === 'matches' && matchId && !matchId.startsWith('sim-')
         ? <RealtimeAuthProvider getAccessToken={getHostAccessToken}>
           {/* Preserve replay state as the selected revision changes between seconds. */}
           <CanonicalMatchPage key={`${matchId}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
