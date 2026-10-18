@@ -487,6 +487,8 @@ printf '\\n'
                 "volume ls -q --filter name=pitchmind_postgres_data",
                 "run --rm --pull=never --network none --mount type=volume,source=pitchmind_postgres_data,target=/pgdata,readonly --entrypoint /bin/sh postgres:17-alpine -c cat /pgdata/PG_VERSION",
                 "compose --env-file docker/.env -f docker/compose.yml up -d --wait",
+                "compose --env-file docker/.env -f docker/compose.yml ps",
+                "compose --env-file docker/.env -f docker/compose.yml logs --no-color --tail=80 kafka",
             ],
         )
 
@@ -722,6 +724,23 @@ printf '\\n'
                 "kafka-data": "pitchmind_kafka_data",
             },
         )
+        kafka = config["services"]["kafka"]
+        self.assertEqual(
+            kafka["volumes"],
+            [
+                {
+                    "type": "volume",
+                    "source": "kafka-data",
+                    "target": "/tmp/kraft-combined-logs",
+                    "volume": {},
+                }
+            ],
+        )
+        self.assertIn("/opt/kafka/bin/kafka-topics.sh", kafka["healthcheck"]["test"][1])
+        kafka_data_init = config["services"]["kafka-data-init"]
+        self.assertEqual(kafka_data_init["user"], "0:0")
+        self.assertEqual(kafka_data_init["command"], ["chown -R 1000:1000 /tmp/kraft-combined-logs"])
+        self.assertEqual(kafka["depends_on"]["kafka-data-init"]["condition"], "service_completed_successfully")
 
     def test_compose_allows_isolated_project_and_volume_identities(self) -> None:
         config = self._resolved_compose_config(

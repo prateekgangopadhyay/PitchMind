@@ -165,7 +165,9 @@ ensure_existing_postgres_volume_compatible "$postgres_image"
 
 if ! env -u POSTGRES_PASSWORD -u PITCHMIND_API_PASSWORD -u REDIS_PASSWORD \
   docker compose --env-file docker/.env -f docker/compose.yml up -d --wait; then
-  echo "Local services did not become healthy. Inspect Docker logs, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
+  docker compose --env-file docker/.env -f docker/compose.yml ps >&2 || true
+  docker compose --env-file docker/.env -f docker/compose.yml logs --no-color --tail=80 kafka >&2 || true
+  echo "Local services did not become healthy. Inspect Docker logs above, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
   exit 1
 fi
 echo "Local PostgreSQL, Redis and Kafka are healthy."

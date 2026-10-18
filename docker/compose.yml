@@ -39,17 +39,29 @@ services:
   kafka:
     image: ${KAFKA_IMAGE:-apache/kafka:4.3.1}
     restart: unless-stopped
+    depends_on:
+      kafka-data-init:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
     volumes:
       - kafka-data:/tmp/kraft-combined-logs
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 20s
     networks: [local]
+
+  kafka-data-init:
+    image: ${KAFKA_IMAGE:-apache/kafka:4.3.1}
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["chown -R 1000:1000 /tmp/kraft-combined-logs"]
+    restart: "no"
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
 
 volumes:
   postgres-data:
