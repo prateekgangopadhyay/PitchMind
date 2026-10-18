@@ -3,7 +3,6 @@ import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection }
 import { clock, getHostAccessToken, request } from './api';
 import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 import { contextHref } from './routes';
-import { resolveClubLogo } from './clubLogos';
 
 interface CandidateEvent {
   eventId: string;
@@ -66,7 +65,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const [replaySeconds, setReplaySeconds] = useState<number | null>(selectedSeconds ?? null);
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [cinemaMode, setCinemaMode] = useState(false);
-  const [showTacticalZones, setShowTacticalZones] = useState(false);
   const [feedTab, setFeedTab] = useState<'events' | 'telemetry' | 'audit'>('events');
   const [showMethodology, setShowMethodology] = useState(false);
   const pitchScreenRef = useRef<HTMLDivElement | null>(null);
@@ -297,30 +295,9 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     [latest]
   );
   const teams = [...new Set(players.map(player => (typeof player.teamName === 'string' ? player.teamName : '')).filter(Boolean))];
-  const home = teams[0] ?? '—';
-  const away = teams[1] ?? '—';
+  const secondSourceTeam = teams[1];
 
-  const homeLogo = resolveClubLogo(home);
-  const awayLogo = resolveClubLogo(away);
-
-  // Live Score computed dynamically from goals streamed up to current sequence
-  const { homeScore, awayScore } = useMemo(() => {
-    let h = 0;
-    let a = 0;
-    const seq = latest?.sequence ?? Infinity;
-    for (const e of events) {
-      if (e.sequence > seq) break;
-      if (e.eventType === 'Goal') {
-        const tName = String(e.rawPayload.teamName ?? '');
-        if (home && tName === home) {
-          h++;
-        } else if (away && tName === away) {
-          a++;
-        }
-      }
-    }
-    return { homeScore: h, awayScore: a };
-  }, [events, home, away, latest]);
+  const sourceTeams = [...new Set(players.map(player => typeof player.teamName === 'string' ? player.teamName : '').filter(Boolean))];
 
   const ballX = latest?.rawPayload.ballX;
   const ballY = latest?.rawPayload.ballY;
@@ -336,7 +313,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
 
   const currentClockFormatted = useMemo(() => {
     const raw = latest?.clockSeconds ?? status?.currentClockValue;
-    return typeof raw === 'number' ? clock(Math.floor(raw)) : '88:55';
+    return typeof raw === 'number' ? clock(Math.floor(raw)) : '—';
   }, [latest, status?.currentClockValue]);
 
   // Filtered timeline events
@@ -375,7 +352,8 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
             <button
               type="button"
               className={`candidate-stream-state ${status?.isStreaming ? 'is-streaming' : ''}`}
-              role="status"
+              aria-pressed={status?.isStreaming ?? false}
+              aria-label={status?.isStreaming ? 'Pause candidate feed' : 'Resume candidate feed'}
               onClick={() => { void toggleCandidateStream(); }}
             >
               <span className="stream-dot" aria-hidden="true"></span>
@@ -384,51 +362,12 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
           </div>
         </div>
 
-        {/* Center broadcast scoreboard */}
-        <div className="hero-scoreboard-grid">
-          {/* Home Team */}
-          <div className="team-col home-col">
-            <div className="team-identity">
-              {homeLogo ? (
-                <img src={homeLogo} alt="" className="club-crest-img hero-crest" width="56" height="56" />
-              ) : (
-                <span className="candidate-team-mark" aria-hidden="true">{home === '—' ? '?' : home.slice(0, 2).toUpperCase()}</span>
-              )}
-              <div className="team-text">
-                <h2 className="team-name">{home}</h2>
-                <span className="team-role-pill home-pill">Home FC</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Center Score & Match Clock */}
-          <div className="center-score-col">
-            <div className="scoreboard-digits">
-              <span className="home-live-score">{homeScore}</span>
-              <span className="score-separator">–</span>
-              <span className="away-live-score">{awayScore}</span>
-            </div>
-            <div className="clock-period-row">
-              <span className="hero-clock-display">{currentClockFormatted}</span>
-              <span className="separator-dot">·</span>
-              <span className="hero-period-tag">Period {latest?.period ?? status?.period ?? '—'}</span>
-            </div>
-          </div>
-
-          {/* Away Team */}
-          <div className="team-col away-col">
-            <div className="team-identity away-identity">
-              <div className="team-text text-right">
-                <h2 className="team-name">{away}</h2>
-                <span className="team-role-pill away-pill">Away FC</span>
-              </div>
-              {awayLogo ? (
-                <img src={awayLogo} alt="" className="club-crest-img hero-crest" width="56" height="56" />
-              ) : (
-                <span className="candidate-team-mark" aria-hidden="true">{away === '—' ? '?' : away.slice(0, 2).toUpperCase()}</span>
-              )}
-            </div>
-          </div>
+        <div className="candidate-match-context">
+          <div><p className="eyebrow">Selected source match</p><h1>{matchId ?? 'Waiting for match data'}</h1>
+            <p>Source event feed · clock {currentClockFormatted} · {latest ? `period ${latest.period}` : 'period unavailable'}</p></div>
+          {sourceTeams.length > 0 && <div className="candidate-source-teams" aria-label="Team names reported by the source">
+            {sourceTeams.map((team, index) => <span key={team} className={`source-team-chip source-team-${index % 2}`}>{team}</span>)}
+          </div>}
         </div>
 
         {/* Integrated Scrubber Timeline Bar */}
@@ -456,11 +395,8 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                 }}
               />
               <div className="slider-ticks" aria-hidden="true">
-                <span>00:00</span>
-                <span>20:00</span>
-                <span>45:00</span>
-                <span>70:00</span>
-                <span>{clock(Math.max(1, replayMaximum))}</span>
+                <span>0</span>
+                <span>Latest source time · {clock(Math.max(1, replayMaximum))}</span>
               </div>
             </div>
 
@@ -494,7 +430,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
       <div className="candidate-caveat-box">
         <div className="caveat-summary-row" onClick={() => setShowMethodology(!showMethodology)}>
           <div className="caveat-badge-wrap">
-            <span className="caveat-icon" aria-hidden="true">ℹ️</span>
+            <span className="caveat-icon" aria-hidden="true">i</span>
             <strong>Candidate Source Notice:</strong>
             <span className="caveat-short-text">Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.</span>
           </div>
@@ -524,20 +460,11 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                   <span>Seq #{latest?.sequence ?? '—'}</span>
                   <span>Period {latest?.period ?? '—'}</span>
                   <span>Clock {valueText(latest?.clockSeconds)}s</span>
-                  <span className="observed-players-tag">{players.length} observed players</span>
+                  <span className="observed-players-tag">{players.length} source players</span>
                 </span>
               </div>
 
               <div className="pitch-action-controls">
-                <button
-                  type="button"
-                  className={`zones-toggle-btn ${showTacticalZones ? 'is-active' : ''}`}
-                  onClick={() => setShowTacticalZones(!showTacticalZones)}
-                  aria-pressed={showTacticalZones}
-                  title="Toggle 18-zone tactical pitch grid"
-                >
-                  {showTacticalZones ? 'Zones · On' : 'Tactical Zones'}
-                </button>
                 <button
                   type="button"
                   className="cinema-mode-toggle"
@@ -620,24 +547,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                       opacity="0.45"
                     />
                   ))}
-
-                  {/* 18-Zone Tactical Overlay (toggleable) */}
-                  {showTacticalZones && (
-                    <g className="tactical-zones-layer" opacity="0.6">
-                      {/* Vertical Thirds Lines */}
-                      <line x1="34.33" y1="3" x2="34.33" y2="65" stroke="#4aefac" strokeWidth="0.22" strokeDasharray="1.2 1.2" />
-                      <line x1="65.67" y1="3" x2="65.67" y2="65" stroke="#4aefac" strokeWidth="0.22" strokeDasharray="1.2 1.2" />
-                      {/* Horizontal Channels */}
-                      <line x1="3" y1="15.4" x2="97" y2="15.4" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
-                      <line x1="3" y1="27.8" x2="97" y2="27.8" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
-                      <line x1="3" y1="40.2" x2="97" y2="40.2" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
-                      <line x1="3" y1="52.6" x2="97" y2="52.6" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
-
-                      {/* Zone 14 (Central Attacking Golden Pocket) Highlight */}
-                      <rect x="65.67" y="27.8" width="16.56" height="12.4" fill="rgba(245, 158, 11, 0.16)" stroke="#f59e0b" strokeWidth="0.3" strokeDasharray="1 1" />
-                      <text x="73.95" y="34.5" fill="#fde68a" fontSize="1.8" textAnchor="middle" fontWeight="bold">ZONE 14</text>
-                    </g>
-                  )}
 
                   {/* Goal Structures (Nets behind Goal Lines) */}
                   <g className="goal-nets">
@@ -729,7 +638,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                     </g>
                   )}
 
-                  {/* 22 Live Tactical Player Markers */}
+                  {/* Source-reported player coordinates; no interpolation is applied. */}
                   {players.map((p, index) => {
                     if (
                       typeof p.x !== 'number' ||
@@ -744,7 +653,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                       return null;
                     const x = toPitchX(p.x);
                     const y = toPitchY(p.y);
-                    const side = p.teamName === away ? 'away' : 'home';
+                    const side = p.teamName === secondSourceTeam ? 'away' : 'home';
                     const isSelected = selectedPlayer?.playerName === p.playerName;
                     const isHovered = hoveredPlayer?.playerName === p.playerName;
 
@@ -756,6 +665,15 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                         onMouseLeave={() => setHoveredPlayer(null)}
                         style={{ cursor: 'pointer' }}
                         className={`player-marker-group ${isSelected ? 'is-selected' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Inspect ${p.playerName ?? p.playerId ?? 'source player'} from ${p.teamName ?? 'the source feed'}`}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedPlayer(isSelected ? null : p);
+                          }
+                        }}
                       >
                         <title>{`${p.teamName ?? side}: ${p.playerName ?? 'Player'} (#${p.jerseyNumber ?? '?'})`}</title>
 
@@ -798,7 +716,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                         #{hoveredPlayer.jerseyNumber} {hoveredPlayer.playerName}
                       </text>
                       <text x="0" y="1.2" fill="#94a3b8" fontSize="1.4" textAnchor="middle">
-                        {hoveredPlayer.teamName} · {hoveredPlayer.speed ? `${hoveredPlayer.speed} km/h` : 'Active'}
+                        {hoveredPlayer.teamName}
                       </text>
                     </g>
                   )}
@@ -819,7 +737,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
               <div className="selected-player-card">
                 <div className="player-card-header">
                   <div className="player-badge-meta">
-                    <span className={`player-jersey-pill ${selectedPlayer.teamName === away ? 'away-side' : 'home-side'}`}>
+                    <span className={`player-jersey-pill ${selectedPlayer.teamName === secondSourceTeam ? 'away-side' : 'home-side'}`}>
                       #{selectedPlayer.jerseyNumber ?? '—'}
                     </span>
                     <div>
@@ -847,37 +765,11 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                   </div>
                 </div>
 
-                <div className="player-metrics-grid">
-                  <div className="metric-tile">
-                    <span className="metric-label">Speed</span>
-                    <strong className="metric-val">{selectedPlayer.speed !== undefined ? `${selectedPlayer.speed} km/h` : '—'}</strong>
-                  </div>
-                  <div className="metric-tile">
-                    <span className="metric-label">Distance</span>
-                    <strong className="metric-val">{selectedPlayer.distanceCovered !== undefined ? `${selectedPlayer.distanceCovered} km` : '—'}</strong>
-                  </div>
-                  <div className="metric-tile">
-                    <span className="metric-label">Pass Accuracy</span>
-                    <strong className="metric-val">{selectedPlayer.passAccuracy !== undefined ? `${selectedPlayer.passAccuracy}%` : '—'}</strong>
-                  </div>
-                  <div className="metric-tile">
-                    <span className="metric-label">Touches</span>
-                    <strong className="metric-val">{valueText(selectedPlayer.touches)}</strong>
-                  </div>
-                  <div className="metric-tile">
-                    <span className="metric-label">Heart Rate</span>
-                    <strong className="metric-val">{selectedPlayer.heartRate !== undefined ? `${selectedPlayer.heartRate} bpm` : '—'}</strong>
-                  </div>
-                  <div className="metric-tile">
-                    <span className="metric-label">Stamina</span>
-                    <strong className="metric-val">{selectedPlayer.stamina !== undefined ? `${selectedPlayer.stamina}%` : '—'}</strong>
-                  </div>
-                </div>
+                <p className="candidate-metric-note">Player performance metrics are withheld until their definitions and units are validated.</p>
               </div>
             ) : (
               <div className="player-selection-hint">
-                <span className="hint-bulb" aria-hidden="true">💡</span>
-                <span>Click any player marker on the pitch to inspect observed biometrics and tracking telemetry.</span>
+                <span>Select a source marker to inspect its identifier and source-reported fields.</span>
               </div>
             )}
           </section>
@@ -923,7 +815,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                       className={`cat-pill-btn ${timelineCategory === cat ? 'active' : ''}`}
                       onClick={() => setTimelineCategory(cat)}
                     >
-                      {cat} {cat === 'Goals' ? '⚽' : ''}
+                      {cat}
                     </button>
                   ))}
                 </div>
@@ -940,7 +832,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                               #{event.sequence} · {valueText(event.clockSeconds)}s
                             </span>
                             <strong className="event-type-label">
-                              {event.eventType} {event.eventType === 'Goal' ? '⚽' : ''}
+                              {event.eventType}
                             </strong>
                           </div>
                           <div className="event-item-meta">
@@ -965,7 +857,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                     <dl className="telemetry-dl">
                       <div className="dl-row">
                         <dt>Event Type</dt>
-                        <dd className="bold-emerald">{latest.eventType} {latest.eventType === 'Goal' ? '⚽' : ''}</dd>
+                        <dd className="bold-emerald">{latest.eventType}</dd>
                       </div>
                       <div className="dl-row">
                         <dt>Clock / Period</dt>

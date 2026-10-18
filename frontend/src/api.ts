@@ -431,16 +431,16 @@ export function getEplHub(signal?: AbortSignal): Promise<EplHubData> {
   return request<EplHubData>('simulation/hub', signal);
 }
 
-export function getTeamProfile(teamId?: string, signal?: AbortSignal): Promise<TeamProfileData> {
-  return request<TeamProfileData>(`simulation/teams/${teamId ? encodeURIComponent(teamId) : 'arsenal'}`, signal);
+export function getTeamProfile(teamId: string, signal?: AbortSignal): Promise<TeamProfileData> {
+  return request<TeamProfileData>(`simulation/teams/${encodeURIComponent(teamId)}`, signal);
 }
 
-export function getPlayerIntelligence(playerId?: string, signal?: AbortSignal): Promise<PlayerIntelligenceData> {
-  return request<PlayerIntelligenceData>(`simulation/players/${playerId ? encodeURIComponent(playerId) : 'saka'}`, signal);
+export function getPlayerIntelligence(playerId: string, signal?: AbortSignal): Promise<PlayerIntelligenceData> {
+  return request<PlayerIntelligenceData>(`simulation/players/${encodeURIComponent(playerId)}`, signal);
 }
 
-export function getTacticalInsightDetail(insightId?: string, signal?: AbortSignal): Promise<TacticalInsightDetailData> {
-  return request<TacticalInsightDetailData>(`simulation/insights/${insightId ? encodeURIComponent(insightId) : 'arsenal-press-city'}`, signal);
+export function getTacticalInsightDetail(insightId: string, signal?: AbortSignal): Promise<TacticalInsightDetailData> {
+  return request<TacticalInsightDetailData>(`simulation/insights/${encodeURIComponent(insightId)}`, signal);
 }
 
 export interface SimulatedMatchData {

@@ -39,7 +39,7 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
   ]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/welcome');
-    await expect(page.getByRole('heading', { name: 'Welcome to PitchMind' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Football intelligence, grounded in evidence.' })).toBeVisible();
     const skipLink = page.getByRole('link', { name: 'Skip to main content' });
     await page.keyboard.press('Tab');
     await expect(skipLink).toBeFocused();
@@ -51,17 +51,17 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
     await page.keyboard.press('Enter');
     await expect(page.locator('#main-content')).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: 'Check match availability' })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Browse available matches' })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Choose a match' })).toBeVisible();
     await expect(page.getByText('Match data with source details')).toBeVisible();
-    await expect(page.getByText('Simulated EPL-context match')).toBeVisible();
+    await expect(page.getByText('Synthetic match')).toBeVisible();
 
     const matches = page.getByRole('list', { name: 'Matches' });
     await expect(matches).toBeVisible();
     await expect(matches.getByRole('listitem')).toHaveCount(1);
     const card = page.locator('.match-card');
-    await expect(card.getByRole('heading', { name: 'Home team 1–0 Away team' })).toBeVisible();
+    await expect(card.getByRole('heading', { name: 'Home 1–0 Away' })).toBeVisible();
     const sourceDetails = card.locator('details');
     await expect(sourceDetails).toHaveJSProperty('open', false);
     await expect(sourceDetails.getByText('Source hash')).not.toBeVisible();
@@ -83,6 +83,9 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
     await card.getByRole('link', { name: 'Open match', exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Match overview' })).toBeVisible();
+    if (viewport.name === 'desktop') {
+      await page.screenshot({ path: testInfo.outputPath('ep07-match-desktop.png'), fullPage: true });
+    }
     await expect(page.getByRole('alert')).toContainText('Match data service is temporarily unavailable.');
     await expect(page.getByText('1–0')).toHaveCount(0);
     const matchCopy = await page.locator('body').innerText();
@@ -94,15 +97,18 @@ test('keeps the seven-screen shell clear, keyboard reachable, and usable at 320p
     await expect(page.getByRole('heading', { name: 'Choose a match' })).toBeVisible();
 
     for (const view of [
-      { name: 'Teams', heading: 'Team overview', message: 'Team profiles are not available yet.' },
-      { name: 'Players', heading: 'Player overview', message: 'Player profiles are not available yet.' },
-      { name: 'Insights', heading: 'Evidence at this moment', message: 'Insights are temporarily unavailable.' },
-      { name: 'AI Analyst', heading: 'Understand a match', message: 'Match questions are not available yet.' }
+      { name: 'Teams', heading: 'Teams' },
+      { name: 'Players', heading: 'Players' },
+      { name: 'Insights', heading: 'Insights' },
+      { name: 'AI Analyst', heading: 'AI Analyst' }
     ]) {
-      await page.getByRole('link', { name: view.name, exact: true }).focus();
+      await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: view.name, exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByRole('heading', { name: view.heading })).toBeVisible();
-      await expect(page.getByText(view.message)).toBeVisible();
+      await expect(page.getByRole('alert')).toBeVisible();
+      if (viewport.name === 'desktop') {
+        await page.screenshot({ path: testInfo.outputPath(`ep07-${view.name.toLowerCase().replaceAll(' ', '-')}-desktop.png`), fullPage: true });
+      }
       const width = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth }));
       expect(width.document, `${view.name} should reflow at ${viewport.width}px`).toBeLessThanOrEqual(width.viewport);
       const visibleCopy = await page.locator('body').innerText();

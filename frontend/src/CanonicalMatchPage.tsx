@@ -12,7 +12,6 @@ type MatchView = {
   insights: CanonicalInsightPage;
   trackingFrames: CanonicalTrackingFramePage | null;
   trackingStatus: string;
-  keyMomentsStatus: string;
   linkedEvidenceStatus: string;
   eventsStatus: string;
   insightsStatus: string;
@@ -187,8 +186,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           if (requestedSourceRevision !== null && requestedSourceRevision > 0)
             frameQuery.set('sourceRevision', String(requestedSourceRevision));
         }
-        const keyMomentQuery = new URLSearchParams({ atSeconds: String(selectedSeconds), revision: String(revision) });
-        const [eventResult, insightResult, frameResult, keyMomentsStatus] = await Promise.all([
+        const [eventResult, insightResult, frameResult] = await Promise.all([
           request<CanonicalEventPage>(`canonical/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal)
             .then(page => ({ page, status: '' }))
             .catch(failure => ({ page: null, status: unavailableMessage(failure, 'Recorded events') })),
@@ -206,11 +204,6 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                 ? 'Observed tracking is unavailable from the canonical service at this selected time.'
                 : 'Observed tracking could not be loaded; player positions are not estimated.'
             })),
-          request<unknown>(`canonical/matches/${encodeURIComponent(matchId)}/key-moments?${keyMomentQuery}`, controller.signal)
-            .then(() => 'The canonical key-moment response is not versioned, so this view cannot display it yet.')
-            .catch(error => error instanceof ApiRequestError && error.status === 503 && error.code === 'CANONICAL_KEY_MOMENTS_UNAVAILABLE'
-              ? 'Canonical Key Moments are unavailable because no canonical projection is available.'
-              : 'Canonical key moments could not be loaded.')
         ]);
         if (controller.signal.aborted) return;
         const emptyContext = { matchId, canonicalRevision: snapshot.canonicalRevision, projectionRevision: snapshot.projectionRevision,
@@ -258,7 +251,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           ? null
           : /^#canonical-event-(\d+)$/.exec(window.location.hash)?.[1] ?? null;
         let currentView: MatchView = { snapshot, events, insights, trackingFrames,
-          trackingStatus: frameResult.status, keyMomentsStatus,
+          trackingStatus: frameResult.status,
           eventsStatus: eventResult.status, insightsStatus: insightResult.status,
           linkedEvidenceStatus: '' };
         const parsedLinkedSequence = linkedEventSequence === null ? null : Number(linkedEventSequence);
@@ -453,7 +446,7 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     setPlaying(true);
   };
 
-  return <section className="content-page" aria-busy={loading}>
+  return <section className="content-page screen-page canonical-match-page" aria-busy={loading}>
     <div className="page-heading">
       <p className="eyebrow">{replay ? 'Replay' : 'Match'}</p>
       <h1>{replay ? 'Selected-time replay' : 'Match overview'}</h1>
@@ -468,23 +461,18 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <div className="clock">{clock(snapshot.selectedTimeSeconds)}<small>{phaseLabel(snapshot.phase)}</small></div>
             <span className="score">{snapshot.awayScore}</span><div className="team">Away</div>
           </section>
-          <section className="panel selected-time-explanation" aria-labelledby="selected-time-explanation-title">
-            <h2 id="selected-time-explanation-title">Explanation at {clock(selectedSeconds)}</h2>
-            {view.insightsStatus
-              ? <p className="empty" role="status">{view.insightsStatus}</p>
-              : selectedTimeInsight ? <>
-                <p><span className="badge">{selectedTimeInsight.truthClass}</span> Saved insight through sequence {selectedTimeInsight.throughSequence}</p>
-                <p>{selectedTimeInsight.summary}</p>
-                <a href={contextHref(`/insights/${encodeURIComponent(selectedTimeInsight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>
-                  Inspect supporting evidence
-                </a>
-              </> : <p className="empty">No saved explanation is available at this selected time.</p>}
-          </section>
-          <section className="page-state match-provenance" aria-label="Match source and revision">
-            <span className="badge">{provenanceLabel(snapshot.provenance)}</span>
+          {selectedTimeInsight && <section className="selected-time-explanation" aria-labelledby="selected-time-explanation-title">
+            <div><p className="eyebrow">{selectedTimeInsight.truthClass} · {clock(selectedSeconds)}</p>
+              <h2 id="selected-time-explanation-title">{selectedTimeInsight.summary}</h2></div>
+            <a href={contextHref(`/insights/${encodeURIComponent(selectedTimeInsight.insightId)}`, matchId, selectedSeconds, snapshot.canonicalRevision)}>
+              Inspect evidence
+            </a>
+          </section>}
+          <details className="match-provenance">
+            <summary><span className="badge">{provenanceLabel(snapshot.provenance)}</span><span>Source and revision details</span></summary>
             <p>Canonical revision {snapshot.canonicalRevision} · sequence through {snapshot.throughSequence}</p>
-            <p>Source {snapshot.sourceSha256.slice(0, 16)} · algorithm {snapshot.algorithmVersion}</p>
-          </section>
+            <p>Source {snapshot.sourceSha256} · algorithm {snapshot.algorithmVersion}</p>
+          </details>
           <div className="match-context-controls">
             <label htmlFor="selected-time">Selected match time</label>
             <input id="selected-time" type="range" min="0" max="5400" step="1" value={selectedSeconds}
@@ -497,21 +485,22 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                 {playing ? 'Pause replay' : 'Play replay'}
               </button>}
           </div>
-          <div className="audience-mode" role="group" aria-label="Explanation detail">
+          {view.insights.items.length > 0 && <div className="audience-mode" role="group" aria-label="Explanation detail">
             <span>Explanation detail</span>
             <button type="button" className={audience === 'fan' ? 'active' : ''} aria-pressed={audience === 'fan'} onClick={() => setAudience('fan')}>Fan</button>
             <button type="button" className={audience === 'analyst' ? 'active' : ''} aria-pressed={audience === 'analyst'} onClick={() => setAudience('analyst')}>Analyst</button>
             <p>Both views use the same saved insight and evidence. AI explanations are not connected; match facts remain available without them.</p>
-          </div>
+          </div>}
+          {!view.insights.items.length && view.events.items.length > 0 && <p className="page-state" role="status">AI explanations are not connected; match facts remain available without them.</p>}
           <div className="dashboard canonical-dashboard pitch-dashboard">
-            <section ref={pitchPanelRef} className={`panel pitch-panel${cinemaMode ? ' is-cinema' : ''}`} aria-labelledby="pitch-title">
+            {pitch && selectedFrame && <section ref={pitchPanelRef} className={`panel pitch-panel${cinemaMode ? ' is-cinema' : ''}`} aria-labelledby="pitch-title">
               <div className="pitch-panel-heading"><h2 id="pitch-title">Observed pitch</h2>
                 <button type="button" className="cinema-mode-toggle" onClick={() => { void toggleCinemaMode(); }} aria-pressed={cinemaMode}>
                   {cinemaMode ? 'Exit cinema view' : 'Cinema view'}
                 </button>
               </div>
               <p>Only a recorded frame at the selected time is shown. Sample gaps are not filled.</p>
-              {pitch && selectedFrame ? <>
+              <>
                 <svg className="canonical-pitch" style={{ aspectRatio: `${pitch.length} / ${pitch.width}` }} viewBox={`-1 -1 ${pitch.length + 2} ${pitch.width + 2}`} role="img"
                   aria-label={`Observed player and ball positions at ${clock(selectedSeconds)}, period ${selectedFrame.period}`} aria-describedby="pitch-description">
                   <rect className="pitch-boundary" x="0" y="0" width={pitch.length} height={pitch.width} />
@@ -558,10 +547,15 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     </tr>)}</tbody>
                   </table>
                 </div>
+                <ul className="pitch-team-legend" aria-label="Pitch marker teams">
+                  {pitch.teamIds.map((teamId, teamIndex) => <li key={teamId}>
+                    <span className={`pitch-team-swatch team-marker-${teamIndex % 2}`} aria-hidden="true" />Team {teamId}
+                  </li>)}
+                </ul>
                 <p className="tracking-legend">Numbered team markers map to the position table. The white marker is the observed ball.</p>
-              </> : <p className="empty tracking-status" role="status" aria-live="polite">{trackingMessage}</p>}
-            </section>
-            <section className="panel" aria-labelledby="timeline-title">
+              </>
+            </section>}
+            {view.events.items.length > 0 && <section className="panel timeline-panel" aria-labelledby="timeline-title">
               <h2 id="timeline-title">Recorded events</h2>
               <p>Choose an event to inspect its exact recorded time.</p>
               {view.events.items.length === 0 ? <p className="empty" role="status">{view.eventsStatus || 'No recorded events are visible at this time.'}</p>
@@ -574,12 +568,10 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                     <small>Sequence {event.sequence} · period {event.period}</small>
                   </button>
                 </li>)}</ol>}
-              {view.linkedEvidenceStatus && <p className="empty" role="status" aria-live="polite">{view.linkedEvidenceStatus}</p>}
-            </section>
-            <section className="panel" aria-labelledby="insights-title">
+            </section>}
+            {view.insights.items.length > 0 && <section className="panel insights-panel" aria-labelledby="insights-title">
               <h2 id="insights-title">Evidence-backed insights</h2>
-              {view.insights.items.length === 0 ? <p className="empty" role="status">{view.insightsStatus || 'No persisted insight is available at this selected time.'}</p>
-                : <ul className="canonical-insights">{view.insights.items.map(insight => <li key={insight.insightId}>
+              <ul className="canonical-insights">{view.insights.items.map(insight => <li key={insight.insightId}>
                   <span className="badge" aria-label={`Insight category: ${insight.truthClass}`}>{insight.truthClass}</span><p>{insight.summary}</p>
                   {audience === 'analyst' && <div className="analyst-insight-detail">
                     <p>Detector {insight.detectorVersion} · sequence through {insight.throughSequence}</p>
@@ -594,13 +586,13 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
                   <CanonicalEvidenceDisclosure matchId={matchId} selectedSeconds={selectedSeconds}
                     projectionRevision={snapshot.projectionRevision} throughSequence={snapshot.throughSequence} insight={insight} />
                   <a href={contextHref(`/insights/${encodeURIComponent(insight.insightId)}`, matchId, selectedSeconds, snapshot.projectionRevision)}>Inspect evidence</a>
-                </li>)}</ul>}
+                </li>)}</ul>
               <a className="primary-link" href={contextHref('/insights', matchId, selectedSeconds, snapshot.projectionRevision)}>View insights</a>
-            </section>
-            <section className="panel" aria-labelledby="key-moments-title">
-              <h2 id="key-moments-title">Key moments</h2>
-              <p role="status">{view.keyMomentsStatus}</p>
-            </section>
+            </section>}
+            {!pitch && <p className="page-state tracking-status" role="status">{trackingMessage}</p>}
+            {view.linkedEvidenceStatus && <p className="page-state" role="status">{view.linkedEvidenceStatus}</p>}
+            {!view.events.items.length && view.eventsStatus && <p className="page-state" role="status">{view.eventsStatus}</p>}
+            {!view.insights.items.length && view.insightsStatus && <p className="page-state" role="status">{view.insightsStatus}</p>}
           </div>
         </>
         : <p className="page-state">This match is not available.</p>}

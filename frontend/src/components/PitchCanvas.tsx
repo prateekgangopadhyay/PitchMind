@@ -79,9 +79,9 @@ export interface TacticalStrategyObservation {
 }
 
 const HOME_TEAM_ID = 'team-home';
-const HOME_COLOR = '#dc2626';       // Arsenal red
+const HOME_COLOR = '#dc2626';
 const HOME_COLOR_DARK = '#991b1b';
-const AWAY_COLOR = '#0284c7';       // Man City sky blue
+const AWAY_COLOR = '#0284c7';
 const AWAY_COLOR_DARK = '#0369a1';
 
 export interface PitchCanvasProps {
@@ -297,8 +297,8 @@ export const PitchCanvas: React.FC<PitchCanvasProps> = ({
   // Player circle sizing: dynamic per view mode
   const PLAYER_RADIUS = playerRadius;
 
-  const effHomeTeamName = homeTeamName || 'Arsenal';
-  const effAwayTeamName = awayTeamName || 'Man City';
+  const effHomeTeamName = homeTeamName || 'Home';
+  const effAwayTeamName = awayTeamName || 'Away';
   const effHomeColor = homeTeamColor || HOME_COLOR;
   const effAwayColor = awayTeamColor || AWAY_COLOR;
 
@@ -536,7 +536,7 @@ export const PitchCanvas: React.FC<PitchCanvasProps> = ({
               <circle cx={toSvgX(50)} cy={toSvgY(50)} r={ARC_R} />
               <circle cx={toSvgX(50)} cy={toSvgY(50)} r="4.5" fill="#ffffff" />
 
-              {/* Left Penalty Box (Arsenal Goal Area - 18 yards) */}
+              {/* Left penalty area */}
               <rect
                 x={padX}
                 y={toSvgY(PENALTY_TOP_Y)}
@@ -634,7 +634,7 @@ export const PitchCanvas: React.FC<PitchCanvasProps> = ({
                 {/* Pitchside LED advertising ribbon along top */}
                 <rect x={padX} y={Math.max(2, padY - 14)} width={pitchW} height="10" rx="2" fill="#020617" stroke="#38bdf8" strokeWidth="0.8" />
                 <text x={padX + pitchW / 2} y={Math.max(2, padY - 14) + 7.5} textAnchor="middle" fill="#38bdf8" fontSize="6.5" fontWeight="900" fontFamily="'JetBrains Mono', monospace" letterSpacing="0.1em">
-                  {`${isLive ? 'PREMIER LEAGUE LIVE' : 'MATCH REPLAY'} · ${effHomeTeamName.toUpperCase()} vs ${effAwayTeamName.toUpperCase()} · SPATIAL VIEW`}
+                  {`${isLive ? 'LIVE MATCH' : 'MATCH REPLAY'} · ${effHomeTeamName.toUpperCase()} vs ${effAwayTeamName.toUpperCase()} · SPATIAL VIEW`}
                 </text>
 
                 {/* Pitchside LED advertising ribbon along bottom */}
@@ -655,7 +655,7 @@ export const PitchCanvas: React.FC<PitchCanvasProps> = ({
 
             {/* Corner Flags for All Modes (Authentic Corner Flags with team colors) */}
             <g opacity="0.95">
-              {/* Top-Left Corner Flag (Arsenal Red) */}
+              {/* Top-left corner flag */}
               <line x1={padX} y1={padY} x2={padX - 8} y2={padY - 14} stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round" />
               <polygon points={`${padX - 8},${padY - 14} ${padX},${padY - 18} ${padX - 8},${padY - 22}`} fill="#dc2626" stroke="#991b1b" strokeWidth="0.8" />
 
@@ -663,7 +663,7 @@ export const PitchCanvas: React.FC<PitchCanvasProps> = ({
               <line x1={padX + pitchW} y1={padY} x2={padX + pitchW + 8} y2={padY - 14} stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round" />
               <polygon points={`${padX + pitchW + 8},${padY - 14} ${padX + pitchW},${padY - 18} ${padX + pitchW + 8},${padY - 22}`} fill="#0284c7" stroke="#0369a1" strokeWidth="0.8" />
 
-              {/* Bottom-Left Corner Flag (Arsenal Red) */}
+              {/* Bottom-left corner flag */}
               <line x1={padX} y1={padY + pitchH} x2={padX - 8} y2={padY + pitchH + 14} stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round" />
               <polygon points={`${padX - 8},${padY + pitchH + 14} ${padX},${padY + pitchH + 18} ${padX - 8},${padY + pitchH + 22}`} fill="#dc2626" stroke="#991b1b" strokeWidth="0.8" />
 

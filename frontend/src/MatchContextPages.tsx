@@ -4,7 +4,6 @@ import { ApiRequestError, clock, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
 import type { AppRoute } from './routes';
 import { contextHref } from './routes';
-import { resolveClubLogo } from './clubLogos';
 
 type CandidateStatus = { matchId: string | null; currentSequence: number | null; currentClockValue: number | null; sourceSha256: string | null };
 type CandidateEvent = { eventId: string; matchId: string; sequence: number; clockSeconds: number; period: number; eventType: string; rawPayload: Record<string, unknown> };
@@ -78,13 +77,13 @@ async function loadCandidateContext(matchId: string, seconds: number, signal: Ab
     team.activePlayers++;
     teamMap.set(teamId, team);
     const name = asText(raw.playerName);
+    const playerId = asText(raw.playerId) ?? name;
+    if (!playerId) continue;
     const x = asNumber(raw.x);
     const y = asNumber(raw.y);
     const withinSourceRange = x !== undefined && y !== undefined && x >= 0 && x <= 100 && y >= 0 && y <= 100;
-    const metrics = Object.fromEntries(['speed', 'distanceCovered', 'passAccuracy', 'touches', 'stamina', 'heartRate']
-      .flatMap(key => asNumber(raw[key]) !== undefined ? [[key, raw[key]]] : []));
-    players.push({ id: asText(raw.playerId) ?? name ?? `${teamId}-${players.length + 1}`, teamId, name,
-      ...(withinSourceRange ? { x, y } : {}), metrics });
+    players.push({ id: playerId, teamId, name,
+      ...(withinSourceRange ? { x, y } : {}) });
   }
   const events = atTime.map(event => ({ id: event.eventId, type: event.eventType, sequence: event.sequence,
     clockSeconds: event.clockSeconds, teamId: asText(event.rawPayload.teamId), playerId: asText(event.rawPayload.playerId) ?? asText(event.rawPayload.playerName) }));
@@ -175,7 +174,7 @@ function ContextLayout({ title, description, matchId, seconds, revision, route, 
   title: string; description: string; matchId?: string; seconds: number; revision?: number; route: AppRoute; children: ReactNode; candidate?: boolean;
 }) {
   const matchPath = candidate ? '/candidate-live' : '/matches';
-  return <section className="content-page match-context-page">
+  return <section className="content-page screen-page match-context-page">
     <div className="match-context-header-bar">
       <header className="page-heading">
         <p className="eyebrow">{title}</p>
@@ -214,22 +213,17 @@ export function MatchContextTeamsPage({ route, matchId, seconds, revision }: { r
     {data.selector}
     {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match to view team data." />
       : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="No team data is available." />
-        : <><div className="entity-grid">{data.context.teams.length ? data.context.teams.map(team => {
+        : data.context.teams.length ? <><div className="entity-grid team-entity-grid">{data.context.teams.map(team => {
           const events = data.context!.events.filter(event => event.teamId === team.id);
-          const logo = resolveClubLogo(team.name ?? team.id);
           return <article className="entity-card team-card" key={team.id}>
-            <div className="entity-card-topline">
-              {logo && <img src={logo} alt="" className="club-crest-img entity-crest" width="32" height="32" />}
-              <span className="badge">{team.name ?? 'Team identifier from match feed'}</span>
-            </div>
+            <div className="entity-card-topline"><span className="badge">Team in selected match</span></div>
             <h2>{team.name ?? team.id}</h2>
             <dl>
-              <div><dt>Active players in match state</dt><dd>{team.activePlayers}</dd></div>
+              {team.activePlayers > 0 && <div><dt>Active players in match state</dt><dd>{team.activePlayers}</dd></div>}
               {events.length > 0 && <div><dt>Events attributed by feed</dt><dd>{events.length}</dd></div>}
             </dl>
-            {!events.length && <p className="entity-note">Team-attributed events are not supplied by this selected API contract.</p>}
           </article>;
-        }) : <article className="entity-card"><h2>Team data unavailable</h2><p>No team identities were present in an observed frame.</p></article>}</div>{matchSource(data.context)}</>}
+        })}</div>{matchSource(data.context)}</> : <ContextState loading={false} empty="Team identity is not included in the selected match data." />}
   </ContextLayout>;
 }
 
@@ -242,18 +236,18 @@ export function MatchContextPlayersPage({ route, matchId, seconds, revision, pla
     {data.selector}
     {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match to view player data." />
       : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="No player data is available." />
-        : players.length ? <><div className="entity-grid">{players.map(player => <article className="entity-card player-card" key={player.id}>
+        : players.length ? <><div className="entity-grid player-entity-grid">{players.map(player => <article className="entity-card player-card" key={player.id}>
           <div className="entity-card-topline">
             <span className="badge">{player.active === undefined ? 'Observed in selected frame' : player.active ? 'Active' : player.dismissed ? 'Dismissed' : 'Not active'}</span>
           </div>
           <h2>{player.name ?? player.id}</h2>
           <p className="entity-subtitle">Team {data.context!.teams.find(team => team.id === player.teamId)?.name ?? player.teamId}</p>
           <dl>
-            {player.x !== undefined && <div><dt>Observed x</dt><dd>{player.x}</dd></div>}
-            {player.y !== undefined && <div><dt>Observed y</dt><dd>{player.y}</dd></div>}
+            {data.context!.candidate && player.x !== undefined && <div><dt>Source coordinate x · unit unverified</dt><dd>{player.x}</dd></div>}
+            {data.context!.candidate && player.y !== undefined && <div><dt>Source coordinate y · unit unverified</dt><dd>{player.y}</dd></div>}
             {player.yellowCards !== undefined && <div><dt>Yellow cards</dt><dd>{player.yellowCards}</dd></div>}
-            {Object.entries(player.metrics ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}
           </dl>
+          {data.context!.candidate && <p className="entity-note">Player metrics and coordinate orientation are not validated, so no performance ratings or pitch position are inferred.</p>}
         </article>)}</div>{matchSource(data.context)}</> : <ContextState loading={false} empty={playerId ? 'This player is not present in the selected match data at this time.' : 'No player positions are available at this selected time.'} />}
   </ContextLayout>;
 }
@@ -267,7 +261,7 @@ export function MatchContextInsightsPage({ route, matchId, seconds, revision, in
     {data.selector}
     {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match to view insights." />
       : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="No insight is available at this selected time." />
-        : items.length ? <><div className="entity-grid">{items.map(insight => <article className="entity-card" key={insight.id}>
+        : items.length ? <><div className="entity-grid insight-entity-grid">{items.map(insight => <article className="entity-card insight-entity-card" key={insight.id}>
           <span className="badge">{insight.truthClass}</span><h2>{insight.summary}</h2><details><summary>Evidence and limitations</summary>
             <ul>{insight.evidence.map(item => <li key={`${item.kind}:${item.id}`}>{item.kind}: {item.id} · {item.relation}</li>)}</ul>
             {insight.limitations.map(item => <p key={item}>{item}</p>)}</details>

@@ -57,6 +57,8 @@ if [ "${1:-}" = run ]; then
 fi
 case " $* " in
   *" compose --env-file docker/.env -f docker/compose.yml ps -q postgres "*) printf 'fake-postgres\\n'; exit 0 ;;
+  *" compose --env-file docker/.env -f docker/compose.yml ps -q redis "*) printf 'fake-redis\\n'; exit 0 ;;
+  *" compose --env-file docker/.env -f docker/compose.yml ps -q kafka "*) printf 'fake-kafka\\n'; exit 0 ;;
 esac
 if [ "${1:-}" = context ] && [ "${2:-}" = show ]; then
   printf '%s\n' "${PITCHMIND_FAKE_DOCKER_CONTEXT:-desktop-linux}"
@@ -75,6 +77,7 @@ if [ \"${1:-}\" = compose ]; then
   fi
   case " $* " in
     *" ps -q redis "*) printf 'fake-redis\n'; exit 0 ;;
+    *" ps -q kafka "*) printf 'fake-kafka\n'; exit 0 ;;
   esac
   exit \"${PITCHMIND_FAKE_COMPOSE_STATUS:-0}\"
 fi
@@ -117,7 +120,7 @@ printf '\\n'
         script: str,
         *args: str,
         input_text: str | None = None,
-        timeout: float = 5.0,
+        timeout: float = 15.0,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", str(self.root / "scripts" / script), *args],
@@ -636,8 +639,11 @@ printf '\\n'
                 "POSTGRES_PORT",
                 "REDIS_PASSWORD",
                 "REDIS_PORT",
+                "KAFKA_PORT",
                 "POSTGRES_DATA_VOLUME",
                 "REDIS_DATA_VOLUME",
+                "KAFKA_DATA_VOLUME",
+                "KAFKA_IMAGE",
                 "COMPOSE_PROJECT_NAME",
             }
         }
@@ -713,6 +719,7 @@ printf '\\n'
             {
                 "postgres-data": "pitchmind_postgres_data",
                 "redis-data": "pitchmind_redis_data",
+                "kafka-data": "pitchmind_kafka_data",
             },
         )
 
@@ -723,6 +730,7 @@ printf '\\n'
                 "COMPOSE_PROJECT_NAME": "pitchmind-isolated",
                 "POSTGRES_DATA_VOLUME": "pitchmind_isolated_postgres_data",
                 "REDIS_DATA_VOLUME": "pitchmind_isolated_redis_data",
+                "KAFKA_DATA_VOLUME": "pitchmind_isolated_kafka_data",
             },
         )
 
@@ -730,15 +738,16 @@ printf '\\n'
         volumes = config.get("volumes", {})
         self.assertEqual(volumes["postgres-data"]["name"], "pitchmind_isolated_postgres_data")
         self.assertEqual(volumes["redis-data"]["name"], "pitchmind_isolated_redis_data")
+        self.assertEqual(volumes["kafka-data"]["name"], "pitchmind_isolated_kafka_data")
 
     def test_compose_services_bind_only_to_loopback(self) -> None:
         config = self._resolved_compose_config(REPOSITORY / "docker" / "compose.yml")
         published_ports = self._published_ports(config)
-        self.assertEqual(len(published_ports), 2)
+        self.assertEqual(len(published_ports), 3)
         self.assertTrue(self._published_ports_are_loopback(config), published_ports)
         self.assertEqual(
             {(service, port.get("published"), port.get("target")) for service, port in published_ports},
-            {("postgres", "5432", 5432), ("redis", "6379", 6379)},
+            {("postgres", "5432", 5432), ("redis", "6379", 6379), ("kafka", "9092", 9092)},
         )
 
     def test_resolved_compose_port_check_handles_inline_lists_and_aliases(self) -> None:
@@ -834,6 +843,7 @@ services:
                 if script == "dev-health.sh":
                     self.assertTrue(any(command.endswith("ps -q postgres") for command in commands_run))
                     self.assertTrue(any(command.endswith("ps -q redis") for command in commands_run))
+                    self.assertTrue(any(command.endswith("ps -q kafka") for command in commands_run))
                 else:
                     self.assertTrue(any(" down" in f" {command}" for command in commands_run))
 

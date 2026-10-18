@@ -49,10 +49,10 @@ test('keeps all seven EP07-S01 views free of axe WCAG A/AA violations at desktop
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: width === 320 ? 800 : 1000 });
     await page.goto('/welcome');
-    await expect(page.getByRole('heading', { name: 'Welcome to PitchMind' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Football intelligence, grounded in evidence.' })).toBeVisible();
     await audit('Welcome');
 
-    await page.getByRole('link', { name: 'Check match availability' }).click();
+    await page.getByRole('link', { name: 'Browse available matches' }).click();
     await expect(page.getByRole('heading', { name: 'Choose a match' })).toBeVisible();
     await audit('Home / match list');
     const sourceDetails = page.locator('details').first();
@@ -65,12 +65,12 @@ test('keeps all seven EP07-S01 views free of axe WCAG A/AA violations at desktop
     await audit('Match overview unavailable state');
 
     for (const view of [
-      { navigation: 'Teams', heading: 'Team overview' },
-      { navigation: 'Players', heading: 'Player overview' },
-      { navigation: 'Insights', heading: 'Evidence at this moment' },
-      { navigation: 'AI Analyst', heading: 'Understand a match' }
+      { navigation: 'Teams', heading: 'Teams' },
+      { navigation: 'Players', heading: 'Players' },
+      { navigation: 'Insights', heading: 'Insights' },
+      { navigation: 'AI Analyst', heading: 'AI Analyst' }
     ]) {
-      await page.getByRole('link', { name: view.navigation, exact: true }).click();
+      await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: view.navigation, exact: true }).click();
       await expect(page.getByRole('heading', { name: view.heading })).toBeVisible();
       await audit(view.navigation);
     }

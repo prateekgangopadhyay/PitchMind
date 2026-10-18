@@ -321,7 +321,7 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
   const phaseFilter = requestedPhase === 'all' || phases.includes(requestedPhase) ? requestedPhase : 'all';
   const visibleMatches = phaseFilter === 'all' ? matches : matches.filter(match => match.phase === phaseFilter);
 
-  return <section className="content-page">
+  return <section className="content-page screen-page home-page">
     <div className="home-heading-row">
       <PageHeading eyebrow="Home · match library" title="Choose a match" question="Scores and match phases come from canonical match records." />
       {!loading && !error && matches.length > 0 && <label className="phase-filter">Filter by phase
@@ -338,10 +338,10 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
             : <><p className="match-count" role="status" aria-live="polite">{visibleMatches.length} {visibleMatches.length === 1 ? 'match' : 'matches'}</p>
               <ul className="match-list" aria-label="Matches">{visibleMatches.map(match => {
                 const matchPath = `/matches/${encodeURIComponent(match.matchId)}`;
-                return <li className="match-list-item" key={match.matchId}><article className="match-card">
+                return <li className="match-list-item" key={match.matchId}><article className="match-card match-row">
                   <div className="match-card-copy"><div className="match-card-topline"><span className="badge">{provenanceLabel(match.provenance)}</span><span className="phase-tag">{phaseLabel(match.phase)}</span></div>
-                    <h2>Home team <span className="match-score">{match.homeScore}–{match.awayScore}</span> Away team</h2>
-                    <p>Recorded at {clock(match.asOfSeconds)} · {phaseLabel(match.phase)}</p>
+                    <h2><span className="match-side-label">Home</span><span className="match-score">{match.homeScore}–{match.awayScore}</span><span className="match-side-label">Away</span></h2>
+                    <p>Recorded at {clock(match.asOfSeconds)}</p>
                     <details className="match-source-details"><summary>Match and source details</summary>
                       <p className="match-id">Match ID <code translate="no">{match.matchId}</code></p><p>Revision {match.canonicalRevision} · source {match.provenance} · algorithm {match.algorithmVersion}</p>
                       <p>Source hash {match.sourceSha256}</p></details>
@@ -355,7 +355,7 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
       {moreError && <p className="error-copy" role="alert">{moreError}</p>}
       <button className="load-more" type="button" onClick={loadMore} disabled={loadingMore || !page.nextMatchId}>{loadingMore ? 'Loading more matches…' : 'More matches'}</button>
     </div>}
-    {!loading && !error && matches.length > 0 && <p className="home-contract-limit">Competition names, team names, line-ups, summaries, and key moments are not available in the canonical fixture contract.</p>}
+    {!loading && !error && matches.length > 0 && <p className="home-contract-limit">Only match facts supplied by the selected data source are shown here.</p>}
   </section>;
 }
 

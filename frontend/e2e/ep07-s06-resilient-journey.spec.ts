@@ -69,6 +69,11 @@ function replayEvidenceItems(selectedTimeSeconds: number) {
 }
 
 async function stubCanonicalMatch(page: Page, options: StubOptions = {}) {
+  await page.route('**/api/v1/simulation/candidate/status', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ matchId: null, isStreaming: false, currentSequence: null, currentClockValue: null,
+      period: null, sourceSha256: null, sourceStatus: 'candidate_not_canonical', coordinateStatus: 'unverified', playerMetricsStatus: 'unvalidated' })
+  }));
   await page.route('**/api/v1/canonical/matches/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const resource = url.pathname.split('/').at(-1);
@@ -197,22 +202,45 @@ test('does not display canonical pitch positions until tracking rights are appro
   await openSelectedMatch(page);
 
   const pitch = page.getByRole('region', { name: 'Observed pitch' });
-  await expect(pitch.getByText('Observed tracking is unavailable until the source is approved for canonical use. Positions are not estimated.')).toBeVisible();
-  await expect(pitch.getByRole('img', { name: /Observed player and ball positions/ })).toHaveCount(0);
-  await expect(pitch.getByRole('table', { name: /Pitch view coordinates/ })).toHaveCount(0);
+  await expect(page.getByText('Observed tracking is unavailable until the source is approved for canonical use. Positions are not estimated.')).toBeVisible();
+  await expect(pitch).toHaveCount(0);
+  await expect(page.getByRole('img', { name: /Observed player and ball positions/ })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: /Pitch view coordinates/ })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Match score' })).toBeVisible();
 });
 
 async function openSelectedMatch(page: Page) {
   await page.goto(`/matches/${matchId}?matchId=${matchId}&atSeconds=${selectedSeconds}&revision=${canonicalRevision}`);
   await expect(page.getByRole('heading', { name: 'Match overview' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Evidence-backed insights' })).toBeVisible();
 }
+
+test('renders the API-backed match canvas edge to edge without mobile overflow', async ({ page }, testInfo) => {
+  await stubCanonicalMatch(page, { withTracking: true, withEvidence: true });
+  for (const viewport of [
+    { name: 'desktop', width: 1440, height: 900 },
+    { name: 'mobile', width: 375, height: 812 }
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await openSelectedMatch(page);
+    await expect(page.getByRole('button', { name: /candidate live simulation/i })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Match score' })).toContainText('55:09');
+    const pitch = page.getByRole('region', { name: 'Observed pitch' });
+    await expect(pitch.getByRole('img', { name: /Observed player and ball positions/ })).toBeVisible();
+    await expect(pitch.getByRole('list', { name: 'Pitch marker teams' })).toContainText('test-home');
+    await expect(pitch.getByRole('list', { name: 'Pitch marker teams' })).toContainText('test-away');
+    await expect(page.getByRole('heading', { name: 'Recorded events' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Evidence-backed insights' })).toBeVisible();
+    const widths = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth }));
+    expect(widths.document, `match layout overflows at ${viewport.width}px`).toBeLessThanOrEqual(widths.viewport);
+    await page.screenshot({ path: testInfo.outputPath(`ep07-match-api-${viewport.name}.png`), fullPage: true });
+  }
+});
 
 test('audience mode changes disclosure while preserving selected-time facts', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await stubCanonicalMatch(page);
   await openSelectedMatch(page);
+  await expect(page.getByRole('heading', { name: 'Evidence-backed insights' })).toBeVisible();
 
   const score = page.getByRole('region', { name: 'Match score' });
   const matchFacts = await score.innerText();
@@ -222,7 +250,7 @@ test('audience mode changes disclosure while preserving selected-time facts', as
   await expect(score).toContainText('55:09');
   await expect(score).toContainText('1');
   await expect(page.getByText(insightSummary).first()).toBeVisible();
-  await expect(page.getByText('Simulated EPL-context match')).toBeVisible();
+  await expect(page.getByText('Synthetic match')).toBeVisible();
 
   const audience = page.getByRole('group', { name: 'Explanation detail' });
   await audience.getByRole('button', { name: 'Analyst' }).click();
@@ -264,6 +292,7 @@ test('keeps canonical score available when optional reads, including AI-related 
   await openSelectedMatch(page);
 
   await expect(page.getByRole('region', { name: 'Match score' })).toContainText('55:09');
+  await expect(page.getByRole('heading', { name: 'Evidence-backed insights' })).toHaveCount(0);
   await expect(page.getByText('Recorded events service is temporarily unavailable.')).toBeVisible();
   await expect(page.getByText('Saved insights service is temporarily unavailable.').first()).toBeVisible();
   await expect(page.getByText('Observed tracking is unavailable from the canonical service at this selected time.')).toBeVisible();

@@ -146,7 +146,7 @@ it('starts replay from live mode and keeps advancing on one historical revision'
   }
 });
 
-it('does not describe an unrelated key-moments 503 as an empty canonical projection', async () => {
+it('omits the unversioned key-moments panel instead of showing an empty placeholder', async () => {
   const matchId = '11111111-1111-1111-1111-111111111111';
   const snapshot = {
     matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
@@ -168,9 +168,8 @@ it('does not describe an unrelated key-moments 503 as an empty canonical project
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Canonical key moments could not be loaded.');
-    expect(container.textContent).not.toContain('no canonical projection is available');
-    expect(container.textContent).not.toContain('No persisted canonical key moments are available');
+    expect(container.textContent).not.toContain('Key moments');
+    expect(container.querySelector('.key-moments-panel')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -225,7 +224,7 @@ it('exposes observed positions as a screen-reader table and keeps event and time
     expect(container.querySelector('table tbody')?.textContent).toContain('Ball');
     expect(container.querySelector('table tbody')?.textContent).toContain('52.50');
     expect(container.querySelector('table tbody')?.textContent).toContain('34.00');
-    expect(container.querySelector('details')).toBeNull();
+    expect(container.querySelector('.match-provenance')).not.toBeNull();
     const slider = container.querySelector<HTMLInputElement>('#selected-time')!;
     const eventButton = container.querySelector<HTMLButtonElement>('.canonical-event')!;
     slider.focus();
@@ -468,7 +467,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
   try {
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('Synthetic match');
-    expect(container.textContent).toContain('Home team 1–0 Away team');
+    expect(container.textContent).toContain('Home1–0Away');
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).toContain('Second half');
     const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('.match-card a.primary-link')].find(link => link.href.includes(firstId));
@@ -720,8 +719,8 @@ it('uses projection revision for canonical page requests when revision axes dive
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('Canonical revision 100');
     const canonicalRequests = fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost'))
-      .filter(url => ['/summary', '/events', '/insights', '/frames', '/key-moments'].some(path => url.pathname.endsWith(path)));
-    expect(canonicalRequests).toHaveLength(5);
+      .filter(url => ['/summary', '/events', '/insights', '/frames'].some(path => url.pathname.endsWith(path)));
+    expect(canonicalRequests).toHaveLength(4);
     expect(canonicalRequests.every(url => url.searchParams.get('revision') === '5')).toBe(true);
   } finally {
     await act(async () => root.unmount());
