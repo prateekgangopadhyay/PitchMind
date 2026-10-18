@@ -50,6 +50,45 @@ public sealed class FoundryExplanationAdapterTests
         Assert.NotEmpty(userPayload.RootElement.GetProperty("retrievedTacticalKnowledge").EnumerateArray());
     }
 
+    [Fact]
+    public async Task GenerateAsync_CallsFoundryProjectAgentResponsesEndpointAndParsesStructuredCandidate()
+    {
+        var agentOutput = JsonSerializer.Serialize(new
+        {
+            text = "The press preceded a regain.",
+            claims = new[] { new { text = "The press preceded a regain.", evidenceIds = new[] { "event-1" } } }
+        });
+        var responseBody = JsonSerializer.Serialize(new
+        {
+            id = "resp-test",
+            status = "completed",
+            model = "agent-deployment",
+            output_text = agentOutput,
+            usage = new { input_tokens = 14, output_tokens = 9 }
+        });
+        var handler = new StubHandler(_ => Task.FromResult(JsonResponse(responseBody)));
+        using var http = new HttpClient(handler);
+        using var adapter = new FoundryExplanationAdapter(http, new StubTokenProvider(),
+            new FoundryAdapterOptions(new Uri("https://pitchmind.services.ai.azure.com/api/projects/pitchmind-ai"), string.Empty,
+                UseProjectAgentEndpoint: true, AgentName: "TacticalAnalyst"),
+            NullLogger<FoundryExplanationAdapter>.Instance);
+
+        var result = await adapter.GenerateAsync(Request(), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("The press preceded a regain.", result.Candidate!.Text);
+        Assert.Equal("agent-deployment", result.Candidate.ModelVersion);
+        Assert.Equal(14, result.Candidate.InputTokens);
+        Assert.Equal(9, result.Candidate.OutputTokens);
+        Assert.Equal("https://pitchmind.services.ai.azure.com/api/projects/pitchmind-ai/agents/TacticalAnalyst/endpoint/protocols/openai/responses?api-version=v1",
+            handler.RequestUri!.AbsoluteUri);
+        using var requestBody = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Contains("supplied JSON evidence only", requestBody.RootElement.GetProperty("instructions").GetString());
+        Assert.Equal("json_schema", requestBody.RootElement.GetProperty("text").GetProperty("format").GetProperty("type").GetString());
+        using var agentInput = JsonDocument.Parse(requestBody.RootElement.GetProperty("input").GetString()!);
+        Assert.Equal("match-1", agentInput.RootElement.GetProperty("context").GetProperty("matchId").GetString());
+    }
+
     [Theory]
     [InlineData(ExplanationAudience.Fan, "fan", "use everyday language", "briefly explain necessary tactical terms")]
     [InlineData(ExplanationAudience.Analyst, "analyst", "use concise tactical terminology", "describe only the evidenced sequence or structure")]

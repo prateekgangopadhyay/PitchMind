@@ -302,7 +302,7 @@ public sealed class FoundryExplanationAdapter(
         options.Validate();
         var root = options.Endpoint.AbsoluteUri.TrimEnd('/');
         if (options.UseProjectAgentEndpoint)
-            return new Uri(root + "/agents/" + Uri.EscapeDataString(options.AgentName) + "/endpoint/protocols/openai/responses", UriKind.Absolute);
+            return new Uri(root + "/agents/" + Uri.EscapeDataString(options.AgentName) + "/endpoint/protocols/openai/responses?api-version=v1", UriKind.Absolute);
         if (!root.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase)) root += "/openai/v1";
         return new Uri(root + "/chat/completions", UriKind.Absolute);
     }
