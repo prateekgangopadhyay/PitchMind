@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, clock, provenanceLabel, request } from './api';
 import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchSnapshot, CanonicalTrackingFrame, CanonicalTrackingFramePage } from './api';
 import { CanonicalEvidenceDisclosure } from './CanonicalEvidenceDisclosure';
@@ -100,6 +100,8 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
   const [focusAfterLoad, setFocusAfterLoad] = useState<FocusRequest | null>(null);
   const [realtimeMode, setRealtimeMode] = useState<'LIVE' | 'HISTORICAL'>(initialMode);
   const [realtimeState, setRealtimeState] = useState<RealtimeTimelineState | null>(null);
+  const [cinemaMode, setCinemaMode] = useState(false);
+  const pitchPanelRef = useRef<HTMLElement | null>(null);
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const projectionRevision = view?.snapshot.projectionRevision;
@@ -120,6 +122,32 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
     : /^\d+$/.test(sourceRevisionParameter) && Number.isSafeInteger(Number(sourceRevisionParameter)) && Number(sourceRevisionParameter) > 0
       ? Number(sourceRevisionParameter)
       : -1;
+  useEffect(() => {
+    const updateCinemaMode = () => setCinemaMode(document.fullscreenElement === pitchPanelRef.current);
+    document.addEventListener('fullscreenchange', updateCinemaMode);
+    return () => document.removeEventListener('fullscreenchange', updateCinemaMode);
+  }, []);
+  const toggleCinemaMode = async () => {
+    const panel = pitchPanelRef.current;
+    if (!panel) return;
+    if (cinemaMode && document.fullscreenElement !== panel) {
+      setCinemaMode(false);
+      return;
+    }
+    if (document.fullscreenElement === panel) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (panel.requestFullscreen) {
+      try {
+        await panel.requestFullscreen();
+        return;
+      } catch {
+        // Use the in-page cinema layout when browser fullscreen is unavailable.
+      }
+    }
+    setCinemaMode(value => !value);
+  };
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -476,15 +504,31 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
             <p>Both views use the same saved insight and evidence. AI explanations are not connected; match facts remain available without them.</p>
           </div>
           <div className="dashboard canonical-dashboard pitch-dashboard">
-            <section className="panel pitch-panel" aria-labelledby="pitch-title">
-              <h2 id="pitch-title">Observed pitch</h2>
+            <section ref={pitchPanelRef} className={`panel pitch-panel${cinemaMode ? ' is-cinema' : ''}`} aria-labelledby="pitch-title">
+              <div className="pitch-panel-heading"><h2 id="pitch-title">Observed pitch</h2>
+                <button type="button" className="cinema-mode-toggle" onClick={() => { void toggleCinemaMode(); }} aria-pressed={cinemaMode}>
+                  {cinemaMode ? 'Exit cinema view' : 'Cinema view'}
+                </button>
+              </div>
               <p>Only a recorded frame at the selected time is shown. Sample gaps are not filled.</p>
               {pitch && selectedFrame ? <>
                 <svg className="canonical-pitch" style={{ aspectRatio: `${pitch.length} / ${pitch.width}` }} viewBox={`-1 -1 ${pitch.length + 2} ${pitch.width + 2}`} role="img"
                   aria-label={`Observed player and ball positions at ${clock(selectedSeconds)}, period ${selectedFrame.period}`} aria-describedby="pitch-description">
                   <rect className="pitch-boundary" x="0" y="0" width={pitch.length} height={pitch.width} />
+                  {/* Halfway line & center circle */}
                   <line className="pitch-marking" x1={pitch.length / 2} y1="0" x2={pitch.length / 2} y2={pitch.width} />
                   <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={pitch.width * .135} />
+                  <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+                  {/* Left penalty area and goal box */}
+                  <rect className="pitch-marking" x="0" y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+                  <rect className="pitch-marking" x="0" y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+                  <circle className="pitch-marking" cx={11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+                  {/* Right penalty area and goal box */}
+                  <rect className="pitch-marking" x={pitch.length - 16.5} y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+                  <rect className="pitch-marking" x={pitch.length - 5.5} y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+                  <circle className="pitch-marking" cx={pitch.length - 11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+                  {/* Ball Marker */}
+                  <circle cx={pitch.ball.x} cy={pitch.ball.y} r={Math.max(pitch.width * .022, .6)} fill="rgba(74, 239, 172, 0.3)" />
                   <circle className="ball-marker" cx={pitch.ball.x} cy={pitch.ball.y} r={Math.max(pitch.width * .012, .25)} />
                   {pitch.players.map((player, index) => <g key={player.playerId}>
                     <circle className={`player-marker team-marker-${pitch.teamIds.indexOf(player.teamId) % 2}`} cx={player.position.x} cy={player.position.y} r={Math.max(pitch.width * .038, 1.1)} />

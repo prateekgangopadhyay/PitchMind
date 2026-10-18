@@ -38,7 +38,7 @@ export interface CanonicalMatchCard {
 export function provenanceLabel(provenance: string): string {
   const normalized = provenance.trim().toLowerCase();
   return normalized.includes('synthetic') || normalized.includes('simulat')
-    ? 'Simulated EPL-context match'
+    ? 'Synthetic match'
     : provenance;
 }
 export interface CanonicalMatchPage { items: CanonicalMatchCard[]; nextMatchId: string | null; hasMore: boolean }

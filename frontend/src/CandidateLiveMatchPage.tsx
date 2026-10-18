@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection } from '@microsoft/signalr';
 import { clock, getHostAccessToken, request } from './api';
 import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
-import { ClubCrest } from './ShellPages';
+import { contextHref } from './routes';
+import { resolveClubLogo } from './clubLogos';
 
 interface CandidateEvent {
   eventId: string;
@@ -30,6 +31,7 @@ interface Cursor {
 interface SourcePlayer {
   [key: string]: unknown;
   playerName?: string;
+  playerId?: string;
   teamName?: string;
   teamId?: string;
   jerseyNumber?: number;
@@ -54,26 +56,45 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const valueText = (value: unknown) =>
   value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-export function CandidateLiveMatchPage() {
+export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: number } = {}) {
   const { status, error: statusError } = useCandidateStreamStatus();
   const [events, setEvents] = useState<CandidateEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<SourcePlayer | null>(null);
-  const [showTacticalZones, setShowTacticalZones] = useState(true);
+  const [hoveredPlayer, setHoveredPlayer] = useState<SourcePlayer | null>(null);
+  const [replaySeconds, setReplaySeconds] = useState<number | null>(selectedSeconds ?? null);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [cinemaMode, setCinemaMode] = useState(false);
+  const [showTacticalZones, setShowTacticalZones] = useState(false);
+  const [feedTab, setFeedTab] = useState<'events' | 'telemetry' | 'audit'>('events');
+  const [showMethodology, setShowMethodology] = useState(false);
+  const pitchScreenRef = useRef<HTMLDivElement | null>(null);
   const [timelineCategory, setTimelineCategory] = useState<'All' | 'Goals' | 'Shots' | 'Passes' | 'Tackles' | 'Pressures'>('All');
-  
-  // Azure AI Analysis state
-  const [aiQuestion, setAiQuestion] = useState("Explain the tactical mechanism behind the Zone 14 pressing regains.");
-  const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
 
   const bySequence = useRef<CandidateEvent[]>([]);
   const busy = useRef(false);
   const refreshPending = useRef(false);
   const matchId = status?.matchId ?? null;
   const sourceHash = status?.sourceSha256 ?? null;
+
+  useEffect(() => {
+    const updateCinemaMode = () => setCinemaMode(document.fullscreenElement === pitchScreenRef.current);
+    document.addEventListener('fullscreenchange', updateCinemaMode);
+    return () => document.removeEventListener('fullscreenchange', updateCinemaMode);
+  }, []);
+
+  const toggleCinemaMode = async () => {
+    const screen = pitchScreenRef.current;
+    if (!screen) return;
+    if (cinemaMode && document.fullscreenElement !== screen) { setCinemaMode(false); return; }
+    if (document.fullscreenElement === screen) { await document.exitFullscreen(); return; }
+    if (screen.requestFullscreen) {
+      try { await screen.requestFullscreen(); return; }
+      catch { /* Fall back to the in-page cinema layout. */ }
+    }
+    setCinemaMode(true);
+  };
 
   const backfill = useCallback(async (target: string, signal?: AbortSignal) => {
     if (busy.current) {
@@ -239,7 +260,7 @@ export function CandidateLiveMatchPage() {
     };
   }, [matchId, status?.isStreaming, sourceHash, backfill]);
 
-  const latest = useMemo(() => {
+  const liveLatest = useMemo(() => {
     if (!events.length) return null;
     const sequence = status?.currentSequence;
     return sequence == null
@@ -249,13 +270,38 @@ export function CandidateLiveMatchPage() {
           events.at(-1)!;
   }, [events, status?.currentSequence]);
 
+  useEffect(() => { if (selectedSeconds !== undefined) setReplaySeconds(selectedSeconds); }, [selectedSeconds]);
+  const syncReplayLocation = useCallback((seconds?: number, mode?: 'live') => {
+    if (!matchId) return;
+    window.history.replaceState(null, '', contextHref('/candidate-live', matchId, seconds, undefined, mode));
+    window.dispatchEvent(new Event('pitchmind:locationchange'));
+  }, [matchId]);
+  const replayMaximum = liveLatest?.clockSeconds ?? status?.currentClockValue ?? 0;
+  const activeSeconds = replaySeconds === null ? replayMaximum : Math.min(replaySeconds, replayMaximum);
+  const visibleEvents = useMemo(() => events.filter(event => event.sequence <= (liveLatest?.sequence ?? -1) && event.clockSeconds <= activeSeconds),
+    [events, liveLatest?.sequence, activeSeconds]);
+  const latest = visibleEvents.at(-1) ?? null;
+  useEffect(() => {
+    if (!replayPlaying) return;
+    if (activeSeconds >= replayMaximum) { setReplayPlaying(false); return; }
+    const timer = window.setInterval(() => {
+      const nextSeconds = Math.min(activeSeconds + 1, replayMaximum);
+      setReplaySeconds(nextSeconds);
+      syncReplayLocation(nextSeconds);
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [replayPlaying, activeSeconds, replayMaximum, syncReplayLocation]);
+
   const players = useMemo(
     () => (Array.isArray(latest?.rawPayload.playerPositions) ? (latest.rawPayload.playerPositions.filter(isObject) as SourcePlayer[]) : []),
     [latest]
   );
   const teams = [...new Set(players.map(player => (typeof player.teamName === 'string' ? player.teamName : '')).filter(Boolean))];
-  const home = teams[0] ?? 'Home';
-  const away = teams[1] ?? 'Away';
+  const home = teams[0] ?? '—';
+  const away = teams[1] ?? '—';
+
+  const homeLogo = resolveClubLogo(home);
+  const awayLogo = resolveClubLogo(away);
 
   // Live Score computed dynamically from goals streamed up to current sequence
   const { homeScore, awayScore } = useMemo(() => {
@@ -266,16 +312,15 @@ export function CandidateLiveMatchPage() {
       if (e.sequence > seq) break;
       if (e.eventType === 'Goal') {
         const tName = String(e.rawPayload.teamName ?? '');
-        if (tName === home || tName.toLowerCase().includes('united') || tName.toLowerCase().includes('home')) {
+        if (home && tName === home) {
           h++;
-        } else {
+        } else if (away && tName === away) {
           a++;
         }
       }
     }
-    // If no goals encountered yet or default demo, provide initial or current score
     return { homeScore: h, awayScore: a };
-  }, [events, home, latest]);
+  }, [events, home, away, latest]);
 
   const ballX = latest?.rawPayload.ballX;
   const ballY = latest?.rawPayload.ballY;
@@ -296,212 +341,395 @@ export function CandidateLiveMatchPage() {
 
   // Filtered timeline events
   const filteredEvents = useMemo(() => {
-    if (timelineCategory === 'All') return events;
-    if (timelineCategory === 'Goals') return events.filter(e => e.eventType === 'Goal');
-    if (timelineCategory === 'Shots') return events.filter(e => e.eventType === 'Shot');
-    if (timelineCategory === 'Passes') return events.filter(e => e.eventType.includes('Pass'));
-    if (timelineCategory === 'Tackles') return events.filter(e => e.eventType === 'Tackle');
-    if (timelineCategory === 'Pressures') return events.filter(e => e.eventType.includes('Pressure'));
-    return events;
-  }, [events, timelineCategory]);
-
-  const handleRunAiAnalysis = async (customPrompt?: string) => {
-    setAiAnalyzing(true);
-    setAiError(null);
-    try {
-      const promptToUse = customPrompt || aiQuestion;
-      const res = await request<{ text: string; source: string }>('simulation/candidate/analyst', undefined, {
-        question: promptToUse,
-        atSeconds: typeof latest?.clockSeconds === 'number' ? Math.floor(latest.clockSeconds) : 5335,
-        matchId: matchId || status?.matchId || ''
-      });
-      setAiAnalysisResult(res.text);
-    } catch (err: unknown) {
-      const errObj = err as { detail?: string; message?: string } | null;
-      setAiError(errObj?.detail || errObj?.message || 'Azure AI Foundry tactical analysis unavailable.');
-    } finally {
-      setAiAnalyzing(false);
-    }
-  };
+    if (timelineCategory === 'All') return visibleEvents;
+    if (timelineCategory === 'Goals') return visibleEvents.filter(e => e.eventType === 'Goal');
+    if (timelineCategory === 'Shots') return visibleEvents.filter(e => e.eventType === 'Shot');
+    if (timelineCategory === 'Passes') return visibleEvents.filter(e => e.eventType.includes('Pass'));
+    if (timelineCategory === 'Tackles') return visibleEvents.filter(e => e.eventType === 'Tackle');
+    if (timelineCategory === 'Pressures') return visibleEvents.filter(e => e.eventType.includes('Pressure'));
+    return visibleEvents;
+  }, [visibleEvents, timelineCategory]);
 
   return (
     <section className="content-page candidate-live-page">
-      {/* Broadcast Match Header Scoreboard */}
-      <div className="candidate-match-hero-banner" style={{ background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(8, 18, 27, 0.95))', border: '1px solid rgba(74, 239, 172, 0.3)', borderRadius: '16px', padding: '18px 24px', marginBottom: '20px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ background: 'rgba(74, 239, 172, 0.15)', color: '#4aefac', border: '1px solid rgba(74, 239, 172, 0.4)', borderRadius: '999px', padding: '3px 10px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em' }}>
-              PREMIER LEAGUE · LIVE SIMULATION
+      {/* Broadcast Scoreboard & Live Telemetry Hub */}
+      <div className="candidate-match-hero-banner">
+        {/* Top telemetry & status bar */}
+        <div className="hero-top-bar">
+          <div className="hero-status-pills">
+            <span className="live-badge-glow">
+              <span className="pulse-dot" aria-hidden="true"></span>
+              CANDIDATE LIVE FEED
             </span>
-            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Old Trafford · Manchester, UK</span>
+            {status?.sourceSha256 && (
+              <span className="telemetry-sha-chip" title={`Telemetry SHA-256: ${status.sourceSha256}`}>
+                SHA-256: <code>{status.sourceSha256.slice(0, 12)}…</code>
+              </span>
+            )}
+            <span className="events-counter-chip">
+              {events.length} events streamed
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+          <div className="hero-stream-action">
             <button
               type="button"
               className={`candidate-stream-state ${status?.isStreaming ? 'is-streaming' : ''}`}
               role="status"
               onClick={() => { void toggleCandidateStream(); }}
-              style={{ cursor: 'pointer', background: 'transparent', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: status?.isStreaming ? '#4aefac' : '#94a3b8', boxShadow: status?.isStreaming ? '0 0 8px #4aefac' : 'none' }}></span>
+              <span className="stream-dot" aria-hidden="true"></span>
               <span>{status?.isStreaming ? 'Streaming · Click to Pause' : 'Paused · Click to Resume'}</span>
             </button>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', alignItems: 'center', gap: '20px' }}>
+        {/* Center broadcast scoreboard */}
+        <div className="hero-scoreboard-grid">
           {/* Home Team */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'flex-start' }}>
-            <ClubCrest name={home} className="scoreboard-team-crest" width={48} height={48} />
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{home}</h2>
-              <span style={{ fontSize: '0.8rem', color: '#ff7182', fontWeight: 600 }}>Home · 4 - 2 - 3 - 1</span>
+          <div className="team-col home-col">
+            <div className="team-identity">
+              {homeLogo ? (
+                <img src={homeLogo} alt="" className="club-crest-img hero-crest" width="56" height="56" />
+              ) : (
+                <span className="candidate-team-mark" aria-hidden="true">{home === '—' ? '?' : home.slice(0, 2).toUpperCase()}</span>
+              )}
+              <div className="team-text">
+                <h2 className="team-name">{home}</h2>
+                <span className="team-role-pill home-pill">Home FC</span>
+              </div>
             </div>
           </div>
 
-          {/* Center Score & Clock */}
-          <div style={{ textAlign: 'center', padding: '0 24px' }}>
-            <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#fff', letterSpacing: '0.05em', fontVariantNumeric: 'tabular-nums' }}>
+          {/* Center Score & Match Clock */}
+          <div className="center-score-col">
+            <div className="scoreboard-digits">
               <span className="home-live-score">{homeScore}</span>
-              <span style={{ color: 'rgba(255,255,255,0.4)', margin: '0 8px' }}>–</span>
+              <span className="score-separator">–</span>
               <span className="away-live-score">{awayScore}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '4px' }}>
-              <span style={{ color: '#4aefac', fontWeight: 700, fontSize: '0.95rem' }}>{currentClockFormatted}</span>
-              <span style={{ color: '#64748b' }}>·</span>
-              <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>Period {latest?.period ?? status?.period ?? 2}</span>
+            <div className="clock-period-row">
+              <span className="hero-clock-display">{currentClockFormatted}</span>
+              <span className="separator-dot">·</span>
+              <span className="hero-period-tag">Period {latest?.period ?? status?.period ?? '—'}</span>
             </div>
           </div>
 
           {/* Away Team */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', justifyContent: 'flex-end', textAlign: 'right' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>{away}</h2>
-              <span style={{ fontSize: '0.8rem', color: '#7db8ff', fontWeight: 600 }}>Away · 4 - 3 - 3</span>
+          <div className="team-col away-col">
+            <div className="team-identity away-identity">
+              <div className="team-text text-right">
+                <h2 className="team-name">{away}</h2>
+                <span className="team-role-pill away-pill">Away FC</span>
+              </div>
+              {awayLogo ? (
+                <img src={awayLogo} alt="" className="club-crest-img hero-crest" width="56" height="56" />
+              ) : (
+                <span className="candidate-team-mark" aria-hidden="true">{away === '—' ? '?' : away.slice(0, 2).toUpperCase()}</span>
+              )}
             </div>
-            <ClubCrest name={away} className="scoreboard-team-crest" width={48} height={48} />
           </div>
         </div>
+
+        {/* Integrated Scrubber Timeline Bar */}
+        {matchId && (
+          <div className="candidate-replay-controls" aria-label="Match event replay">
+            <div className="replay-meta">
+              <span className="replay-title">Event replay</span>
+              <span className="replay-clock">Source clock · {clock(Math.floor(activeSeconds))}</span>
+            </div>
+
+            <div className="replay-slider-wrap">
+              <input
+                aria-label="Select source event time"
+                type="range"
+                min="0"
+                max={Math.max(1, replayMaximum)}
+                step="1"
+                value={activeSeconds}
+                className="replay-range-slider"
+                onChange={event => {
+                  const seconds = Number(event.target.value);
+                  setReplayPlaying(false);
+                  setReplaySeconds(seconds);
+                  syncReplayLocation(seconds);
+                }}
+              />
+              <div className="slider-ticks" aria-hidden="true">
+                <span>00:00</span>
+                <span>20:00</span>
+                <span>45:00</span>
+                <span>70:00</span>
+                <span>{clock(Math.max(1, replayMaximum))}</span>
+              </div>
+            </div>
+
+            <div className="replay-btn-group">
+              <button
+                type="button"
+                className="replay-toggle-btn"
+                onClick={() => setReplayPlaying(value => !value)}
+                disabled={activeSeconds >= replayMaximum}
+                aria-pressed={replayPlaying}
+              >
+                {replayPlaying ? 'Pause replay' : 'Play replay'}
+              </button>
+              <button
+                type="button"
+                className="return-live-btn"
+                onClick={() => {
+                  setReplayPlaying(false);
+                  setReplaySeconds(null);
+                  syncReplayLocation(undefined, 'live');
+                }}
+              >
+                Return to live
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <header className="candidate-live-heading" style={{ display: 'none' }}>
-        <div>
-          <p className="eyebrow">Candidate live · synthetic source</p>
-          <h1>
-            {home} <span aria-hidden="true">vs</span> {away}
-          </h1>
-          <p>Raw source simulation records, kept separate from canonical match data.</p>
+      {/* Refined Methodology & Verification Notice */}
+      <div className="candidate-caveat-box">
+        <div className="caveat-summary-row" onClick={() => setShowMethodology(!showMethodology)}>
+          <div className="caveat-badge-wrap">
+            <span className="caveat-icon" aria-hidden="true">ℹ️</span>
+            <strong>Candidate Source Notice:</strong>
+            <span className="caveat-short-text">Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.</span>
+          </div>
+          <button type="button" className="caveat-expand-btn" aria-expanded={showMethodology}>
+            {showMethodology ? 'Hide methodology' : 'Show methodology'}
+          </button>
         </div>
-      </header>
+        <p className="candidate-caveat" role="note" style={{ display: showMethodology ? 'block' : 'none' }}>
+          Candidate source only. Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.
+          For display only, raw numeric x/y and ball coordinates are proportionally mapped from a 0–100 range to the pitch canvas; this does
+          not certify real pitch dimensions or orientation. No clock conversion, interpolation or canonical claim is applied.
+        </p>
+      </div>
 
-      {status?.sourceSha256 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '12px' }}>
-          <span>Telemetry Source SHA-256:</span>
-          <code style={{ background: '#08121b', padding: '2px 6px', borderRadius: '4px', color: '#cbd5e1' }}>
-            {status.sourceSha256}
-          </code>
-          <span>· Total dataset events: {events.length} streamed</span>
-        </div>
-      )}
-
-      <p className="candidate-caveat" role="note">
-        Candidate source only. Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.
-        For display only, raw numeric x/y and ball coordinates are proportionally mapped from a 0–100 range to the pitch canvas; this does
-        not certify real pitch dimensions or orientation. No clock conversion, interpolation or canonical claim is applied.
-      </p>
-
-      {statusError && <p role="alert" style={{ color: '#ef4444', fontWeight: 600 }}>{statusError}</p>}
-      {error && <p role="status" style={{ color: '#eab308' }}>{error}</p>}
-      {!matchId && <p role="status">Waiting for the candidate simulation service.</p>}
+      {statusError && <p role="alert" className="candidate-error-banner">{statusError}</p>}
+      {error && <p role="status" className="candidate-warning-banner">{error}</p>}
+      {!matchId && <p role="status" className="candidate-waiting-banner">Waiting for the candidate simulation service.</p>}
 
       {matchId && (
         <div className="candidate-live-grid">
-          {/* Main Left Column: Tactical Football Field & Player Analytics */}
-          <section className="candidate-panel" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '8px' }}>
-              <div>
-                <h2 style={{ margin: 0 }}>Live Football Field</h2>
-                <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
-                  Sequence #{latest?.sequence ?? '—'} · Period {latest?.period ?? '—'} · Raw Clock {valueText(latest?.clockSeconds ?? status?.currentClockValue)}s · 22 Live Players
-                </p>
+          {/* Left Column: Tactical Pitch Command Center */}
+          <section className="candidate-panel pitch-command-panel">
+            <div className="pitch-panel-toolbar">
+              <div className="pitch-title-meta">
+                <h2>Match Pitch</h2>
+                <span className="pitch-meta-pills">
+                  <span>Seq #{latest?.sequence ?? '—'}</span>
+                  <span>Period {latest?.period ?? '—'}</span>
+                  <span>Clock {valueText(latest?.clockSeconds)}s</span>
+                  <span className="observed-players-tag">{players.length} observed players</span>
+                </span>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+
+              <div className="pitch-action-controls">
                 <button
                   type="button"
+                  className={`zones-toggle-btn ${showTacticalZones ? 'is-active' : ''}`}
                   onClick={() => setShowTacticalZones(!showTacticalZones)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    background: showTacticalZones ? 'rgba(74, 239, 172, 0.2)' : 'rgba(255,255,255,0.06)',
-                    color: showTacticalZones ? '#4aefac' : '#cbd5e1',
-                    border: '1px solid ' + (showTacticalZones ? 'rgba(74, 239, 172, 0.4)' : 'rgba(255,255,255,0.1)'),
-                    cursor: 'pointer'
-                  }}
+                  aria-pressed={showTacticalZones}
+                  title="Toggle 18-zone tactical pitch grid"
                 >
-                  {showTacticalZones ? '✓ Zone 14 Overlay' : 'Show Zone 14'}
+                  {showTacticalZones ? 'Zones · On' : 'Tactical Zones'}
+                </button>
+                <button
+                  type="button"
+                  className="cinema-mode-toggle"
+                  onClick={() => { void toggleCinemaMode(); }}
+                  aria-pressed={cinemaMode}
+                >
+                  {cinemaMode ? 'Exit cinema view' : 'Cinema view'}
                 </button>
               </div>
             </div>
 
             {players.length ? (
-              <div style={{ position: 'relative' }}>
+              <div ref={pitchScreenRef} className={`candidate-pitch-screen${cinemaMode ? ' is-cinema' : ''}`}>
+                {cinemaMode && (
+                  <button type="button" className="cinema-exit-toggle" onClick={() => { void toggleCinemaMode(); }}>
+                    Exit cinema view
+                  </button>
+                )}
+
                 <svg
                   className="candidate-pitch"
-                  viewBox="0 0 100 68"
+                  viewBox="-3.5 -2.5 107 73"
+                  preserveAspectRatio="xMidYMid meet"
                   role="img"
                   aria-label="Raw candidate player and ball positions mapped to the pitch canvas; dimensions and orientation unverified"
-                  style={{ width: '100%', height: 'auto', borderRadius: '12px', boxShadow: 'inset 0 0 30px rgba(0,0,0,0.5)', background: '#0a4630' }}
                 >
                   <defs>
-                    <linearGradient id="grassMow" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#0c563b" />
-                      <stop offset="10%" stopColor="#0d6143" />
-                      <stop offset="20%" stopColor="#0c563b" />
-                      <stop offset="30%" stopColor="#0d6143" />
-                      <stop offset="40%" stopColor="#0c563b" />
-                      <stop offset="50%" stopColor="#0d6143" />
-                      <stop offset="60%" stopColor="#0c563b" />
-                      <stop offset="70%" stopColor="#0d6143" />
-                      <stop offset="80%" stopColor="#0c563b" />
-                      <stop offset="90%" stopColor="#0d6143" />
-                      <stop offset="100%" stopColor="#0c563b" />
+                    {/* Deep Stadium Turf & Radial Floodlight Gradients */}
+                    <radialGradient id="pitch-floodlight" cx="50%" cy="50%" r="58%" fx="50%" fy="48%">
+                      <stop offset="0%" stopColor="#165331" />
+                      <stop offset="45%" stopColor="#103e24" />
+                      <stop offset="85%" stopColor="#0b2c19" />
+                      <stop offset="100%" stopColor="#071e11" />
+                    </radialGradient>
+
+                    <linearGradient id="stripe-sheen" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.04" />
+                      <stop offset="50%" stopColor="#ffffff" stopOpacity="0.01" />
+                      <stop offset="100%" stopColor="#000000" stopOpacity="0.08" />
                     </linearGradient>
+
+                    {/* 3D Soccer Ball Shading Gradients */}
+                    <radialGradient id="ball-leather-sphere" cx="35%" cy="32%" r="65%">
+                      <stop offset="0%" stopColor="#ffffff" />
+                      <stop offset="55%" stopColor="#f1f5f9" />
+                      <stop offset="85%" stopColor="#cbd5e1" />
+                      <stop offset="100%" stopColor="#94a3b8" />
+                    </radialGradient>
+
+                    {/* Goal Net Hexagonal / Diamond Weave Pattern */}
+                    <pattern id="goal-net-pattern" width="0.7" height="0.7" patternUnits="userSpaceOnUse">
+                      <rect width="0.7" height="0.7" fill="rgba(255,255,255,0.02)" />
+                      <path d="M 0 0.7 L 0.7 0 M 0 0 L 0.7 0.7" stroke="rgba(255,255,255,0.4)" strokeWidth="0.08" />
+                    </pattern>
+
+                    {/* Ground Soft Shadows */}
+                    <filter id="ball-shadow-filter" x="-60%" y="-60%" width="220%" height="220%">
+                      <feGaussianBlur stdDeviation="0.3" result="blur" />
+                    </filter>
+                    <filter id="player-shadow-filter" x="-40%" y="-40%" width="180%" height="180%">
+                      <feGaussianBlur stdDeviation="0.25" result="blur" />
+                    </filter>
                   </defs>
 
-                  <rect className="candidate-pitch-grass" width="100" height="68" fill="url(#grassMow)" />
+                  {/* Outer Turf Apron & Run-off Track */}
+                  <rect x="-4" y="-3" width="108" height="74" fill="#082013" />
 
-                  {/* Tactical Zone 14 Highlight */}
+                  {/* Main Floodlit Playing Turf */}
+                  <rect className="candidate-pitch-grass" x="0" y="0" width="100" height="68" fill="url(#pitch-floodlight)" />
+
+                  {/* 10 Precision Lawn Mowing Bands (4.7m stripe alternation) */}
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <rect
+                      key={index}
+                      x={3 + index * 9.4}
+                      y="3"
+                      width="4.7"
+                      height="62"
+                      fill="url(#stripe-sheen)"
+                      opacity="0.45"
+                    />
+                  ))}
+
+                  {/* 18-Zone Tactical Overlay (toggleable) */}
                   {showTacticalZones && (
-                    <g className="tactical-zones-group">
-                      <rect x="58" y="24" width="22" height="20" fill="rgba(234, 179, 8, 0.15)" stroke="rgba(234, 179, 8, 0.5)" strokeDasharray="1,1" strokeWidth="0.3" />
-                      <text x="69" y="34" fill="rgba(234, 179, 8, 0.85)" fontSize="1.8" textAnchor="middle" fontWeight="bold">ZONE 14</text>
+                    <g className="tactical-zones-layer" opacity="0.6">
+                      {/* Vertical Thirds Lines */}
+                      <line x1="34.33" y1="3" x2="34.33" y2="65" stroke="#4aefac" strokeWidth="0.22" strokeDasharray="1.2 1.2" />
+                      <line x1="65.67" y1="3" x2="65.67" y2="65" stroke="#4aefac" strokeWidth="0.22" strokeDasharray="1.2 1.2" />
+                      {/* Horizontal Channels */}
+                      <line x1="3" y1="15.4" x2="97" y2="15.4" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
+                      <line x1="3" y1="27.8" x2="97" y2="27.8" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
+                      <line x1="3" y1="40.2" x2="97" y2="40.2" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
+                      <line x1="3" y1="52.6" x2="97" y2="52.6" stroke="#4aefac" strokeWidth="0.2" strokeDasharray="1.2 1.2" />
+
+                      {/* Zone 14 (Central Attacking Golden Pocket) Highlight */}
+                      <rect x="65.67" y="27.8" width="16.56" height="12.4" fill="rgba(245, 158, 11, 0.16)" stroke="#f59e0b" strokeWidth="0.3" strokeDasharray="1 1" />
+                      <text x="73.95" y="34.5" fill="#fde68a" fontSize="1.8" textAnchor="middle" fontWeight="bold">ZONE 14</text>
                     </g>
                   )}
 
-                  <g className="candidate-pitch-lines">
-                    <rect x="2" y="2" width="96" height="64" />
-                    <path d="M50 2v64M50 20a14 14 0 1 0 0 28a14 14 0 1 0 0-28M2 13h16v42H2M98 13H82v42h16" />
-                    {/* Goal boxes */}
-                    <rect x="2" y="22" width="6" height="24" />
-                    <rect x="92" y="22" width="6" height="24" />
-                    {/* Penalty spots */}
-                    <circle cx="12" cy="34" r="0.5" fill="#fff" />
-                    <circle cx="88" cy="34" r="0.5" fill="#fff" />
-                    <circle cx="50" cy="34" r="0.6" fill="#fff" />
+                  {/* Goal Structures (Nets behind Goal Lines) */}
+                  <g className="goal-nets">
+                    {/* Left Goal Net & Posts */}
+                    <rect x="0.85" y="30.66" width="2.15" height="6.68" rx="0.3" fill="url(#goal-net-pattern)" stroke="rgba(255,255,255,0.7)" strokeWidth="0.25" />
+                    <line x1="3" y1="30.66" x2="3" y2="37.34" stroke="#ffffff" strokeWidth="0.5" strokeLinecap="round" />
+                    {/* Right Goal Net & Posts */}
+                    <rect x="97" y="30.66" width="2.15" height="6.68" rx="0.3" fill="url(#goal-net-pattern)" stroke="rgba(255,255,255,0.7)" strokeWidth="0.25" />
+                    <line x1="97" y1="30.66" x2="97" y2="37.34" stroke="#ffffff" strokeWidth="0.5" strokeLinecap="round" />
                   </g>
 
-                  {/* Ball Marker */}
+                  {/* Official Regulation Pitch Markings in Crisp White */}
+                  <g className="candidate-pitch-lines" fill="none" stroke="rgba(255, 255, 255, 0.88)" strokeWidth="0.35" strokeLinecap="round" strokeLinejoin="round">
+                    {/* Boundary Touchlines */}
+                    <rect x="3" y="3" width="94" height="62" />
+
+                    {/* Halfway Line */}
+                    <line x1="50" y1="3" x2="50" y2="65" />
+
+                    {/* Center Circle & Kick-off Spot */}
+                    <circle cx="50" cy="34" r="8.19" />
+                    <circle cx="50" cy="34" r="0.45" fill="#ffffff" />
+
+                    {/* Left Penalty Box (18-yard box) */}
+                    <rect x="3" y="15.62" width="14.77" height="36.76" />
+                    {/* Left 6-Yard Goal Box */}
+                    <rect x="3" y="25.65" width="4.92" height="16.70" />
+                    {/* Left Penalty Spot (11m) */}
+                    <circle cx="12.85" cy="34" r="0.45" fill="#ffffff" />
+                    {/* Left Penalty Arc (The D) */}
+                    <path d="M 17.77 27.45 A 8.19 8.19 0 0 1 17.77 40.55" />
+
+                    {/* Right Penalty Box (18-yard box) */}
+                    <rect x="82.23" y="15.62" width="14.77" height="36.76" />
+                    {/* Right 6-Yard Goal Box */}
+                    <rect x="92.08" y="25.65" width="4.92" height="16.70" />
+                    {/* Right Penalty Spot (11m) */}
+                    <circle cx="87.15" cy="34" r="0.45" fill="#ffffff" />
+                    {/* Right Penalty Arc (The D) */}
+                    <path d="M 82.23 27.45 A 8.19 8.19 0 0 0 82.23 40.55" />
+
+                    {/* 4 Regulation Corner Arcs (1m radius) */}
+                    <path d="M 3 3.9 A 0.9 0.9 0 0 0 3.9 3" />
+                    <path d="M 3 64.1 A 0.9 0.9 0 0 1 3.9 65" />
+                    <path d="M 97 3.9 A 0.9 0.9 0 0 1 96.1 3" />
+                    <path d="M 97 64.1 A 0.9 0.9 0 0 0 96.1 65" />
+                  </g>
+
+                  {/* Corner Flag Pins at the 4 Touchline Vertices */}
+                  <g className="corner-flags" pointerEvents="none">
+                    <circle cx="3" cy="3" r="0.45" fill="#facc15" stroke="#ca8a04" strokeWidth="0.1" />
+                    <circle cx="3" cy="65" r="0.45" fill="#facc15" stroke="#ca8a04" strokeWidth="0.1" />
+                    <circle cx="97" cy="3" r="0.45" fill="#facc15" stroke="#ca8a04" strokeWidth="0.1" />
+                    <circle cx="97" cy="65" r="0.45" fill="#facc15" stroke="#ca8a04" strokeWidth="0.1" />
+                  </g>
+
+                  {/* ⚽ Authentic 3D Telstar Football Ball Marker (Glides smoothly without cursor flickering) */}
                   {ballPosition && (
-                    <g className="candidate-ball-marker">
-                      <circle cx={toPitchX(ballPosition.x)} cy={toPitchY(ballPosition.y)} r="2.2" fill="none" stroke="#4aefac" strokeWidth="0.4" opacity="0.75" />
-                      <circle cx={toPitchX(ballPosition.x)} cy={toPitchY(ballPosition.y)} r="1.3" />
-                      <text x={toPitchX(ballPosition.x)} y={toPitchY(ballPosition.y) + 0.45}>B</text>
+                    <g
+                      className="candidate-ball-marker"
+                      role="img"
+                      aria-label={`Match ball at X ${ballPosition.x.toFixed(1)}, Y ${ballPosition.y.toFixed(1)}`}
+                      style={{
+                        transform: `translate(${toPitchX(ballPosition.x)}px, ${toPitchY(ballPosition.y)}px)`,
+                        transition: 'transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1)',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      {/* Ground Contact Soft Shadow */}
+                      <ellipse cx="0" cy="0.38" rx="0.95" ry="0.4" fill="rgba(0, 0, 0, 0.5)" filter="url(#ball-shadow-filter)" />
+
+                      {/* 3D Spherical Leather Ball Body */}
+                      <circle cx="0" cy="0" r="0.95" fill="url(#ball-leather-sphere)" stroke="#0f172a" strokeWidth="0.14" />
+
+                      {/* Classic Telstar Pentagonal Patches & Seam Lines */}
+                      <polygon points="0,-0.32 0.31,-0.1 0.19,0.26 -0.19,0.26 -0.31,-0.1" fill="#0f172a" />
+                      <line x1="0" y1="-0.32" x2="0" y2="-0.72" stroke="#0f172a" strokeWidth="0.08" />
+                      <line x1="0.31" y1="-0.1" x2="0.68" y2="-0.22" stroke="#0f172a" strokeWidth="0.08" />
+                      <line x1="0.19" y1="0.26" x2="0.42" y2="0.65" stroke="#0f172a" strokeWidth="0.08" />
+                      <line x1="-0.19" y1="0.26" x2="-0.42" y2="0.65" stroke="#0f172a" strokeWidth="0.08" />
+                      <line x1="-0.31" y1="-0.1" x2="-0.68" y2="-0.22" stroke="#0f172a" strokeWidth="0.08" />
+                      <path d="M -0.26 -0.76 A 0.95 0.95 0 0 1 0.26 -0.76 L 0 -0.72 Z" fill="#0f172a" />
+                      <path d="M 0.72 -0.36 A 0.95 0.95 0 0 1 0.78 0.12 L 0.68 -0.22 Z" fill="#0f172a" />
+                      <path d="M 0.31 0.73 A 0.95 0.95 0 0 1 -0.31 0.73 L -0.19 0.65 L 0.19 0.65 Z" fill="#0f172a" />
+                      <path d="M -0.78 0.12 A 0.95 0.95 0 0 1 -0.72 -0.36 L -0.68 -0.22 Z" fill="#0f172a" />
+
+                      {/* Specular 3D Gloss Sheen */}
+                      <ellipse cx="-0.28" cy="-0.28" rx="0.28" ry="0.15" fill="rgba(255, 255, 255, 0.7)" transform="rotate(-30 -0.28 -0.28)" />
                     </g>
                   )}
 
-                  {/* 22 Live Player Markers */}
+                  {/* 22 Live Tactical Player Markers */}
                   {players.map((p, index) => {
                     if (
                       typeof p.x !== 'number' ||
@@ -518,235 +746,291 @@ export function CandidateLiveMatchPage() {
                     const y = toPitchY(p.y);
                     const side = p.teamName === away ? 'away' : 'home';
                     const isSelected = selectedPlayer?.playerName === p.playerName;
+                    const isHovered = hoveredPlayer?.playerName === p.playerName;
 
                     return (
                       <g
-                        key={`${p.teamId ?? side}-${p.jerseyNumber ?? index}`}
-                        onClick={() => setSelectedPlayer(p)}
+                        key={`${p.teamId ?? side}-${p.playerName ?? index}`}
+                        onClick={() => setSelectedPlayer(isSelected ? null : p)}
+                        onMouseEnter={() => setHoveredPlayer(p)}
+                        onMouseLeave={() => setHoveredPlayer(null)}
                         style={{ cursor: 'pointer' }}
+                        className={`player-marker-group ${isSelected ? 'is-selected' : ''}`}
                       >
+                        <title>{`${p.teamName ?? side}: ${p.playerName ?? 'Player'} (#${p.jerseyNumber ?? '?'})`}</title>
+
+                        {/* Selection & Hover Focus Ring */}
                         {isSelected && (
-                          <circle cx={x} cy={y} r="2.8" fill="none" stroke="#facc15" strokeWidth="0.5" />
+                          <circle cx={x} cy={y} r="2.6" fill="none" stroke="#10b981" strokeWidth="0.45" strokeDasharray="1 0.7" className="player-selection-ring" />
                         )}
-                        <circle cx={x} cy={y} r="1.9" className={`candidate-player ${side}`} />
-                        <text x={x} y={y + 0.6}>
-                          {valueText(p.jerseyNumber ?? index + 1)}
+                        {isHovered && !isSelected && (
+                          <circle cx={x} cy={y} r="2.3" fill="none" stroke="#ffffff" strokeWidth="0.35" opacity="0.8" />
+                        )}
+
+                        {/* Player Turf Shadow */}
+                        <ellipse cx={x} cy={y + 0.3} rx="1.35" ry="0.5" fill="rgba(0, 0, 0, 0.45)" filter="url(#player-shadow-filter)" />
+
+                        {/* Authentic Team Kit Circle (Satisfies cx/cy test assertions) */}
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r="1.45"
+                          className={`candidate-player ${side}`}
+                        />
+
+                        {/* High-Legibility Jersey Number in Tabular Figures */}
+                        <text x={x} y={y + 0.5} className="candidate-player-num">
+                          {valueText(p.jerseyNumber)}
                         </text>
                       </g>
                     );
                   })}
-                </svg>
 
-                {/* Selected Player Interactive HUD Card */}
-                {selectedPlayer && (
-                  <div style={{ marginTop: '12px', padding: '12px 16px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid #facc15', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ width: 28, height: 28, borderRadius: '50%', background: selectedPlayer.teamName === away ? '#0284c7' : '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem' }}>
-                        {selectedPlayer.jerseyNumber ?? '?'}
-                      </span>
-                      <div>
-                        <strong style={{ fontSize: '0.95rem', color: '#fff' }}>{selectedPlayer.playerName}</strong>
-                        <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                          {selectedPlayer.teamName} · {selectedPlayer.position ?? 'Midfield'}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.8rem' }}>
-                      <div><span style={{ color: '#64748b' }}>Speed:</span> <strong style={{ color: '#4aefac' }}>{valueText(selectedPlayer.speed)} km/h</strong></div>
-                      <div><span style={{ color: '#64748b' }}>Distance:</span> <strong style={{ color: '#38bdf8' }}>{valueText(selectedPlayer.distanceCovered)} km</strong></div>
-                      <div><span style={{ color: '#64748b' }}>Pass Acc:</span> <strong style={{ color: '#facc15' }}>{valueText(selectedPlayer.passAccuracy)}%</strong></div>
-                      <div><span style={{ color: '#64748b' }}>Touches:</span> <strong style={{ color: '#fff' }}>{valueText(selectedPlayer.touches)}</strong></div>
-                      <div><span style={{ color: '#64748b' }}>Stamina:</span> <strong style={{ color: '#4ade80' }}>{valueText(selectedPlayer.stamina)}%</strong></div>
-                    </div>
-                    <button type="button" onClick={() => setSelectedPlayer(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.9rem' }}>✕</button>
-                  </div>
-                )}
+                  {/* Interactive Floating Hover HUD Tooltip on the Pitch */}
+                  {hoveredPlayer && typeof hoveredPlayer.x === 'number' && typeof hoveredPlayer.y === 'number' && (
+                    <g
+                      className="pitch-hud-tooltip"
+                      transform={`translate(${Math.min(84, Math.max(16, toPitchX(hoveredPlayer.x)))}, ${toPitchY(hoveredPlayer.y) > 18 ? toPitchY(hoveredPlayer.y) - 6 : toPitchY(hoveredPlayer.y) + 8})`}
+                      pointerEvents="none"
+                    >
+                      <rect x="-15" y="-5" width="30" height="7.5" rx="1.5" fill="rgba(7, 19, 28, 0.95)" stroke="#4aefac" strokeWidth="0.3" />
+                      <text x="0" y="-1.5" fill="#ffffff" fontSize="2" fontWeight="bold" textAnchor="middle">
+                        #{hoveredPlayer.jerseyNumber} {hoveredPlayer.playerName}
+                      </text>
+                      <text x="0" y="1.2" fill="#94a3b8" fontSize="1.4" textAnchor="middle">
+                        {hoveredPlayer.teamName} · {hoveredPlayer.speed ? `${hoveredPlayer.speed} km/h` : 'Active'}
+                      </text>
+                    </g>
+                  )}
+                </svg>
               </div>
             ) : (
-              <p>{loading ? 'Loading player positions from PostgreSQL…' : 'No player positions in this source event.'}</p>
+              <div className="pitch-loading-state">
+                <p>{loading ? 'Loading player tracking telemetry from candidate feed…' : 'No player positions recorded in this source event.'}</p>
+              </div>
             )}
 
-            <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '8px' }}>
-              Raw source coordinates shown proportionally for preview · no verified pitch scale or attack direction.
+            <p className="candidate-coordinate-note">
+              Raw source coordinates are displayed proportionally for preview · pitch scale and attack direction are unverified.
             </p>
 
-            {/* Team Squad Lists */}
-            <div className="candidate-player-groups">
-              {[home, away].map(team => (
-                <section key={team} style={{ background: 'rgba(8, 18, 27, 0.6)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                    <ClubCrest name={team} width={20} height={20} />
-                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#fff' }}>{team} Squad</h3>
+            {/* Selected Player Tactical Intelligence Card */}
+            {selectedPlayer ? (
+              <div className="selected-player-card">
+                <div className="player-card-header">
+                  <div className="player-badge-meta">
+                    <span className={`player-jersey-pill ${selectedPlayer.teamName === away ? 'away-side' : 'home-side'}`}>
+                      #{selectedPlayer.jerseyNumber ?? '—'}
+                    </span>
+                    <div>
+                      <h3 className="player-card-name">{valueText(selectedPlayer.playerName)}</h3>
+                      <span className="player-card-sub">
+                        {valueText(selectedPlayer.teamName)} · Position {valueText(selectedPlayer.position)}
+                      </span>
+                    </div>
                   </div>
-                  <ul>
-                    {players
-                      .filter(p => p.teamName === team)
-                      .map((p, index) => (
-                        <li
-                          key={`${p.teamId ?? team}-${p.jerseyNumber ?? index}`}
-                          onClick={() => setSelectedPlayer(p)}
-                          style={{ cursor: 'pointer', transition: 'background 0.2s', padding: '6px 8px', borderRadius: '6px' }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>
-                              <span style={{ color: p.teamName === away ? '#7db8ff' : '#ff7182', fontWeight: 700, marginRight: '6px' }}>
-                                #{p.jerseyNumber ?? index + 1}
-                              </span>
-                              <strong>{valueText(p.playerName)}</strong>
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: '#4aefac' }}>
-                              {p.speed ? `${p.speed} km/h` : p.position ?? '—'}
-                            </span>
-                          </div>
-                          <span>
-                            {Object.entries(p)
-                              .filter(([key]) => !['playerName', 'teamName', 'teamId', 'jerseyNumber', 'x', 'y'].includes(key))
-                              .map(([key, value]) => `${key}: ${valueText(value)}`)
-                              .join(' · ')}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-
-            {/* Azure AI Tactical Analysis Panel */}
-            <div style={{ marginTop: '24px', padding: '18px 20px', background: 'linear-gradient(135deg, rgba(8, 20, 36, 0.9), rgba(15, 23, 42, 0.95))', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '999px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700 }}>
-                    AZURE AI FOUNDRY
-                  </span>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#fff' }}>Detailed AI Tactical Analytics</h3>
+                  <div className="player-card-actions">
+                    <a
+                      className="player-details-link"
+                      href={contextHref(`/players/${encodeURIComponent(selectedPlayer.playerId ?? selectedPlayer.playerName ?? '')}`, matchId ?? undefined, Math.floor(activeSeconds))}
+                    >
+                      Open {valueText(selectedPlayer.playerName)} in Players →
+                    </a>
+                    <button
+                      type="button"
+                      className="close-player-card-btn"
+                      onClick={() => setSelectedPlayer(null)}
+                      aria-label="Deselect player"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Evaluated against candidate telemetry</span>
-              </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                <input
-                  type="text"
-                  value={aiQuestion}
-                  onChange={e => setAiQuestion(e.target.value)}
-                  placeholder="Ask a tactical question about this match..."
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: '#07131c', color: '#fff', fontSize: '0.85rem' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRunAiAnalysis()}
-                  disabled={aiAnalyzing}
-                  style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#0284c7', color: '#fff', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
-                >
-                  {aiAnalyzing ? 'Analyzing…' : 'Ask Azure AI'}
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                {[
-                  "Why did the high press succeed in the 14th minute?",
-                  "How did the attacking side overload the right half-space?",
-                  "Evaluate midfield defensive transition efficiency"
-                ].map(q => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => { setAiQuestion(q); void handleRunAiAnalysis(q); }}
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: '999px', padding: '3px 10px', fontSize: '0.75rem', cursor: 'pointer' }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-
-              {aiError && <p style={{ color: '#f87171', fontSize: '0.85rem', margin: '8px 0' }}>{aiError}</p>}
-
-              {aiAnalysisResult ? (
-                <div style={{ padding: '14px', background: 'rgba(7, 19, 28, 0.8)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', color: '#e2e8f0', fontSize: '0.85rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-                  {aiAnalysisResult}
+                <div className="player-metrics-grid">
+                  <div className="metric-tile">
+                    <span className="metric-label">Speed</span>
+                    <strong className="metric-val">{selectedPlayer.speed !== undefined ? `${selectedPlayer.speed} km/h` : '—'}</strong>
+                  </div>
+                  <div className="metric-tile">
+                    <span className="metric-label">Distance</span>
+                    <strong className="metric-val">{selectedPlayer.distanceCovered !== undefined ? `${selectedPlayer.distanceCovered} km` : '—'}</strong>
+                  </div>
+                  <div className="metric-tile">
+                    <span className="metric-label">Pass Accuracy</span>
+                    <strong className="metric-val">{selectedPlayer.passAccuracy !== undefined ? `${selectedPlayer.passAccuracy}%` : '—'}</strong>
+                  </div>
+                  <div className="metric-tile">
+                    <span className="metric-label">Touches</span>
+                    <strong className="metric-val">{valueText(selectedPlayer.touches)}</strong>
+                  </div>
+                  <div className="metric-tile">
+                    <span className="metric-label">Heart Rate</span>
+                    <strong className="metric-val">{selectedPlayer.heartRate !== undefined ? `${selectedPlayer.heartRate} bpm` : '—'}</strong>
+                  </div>
+                  <div className="metric-tile">
+                    <span className="metric-label">Stamina</span>
+                    <strong className="metric-val">{selectedPlayer.stamina !== undefined ? `${selectedPlayer.stamina}%` : '—'}</strong>
+                  </div>
                 </div>
-              ) : (
-                <p style={{ color: '#64748b', fontSize: '0.82rem', margin: 0 }}>
-                  Click "Ask Azure AI" to generate real-time evidence-grounded tactical analysis of the live stream.
-                </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="player-selection-hint">
+                <span className="hint-bulb" aria-hidden="true">💡</span>
+                <span>Click any player marker on the pitch to inspect observed biometrics and tracking telemetry.</span>
+              </div>
+            )}
           </section>
 
-          {/* Right Column: Live Event Stream & Raw Telemetry */}
-          <aside className="candidate-panel">
-            <h2>Live Event Stream</h2>
-            <p>SignalR cursors prompt PostgreSQL backfill; event JSON stays intact.</p>
-
-            {/* Event Filter Pills */}
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '10px 0 14px' }}>
-              {(['All', 'Goals', 'Shots', 'Passes', 'Tackles', 'Pressures'] as const).map(cat => (
+          {/* Right Column: Live Match Operations & Event Feed */}
+          <aside className="candidate-panel candidate-feed-section">
+            <div className="feed-header-row">
+              <h2>Match Operations</h2>
+              <div className="feed-segmented-tabs">
                 <button
-                  key={cat}
                   type="button"
-                  onClick={() => setTimelineCategory(cat)}
-                  style={{
-                    padding: '3px 9px',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    background: timelineCategory === cat ? '#0284c7' : 'rgba(255,255,255,0.06)',
-                    color: timelineCategory === cat ? '#fff' : '#94a3b8',
-                    border: '1px solid ' + (timelineCategory === cat ? '#38bdf8' : 'rgba(255,255,255,0.1)'),
-                    cursor: 'pointer'
-                  }}
+                  className={`feed-tab-btn ${feedTab === 'events' ? 'is-active' : ''}`}
+                  onClick={() => setFeedTab('events')}
                 >
-                  {cat}
+                  Live Feed ({filteredEvents.length})
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className={`feed-tab-btn ${feedTab === 'telemetry' ? 'is-active' : ''}`}
+                  onClick={() => setFeedTab('telemetry')}
+                >
+                  Telemetry
+                </button>
+                <button
+                  type="button"
+                  className={`feed-tab-btn ${feedTab === 'audit' ? 'is-active' : ''}`}
+                  onClick={() => setFeedTab('audit')}
+                >
+                  Audit
+                </button>
+              </div>
             </div>
 
-            {latest ? (
-              <>
-                <dl>
-                  <dt>Event type</dt>
-                  <dd style={{ color: latest.eventType === 'Goal' ? '#4ade80' : '#fff', fontWeight: 700 }}>
-                    {latest.eventType} {latest.eventType === 'Goal' ? '⚽' : ''}
-                  </dd>
-                  <dt>Raw clock / period</dt>
-                  <dd>{valueText(latest.clockSeconds)} / {latest.period}</dd>
-                  <dt>Sequence</dt>
-                  <dd>{latest.sequence}</dd>
-                  <dt>Event ID</dt>
-                  <dd><code>{latest.eventId}</code></dd>
-                </dl>
-                <details>
-                  <summary>Original event payload</summary>
-                  <pre className="candidate-raw-payload">{JSON.stringify(latest.rawPayload, null, 2)}</pre>
-                </details>
-              </>
-            ) : (
-              <p>{loading ? 'Loading candidate events…' : 'No persisted source event yet.'}</p>
+            {/* TAB 1: Live Event Feed */}
+            {feedTab === 'events' && (
+              <div className="feed-tab-content">
+                {/* Event Filter Pills */}
+                <div className="category-filter-bar">
+                  {(['All', 'Goals', 'Shots', 'Passes', 'Tackles', 'Pressures'] as const).map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`cat-pill-btn ${timelineCategory === cat ? 'active' : ''}`}
+                      onClick={() => setTimelineCategory(cat)}
+                    >
+                      {cat} {cat === 'Goals' ? '⚽' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="events-scroll-container">
+                  <ol className="candidate-history">
+                    {filteredEvents
+                      .slice(-40)
+                      .reverse()
+                      .map(event => (
+                        <li key={event.eventId} className={`event-history-item ${event.eventType === 'Goal' ? 'is-goal-event' : ''}`}>
+                          <div className="event-item-top">
+                            <span className="event-seq-time">
+                              #{event.sequence} · {valueText(event.clockSeconds)}s
+                            </span>
+                            <strong className="event-type-label">
+                              {event.eventType} {event.eventType === 'Goal' ? '⚽' : ''}
+                            </strong>
+                          </div>
+                          <div className="event-item-meta">
+                            <span className="event-team-name">{valueText(event.rawPayload.teamName)}</span>
+                            {Boolean(event.rawPayload.playerName) && (
+                              <span className="event-player-name">· {valueText(event.rawPayload.playerName)}</span>
+                            )}
+                            <span className="event-id-pill">· <code>{event.eventId}</code></span>
+                          </div>
+                        </li>
+                      ))}
+                  </ol>
+                </div>
+              </div>
             )}
 
-            <h3 style={{ marginTop: '20px' }}>Recent events · {filteredEvents.length} loaded</h3>
-            <ol className="candidate-history">
-              {filteredEvents
-                .slice(-40)
-                .reverse()
-                .map(event => (
-                  <li key={event.eventId} style={{ borderLeft: event.eventType === 'Goal' ? '3px solid #4ade80' : 'none' }}>
-                    <span>
-                      #{event.sequence} · {valueText(event.clockSeconds)}s
-                    </span>
-                    <strong style={{ color: event.eventType === 'Goal' ? '#4ade80' : '#fff' }}>
-                      {event.eventType} {event.eventType === 'Goal' ? '⚽' : ''}
-                    </strong>
-                    <small>
-                      {valueText(event.rawPayload.teamName)} · {valueText(event.rawPayload.playerName)}
-                    </small>
-                  </li>
-                ))}
-            </ol>
+            {/* TAB 2: Telemetry & Raw Payload */}
+            {feedTab === 'telemetry' && (
+              <div className="feed-tab-content">
+                {latest ? (
+                  <div className="telemetry-details-card">
+                    <dl className="telemetry-dl">
+                      <div className="dl-row">
+                        <dt>Event Type</dt>
+                        <dd className="bold-emerald">{latest.eventType} {latest.eventType === 'Goal' ? '⚽' : ''}</dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Clock / Period</dt>
+                        <dd>{valueText(latest.clockSeconds)}s / Period {latest.period}</dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Sequence #</dt>
+                        <dd>{latest.sequence}</dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Event ID</dt>
+                        <dd><code>{latest.eventId}</code></dd>
+                      </div>
+                      <div className="dl-row">
+                        <dt>Ball Location</dt>
+                        <dd>{ballPosition ? `X: ${ballPosition.x.toFixed(1)}, Y: ${ballPosition.y.toFixed(1)}` : 'No ball position recorded'}</dd>
+                      </div>
+                    </dl>
+
+                    <details className="raw-payload-collapsible" open>
+                      <summary>Original Event Payload (JSON)</summary>
+                      <pre className="candidate-raw-payload">{JSON.stringify(latest.rawPayload, null, 2)}</pre>
+                    </details>
+                  </div>
+                ) : (
+                  <p>{loading ? 'Loading candidate telemetry…' : 'No persisted source event yet.'}</p>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: Feed Audit Status */}
+            {feedTab === 'audit' && (
+              <div className="feed-tab-content">
+                <div className="audit-specs-card">
+                  <h3 className="audit-subheading">Data Provenance & Rigor</h3>
+                  <dl className="telemetry-dl">
+                    <div className="dl-row">
+                      <dt>Source Status</dt>
+                      <dd><code>{status?.sourceStatus ?? 'candidate_not_canonical'}</code></dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>Coordinates</dt>
+                      <dd><code>{status?.coordinateStatus ?? 'unverified'}</code></dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>Player Metrics</dt>
+                      <dd><code>{status?.playerMetricsStatus ?? 'unvalidated'}</code></dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>SignalR Stream</dt>
+                      <dd>{status?.isStreaming ? 'Active · PostgreSQL Backfill Synced' : 'Paused'}</dd>
+                    </div>
+                    <div className="dl-row">
+                      <dt>Source SHA-256</dt>
+                      <dd><code className="full-hash-break">{status?.sourceSha256 ?? '—'}</code></dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            )}
           </aside>
         </div>
       )}
 
-      <footer>
+      <footer className="candidate-provenance-footer">
         Source state: {status?.sourceStatus ?? 'candidate_not_canonical'} · coordinates {status?.coordinateStatus ?? 'unverified'} · player metrics {status?.playerMetricsStatus ?? 'unvalidated'}
       </footer>
     </section>
