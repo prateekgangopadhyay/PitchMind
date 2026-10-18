@@ -23,6 +23,11 @@ describe('Match experience', () => {
   });
 });
 
+const candidateStatusFixture = { matchId: null, isStreaming: false, currentSequence: null,
+  currentClockValue: null, period: null, sourceSha256: null, sourceStatus: 'candidate_not_canonical',
+  coordinateStatus: 'unverified', playerMetricsStatus: 'unvalidated' };
+const candidateStatusResponse = { ok: true, json: async () => candidateStatusFixture };
+
 describe('Information architecture routes', () => {
   it('resolves the seven product screens and replay deep link', () => {
     expect(resolveRoute('/welcome').kind).toBe('welcome');
@@ -158,8 +163,9 @@ it('loads a canonical match using one exact selected time and revision without d
     expect(container.textContent).toContain('Score event');
     expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
     expect(container.textContent).toContain('No observed tracking frame approved for display is available at 55:09. Positions are not estimated.');
-    expect(observedRequests).toHaveLength(5);
-    for (const url of observedRequests) {
+    const canonicalRequests = observedRequests.filter(url => new URL(url, 'http://localhost').pathname.includes('/canonical/matches/'));
+    expect(canonicalRequests).toHaveLength(5);
+    for (const url of canonicalRequests) {
       const parsed = new URL(url, 'http://localhost');
       expect(parsed.pathname).toContain(`/canonical/matches/${matchId}/`);
       expect(parsed.searchParams.get('atSeconds')).toBe('3309');
@@ -583,8 +589,9 @@ it('preserves projection revision from an insight into selected-match navigation
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(requested).toHaveLength(1);
-    expect(new URL(requested[0]).searchParams.get('revision')).toBe('5');
+    const insightRequests = requested.filter(value => new URL(value).pathname.endsWith('/insights'));
+    expect(insightRequests).toHaveLength(1);
+    expect(new URL(insightRequests[0]).searchParams.get('revision')).toBe('5');
     const link = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(anchor => anchor.textContent === 'Open selected match');
     expect(link?.getAttribute('href')).toBe(`/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=5`);
   } finally {
@@ -597,18 +604,23 @@ it('preserves projection revision from an insight into selected-match navigation
 it('shows a clear canonical-unavailable state and retries without demo substitution', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home');
-  const fetchMock = vi.fn()
-    .mockRejectedValueOnce(new Error('offline'))
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) });
+  let homeAttempt = 0;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (new URL(String(input), 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
+    homeAttempt++;
+    if (homeAttempt === 1) throw new Error('offline');
+    return { ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) };
+  });
   vi.stubGlobal('fetch', fetchMock);
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
     expect(container.textContent).toContain('No demo fixture has been substituted');
-    await act(async () => { container.querySelector('button')!.click(); });
+    const retry = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('Try loading matches again'))!;
+    await act(async () => { retry.click(); });
     expect(container.textContent).toContain('No matches are available yet.');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(homeAttempt).toBe(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -622,6 +634,7 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home');
   const fetchMock = vi.fn(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
     const firstPage = !url.includes('afterMatchId=');
     const matchId = firstPage ? firstId : secondId;
     return { ok: true, json: async () => ({
@@ -638,8 +651,9 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
     expect(container.textContent).toContain(firstId);
     await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(container.textContent).toContain(secondId);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toContain(`afterMatchId=${firstId}`);
+    const homeRequests = fetchMock.mock.calls.map(([url]) => url).filter(url => !new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status'));
+    expect(homeRequests).toHaveLength(2);
+    expect(homeRequests[1]).toContain(`afterMatchId=${firstId}`);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -657,6 +671,7 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home?phase=secondhalf');
   const fetchMock = vi.fn(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
     const secondPage = url.includes('afterMatchId=');
     return { ok: true, json: async () => ({
       items: [secondPage ? card(secondId, 'secondhalf') : card(firstId, 'firsthalf')],
@@ -678,7 +693,7 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
     expect(container.textContent).toContain(secondId);
     expect(container.textContent).not.toContain(firstId);
     expect(container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!.value).toBe('secondhalf');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([url]) => !new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status'))).toHaveLength(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
