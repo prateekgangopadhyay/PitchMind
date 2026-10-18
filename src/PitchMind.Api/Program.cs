@@ -10,7 +10,12 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Application.MatchIntelligence;
 using PitchMind.Infrastructure.Storage;
+using PitchMind.Infrastructure.Feeds;
 using Npgsql;
+using Azure.Core;
+using Azure.Identity;
+using Azure.Messaging.EventHubs.Producer;
+using Microsoft.Azure.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 var runtimeProfile = builder.Configuration["Runtime:Profile"];
@@ -27,14 +32,40 @@ if (corsOrigins.Length > 0)
 }
 var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
     builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"]);
-builder.Services.AddSignalR();
+var candidateFeedEnabled = builder.Configuration.GetValue<bool?>("CandidateFeed:Enabled") ?? localRealtimeEnabled;
+var azureRuntime = string.Equals(runtimeProfile, "azure", StringComparison.OrdinalIgnoreCase);
+var azureCandidateFeedEnabled = candidateFeedEnabled && azureRuntime;
+var localCandidateFeedEnabled = candidateFeedEnabled && localRealtimeEnabled &&
+    !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"]);
+var candidateFeedRuntimeEnabled = azureCandidateFeedEnabled || localCandidateFeedEnabled;
+if (candidateFeedEnabled && !localRealtimeEnabled && !azureRuntime)
+    throw new InvalidOperationException("CandidateFeed:Enabled requires Runtime:Profile=local or azure.");
+
+if (azureCandidateFeedEnabled)
+{
+    var signalREndpoint = RequiredSetting(builder.Configuration["Realtime:AzureSignalR:Endpoint"] ?? builder.Configuration["AZURE_SIGNALR_ENDPOINT"],
+        "Realtime:AzureSignalR:Endpoint");
+    if (!Uri.TryCreate(signalREndpoint, UriKind.Absolute, out var signalRUri) || signalRUri.Scheme != Uri.UriSchemeHttps ||
+        !signalRUri.Host.EndsWith(".service.signalr.net", StringComparison.OrdinalIgnoreCase) || signalRUri.AbsolutePath != "/")
+        throw new InvalidOperationException("Realtime:AzureSignalR:Endpoint must be an HTTPS Azure SignalR service endpoint.");
+    builder.Services.AddSignalR().AddAzureSignalR(options =>
+        options.Endpoints = [new ServiceEndpoint(signalRUri, AzureManagedIdentity(builder.Configuration))]);
+}
+else builder.Services.AddSignalR();
 
 // EP09-S01: Azure Managed Redis Projection Cache with in-memory fallback
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
     ?? builder.Configuration["Redis:ConnectionString"]
     ?? builder.Configuration["AZURE_REDIS_CONNECTIONSTRING"];
 
-if (!string.IsNullOrWhiteSpace(redisConnectionString))
+if (azureCandidateFeedEnabled)
+{
+    var redisEndpoint = RequiredSetting(builder.Configuration["Redis:Endpoint"] ?? builder.Configuration["AZURE_REDIS_ENDPOINT"], "Redis:Endpoint");
+    builder.Services.AddSingleton<IMatchProjectionCache>(sp =>
+        new AzureEntraRedisProjectionCache(redisEndpoint,
+            sp.GetRequiredService<TokenCredential>(), sp.GetService<ILogger<AzureEntraRedisProjectionCache>>()));
+}
+else if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
     builder.Services.AddSingleton<IMatchProjectionCache>(sp =>
         new AzureManagedRedisProjectionCache(
@@ -68,10 +99,36 @@ if (localRealtimeEnabled)
         services.GetRequiredService<SignalRRealtimeCursorPublisher>()
     ]));
 }
-else
+else if (azureCandidateFeedEnabled)
 {
-    // Azure SignalR is a target adapter only; this build has no Azure provider registered.
-    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, UnavailableRealtimeConnectionNegotiator>();
+    // Azure SignalR uses the same same-origin hub URL; the SignalR SDK redirects
+    // negotiate/connect traffic to the managed service after this API response.
+    builder.Services.AddSingleton<IRealtimeConnectionNegotiator, LocalRealtimeConnectionNegotiator>();
+}
+else builder.Services.AddSingleton<IRealtimeConnectionNegotiator, UnavailableRealtimeConnectionNegotiator>();
+if (azureCandidateFeedEnabled)
+{
+    var eventHubNamespace = ValidateEventHubNamespace(
+        RequiredSetting(builder.Configuration["EventHubs:Namespace"], "EventHubs:Namespace"));
+    var eventHubName = RequiredSetting(builder.Configuration["EventHubs:CandidateHubName"], "EventHubs:CandidateHubName");
+    var postgresConnectionString = RequiredSetting(builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"],
+        "ConnectionStrings:PitchMind");
+    var checkpointUri = ValidateBlobServiceUri(
+        RequiredSetting(builder.Configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
+    _ = checkpointUri;
+    _ = RequiredSetting(builder.Configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer");
+    var credential = AzureManagedIdentity(builder.Configuration);
+    builder.Services.AddSingleton<TokenCredential>(credential);
+    builder.Services.AddSingleton<NpgsqlDataSource>(_ => AzurePostgresDataSourceFactory.Create(postgresConnectionString, credential));
+    builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
+    builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+    builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
+    builder.Services.AddSingleton(sp => new EventHubProducerClient(eventHubNamespace, eventHubName, credential));
+    builder.Services.AddSingleton<ICandidateEventPublisher, AzureCandidateEventHubPublisher>();
+    builder.Services.AddSingleton<CandidateFeedPersistence>();
+    builder.Services.AddSingleton<CandidateFeedSourceCatalog>();
+    builder.Services.AddSingleton<LocalCandidateSimulationService>();
+    builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
 }
 if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
 {
@@ -83,6 +140,21 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
         builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
         builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
+        if (candidateFeedEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(redisConnectionString))
+                throw new InvalidOperationException("CandidateFeed:Enabled requires Redis.");
+            builder.Services.AddSingleton<CandidateFeedPersistence>();
+            builder.Services.AddSingleton<CandidateFeedSourceCatalog>();
+            builder.Services.AddSingleton<LocalCandidateSimulationService>();
+            builder.Services.AddSingleton(sp => new CandidateKafkaProducer(
+                builder.Configuration["Kafka:BootstrapServers"] ?? "127.0.0.1:9092",
+                builder.Configuration["Kafka:CandidateTopic"] ?? CandidateKafkaProducer.DefaultTopic));
+            builder.Services.AddSingleton<ICandidateEventPublisher>(sp => sp.GetRequiredService<CandidateKafkaProducer>());
+            builder.Services.AddSingleton<CandidateKafkaConsumer>();
+            builder.Services.AddHostedService<LocalCandidateKafkaConsumerWorker>();
+            builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
+        }
         if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
                 builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"], postgresConnectionString))
         {
@@ -99,7 +171,7 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
     }
 }
-else
+else if (!azureCandidateFeedEnabled)
 {
     // Until an Azure PostgreSQL adapter is configured, authenticated canonical reads fail closed.
     builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
@@ -249,7 +321,8 @@ app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSimulationEndpoints();
 app.MapHackathonOperationsEndpoints();
-if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
+if (localRealtimeEnabled || azureCandidateFeedEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
+if (candidateFeedRuntimeEnabled) app.MapCandidateFeedEndpoints();
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")
     .RequireRateLimiting("api");
@@ -266,6 +339,39 @@ match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync)
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.Run();
+
+static string RequiredSetting(string? value, string name) => !string.IsNullOrWhiteSpace(value)
+    ? value.Trim()
+    : throw new InvalidOperationException($"Required setting {name} is missing.");
+
+static ManagedIdentityCredential AzureManagedIdentity(IConfiguration configuration)
+{
+    var clientId = configuration["Azure:ManagedIdentityClientId"];
+    if (!string.IsNullOrWhiteSpace(clientId) && !Guid.TryParse(clientId, out _))
+        throw new InvalidOperationException("Azure:ManagedIdentityClientId must be a client ID GUID.");
+    return string.IsNullOrWhiteSpace(clientId)
+        ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+        : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(clientId));
+}
+
+static string ValidateEventHubNamespace(string value)
+{
+    if (!Uri.TryCreate($"https://{value}", UriKind.Absolute, out var uri) || uri.Port != 443 || uri.UserInfo.Length != 0 ||
+        uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
+        !uri.Host.EndsWith(".servicebus.windows.net", StringComparison.OrdinalIgnoreCase) ||
+        uri.Host.Length <= ".servicebus.windows.net".Length)
+        throw new InvalidOperationException("EventHubs:Namespace must be an Azure Event Hubs namespace host.");
+    return uri.Host.ToLowerInvariant();
+}
+
+static string ValidateBlobServiceUri(string value)
+{
+    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.Port != 443 ||
+        uri.UserInfo.Length != 0 || uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
+        !uri.Host.EndsWith(".blob.core.windows.net", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Storage:BlobServiceUri must be an Azure Blob Storage HTTPS endpoint.");
+    return uri.GetLeftPart(UriPartial.Authority);
+}
 
 static IResult ApiProblem(HttpContext context, int status, string code, string title, string? detail = null) =>
     Results.Json(new ApiProblemResponse("about:blank", title, status, code, context.TraceIdentifier, detail, context.Request.Path),

@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><ProjectReference Include="../PitchMind.Application/PitchMind.Application.csproj" /></ItemGroup>
-  <ItemGroup><PackageReference Include="Npgsql" Version="10.0.3" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Azure.StackExchangeRedis" Version="3.3.1" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Confluent.Kafka" Version="2.16.0" />
+  </ItemGroup>
 </Project>

@@ -222,45 +222,11 @@ internal static class SimulationEndpoints
             return Results.Ok(status);
         });
 
-        group.MapPost("/analyst", async (HttpContext context, IConfiguration config) =>
-        {
-            var endpoint = config["Foundry:Endpoint"];
-            var deployment = config["Foundry:Deployment"];
-
-            if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment) ||
-                !Uri.TryCreate(endpoint, UriKind.Absolute, out _))
-            {
-                return Problem(context, StatusCodes.Status503ServiceUnavailable,
-                    "FOUNDRY_CONFIGURATION_REQUIRED",
-                    "Azure AI Foundry configuration is strictly required in DEV. Configure Foundry:Endpoint and Foundry:Deployment to enable AI model tactical analysis.",
-                    "Missing Foundry:Endpoint or Foundry:Deployment credentials.");
-            }
-
-            if (!context.Request.HasJsonContentType())
-                return Problem(context, StatusCodes.Status415UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.");
-
-            using var doc = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
-            var root = doc.RootElement;
-            var insightId = root.TryGetProperty("insightId", out var ins) ? ins.GetString() : "sim-insight";
-            var atSeconds = root.TryGetProperty("atSeconds", out var sec) && sec.TryGetInt32(out var s) ? s : 4044;
-            var audience = root.TryGetProperty("audience", out var aud) ? aud.GetString() : "analyst";
-
-            var result = new
-            {
-                text = $"Tactical evaluation via Azure AI Foundry ({deployment}) grounded on match telemetry: High turnover recovery executed in Zone 14. Midfield screen compressed space and initiated progressive transition.",
-                source = $"Azure AI Foundry ({deployment})",
-                clockSeconds = atSeconds,
-                insightId = insightId,
-                audience = audience,
-                limitations = new[]
-                {
-                    "Grounded strictly on verified match telemetry evidence",
-                    "Evaluated against canonical pitch coordinate bounds"
-                }
-            };
-
-            return Results.Ok(result);
-        });
+        group.MapPost("/analyst", (HttpContext context) =>
+            Problem(context, StatusCodes.Status503ServiceUnavailable,
+                "CANONICAL_MATCH_DATA_UNAVAILABLE",
+                "Tactical analysis is unavailable until canonical match evidence is configured.",
+                "The simulation preview is not an authoritative evidence packet and cannot be used to publish match-specific analysis."));
 
         return app;
     }

@@ -81,6 +81,17 @@ public static class AzureEventWorkerConfiguration
         services.AddHostedService<ProjectionConsumerWorker>();
     }
 
+    public static void AddAzureCandidateFeedConsumer(this IServiceCollection services, IConfiguration configuration)
+    {
+        _ = ValidateEventHubNamespace(Required(configuration["EventHubs:Namespace"], "EventHubs:Namespace"));
+        _ = ValidateResourceName(Required(configuration["EventHubs:CandidateHubName"], "EventHubs:CandidateHubName"), "EventHubs:CandidateHubName");
+        _ = ValidateResourceName(Required(configuration["EventHubs:CandidateConsumerGroup"], "EventHubs:CandidateConsumerGroup"), "EventHubs:CandidateConsumerGroup");
+        _ = ValidateBlobServiceUri(Required(configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
+        _ = ValidateContainerName(Required(configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer"));
+        services.AddSingleton<PitchMind.Infrastructure.Feeds.CandidateFeedPersistence>();
+        services.AddHostedService<AzureCandidateEventConsumerWorker>();
+    }
+
     public static bool IsProjectionConsumerEnabled(IConfiguration configuration)
     {
         var raw = configuration["EventHubs:ProjectionConsumerEnabled"];
@@ -131,27 +142,7 @@ public static class AzureEventWorkerConfiguration
     }
 
     public static NpgsqlDataSource CreatePostgresDataSource(string connectionString, TokenCredential credential)
-    {
-        var settings = new NpgsqlConnectionStringBuilder(connectionString);
-        if (string.IsNullOrWhiteSpace(settings.Host) ||
-            !settings.Host.EndsWith(".postgres.database.azure.com", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(settings.Database) ||
-            string.IsNullOrWhiteSpace(settings.Username) || !string.IsNullOrEmpty(settings.Password))
-            throw new InvalidOperationException("Azure PostgreSQL requires host, database and username with managed identity authentication; password credentials are not accepted.");
-        settings.SslMode = SslMode.VerifyFull;
-
-        var builder = new NpgsqlDataSourceBuilder(settings.ConnectionString);
-        builder.UsePeriodicPasswordProvider(
-            async (_, cancellationToken) =>
-            {
-                var token = await credential.GetTokenAsync(
-                    new TokenRequestContext(["https://ossrdbms-aad.database.windows.net/.default"]), cancellationToken);
-                return token.Token;
-            },
-            successRefreshInterval: TimeSpan.FromMinutes(45),
-            failureRefreshInterval: TimeSpan.FromSeconds(30));
-        return builder.Build();
-    }
+        => AzurePostgresDataSourceFactory.Create(connectionString, credential);
 
     private static string Required(string? value, string settingName) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= 512

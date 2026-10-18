@@ -137,6 +137,11 @@ public static partial class LocalApiRoleProvisioner
             GRANT SELECT ON TABLE pitchmind.outbox TO pitchmind_api;
             GRANT UPDATE (claim_token, lease_expires_at, attempt_count, published_at, next_attempt_at,
                 failed_at, last_error_code) ON TABLE pitchmind.outbox TO pitchmind_api;
+            GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_outbox TO pitchmind_api;
+            GRANT UPDATE (claim_token, lease_expires_at, attempt_count, published_at)
+                ON TABLE pitchmind.candidate_feed_outbox TO pitchmind_api;
+            GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_events TO pitchmind_api;
+            GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_poison TO pitchmind_api;
             """, connection);
         await grants.ExecuteNonQueryAsync(cancellationToken);
     }

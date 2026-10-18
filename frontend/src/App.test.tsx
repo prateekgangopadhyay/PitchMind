@@ -23,6 +23,11 @@ describe('Match experience', () => {
   });
 });
 
+const candidateStatusFixture = { matchId: null, isStreaming: false, currentSequence: null,
+  currentClockValue: null, period: null, sourceSha256: null, sourceStatus: 'candidate_not_canonical',
+  coordinateStatus: 'unverified', playerMetricsStatus: 'unvalidated' };
+const candidateStatusResponse = { ok: true, json: async () => candidateStatusFixture };
+
 describe('Information architecture routes', () => {
   it('resolves the seven product screens and replay deep link', () => {
     expect(resolveRoute('/welcome').kind).toBe('welcome');
@@ -48,8 +53,8 @@ describe('Information architecture routes', () => {
 
 describe('canonical provenance labels', () => {
   it('makes synthetic match provenance clear without inventing match facts', () => {
-    expect(provenanceLabel('synthetic-approved')).toBe('Simulated EPL-context match');
-    expect(provenanceLabel('owner-confirmed-synthetic')).toBe('Simulated EPL-context match');
+    expect(provenanceLabel('synthetic-approved')).toBe('Synthetic match');
+    expect(provenanceLabel('owner-confirmed-synthetic')).toBe('Synthetic match');
     expect(provenanceLabel('official-source')).toBe('official-source');
   });
 
@@ -68,7 +73,7 @@ describe('canonical provenance labels', () => {
     const root = createRoot(container);
     try {
       await act(async () => { root.render(createElement(App)); });
-      expect(container.textContent).toContain('Simulated EPL-context match');
+      expect(container.textContent).toContain('Synthetic match');
     } finally {
       await act(async () => root.unmount());
       vi.unstubAllGlobals();
@@ -80,92 +85,17 @@ describe('canonical provenance labels', () => {
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { vi } from 'vitest';
-it('loads API state and clears historical insight when replay moves before evidence', async () => {
-  const fixture = {matchId: 'fixture', version: 'v1', seed: 42, durationSeconds: 3600, halfTimeSeconds: 1800, pitchLengthMetres: 120, pitchWidthMetres: 80, home: {id: 'h', name: 'Harbour FC', formation: '4-2-3-1', players: []}, away: {id: 'a', name: 'Ridge Athletic', formation: '4-2-3-1', players: []}};
+it('keeps the retired demo URL from substituting match data', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/demo/matches/fixture?matchId=fixture&atSeconds=0');
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    const seconds = Number(new URL(url, 'http://localhost').searchParams.get('atSeconds') ?? 0);
-    const body = url.endsWith('/matches') ? [fixture] : url.includes('/state?') ? {clockSeconds: seconds, homeScore: seconds >= 3309 ? 1 : 0, awayScore: 0, status: 'Simulated replay', frame: {clockSeconds: seconds, players: [], ballX: 52.5, ballY: 34}} : url.includes('/insights?') && seconds >= 3309 ? [{id: 'press', title: 'Supported press', summary: 'Observed sequence', classification: 'derived'}] : [];
-    return {ok: true, json: async () => body};
-  }));
-  const container = document.createElement('div');
-  document.body.append(container);
-  const root = createRoot(container);
-  try {
-    await act(async () => {root.render(createElement(App));});
-    expect(container.textContent).toContain('Harbour FC');
-    const slider = container.querySelector('input')!;
-    expect(slider.max).toBe('3600');
-    expect(container.querySelector('svg.pitch')?.getAttribute('viewBox')).toBe('-3 -3 126 86');
-    expect(container.querySelectorAll('.pitch rect')[1].getAttribute('width')).toBe('16.5');
-    expect(container.querySelectorAll('.pitch rect')[1].getAttribute('height')).toBe('40.32');
-    expect(container.querySelectorAll('.pitch rect')[3].getAttribute('width')).toBe('5.5');
-    expect(container.querySelectorAll('.pitch rect')[3].getAttribute('height')).toBe('18.32');
-    expect(container.textContent).toContain('120 × 80 m');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '3309');
-      slider.dispatchEvent(new Event('input', {bubbles: true}));
-      slider.dispatchEvent(new Event('change', {bubbles: true}));
-    });
-    expect(container.textContent).toContain('Supported press');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '0');
-      slider.dispatchEvent(new Event('input', {bubbles: true}));
-      slider.dispatchEvent(new Event('change', {bubbles: true}));
-    });
-    expect(container.textContent).not.toContain('Supported press');
-  } finally {
-    await act(async () => root.unmount());
-    container.remove();
-    vi.unstubAllGlobals();
-    window.history.replaceState(null, '', '/');
-  }
-});
-
-it('loads a canonical match using one exact selected time and revision without demo fallback', async () => {
-  const matchId = '11111111-1111-1111-1111-111111111111';
-  const observedRequests: string[] = [];
-  const snapshot = {
-    matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, asOfSeconds: 3309, throughSequence: 19,
-    algorithmVersion: 'projection-v1', sourceSha256: 'a'.repeat(64), stateSha256: 'b'.repeat(64),
-    provenance: 'synthetic-approved', period: 2, phase: 'secondhalf', homeScore: 1, awayScore: 0,
-    possessionTeamId: null, homeActivePlayers: 11, awayActivePlayers: 11, players: []
-  };
-  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  window.history.replaceState(null, '', `/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=4`);
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    observedRequests.push(url);
-    const parsed = new URL(url, 'http://localhost');
-    if (parsed.pathname.endsWith('/key-moments')) return {ok: false, status: 503, json: async () => ({status: 503, title: 'Unavailable', code: 'CANONICAL_KEY_MOMENTS_UNAVAILABLE', correlationId: 'test'})};
-    const body = parsed.pathname.endsWith('/summary') ? snapshot
-      : parsed.pathname.endsWith('/events') ? {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [
-        {eventId: 'event-1', matchId, sequence: 18, type: 'shot', clockSeconds: 3300, period: 2, occurredAt: '2026-01-01T00:55:00Z'},
-        {eventId: 'event-2', matchId, sequence: 19, type: 'goal', clockSeconds: 3309, period: 2, occurredAt: '2026-01-01T00:55:09Z'}
-      ], nextCursor: null, hasMore: false}
-        : {matchId, canonicalRevision: 4, projectionRevision: 4, selectedTimeSeconds: 3309, throughSequence: 19, items: [], nextCursor: null, hasMore: false};
-    return {ok: true, json: async () => body};
-  }));
+  vi.stubGlobal('fetch', vi.fn(async () => ({ok: true, json: async () => []})));
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Match overview');
-    expect(container.textContent).toContain('Simulated EPL-context match');
-    expect(container.textContent).toContain('Canonical revision 4');
-    expect(container.textContent).toContain('shot');
-    expect(container.textContent).toContain('Goal');
-    expect(container.textContent).toContain('Score event');
-    expect(container.textContent).toContain('Canonical Key Moments are unavailable because no canonical projection is available.');
-    expect(container.textContent).toContain('No observed tracking frame approved for display is available at 55:09. Positions are not estimated.');
-    expect(observedRequests).toHaveLength(5);
-    for (const url of observedRequests) {
-      const parsed = new URL(url, 'http://localhost');
-      expect(parsed.pathname).toContain(`/canonical/matches/${matchId}/`);
-      expect(parsed.searchParams.get('atSeconds')).toBe('3309');
-      expect(parsed.searchParams.get('revision')).toBe('4');
-    }
-    expect(new URL(observedRequests.find(url => url.includes('/key-moments'))!, 'http://localhost').searchParams.has('limit')).toBe(false);
+    expect(container.textContent).toContain('This page is unavailable');
+    expect(container.textContent).not.toContain('Harbour FC');
+    expect(container.textContent).not.toContain('Ridge Athletic');
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -537,7 +467,7 @@ it('renders persisted home cards from canonical fields and keeps the match id in
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Simulated EPL-context match');
+    expect(container.textContent).toContain('Synthetic match');
     expect(container.textContent).toContain('Home team 1–0 Away team');
     expect(container.textContent).toContain(firstId);
     expect(container.textContent).toContain('Second half');
@@ -562,31 +492,18 @@ it('renders persisted home cards from canonical fields and keeps the match id in
 });
 
 
-it('preserves projection revision from an insight into selected-match navigation', async () => {
-  const matchId = '11111111-1111-1111-1111-111111111111';
-  const insight = {
-    insightId: 'insight-press', matchId, canonicalRevision: 100, projectionRevision: 5,
-    selectedTimeSeconds: 3309, throughSequence: 19, sourceVersion: 'test-v1', provenance: 'synthetic-approved',
-    sourceSha256: 'c'.repeat(64), detectorVersion: 'test-v1', truthClass: 'interpretation',
-    summary: 'Evidence-backed pattern.', evidence: [{kind: 'event', id: 'event-19', relation: 'supports'}]
-  };
-  const requested: string[] = [];
+it('requires the selected match context on the Insights submenu', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  window.history.replaceState(null, '', `/insights?matchId=${matchId}&atSeconds=3309&revision=5`);
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input), 'http://localhost');
-    requested.push(url.toString());
-    return {ok: true, json: async () => ({matchId, canonicalRevision: 100, projectionRevision: 5,
-      selectedTimeSeconds: 3309, throughSequence: 19, items: [insight], nextCursor: null, hasMore: false})};
-  }));
+  window.history.replaceState(null, '', '/insights');
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => { void input; return candidateStatusResponse; });
+  vi.stubGlobal('fetch', fetchMock);
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(requested).toHaveLength(1);
-    expect(new URL(requested[0]).searchParams.get('revision')).toBe('5');
-    const link = [...container.querySelectorAll<HTMLAnchorElement>('a')].find(anchor => anchor.textContent === 'Open selected match');
-    expect(link?.getAttribute('href')).toBe(`/matches/${matchId}?matchId=${matchId}&atSeconds=3309&revision=5`);
+    expect(container.textContent).toContain('Choose a match to view insights.');
+    expect(container.querySelector('nav[aria-label="Selected match analysis"]')).not.toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/insights'))).toBe(false);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -597,18 +514,23 @@ it('preserves projection revision from an insight into selected-match navigation
 it('shows a clear canonical-unavailable state and retries without demo substitution', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home');
-  const fetchMock = vi.fn()
-    .mockRejectedValueOnce(new Error('offline'))
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) });
+  let homeAttempt = 0;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    if (new URL(String(input), 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
+    homeAttempt++;
+    if (homeAttempt === 1) throw new Error('offline');
+    return { ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) };
+  });
   vi.stubGlobal('fetch', fetchMock);
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('No demo fixture has been substituted');
-    await act(async () => { container.querySelector('button')!.click(); });
-    expect(container.textContent).toContain('No matches are available yet.');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Match data is temporarily unavailable.');
+    const retry = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('Try loading matches again'))!;
+    await act(async () => { retry.click(); });
+    expect(container.textContent).toContain('No canonical matches are available yet.');
+    expect(homeAttempt).toBe(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -622,6 +544,7 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home');
   const fetchMock = vi.fn(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
     const firstPage = !url.includes('afterMatchId=');
     const matchId = firstPage ? firstId : secondId;
     return { ok: true, json: async () => ({
@@ -638,8 +561,9 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
     expect(container.textContent).toContain(firstId);
     await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(container.textContent).toContain(secondId);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toContain(`afterMatchId=${firstId}`);
+    const homeRequests = fetchMock.mock.calls.map(([url]) => url).filter(url => !new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status'));
+    expect(homeRequests).toHaveLength(2);
+    expect(homeRequests[1]).toContain(`afterMatchId=${firstId}`);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
@@ -657,6 +581,7 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   window.history.replaceState(null, '', '/home?phase=secondhalf');
   const fetchMock = vi.fn(async (url: string) => {
+    if (new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status')) return candidateStatusResponse;
     const secondPage = url.includes('afterMatchId=');
     return { ok: true, json: async () => ({
       items: [secondPage ? card(secondId, 'secondhalf') : card(firstId, 'firsthalf')],
@@ -671,14 +596,14 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
     await act(async () => { root.render(createElement(App)); });
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     expect(phaseFilter.value).toBe('secondhalf');
-    expect(container.textContent).toContain('No match in this phase is in the current list.');
-    expect(container.textContent).toContain('Choose “More matches” to check the next results.');
-    expect(container.textContent).not.toContain('No matches are available in this phase.');
+    expect(container.textContent).toContain('No matches are available in this phase.');
+    expect(container.querySelector('.load-more')).not.toBeNull();
+    expect(container.textContent).toContain('No matches are available in this phase.');
     await act(async () => { container.querySelector<HTMLButtonElement>('.load-more')!.click(); });
     expect(container.textContent).toContain(secondId);
     expect(container.textContent).not.toContain(firstId);
     expect(container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!.value).toBe('secondhalf');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([url]) => !new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status'))).toHaveLength(2);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
