@@ -83,7 +83,7 @@ _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/private-dev-plan.sh": "e7920d8f743afa110ca62f49dffb1ed063f6f394282556b1a3905405f1d782c9",
     "scripts/private-dev-deploy.sh": "b7394328d5a1ceef081005cae8c3f29d978a61a191ca8e2ff471e52494134241",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
-    "scripts/validate_private_dev_whatif.py": "2748112d6b68f39146f64901095ab2ad2bd55223a09f0d3a160612d880e29f4f",
+    "scripts/validate_private_dev_whatif.py": "60bf6ec640145568c74111828fb64ec6a767215b77c92825ab97c2ed3dfb353f",
     "pipelines/templates/preview-private-dev.yml": "e5f25b62c3220e762583e5b403f0e4e32d4d555d1ba9bc6338e2113b368353b4",
     "pipelines/templates/provision-private-dev.yml": "da53e22d664207465d36b281e26b0e7b0f02ebb591c04abcb2ef9a62c6e6e2a7",
     "infra/private-dev-topology.bicep": "4274a9052d36f100f7134913494dfae47a7305fbba41d44077d7580d5f67777c",

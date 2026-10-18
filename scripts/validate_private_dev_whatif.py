@@ -20,6 +20,8 @@ ALLOWED_TYPES = {
     "microsoft.network/privateendpoints/privatednszonegroups",
     "microsoft.app/managedenvironments",
     "microsoft.app/containerapps",
+    "microsoft.eventhub/namespaces/eventhubs",
+    "microsoft.eventhub/namespaces/eventhubs/consumergroups",
 }
 TARGET_RESOURCE_GROUP = "rg-pitchmind-dev-001"
 TARGET_RESOURCE_NAMES = {
@@ -29,6 +31,7 @@ TARGET_RESOURCE_NAMES = {
     "pm-dev-api-vnet", "pm-dev-api-vnet-pull", "pm-dev-private-cae",
     "pitchmind-postgresql-dev", "pitchmind", "pm-dev-redis", "default", "pm-dev-redis-pe",
 }
+TARGET_EVENTHUB_NAMESPACE = "pm-dev-eh"
 
 
 def load_changes(path: str) -> list[dict]:
@@ -66,6 +69,20 @@ def main() -> int:
                 if resource_type == "microsoft.authorization/roleassignments":
                     if "/providers/microsoft.containerregistry/registries/pmdev4iwntkatliy6sacr/providers/microsoft.authorization/roleassignments/" not in resource_id:
                         raise ValueError("Role assignment is not scoped to the approved ACR")
+                elif resource_type in {
+                    "microsoft.eventhub/namespaces/eventhubs",
+                    "microsoft.eventhub/namespaces/eventhubs/consumergroups",
+                }:
+                    expected_eventhub_path = (
+                        f"/providers/microsoft.eventhub/namespaces/{TARGET_EVENTHUB_NAMESPACE}"
+                        "/eventhubs/candidate-match-events"
+                    )
+                    if expected_eventhub_path not in resource_id:
+                        raise ValueError("Event Hubs mutation is outside the approved candidate hub")
+                    if resource_type.endswith("/consumergroups") and not resource_id.endswith(
+                        "/consumergroups/pitchmind-candidate-worker"
+                    ):
+                        raise ValueError("Consumer group mutation is outside the approved candidate group")
                 elif resource_type.endswith("/subnets"):
                     if not any(f"/subnets/{name}" in resource_id for name in ("postgres", "container-apps")):
                         raise ValueError("Subnet mutation is outside the two approved service subnets")

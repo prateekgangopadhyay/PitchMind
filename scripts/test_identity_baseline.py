@@ -3,8 +3,12 @@
 These tests validate source declarations only. They do not prove Azure RBAC,
 federation, token acquisition, database grants, or denied operations in DEV.
 """
+import json
 from pathlib import Path
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from scripts.release_pipeline_policy import PipelinePolicyError, validate_pipeline_policy
@@ -497,6 +501,57 @@ class IdentityBaselineTests(unittest.TestCase):
         )
         with self.subTest(mutation="unreviewed validation template indirection"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(new_validation_template, build_template, deploy_template)
+
+
+class PrivateDevWhatIfTests(unittest.TestCase):
+    def run_validator(self, changes):
+        with tempfile.TemporaryDirectory() as directory:
+            plan_path = Path(directory) / "what-if.json"
+            plan_path.write_text(json.dumps({"changes": changes}), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(ROOT / "scripts/validate_private_dev_whatif.py"), str(plan_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+    def test_whatif_accepts_only_declared_candidate_event_hub_and_group(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        changes = [
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.EventHub/namespaces/eventhubs",
+                "resourceId": f"{resource_group}/providers/Microsoft.EventHub/namespaces/pm-dev-eh/eventhubs/candidate-match-events",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+                "resourceId": f"{resource_group}/providers/Microsoft.EventHub/namespaces/pm-dev-eh/eventhubs/candidate-match-events/consumergroups/pitchmind-candidate-worker",
+            },
+        ]
+
+        result = self.run_validator(changes)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no deletes/out-of-scope types", result.stdout)
+
+    def test_whatif_rejects_unapproved_event_hub_namespaces_hubs_and_groups(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        mutations = [
+            ("Microsoft.EventHub/namespaces/eventhubs", "other-namespace", "candidate-match-events"),
+            ("Microsoft.EventHub/namespaces/eventhubs", "pm-dev-eh", "other-hub"),
+            ("Microsoft.EventHub/namespaces/eventhubs/consumergroups", "pm-dev-eh", "candidate-match-events/consumergroups/other-group"),
+        ]
+        for resource_type, namespace, child_path in mutations:
+            with self.subTest(resource_type=resource_type, namespace=namespace, child_path=child_path):
+                changes = [{
+                    "changeType": "Create",
+                    "resourceType": resource_type,
+                    "resourceId": f"{resource_group}/providers/Microsoft.EventHub/namespaces/{namespace}/eventhubs/{child_path}",
+                }]
+                result = self.run_validator(changes)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("outside the approved", result.stderr)
 
 
 if __name__ == "__main__":
