@@ -3,7 +3,6 @@ export type AppRoute =
   | { kind: 'home' }
   | { kind: 'matches'; matchId?: string; replay: boolean }
   | { kind: 'demo-match'; matchId?: string; replay: boolean }
-  | { kind: 'candidate-live' }
   | { kind: 'teams'; teamId?: string }
   | { kind: 'players'; playerId?: string }
   | { kind: 'insights'; insightId?: string }
@@ -16,7 +15,6 @@ export function resolveRoute(pathname: string): AppRoute {
   catch { return { kind: 'not-found' }; }
   if (parts.length === 0 || (parts.length === 1 && (parts[0] === 'welcome' || parts[0] === 'sign-in' || parts[0] === 'login'))) return { kind: 'welcome' };
   if (parts.length === 1 && parts[0] === 'home') return { kind: 'home' };
-  if (parts.length === 1 && parts[0] === 'candidate-live') return { kind: 'candidate-live' };
   if (parts.length === 1 && parts[0] === 'matches') return { kind: 'matches', replay: false };
   if (parts.length === 2 && parts[0] === 'matches') return { kind: 'matches', matchId: parts[1], replay: false };
   if (parts.length === 2 && parts[0] === 'replay') return { kind: 'matches', matchId: parts[1], replay: true };

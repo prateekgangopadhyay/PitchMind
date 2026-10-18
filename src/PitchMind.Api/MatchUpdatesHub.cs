@@ -58,11 +58,7 @@ public sealed class MatchRealtimeAccessPolicy(
 public interface IMatchUpdateClient
 {
     Task MatchUpdated(RealtimeCursorV1 cursor);
-    Task CandidateMatchUpdated(CandidateRealtimeCursor cursor);
 }
-
-public sealed record CandidateRealtimeCursor(string MatchId, string SourceSha256, long Sequence,
-    decimal ClockSeconds, int Period);
 
 internal enum SubscriptionReservation
 {
@@ -120,12 +116,11 @@ internal sealed class RealtimeSubscriptionState
 }
 
 /// <summary>Clients join only through an authorized match-specific operation; SignalR removes groups on disconnect.</summary>
-public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, CandidateFeedSourceCatalog? candidateSource = null) : Hub<IMatchUpdateClient>
+public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access) : Hub<IMatchUpdateClient>
 {
     private const string SubscriptionStateKey = "PitchMind.RealtimeSubscriptionState";
 
     public static string GroupName(Guid matchId) => $"match:{matchId:D}";
-    public static string CandidateGroupName(Guid matchId, string sourceSha256) => $"candidate:{matchId:D}:{sourceSha256}";
 
     public async Task SubscribeToMatch(Guid matchId)
     {
@@ -161,27 +156,6 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, Candidate
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(matchId), Context.ConnectionAborted)
             .ConfigureAwait(false);
         GetSubscriptionState().Remove(matchId);
-    }
-
-    public async Task SubscribeToCandidateMatch(string matchId, string sourceSha256)
-    {
-        if (Context.User?.Identity?.IsAuthenticated != true ||
-            !(Context.User.IsInRole("analyst") || Context.User.IsInRole("admin")) ||
-            !Guid.TryParse(matchId, out var parsed) || parsed == Guid.Empty ||
-            sourceSha256 is not { Length: 64 } || sourceSha256.Any(c => !Uri.IsHexDigit(c)) || candidateSource is null)
-            throw new HubException("Candidate match subscription is not authorized.");
-        var source = await candidateSource.GetAsync(Context.ConnectionAborted).ConfigureAwait(false);
-        if (source.SourceSha256 != sourceSha256 || source.Events[0].SourceMatchId != matchId)
-            throw new HubException("Candidate match subscription is not authorized.");
-        await Groups.AddToGroupAsync(Context.ConnectionId, CandidateGroupName(parsed, sourceSha256), Context.ConnectionAborted)
-            .ConfigureAwait(false);
-    }
-
-    public async Task UnsubscribeFromCandidateMatch(string matchId, string sourceSha256)
-    {
-        if (Guid.TryParse(matchId, out var parsed) && sourceSha256 is { Length: 64 })
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, CandidateGroupName(parsed, sourceSha256), Context.ConnectionAborted)
-                .ConfigureAwait(false);
     }
 
     private RealtimeSubscriptionState GetSubscriptionState()

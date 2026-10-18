@@ -10,7 +10,6 @@ using PitchMind.Application.Abstractions;
 using PitchMind.Application.Matches;
 using PitchMind.Application.MatchIntelligence;
 using PitchMind.Infrastructure.Storage;
-using PitchMind.Infrastructure.Feeds;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,9 +27,6 @@ if (corsOrigins.Length > 0)
 }
 var localRealtimeEnabled = LocalPostgresConnectionPolicy.IsLocalRealtimeProfile(
     builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"]);
-var candidateFeedEnabled = builder.Configuration.GetValue<bool?>("CandidateFeed:Enabled") ?? localRealtimeEnabled;
-if (candidateFeedEnabled && !localRealtimeEnabled)
-    throw new InvalidOperationException("Candidate feed currently requires the explicit Development/local profile; Azure candidate delivery is not enabled yet.");
 builder.Services.AddSignalR();
 
 // EP09-S01: Azure Managed Redis Projection Cache with in-memory fallback
@@ -87,19 +83,6 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
         builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
         builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
-        if (candidateFeedEnabled)
-        {
-            if (string.IsNullOrWhiteSpace(redisConnectionString))
-                throw new InvalidOperationException("CandidateFeed:Enabled requires Redis.");
-            builder.Services.AddSingleton<CandidateFeedPersistence>();
-            builder.Services.AddSingleton<CandidateFeedSourceCatalog>();
-            builder.Services.AddSingleton<LocalCandidateSimulationService>();
-            builder.Services.AddSingleton(sp => new CandidateKafkaProducer(
-                builder.Configuration["Kafka:BootstrapServers"] ?? "127.0.0.1:9092",
-                builder.Configuration["Kafka:CandidateTopic"] ?? CandidateKafkaProducer.DefaultTopic));
-            builder.Services.AddSingleton<ICandidateEventPublisher>(sp => sp.GetRequiredService<CandidateKafkaProducer>());
-            builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
-        }
         if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(
                 builder.Environment.EnvironmentName, runtimeProfile, builder.Configuration["Realtime:Provider"], postgresConnectionString))
         {
@@ -267,7 +250,6 @@ app.MapRealtimeEndpoints();
 app.MapSimulationEndpoints();
 app.MapHackathonOperationsEndpoints();
 if (localRealtimeEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
-if (candidateFeedEnabled) app.MapCandidateFeedEndpoints();
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")
     .RequireRateLimiting("api");

@@ -40,19 +40,6 @@
         "resolved": "3.1.4",
         "contentHash": "5mj99LvCqrq3CNi06xYdyIAXOEh+5b33F2nErCzI5zWiDdLHXiPXEWFSUAF8zlIv0ZWqjZNCwHTQeAPYbF3pCg=="
       },
-      "Confluent.Kafka": {
-        "type": "Transitive",
-        "resolved": "2.16.0",
-        "contentHash": "BREXaSYr9BrXpaJ7S4TTSIhI6q5amIjxoxJGbvKLQjAG/08hs223UDt60j42JdCgtD+aFYuduG/oP/tHqNJt8w==",
-        "dependencies": {
-          "librdkafka.redist": "2.16.0"
-        }
-      },
-      "librdkafka.redist": {
-        "type": "Transitive",
-        "resolved": "2.16.0",
-        "contentHash": "cr/wX7+G/rqOwN88Imxxco+OMGG6XslgSFh9xMb3utHY7/iWfssD2AY9MF7rsGdGm+mGuRw+1IQ+Zslris9IoQ=="
-      },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -557,7 +544,6 @@
       "pitchmind.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "Confluent.Kafka": "[2.16.0, )",
           "Npgsql": "[10.0.3, )",
           "PitchMind.Application": "[1.0.0, )"
         }

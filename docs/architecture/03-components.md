@@ -4,26 +4,6 @@
 
 **Authority:** [Football LLD](07-football-analytics-detailed-lld.md), [API](../api/API.md), [Architecture review](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md). Current runtime and target ports are intentionally separated to avoid asserting unavailable integrations.
 
-## LOCAL candidate simulation stream (not canonical admission)
-
-```mermaid
-flowchart LR
-  Source["Approved synthetic candidate JSON"] --> Sim["LOCAL Simulation Service"]
-  Sim -->|raw event + source hash, ID, sequence| Kafka[("Docker Kafka")]
-  Kafka --> Worker["EventWorker candidate consumer"]
-  Worker -->|durable stage before Kafka offset commit| Outbox[("PostgreSQL candidate_feed_outbox")]
-  Outbox --> Dispatch["API CandidateOutboxDispatchWorker"]
-  Dispatch -->|parallel| History[("PostgreSQL candidate_feed_events")]
-  Dispatch -->|parallel latest cursor| Redis[("Docker Redis")]
-  Dispatch -->|cursor after durable write + cache attempt| Hub["LOCAL SignalR candidate group"]
-  History -->|ordered raw pages| UI["React /candidate-live"]
-  Hub -->|cursor-only wakeup| UI
-```
-
-The candidate path preserves source event identity, sequence, raw clock/period values, raw event payload, provenance hash and original order. It intentionally uses separate candidate tables rather than `matches`, canonical event/projection tables or canonical BFF contracts. The UI renders raw candidate positions and player fields as unverified candidate observations; it scales only for visualization and does not infer a pitch coordinate system or interpret player metrics. Header Live starts/resumes or pauses the local replay; its indicator pulses only while the API reports active replay. SignalR is a latency hint, and PostgreSQL page reads are the UI's data source of truth.
-
-Azure DEV is not wired by this implementation. The existing Azure EventWorker path is for the older projection-outbox publishing flow; it does not consume these candidate envelopes. Azure-specific Event Hubs source ingress, candidate PostgreSQL read/write adapter and least-privilege cloud grants, managed Redis cursor handling, Azure SignalR groups/negotiate, and cloud identity configuration need a separate implementation and review before enabling the feature for the Azure profile.
-
 ## Realized application components (source verified, not new test evidence)
 
 `ApiRequestTelemetry` records bounded HTTP request/error/duration instruments and trace tags without high-cardinality metric dimensions; unrecognized HTTP methods map to `_OTHER`. SignalR hub and negotiate requests are excluded from HTTP duration metrics because they can remain open for a connection lifetime. `PostgresOutboxDispatcher` measures durable message age and publication/retry/dead-letter counts; this is dispatch lag, not browser receipt lag or client reconnect state. An OTLP metrics exporter is registered only when an explicit standard OTLP endpoint variable is present; non-local profiles require HTTPS. No collector/backend is configured here, and no measured SLO or operator dashboard is claimed. `/health/live` and the compatibility `/health` route report process liveness; `/health/ready` requires configured PostgreSQL and a bounded probe of the current canonical schema version. Local without PostgreSQL is unready.

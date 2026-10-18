@@ -26,7 +26,7 @@ if [[ ! -f docker/.env ]]; then
   postgres_password="$(openssl rand -hex 24)"
   api_password="$(openssl rand -hex 24)"
   redis_password="$(openssl rand -hex 24)"
-  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD=%s\nPITCHMIND_API_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\nKAFKA_PORT=9092\n' "$postgres_password" "$api_password" "$redis_password" > docker/.env
+  printf 'POSTGRES_USER=pitchmind\nPOSTGRES_DB=pitchmind\nPOSTGRES_IMAGE=postgres:17-alpine\nPOSTGRES_PASSWORD=%s\nPITCHMIND_API_PASSWORD=%s\nPOSTGRES_PORT=5432\nREDIS_PASSWORD=%s\nREDIS_PORT=6379\n' "$postgres_password" "$api_password" "$redis_password" > docker/.env
   echo "Created gitignored docker/.env with generated local passwords."
 fi
 require_regular_credentials_file
@@ -168,4 +168,4 @@ if ! env -u POSTGRES_PASSWORD -u PITCHMIND_API_PASSWORD -u REDIS_PASSWORD \
   echo "Local services did not become healthy. Inspect Docker logs, then run ./scripts/dev-down.sh to stop the partial stack; volumes are preserved." >&2
   exit 1
 fi
-echo "Local PostgreSQL, Redis and Kafka are healthy."
+echo "Local PostgreSQL and Redis are healthy."

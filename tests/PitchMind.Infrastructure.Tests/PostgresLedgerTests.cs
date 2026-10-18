@@ -42,24 +42,21 @@ public sealed class PostgresLedgerTests
         Assert.Contains("48 lowercase hexadecimal characters", formatException.Message, StringComparison.Ordinal);
     }
 
-    [Fact(Skip = "This legacy permission test changes cluster-global PostgreSQL role state; replace it with isolated-role coverage before enabling.")]
+    [PostgresIntegrationFact]
     public async Task LocalApiRoleCanReadCanonicalDataAndDispatchOutboxWithoutSchemaOrLedgerWrites()
     {
         await using var migrationSource = Source();
         uint largeObjectId = 0;
-        var privilegedRole = "pitchmind_api_privileged_" + Guid.NewGuid().ToString("N");
-        var quotedPrivilegedRole = "\"" + privilegedRole.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
         try
         {
             await PostgresSchemaMigrator.ApplyAsync(migrationSource, CancellationToken.None);
-            var password = Environment.GetEnvironmentVariable("PITCHMIND_API_PASSWORD") ??
-                Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+            var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
             await LocalApiRoleProvisioner.ProvisionAsync(migrationSource, password, CancellationToken.None);
 
-            await using (var overprivilege = migrationSource.CreateCommand($"""
+            await using (var overprivilege = migrationSource.CreateCommand("""
             ALTER ROLE pitchmind_api WITH SUPERUSER CREATEDB CREATEROLE INHERIT REPLICATION BYPASSRLS;
-            CREATE ROLE {quotedPrivilegedRole};
-            GRANT {quotedPrivilegedRole} TO pitchmind_api;
+            CREATE ROLE pitchmind_api_privileged;
+            GRANT pitchmind_api_privileged TO pitchmind_api;
             CREATE SEQUENCE pitchmind.api_privilege_probe;
             CREATE TABLE pitchmind.api_owned_probe (id integer);
             ALTER TABLE pitchmind.api_owned_probe OWNER TO pitchmind_api;
@@ -192,13 +189,13 @@ public sealed class PostgresLedgerTests
         }
         finally
         {
-            await using var cleanup = migrationSource.CreateCommand($"""
+            await using var cleanup = migrationSource.CreateCommand("""
                 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM pitchmind_api;
                 ALTER DEFAULT PRIVILEGES IN SCHEMA pitchmind REVOKE ALL ON TABLES FROM pitchmind_api;
                 ALTER DEFAULT PRIVILEGES IN SCHEMA "api'schema_probe" REVOKE ALL ON TABLES FROM pitchmind_api;
-                DROP OWNED BY pitchmind_api CASCADE;
-                -- PostgreSQL roles are cluster-global. Keep the local API role; drop only this test's unique role.
-                DROP ROLE IF EXISTS {quotedPrivilegedRole};
+                DROP OWNED BY pitchmind_api;
+                DROP ROLE IF EXISTS pitchmind_api;
+                DROP ROLE IF EXISTS pitchmind_api_privileged;
                 DROP SEQUENCE IF EXISTS pitchmind.api_privilege_probe;
                 DROP TABLE IF EXISTS pitchmind.api_owned_probe;
                 DROP TABLE IF EXISTS pitchmind.api_default_acl_probe;
@@ -493,7 +490,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
         await using (var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions"))
-            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, (int[])(await versions.ExecuteScalarAsync())!);
+            Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }, (int[])(await versions.ExecuteScalarAsync())!);
         foreach (var table in new[] { "matches", "tracking_frames", "match_projections", "insights", "insight_evidence", "quarantine", "consumer_checkpoints", "consumer_projection_inbox", "consumer_projection_snapshots", "consumer_projection_poison", "outbox", "consumer_inbox" })
         {
             await using var command = source.CreateCommand("SELECT to_regclass($1) IS NOT NULL");
@@ -638,7 +635,7 @@ public sealed class PostgresLedgerTests
             await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
 
             await using (var version = source.CreateCommand("SELECT MAX(version) FROM pitchmind.schema_versions"))
-                Assert.Equal(14, (int)(await version.ExecuteScalarAsync())!);
+                Assert.Equal(13, (int)(await version.ExecuteScalarAsync())!);
             await using (var validation = source.CreateCommand("SELECT NOT convalidated FROM pg_constraint WHERE conname = 'match_projections_match_source_fk'"))
                 Assert.True((bool)(await validation.ExecuteScalarAsync())!);
             await using (var legacyRow = source.CreateCommand("SELECT COUNT(*) FROM pitchmind.match_projections WHERE match_id = $1"))
@@ -923,7 +920,7 @@ public sealed class PostgresLedgerTests
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await PostgresSchemaMigrator.ApplyAsync(source, CancellationToken.None);
         await using var versions = source.CreateCommand("SELECT array_agg(version ORDER BY version) FROM pitchmind.schema_versions");
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 }, (int[])(await versions.ExecuteScalarAsync())!);
+        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }, (int[])(await versions.ExecuteScalarAsync())!);
         await using var inbox = source.CreateCommand("SELECT to_regclass('pitchmind.consumer_inbox') IS NOT NULL");
         Assert.True((bool)(await inbox.ExecuteScalarAsync())!);
         Assert.Equal(existingEvent, Assert.Single(await Read(new(source), existingEvent.MatchId)));

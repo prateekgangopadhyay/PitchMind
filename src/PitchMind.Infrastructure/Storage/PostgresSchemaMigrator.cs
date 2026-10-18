@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 13;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -50,8 +50,6 @@ public static class PostgresSchemaMigrator
 
         if (currentVersion < 13)
             await ExecuteAsync(connection, transaction, ConsumerProjectionPoisonV13Sql, cancellationToken);
-        if (currentVersion < 14)
-            await ExecuteAsync(connection, transaction, CandidateFeedV14Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -546,60 +544,5 @@ public static class PostgresSchemaMigrator
             FOREIGN KEY (last_poison_id, consumer_id, partition_id)
             REFERENCES pitchmind.consumer_projection_poison(poison_id, consumer_id, partition_id);
         INSERT INTO pitchmind.schema_versions(version) VALUES (13) ON CONFLICT DO NOTHING;
-        """;
-
-    /// <summary>Dedicated raw-source outbox and read ledger; never canonical match tables.</summary>
-    public const string CandidateFeedV14Sql = """
-        CREATE TABLE IF NOT EXISTS pitchmind.candidate_feed_outbox (
-            source_sha256 char(64) NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
-            source_match_id text NOT NULL CHECK (length(source_match_id) BETWEEN 1 AND 128),
-            source_sequence bigint NOT NULL CHECK (source_sequence >= 0),
-            source_event_id text NOT NULL CHECK (length(source_event_id) BETWEEN 1 AND 128),
-            raw_clock_value numeric NOT NULL,
-            raw_period integer NOT NULL CHECK (raw_period BETWEEN 1 AND 5),
-            message_json jsonb NOT NULL CHECK (jsonb_typeof(message_json) = 'object'),
-            created_at timestamptz NOT NULL DEFAULT now(),
-            published_at timestamptz,
-            claim_token uuid,
-            lease_expires_at timestamptz,
-            attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-            PRIMARY KEY (source_sha256, source_match_id, source_sequence),
-            UNIQUE (source_sha256, source_event_id),
-            CHECK ((claim_token IS NULL) = (lease_expires_at IS NULL)),
-            CHECK (published_at IS NULL OR claim_token IS NULL)
-        );
-        CREATE INDEX IF NOT EXISTS ix_candidate_feed_outbox_pending
-            ON pitchmind.candidate_feed_outbox(created_at, source_sequence) WHERE published_at IS NULL;
-
-        CREATE TABLE IF NOT EXISTS pitchmind.candidate_feed_events (
-            source_sha256 char(64) NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
-            contract_version text NOT NULL CHECK (length(contract_version) BETWEEN 1 AND 64),
-            source_match_id text NOT NULL CHECK (length(source_match_id) BETWEEN 1 AND 128),
-            source_event_id text NOT NULL CHECK (length(source_event_id) BETWEEN 1 AND 128),
-            source_sequence bigint NOT NULL CHECK (source_sequence >= 0),
-            raw_clock_value numeric NOT NULL,
-            raw_period integer NOT NULL CHECK (raw_period BETWEEN 1 AND 5),
-            raw_event_type text NOT NULL CHECK (length(raw_event_type) BETWEEN 1 AND 128),
-            raw_payload jsonb NOT NULL CHECK (jsonb_typeof(raw_payload) = 'object'),
-            persisted_at timestamptz NOT NULL DEFAULT now(),
-            PRIMARY KEY (source_sha256, source_event_id),
-            UNIQUE (source_sha256, source_match_id, source_sequence)
-        );
-        CREATE INDEX IF NOT EXISTS ix_candidate_feed_events_match_sequence
-            ON pitchmind.candidate_feed_events(source_sha256, source_match_id, source_sequence);
-
-        CREATE TABLE IF NOT EXISTS pitchmind.candidate_feed_poison (
-            transport text NOT NULL CHECK (transport IN ('kafka-local', 'event-hubs-azure')),
-            partition_id text NOT NULL CHECK (length(partition_id) BETWEEN 1 AND 128),
-            broker_position text NOT NULL CHECK (length(broker_position) BETWEEN 1 AND 128),
-            payload_sha256 char(64) NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
-            reason_code text NOT NULL CHECK (reason_code ~ '^[A-Z][A-Z0-9_]{0,99}$'),
-            exception_type text NOT NULL CHECK (length(exception_type) BETWEEN 1 AND 128),
-            first_observed_at timestamptz NOT NULL DEFAULT now(),
-            last_observed_at timestamptz NOT NULL DEFAULT now(),
-            attempt_count integer NOT NULL DEFAULT 1 CHECK (attempt_count > 0),
-            PRIMARY KEY (transport, partition_id, broker_position)
-        );
-        INSERT INTO pitchmind.schema_versions(version) VALUES (14) ON CONFLICT DO NOTHING;
         """;
 }

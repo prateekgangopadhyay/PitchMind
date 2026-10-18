@@ -36,28 +36,11 @@ services:
       start_period: 5s
     networks: [local]
 
-  kafka:
-    image: ${KAFKA_IMAGE:-apache/kafka:4.3.1}
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
-    volumes:
-      - kafka-data:/tmp/kraft-combined-logs
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
-    networks: [local]
-
 volumes:
   postgres-data:
     name: ${POSTGRES_DATA_VOLUME:-pitchmind_postgres_data}
   redis-data:
     name: ${REDIS_DATA_VOLUME:-pitchmind_redis_data}
-  kafka-data:
-    name: ${KAFKA_DATA_VOLUME:-pitchmind_kafka_data}
 
 networks:
   local:

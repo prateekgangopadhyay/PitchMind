@@ -10,14 +10,6 @@ export default defineConfig({
           'X-Dev-Subject': 'local-analyst',
           'X-Dev-Roles': 'analyst'
         }
-      },
-      '/hubs': {
-        target: 'http://127.0.0.1:5080',
-        ws: true,
-        headers: {
-          'X-Dev-Subject': 'local-analyst',
-          'X-Dev-Roles': 'analyst'
-        }
       }
     }
   },
