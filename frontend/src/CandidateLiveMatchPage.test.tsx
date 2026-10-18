@@ -14,7 +14,7 @@ it('loads both teams from the candidate PostgreSQL backfill and labels their pos
   const status = { matchId, isStreaming: true, currentSequence: 1, currentClockValue: 0,
     period: 1, sourceSha256, sourceStatus: 'candidate_not_canonical', coordinateStatus: 'unverified', playerMetricsStatus: 'unvalidated' };
   const event = { eventId: 'source-event-1', matchId, sequence: 1, clockSeconds: 0, period: 1,
-    eventType: 'KickOff', rawPayload: { playerPositions: [
+    eventType: 'KickOff', rawPayload: { ballX: 50, ballY: 50, playerPositions: [
       { playerName: 'Home keeper', teamName: 'Home FC', teamId: 'home', jerseyNumber: 1, x: 5, y: 50, speed: 0 },
       { playerName: 'Away forward', teamName: 'Away FC', teamId: 'away', jerseyNumber: 9, x: 95, y: 50, speed: 0 }
     ] } };
@@ -38,6 +38,8 @@ it('loads both teams from the candidate PostgreSQL backfill and labels their pos
     expect(container.textContent).toContain('source-event-1');
     expect(container.textContent).toContain('unverified');
     expect(container.querySelector('.candidate-pitch')?.getAttribute('aria-label')).toContain('orientation unverified');
+    expect(container.querySelector('.candidate-ball-marker')).not.toBeNull();
+    expect(Number(container.querySelector('.candidate-player.home')?.getAttribute('cx'))).toBeCloseTo(7.7);
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -886,7 +886,6 @@ export function HomePage({
   const { page, error, loading, loadingMore, moreError, retry, loadMore } = useCanonicalFixtures();
   const [hubData, setHubData] = useState<EplHubData | null>(null);
   const [queryInput, setQueryInput] = useState('');
-  const [activeMomentFilter, setActiveMomentFilter] = useState<'live' | 'all'>('live');
 
   useEffect(() => {
     const isTestEnv = typeof globalThis !== 'undefined' && Boolean((globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT);
@@ -978,66 +977,18 @@ export function HomePage({
         onButtonClick={() => { window.location.href = contextHref('/matches', selectedMatchId, selectedSeconds); }}
       />
 
-      {/* Middle Row: Other Live Matches (60%) + What Matters Now (40%) */}
+      {/* Middle Row: live-match coverage is still being developed. */}
       <div className="hub-middle-row-grid">
         {/* Left: Other Live Matches */}
         <div className="hub-other-matches-panel">
           <div className="panel-header-row">
             <div className="panel-title-with-badge">
-              <span className="pulse-dot"></span>
               <h3>Other Live Matches</h3>
-              <span className="panel-count-badge">5 matches live</span>
             </div>
-            <a href="#all-matches" className="view-all-link">View all →</a>
           </div>
-
-          <div className="live-matches-strip-row">
-            {hubData?.otherLiveMatches && hubData.otherLiveMatches.map(m => (
-              <div key={m.matchId} className="live-match-card-mini">
-                <div className="mini-card-topline">
-                  <span className="mini-live-tag">• LIVE {m.clock}</span>
-                  <span className="mini-card-chevron">›</span>
-                </div>
-
-                <div className="mini-card-scores">
-                  <div className="mini-team-left">
-                    <ClubCrest name={m.homeTeam} logoUrl={m.homeLogo} className="mini-crest" />
-                    <strong>{m.homeScore}</strong>
-                  </div>
-                  <span className="mini-score-divider">-</span>
-                  <div className="mini-team-right">
-                    <strong>{m.awayScore}</strong>
-                    <ClubCrest name={m.awayTeam} logoUrl={m.awayLogo} className="mini-crest" />
-                  </div>
-                </div>
-
-                <div className="mini-card-names">
-                  <div>
-                    <span>{m.homeTeam}</span>
-                    <small>{m.homeFormation ?? '4-2-3-1'}</small>
-                  </div>
-                  <div className="text-right">
-                    <span>{m.awayTeam}</span>
-                    <small>{m.awayFormation ?? '4-3-3'}</small>
-                  </div>
-                </div>
-
-                <div className="mini-stadium-venue">{m.stadium ?? 'Premier League'}</div>
-
-                {/* Sparkline */}
-                <div className="mini-sparkline-row">
-                  <svg className="sparkline-svg" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <polyline
-                      fill="none"
-                      stroke="#4aefac"
-                      strokeWidth="2"
-                      points={m.momentum.map((val, idx) => `${idx * 11},${20 - (val / 100) * 16}`).join(' ')}
-                    />
-                    <circle cx="85" cy="8" r="2.5" fill="#fff" stroke="#07131c" strokeWidth="0.8" />
-                  </svg>
-                </div>
-              </div>
-            ))}
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Live coverage for other matches will appear here when verified match feeds are available.</span>
           </div>
         </div>
 
@@ -1069,7 +1020,7 @@ export function HomePage({
         </div>
       </div>
 
-      {/* Bottom Row: Key Moments (48%) + League Snapshot (26%) + Upcoming Fixtures (26%) */}
+      {/* Bottom Row: these competition-wide views are not available yet. */}
       <div className="hub-bottom-row-grid">
         {/* Left: Key Moments Across EPL */}
         <div className="hub-key-moments-panel">
@@ -1082,46 +1033,10 @@ export function HomePage({
               </span>
               <h3>Key Moments Across EPL</h3>
             </div>
-            <div className="moments-toggle-pills">
-              <button
-                type="button"
-                className={`moment-filter-btn ${activeMomentFilter === 'live' ? 'active' : ''}`}
-                onClick={() => setActiveMomentFilter('live')}
-              >
-                Live & Recent
-              </button>
-              <button
-                type="button"
-                className={`moment-filter-btn ${activeMomentFilter === 'all' ? 'active' : ''}`}
-                onClick={() => setActiveMomentFilter('all')}
-              >
-                All Matches
-              </button>
-              <a href="#view-all-moments" className="view-all-link">View all →</a>
-            </div>
           </div>
-
-          <div className="key-moments-cards-strip">
-            {hubData?.keyMoments && hubData.keyMoments.map(km => (
-              <div key={km.id} className="moment-video-card">
-                <div className="moment-video-thumbnail">
-                  <span className="moment-clock-tag">{km.clock}</span>
-                  <div className="moment-play-circle" aria-hidden="true">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="moment-desc-box">
-                  <div className="moment-team-indicator">
-                    <span className="team-vertical-bar"></span>
-                    <strong>{km.team}</strong>
-                  </div>
-                  <p>{km.title}</p>
-                  <span className="moment-fixture-tag">{km.matchTag ?? 'EPL'}</span>
-                </div>
-              </div>
-            ))}
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Verified competition-wide key moments are not available yet.</span>
           </div>
         </div>
 
@@ -1136,37 +1051,14 @@ export function HomePage({
               </span>
               <div>
                 <h3>EPL League Snapshot</h3>
-                <small className="panel-subcaption">Live Table (Top 6)</small>
+                <small className="panel-subcaption">Competition standings</small>
               </div>
             </div>
-            <a href="#full-table" className="view-all-link">Full Table →</a>
           </div>
-
-          <table className="epl-snapshot-table" aria-label="Premier League snapshot table">
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">Team</th>
-                <th scope="col">P</th>
-                <th scope="col">GD</th>
-                <th scope="col">Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hubData?.leagueSnapshot && hubData.leagueSnapshot.map(row => (
-                <tr key={row.rank}>
-                  <td className="rank-col">{row.rank}</td>
-                  <td className="team-col">
-                    <ClubCrest name={row.team} logoUrl={row.logo} className="table-crest" />
-                    <span>{row.team}</span>
-                  </td>
-                  <td>{row.played}</td>
-                  <td>{row.gd}</td>
-                  <td className="points-col"><strong>{row.points}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Standings will be shown when an authoritative competition table is connected.</span>
+          </div>
         </div>
 
         {/* Right: Upcoming Fixtures */}
@@ -1183,30 +1075,10 @@ export function HomePage({
                 <small className="panel-subcaption">Next 3 EPL matches</small>
               </div>
             </div>
-            <a href="#view-all-fixtures" className="view-all-link">View all →</a>
           </div>
-
-          <div className="upcoming-fixtures-vertical-list">
-            {hubData?.upcomingFixtures && hubData.upcomingFixtures.map((fix, idx) => (
-              <div key={idx} className="upcoming-fixture-row-card">
-                <div className="fixture-time-col">
-                  <span className="fix-date">{fix.date}</span>
-                  <strong className="fix-clock">{fix.kickOff}</strong>
-                </div>
-
-                <div className="fixture-matchup-col">
-                  <div className="fix-team">
-                    <ClubCrest name={fix.homeTeam} logoUrl={fix.homeLogo} className="fix-crest" />
-                    <span>{fix.homeTeam}</span>
-                  </div>
-                  <span className="fix-vs">vs</span>
-                  <div className="fix-team">
-                    <ClubCrest name={fix.awayTeam} logoUrl={fix.awayLogo} className="fix-crest" />
-                    <span>{fix.awayTeam}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Upcoming fixtures will appear when an authoritative schedule is connected.</span>
           </div>
         </div>
       </div>
@@ -1744,31 +1616,14 @@ export function MatchPage({
               <span className="panel-star-icon">⭐</span>
               <div>
                 <h3>Key Moments</h3>
-                <small className="panel-subcaption">Defining moments that are shaping the match</small>
+                <small className="panel-subcaption">Evidence-backed moments from this match</small>
               </div>
             </div>
-            <a href="#view-all" className="view-all-link">View all →</a>
           </div>
 
-          <div className="hero-key-moment-card">
-            <div className="hero-km-thumb-col">
-              <img src="/match/key-moment-64.webp" alt="High regain tactical action" className="hero-km-img-thumb" />
-              <span className="hero-km-clock">64'</span>
-              <div className="hero-km-play-btn" aria-hidden="true">▶</div>
-            </div>
-            <div className="hero-km-content-col">
-              <div className="hero-km-title-row">
-                <span className="star-gold">⭐</span>
-                <span className="hero-km-tag">Key Moment</span>
-              </div>
-              <h4>High regain leads to shot (wide)</h4>
-              <p>Arsenal win the ball in the final third, quickly combine and get a shot away from the edge of the box.</p>
-              <div className="hero-km-badges-row">
-                <span className="tag-pill-badge tag-green">Observed</span>
-                <span className="tag-pill-badge tag-blue">Derived</span>
-                <span className="tag-pill-badge tag-purple">Explained</span>
-              </div>
-            </div>
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Verified key moments for this match are not available yet.</span>
           </div>
         </div>
 
@@ -1779,30 +1634,14 @@ export function MatchPage({
               <span className="panel-icon-emerald">▶</span>
               <div>
                 <h3>Sequence Replay</h3>
-                <small className="panel-subcaption">Watch the build-up with tactical context</small>
+                <small className="panel-subcaption">Evidence-backed sequence playback</small>
               </div>
             </div>
-            <a href="#open-player" className="view-all-link">Open in player →</a>
           </div>
 
-          <div className="sequence-steps-strip">
-            {[
-              { step: 1, title: "1. High press", img: "/match/step-1-high-press.webp", active: true },
-              { step: 2, title: "2. Ball regain", img: "/match/step-2-ball-regain.webp", active: false },
-              { step: 3, title: "3. Quick transition", img: "/match/step-3-quick-transition.webp", active: false },
-              { step: 4, title: "4. Shot (wide)", img: "/match/step-4-shot.webp", active: false }
-            ].map((st, i) => (
-              <div key={st.step} className="seq-step-wrapper">
-                <div className={`seq-step-card ${st.active ? 'active-border' : ''}`}>
-                  <div className="seq-step-thumb">
-                    <img src={st.img} alt={st.title} className="seq-step-img" />
-                    <span className="seq-play-icon" aria-hidden="true">▶</span>
-                  </div>
-                  <span className="seq-step-title">{st.title}</span>
-                </div>
-                {i < 3 && <span className="seq-step-arrow" aria-hidden="true">›</span>}
-              </div>
-            ))}
+          <div className="home-development-notice" role="status">
+            <strong>Under development</strong>
+            <span>Verified event sequences and replay controls are not available yet.</span>
           </div>
         </div>
       </div>

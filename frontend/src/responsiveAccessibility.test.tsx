@@ -49,8 +49,9 @@ describe('responsive navigation accessibility contract', () => {
 
     const links = [...(navigation ?? '').matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)];
     expect(links.map(([, , label]) => label.replace(/<[^>]+>/g, '').trim())).toEqual([
-      'Home', 'Match', 'Live match', 'Teams', 'Players', 'Insights', 'AI Analyst'
+      'Home', 'Match', 'Teams', 'Players', 'Insights', 'AI Analyst'
     ]);
+    expect(links[1][1]).toMatch(/href="\/candidate-live(?:\?[^\"]*)?"/);
     expect(links.every(([, attributes]) => /\bhref=/.test(attributes) && !/\btabindex="(?:[1-9]|-[1-9])/.test(attributes))).toBe(true);
     expect(links[0][1]).toContain('aria-current="page"');
   });

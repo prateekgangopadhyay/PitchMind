@@ -50,30 +50,19 @@ The first run creates gitignored `docker/.env` with independent random passwords
 
 The candidate path is deliberately isolated from canonical match routes. The local Simulation Service reads `data/simulations/manu-liv-match-dataset.json`, preserves each raw event envelope and publishes it to Kafka. `PitchMind.EventWorker` consumes Kafka and durably inserts each envelope into a PostgreSQL outbox before committing its Kafka offset. The API outbox dispatcher then writes the candidate event history in PostgreSQL and updates the latest cursor in Redis concurrently; once the durable write and cache attempt complete, it publishes a cursor-only SignalR notification and acknowledges the outbox item. Redis errors are handled by the existing best-effort cache adapter; PostgreSQL remains the durable source. The UI backfills ordered raw events from PostgreSQL after each cursor notification (or bounded polling fallback), renders the source's two-team player positions, and exposes the raw player fields.
 
-After `dev-up` and `dev-migrate`, run the API and EventWorker in separate terminals:
+After `dev-up` and `dev-migrate`, run the API and EventWorker in separate terminals. The launch scripts read the gitignored `docker/.env` without printing its credentials, apply the selected local Docker ports, and enable the candidate-feed adapters:
 
 ```bash
-set -a; source docker/.env; set +a
-Runtime__Profile=local Realtime__Provider=local CandidateFeed__Enabled=true \
-  ConnectionStrings__PitchMind="Host=127.0.0.1;Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-pitchmind};Username=pitchmind_api;Password=${PITCHMIND_API_PASSWORD}" \
-  Redis__ConnectionString="127.0.0.1:${REDIS_PORT:-6379},password=${REDIS_PASSWORD},ssl=false" \
-  Kafka__BootstrapServers="127.0.0.1:${KAFKA_PORT:-9092}" \
-  Identity__DevelopmentHeaderAuthEnabled=true DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development \
-  dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+./scripts/start-local-api.sh
 ```
 
 ```bash
-set -a; source docker/.env; set +a
-Runtime__Profile=local CandidateFeed__Enabled=true \
-  ConnectionStrings__PitchMind="Host=127.0.0.1;Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-pitchmind};Username=pitchmind_api;Password=${PITCHMIND_API_PASSWORD}" \
-  Kafka__BootstrapServers="127.0.0.1:${KAFKA_PORT:-9092}" \
-  DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development \
-  dotnet run --project src/PitchMind.EventWorker
+./scripts/start-local-eventworker.sh
 ```
 
-Then start the frontend with `npm --prefix frontend run dev -- --host 127.0.0.1` and open `http://127.0.0.1:5173/candidate-live`. Opening the page starts the candidate simulation once; the header Live control pauses or resumes it. `Identity:DevelopmentHeaderAuthEnabled` is a LOCAL-only developer adapter. For browser SignalR on localhost, the UI uses long polling with the same local identity headers; normal Azure identity must provide its bearer token.
+Then start the frontend with `npm --prefix frontend run dev -- --host 127.0.0.1` and open `http://127.0.0.1:5173/home`; use the Match tab to open the candidate MANU–Liverpool stream. Entering the signed-in app starts the local candidate simulation once; the blinking header Live control pauses or resumes it. `Identity:DevelopmentHeaderAuthEnabled` is a LOCAL-only developer adapter. For browser SignalR on localhost, the UI uses long polling with the same local identity headers; normal Azure identity must provide its bearer token.
 
-The page labels the source as noncanonical. Its coordinate units/axes/orientation, clock/period semantics, player metric definitions and football realism remain unverified. The visual scales raw positions to the source-frame bounds; it does not convert them to pitch metres or make performance claims. This local implementation is not yet an Azure DEV implementation: the Azure Event Hubs ingress, Azure PostgreSQL candidate persistence/read adapter, Azure Managed Redis fan-out and Azure SignalR connection negotiation are not wired by this slice. No Azure deployment has been performed.
+The page labels the source as noncanonical. Its coordinate units/axes/orientation, clock/period semantics, player metric definitions and football realism remain unverified. The visual proportionally maps raw source coordinates to the pitch canvas for preview only; it does not convert them to pitch metres or make performance claims. The Azure profile has code adapters for Event Hubs, PostgreSQL, Redis and Azure SignalR, but DEV still requires the EventWorker to be deployed with Azure identity and matching settings, plus provisioned resources and schema. No Azure deployment has been performed.
 
 `./scripts/dev-migrate.py` is the explicit LOCAL schema migration step. It uses the PostgreSQL owner from the private Compose environment, refuses non-loopback port mappings, applies versioned migrations, then creates or refreshes `pitchmind_api` with SELECT on canonical read tables and only the column-level UPDATE privileges needed by the local outbox dispatcher. The runtime API command uses that restricted role. It cannot create or alter schema objects, insert canonical data, or change migration history.
 

@@ -27,14 +27,19 @@ public sealed class CandidateKafkaProducer : ICandidateEventPublisher, IDisposab
         _producer = new ProducerBuilder<string, string>(new ProducerConfig
         {
             BootstrapServers = bootstrap, Acks = Acks.All, EnableIdempotence = true,
-            MessageTimeoutMs = 10000, ClientId = "pitchmind-candidate-simulation"
+            MessageTimeoutMs = 10000, ClientId = "pitchmind-candidate-simulation",
+            BrokerAddressFamily = BrokerAddressFamily.V4
         }).Build();
     }
 
     public async Task EnsureReadyAsync(CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _ready) == 1) return;
-        using var admin = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = _bootstrap }).Build();
+        using var admin = new AdminClientBuilder(new AdminClientConfig
+        {
+            BootstrapServers = _bootstrap,
+            BrokerAddressFamily = BrokerAddressFamily.V4
+        }).Build();
         try
         {
             await admin.CreateTopicsAsync([new TopicSpecification { Name = _topic, NumPartitions = 1, ReplicationFactor = 1 }])
@@ -74,7 +79,8 @@ public sealed class CandidateKafkaConsumer(CandidateFeedPersistence persistence)
         using var consumer = new ConsumerBuilder<string, string>(new ConsumerConfig
         {
             BootstrapServers = bootstrap, GroupId = groupId, AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = false, EnablePartitionEof = false, ClientId = "pitchmind-candidate-event-worker"
+            EnableAutoCommit = false, EnablePartitionEof = false, ClientId = "pitchmind-candidate-event-worker",
+            BrokerAddressFamily = BrokerAddressFamily.V4
         }).Build();
         consumer.Subscribe(topic);
         while (!cancellationToken.IsCancellationRequested)

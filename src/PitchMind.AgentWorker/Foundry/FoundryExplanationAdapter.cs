@@ -19,7 +19,9 @@ public sealed record FoundryAdapterOptions(
     int MaximumOutputTokens = 512,
     int TimeoutSeconds = 15,
     int MaximumConcurrency = 4,
-    bool AllowInsecureHttpForLocalTesting = false)
+    bool AllowInsecureHttpForLocalTesting = false,
+    bool UseProjectAgentEndpoint = false,
+    string AgentName = "TacticalAnalyst")
 {
     public void Validate()
     {
@@ -37,8 +39,15 @@ public sealed record FoundryAdapterOptions(
                                host.EndsWith(".models.ai.azure.com", StringComparison.OrdinalIgnoreCase);
         if (!loopbackTest && !knownFoundryHost)
             throw new InvalidOperationException("Foundry endpoint must use a supported Azure AI host.");
-        if (string.IsNullOrWhiteSpace(Deployment) || Deployment.Length > 128 || Deployment.Any(char.IsControl))
+        if (!UseProjectAgentEndpoint && (string.IsNullOrWhiteSpace(Deployment) || Deployment.Length > 128 || Deployment.Any(char.IsControl)))
             throw new InvalidOperationException("Foundry deployment name is invalid.");
+        if (UseProjectAgentEndpoint && (string.IsNullOrWhiteSpace(AgentName) || AgentName.Length > 128 ||
+            AgentName.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '-' or '_'))))
+            throw new InvalidOperationException("Foundry project agent name is invalid.");
+        var projectPathSegments = Endpoint.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (UseProjectAgentEndpoint && (projectPathSegments.Length != 3 || projectPathSegments[0] != "api" ||
+            projectPathSegments[1] != "projects" || string.IsNullOrWhiteSpace(projectPathSegments[2])))
+            throw new InvalidOperationException("Foundry project-agent mode requires the project endpoint path /api/projects/{project}.");
         if (MaximumRequestBytes is < 1_024 or > 262_144 || MaximumResponseBytes is < 1_024 or > 65_536 ||
             MaximumOutputTokens is < 1 or > 2_048 || TimeoutSeconds is < 1 or > 60 || MaximumConcurrency is < 1 or > 32)
             throw new InvalidOperationException("Foundry adapter limits are outside the supported bounds.");
@@ -56,13 +65,11 @@ public interface IFoundryAccessTokenProvider
     ValueTask<string> GetTokenAsync(CancellationToken cancellationToken);
 }
 
-public sealed class ManagedIdentityFoundryAccessTokenProvider(TokenCredential credential) : IFoundryAccessTokenProvider
+public sealed class ManagedIdentityFoundryAccessTokenProvider(TokenCredential credential, string scope = "https://cognitiveservices.azure.com/.default") : IFoundryAccessTokenProvider
 {
-    private static readonly TokenRequestContext TokenContext = new(["https://cognitiveservices.azure.com/.default"]);
-
     public async ValueTask<string> GetTokenAsync(CancellationToken cancellationToken)
     {
-        var token = await credential.GetTokenAsync(TokenContext, cancellationToken);
+        var token = await credential.GetTokenAsync(new TokenRequestContext([scope]), cancellationToken);
         return token.Token;
     }
 }
@@ -80,7 +87,8 @@ public sealed class FoundryExplanationAdapter(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly SemaphoreSlim _concurrency = new(options.MaximumConcurrency, options.MaximumConcurrency);
-    private readonly Uri _chatCompletionsUri = BuildChatCompletionsUri(options);
+    private readonly Uri _requestUri = BuildRequestUri(options);
+    private string TargetName => options.UseProjectAgentEndpoint ? options.AgentName : options.Deployment;
 
     public FoundryExplanationAdapter(HttpClient httpClient, IFoundryAccessTokenProvider tokenProvider,
         FoundryAdapterOptions options, ILogger<FoundryExplanationAdapter> logger)
@@ -100,7 +108,7 @@ public sealed class FoundryExplanationAdapter(
 
         if (!await _concurrency.WaitAsync(0, cancellationToken))
         {
-            logger.LogWarning("Foundry candidate capacity exhausted; deployment={Deployment}", options.Deployment);
+            logger.LogWarning("Foundry candidate capacity exhausted; target={Target}", TargetName);
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.Unavailable);
         }
         var stopwatch = Stopwatch.StartNew();
@@ -115,7 +123,7 @@ public sealed class FoundryExplanationAdapter(
             if (requestBytes.Length > options.MaximumRequestBytes || request.Context.SerializedSizeBytes > 32_768)
                 return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.RequestTooLarge);
             var accessToken = await tokenProvider.GetTokenAsync(timeout.Token);
-            using var message = new HttpRequestMessage(HttpMethod.Post, _chatCompletionsUri);
+            using var message = new HttpRequestMessage(HttpMethod.Post, _requestUri);
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             message.Content = new ByteArrayContent(requestBytes);
@@ -123,8 +131,8 @@ public sealed class FoundryExplanationAdapter(
             using var response = await httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Foundry candidate request unavailable; status={StatusCode} deployment={Deployment}",
-                    (int)response.StatusCode, options.Deployment);
+                logger.LogWarning("Foundry candidate request unavailable; status={StatusCode} target={Target}",
+                    (int)response.StatusCode, TargetName);
                 return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.Unavailable);
             }
 
@@ -132,10 +140,12 @@ public sealed class FoundryExplanationAdapter(
             if (responseBytes is null)
                 return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.InvalidCandidate);
 
-            var parsed = ParseResponse(responseBytes, request.Context);
+            var parsed = options.UseProjectAgentEndpoint
+                ? ParseProjectAgentResponse(responseBytes, request.Context, options.AgentName)
+                : ParseResponse(responseBytes, request.Context);
             if (parsed is null)
             {
-                logger.LogWarning("Foundry candidate response rejected; reason=invalid-structured-output deployment={Deployment}", options.Deployment);
+                logger.LogWarning("Foundry candidate response rejected; reason=invalid-structured-output target={Target}", TargetName);
                 return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.InvalidCandidate);
             }
 
@@ -151,37 +161,37 @@ public sealed class FoundryExplanationAdapter(
                 request.Context.SelectedTimeSeconds, request.Context.ThroughSequence, request.Context.SourceVersion,
                 request.Context.Provenance, request.Context.SourceSha256, request.Context.StateSha256,
                 MatchIntelligenceContextFingerprint.Compute(request.Context), request.Context.ContextPolicyVersion);
-            logger.LogInformation("Foundry candidate generated; deployment={Deployment} durationMs={DurationMs} inputTokens={InputTokens} outputTokens={OutputTokens} traceId={TraceId}",
-                options.Deployment, (long)stopwatch.Elapsed.TotalMilliseconds, parsed.InputTokens, parsed.OutputTokens, traceId);
+            logger.LogInformation("Foundry candidate generated; target={Target} durationMs={DurationMs} inputTokens={InputTokens} outputTokens={OutputTokens} traceId={TraceId}",
+                TargetName, (long)stopwatch.Elapsed.TotalMilliseconds, parsed.InputTokens, parsed.OutputTokens, traceId);
             completed = true;
             return ExplanationGenerationResult.Success(candidate);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning("Foundry candidate request timed out; deployment={Deployment}", options.Deployment);
+            logger.LogWarning("Foundry candidate request timed out; target={Target}", TargetName);
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.Unavailable);
         }
         catch (HttpRequestException)
         {
-            logger.LogWarning("Foundry candidate request unavailable; deployment={Deployment}", options.Deployment);
+            logger.LogWarning("Foundry candidate request unavailable; target={Target}", TargetName);
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.Unavailable);
         }
         catch (AuthenticationFailedException)
         {
-            logger.LogWarning("Foundry identity unavailable; deployment={Deployment}", options.Deployment);
+            logger.LogWarning("Foundry identity unavailable; target={Target}", TargetName);
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.Unavailable);
         }
         catch (InvalidDataException)
         {
-            logger.LogWarning("Tactical knowledge retrieval response rejected; deployment={Deployment}", options.Deployment);
+            logger.LogWarning("Tactical knowledge retrieval response rejected; target={Target}", TargetName);
             return ExplanationGenerationResult.Refused(ExplanationGenerationFailure.InvalidCandidate);
         }
         finally
         {
             stopwatch.Stop();
             if (!completed)
-                logger.LogInformation("Foundry candidate attempt completed without a candidate; deployment={Deployment} durationMs={DurationMs}",
-                    options.Deployment, (long)stopwatch.Elapsed.TotalMilliseconds);
+                logger.LogInformation("Foundry candidate attempt completed without a candidate; target={Target} durationMs={DurationMs}",
+                    TargetName, (long)stopwatch.Elapsed.TotalMilliseconds);
             _concurrency.Release();
         }
     }
@@ -189,37 +199,56 @@ public sealed class FoundryExplanationAdapter(
     public void Dispose() => _concurrency.Dispose();
 
     private object BuildRequestBody(ExplanationGenerationRequest request, TacticalAgentProfile agentProfile,
-        TacticalKnowledgeSearchResult knowledge) => new
+        TacticalKnowledgeSearchResult knowledge)
     {
-        model = options.Deployment,
-        messages = new object[]
+        var input = JsonSerializer.Serialize(new
         {
-            new { role = "system", content = BuildSystemInstruction(request.Audience, agentProfile) },
-            new
+            audience = request.Audience.ToString().ToLowerInvariant(),
+            question = request.Question,
+            context = request.Context,
+            retrievedTacticalKnowledge = knowledge.Sources
+        }, JsonOptions);
+
+        if (options.UseProjectAgentEndpoint)
+            return new
             {
-                role = "user",
-                content = JsonSerializer.Serialize(new
+                instructions = BuildSystemInstruction(request.Audience, agentProfile),
+                input,
+                max_output_tokens = request.MaximumOutputTokens,
+                text = new
                 {
-                    audience = request.Audience.ToString().ToLowerInvariant(),
-                    question = request.Question,
-                    context = request.Context,
-                    retrievedTacticalKnowledge = knowledge.Sources
-                }, JsonOptions)
-            }
-        },
-        max_completion_tokens = request.MaximumOutputTokens,
-        temperature = 0.2,
-        response_format = new
+                    format = new
+                    {
+                        type = "json_schema",
+                        name = "candidate_explanation",
+                        strict = true,
+                        schema = CandidateSchema
+                    }
+                }
+            };
+
+        return new
         {
-            type = "json_schema",
-            json_schema = new
+            model = options.Deployment,
+            messages = new object[]
             {
-                name = "candidate_explanation",
-                strict = true,
-                schema = CandidateSchema
+                new { role = "system", content = BuildSystemInstruction(request.Audience, agentProfile) },
+                new { role = "user", content = input }
+            },
+            max_completion_tokens = request.MaximumOutputTokens,
+            temperature = 0.2,
+            response_format = new
+            {
+                type = "json_schema",
+                json_schema = new
+                {
+                    name = "candidate_explanation",
+                    strict = true,
+                    schema = CandidateSchema
+                }
             }
-        }
-    };
+        };
+    }
 
     private static string BuildSystemInstruction(ExplanationAudience audience, TacticalAgentProfile profile)
     {
@@ -227,7 +256,7 @@ public sealed class FoundryExplanationAdapter(
         {
             ExplanationAudience.Fan => "For a fan: use everyday language, briefly explain necessary tactical terms, and keep the answer to at most two short sentences.",
             ExplanationAudience.Analyst => "For an analyst: use concise tactical terminology and describe only the evidenced sequence or structure; keep the answer to at most two short sentences.",
-            ExplanationAudience.Expert => "For an expert: There are subagents registered in the AI Project. Take the evidence and let all the agents analyse them. They may have variablity in their analysis, hence try to consolidate the response from all subagents to get the most accurate explanation that supports the outcome. Use the best tactical football knowledge and the evidence to produce the explanation. Do not hallucinate and create any facts out of thin air.",
+            ExplanationAudience.Expert => "For an expert: apply the selected tactical lens and retrieved football knowledge to the supplied evidence. No claim of multi-agent review is made unless separate specialist handoffs are present in the request trace. Preserve uncertainty and do not invent facts.",
             _ => throw new ArgumentOutOfRangeException(nameof(audience))
         };
 
@@ -268,12 +297,75 @@ public sealed class FoundryExplanationAdapter(
         }
     };
 
-    private static Uri BuildChatCompletionsUri(FoundryAdapterOptions options)
+    private static Uri BuildRequestUri(FoundryAdapterOptions options)
     {
         options.Validate();
         var root = options.Endpoint.AbsoluteUri.TrimEnd('/');
+        if (options.UseProjectAgentEndpoint)
+            return new Uri(root + "/agents/" + Uri.EscapeDataString(options.AgentName) + "/endpoint/protocols/openai/responses", UriKind.Absolute);
         if (!root.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase)) root += "/openai/v1";
         return new Uri(root + "/chat/completions", UriKind.Absolute);
+    }
+
+    private static ParsedCandidate? ParseProjectAgentResponse(byte[] bytes, MatchIntelligenceContextPacket context, string agentName)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(bytes);
+            var root = document.RootElement;
+            if (root.TryGetProperty("status", out var status) &&
+                !string.Equals(status.GetString(), "completed", StringComparison.Ordinal)) return null;
+            string? content = root.TryGetProperty("output_text", out var outputText) && outputText.ValueKind == JsonValueKind.String
+                ? outputText.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(content) && root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
+            {
+                var texts = output.EnumerateArray()
+                    .Where(item => item.TryGetProperty("type", out var type) && type.GetString() == "message" &&
+                                   item.TryGetProperty("content", out _))
+                    .SelectMany(item => item.GetProperty("content").EnumerateArray())
+                    .Where(item => item.TryGetProperty("type", out var type) && type.GetString() == "output_text" &&
+                                   item.TryGetProperty("text", out _))
+                    .Select(item => item.GetProperty("text").GetString())
+                    .Where(text => !string.IsNullOrWhiteSpace(text));
+                content = string.Join("", texts);
+            }
+            if (string.IsNullOrWhiteSpace(content)) return null;
+            using var candidateDocument = JsonDocument.Parse(content);
+            var candidateRoot = candidateDocument.RootElement;
+            if (candidateRoot.ValueKind != JsonValueKind.Object || !HasExactProperties(candidateRoot, "text", "claims")) return null;
+            var text = candidateRoot.GetProperty("text").GetString();
+            var claimsElement = candidateRoot.GetProperty("claims");
+            var evidenceIds = context.Evidence.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+            if (string.IsNullOrWhiteSpace(text) || text.Length > 2_500 || claimsElement.ValueKind != JsonValueKind.Array ||
+                claimsElement.GetArrayLength() is < 1 or > 12) return null;
+            var claims = new List<CandidateExplanationClaim>();
+            foreach (var claimElement in claimsElement.EnumerateArray())
+            {
+                if (claimElement.ValueKind != JsonValueKind.Object || !HasExactProperties(claimElement, "text", "evidenceIds")) return null;
+                var claimText = claimElement.GetProperty("text").GetString();
+                var refs = claimElement.GetProperty("evidenceIds").EnumerateArray().Select(value => value.GetString()).ToArray();
+                var uniqueRefs = new HashSet<string>(StringComparer.Ordinal);
+                if (string.IsNullOrWhiteSpace(claimText) || claimText.Length > 1_000 || refs.Length is < 1 or > 12 ||
+                    refs.Any(id => string.IsNullOrWhiteSpace(id) || !evidenceIds.Contains(id) || !uniqueRefs.Add(id!))) return null;
+                claims.Add(new CandidateExplanationClaim(claimText, Array.AsReadOnly(refs.Select(id => id!).ToArray())));
+            }
+            int? inputTokens = null;
+            int? outputTokens = null;
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                if (usage.TryGetProperty("input_tokens", out var input)) inputTokens = ReadNonnegativeInt(input);
+                if (usage.TryGetProperty("output_tokens", out var outputUsage)) outputTokens = ReadNonnegativeInt(outputUsage);
+            }
+            var model = root.TryGetProperty("model", out var modelValue) && modelValue.ValueKind == JsonValueKind.String
+                ? modelValue.GetString() ?? agentName
+                : agentName;
+            return new ParsedCandidate(text, Array.AsReadOnly(claims.ToArray()), model, inputTokens, outputTokens);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or IndexOutOfRangeException)
+        {
+            return null;
+        }
     }
 
     private static bool IsBoundedContext(MatchIntelligenceContextPacket context)

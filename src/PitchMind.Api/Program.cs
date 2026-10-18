@@ -151,6 +151,8 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
                 builder.Configuration["Kafka:BootstrapServers"] ?? "127.0.0.1:9092",
                 builder.Configuration["Kafka:CandidateTopic"] ?? CandidateKafkaProducer.DefaultTopic));
             builder.Services.AddSingleton<ICandidateEventPublisher>(sp => sp.GetRequiredService<CandidateKafkaProducer>());
+            builder.Services.AddSingleton<CandidateKafkaConsumer>();
+            builder.Services.AddHostedService<LocalCandidateKafkaConsumerWorker>();
             builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
         }
         if (LocalPostgresConnectionPolicy.ShouldRegisterOutboxWorker(

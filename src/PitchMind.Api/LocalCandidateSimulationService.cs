@@ -74,7 +74,7 @@ public sealed class LocalCandidateSimulationService(CandidateFeedSourceCatalog c
                 if (_session is not null) await _session.DisposeAsync().ConfigureAwait(false);
                 await publisher.EnsureReadyAsync(token).ConfigureAwait(false);
                 var source = await catalog.GetAsync(token).ConfigureAwait(false);
-                var checkpoint = new FileCandidateFeedReplayCheckpointStore(Path.Combine(Path.GetTempPath(), "PitchMind", "candidate-feed", source.SourceSha256, Guid.NewGuid().ToString("N")));
+                var checkpoint = new FileCandidateFeedReplayCheckpointStore(Path.Combine(AppContext.BaseDirectory, "candidate-feed", source.SourceSha256, Guid.NewGuid().ToString("N")));
                 var rate = configuration.GetValue("CandidateFeed:RecordsPerSecond", 10);
                 if (rate is < 1 or > LocalCandidateFeedReplayProducer.MaximumRecordsPerSecond)
                     throw new InvalidOperationException("CandidateFeed:RecordsPerSecond is outside the supported range.");

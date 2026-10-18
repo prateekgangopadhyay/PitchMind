@@ -109,11 +109,9 @@ export function App() {
   const realtimeMode = params.get('mode') === 'live' || selectedSeconds === undefined ? 'LIVE' : 'HISTORICAL';
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
-  const matchPath = matchId && !matchId.startsWith('sim-') ? `/matches/${encodeURIComponent(matchId)}` : '/matches';
   const links = [
     { label: 'Home', path: '/home', active: route.kind === 'home' },
-    { label: 'Match', path: matchPath, active: route.kind === 'matches' || route.kind === 'demo-match' },
-    { label: 'Live match', path: '/candidate-live', active: route.kind === 'candidate-live' },
+    { label: 'Match', path: '/candidate-live', active: route.kind === 'candidate-live' || route.kind === 'matches' || route.kind === 'demo-match' },
     { label: 'Teams', path: '/teams', active: route.kind === 'teams' },
     { label: 'Players', path: '/players', active: route.kind === 'players' },
     { label: 'Insights', path: '/insights', active: route.kind === 'insights' },

@@ -3683,10 +3683,27 @@ a[href*='#open-player'] {
   animation: pmPulse 2s infinite !important;
 }
 
-.live-status-pill { cursor: pointer !important; }
-.live-status-pill:disabled { cursor: not-allowed !important; opacity: .6; }
-.live-status-pill .live-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #81918b; }
-.live-status-pill.is-streaming .live-status-dot { background: #4aefac; box-shadow: 0 0 8px #4aefac; animation: pmPulse 1.5s infinite; }
+.live-status-pill .live-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #81918b; transition: background .2s, box-shadow .2s; }
+.live-status-pill.is-streaming .live-status-dot {
+  background: #4aefac;
+  box-shadow: 0 0 10px #4aefac;
+  animation: liveBlinkDot 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes liveBlinkDot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1.15);
+    box-shadow: 0 0 8px #4aefac, 0 0 14px rgba(74, 239, 172, 0.6);
+  }
+  50% {
+    opacity: 0.15;
+    transform: scale(0.85);
+    box-shadow: 0 0 2px #4aefac;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-status-pill.is-streaming .live-status-dot { animation: none; }
+}
 
 .candidate-live-page { max-width: 1440px; margin: 0 auto; }
 .candidate-live-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:18px; }
@@ -3703,6 +3720,8 @@ a[href*='#open-player'] {
 .candidate-pitch text { fill:white; font-size:1.6px; text-anchor:middle; dominant-baseline:middle; pointer-events:none; }
 .candidate-player.home { fill:#ff7182; stroke:#fff; stroke-width:.3; }
 .candidate-player.away { fill:#7db8ff; stroke:#fff; stroke-width:.3; }
+.candidate-ball-marker circle { fill:#fff; stroke:#07131c; stroke-width:.45; }
+.candidate-ball-marker text { fill:#07131c; font-weight:700; }
 .candidate-player-groups { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:14px; }
 .candidate-player-groups ul,.candidate-history { list-style:none; padding:0; margin:0; }
 .candidate-player-groups li { display:grid; gap:4px; padding:9px 0; border-bottom:1px solid var(--pm-border); }
@@ -5103,6 +5122,29 @@ input[type="checkbox"] {
   border: 1px solid var(--pm-border) !important;
   border-radius: 10px !important;
   padding: 1.15rem !important;
+}
+
+.home-development-notice {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 0.35rem !important;
+  min-height: 108px !important;
+  padding: 1rem !important;
+  border: 1px dashed var(--pm-border) !important;
+  border-radius: 8px !important;
+  background: var(--pm-surface-raised) !important;
+  color: var(--pm-text-secondary) !important;
+  line-height: 1.45 !important;
+}
+
+.home-development-notice strong {
+  color: var(--pm-text) !important;
+  font-size: 0.82rem !important;
+}
+
+.home-development-notice span {
+  font-size: 0.75rem !important;
 }
 
 .moments-toggle-pills {

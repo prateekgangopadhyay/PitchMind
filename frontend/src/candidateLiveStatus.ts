@@ -8,7 +8,8 @@ export interface CandidateStreamStatus {
 }
 interface Snapshot { status: CandidateStreamStatus | null; error: string; pending: boolean }
 let status: CandidateStreamStatus | null = null; let error = ''; let pending = false;
-let autoStarted = false; let poller: ReturnType<typeof setInterval> | null = null; let requestInFlight: Promise<void> | null = null;
+let autoStartRequested = false; let autoStartAttempted = false;
+let poller: ReturnType<typeof setInterval> | null = null; let requestInFlight: Promise<void> | null = null;
 let snapshot: Snapshot = { status, error, pending }; const listeners = new Set<() => void>();
 function publish() { snapshot = { status, error, pending }; listeners.forEach(fn => fn()); }
 export function readCandidateStatus(): Snapshot { return snapshot; }
@@ -20,20 +21,33 @@ export function subscribeCandidateStatus(fn: () => void) {
   }
   return () => { listeners.delete(fn); if (!listeners.size && poller) { clearInterval(poller); poller = null; } };
 }
+async function startAfterStatusIfRequested() {
+  if (!autoStartRequested) return;
+  if (status?.isStreaming) {
+    autoStartRequested = false;
+    autoStartAttempted = true;
+    return;
+  }
+  if (!status?.matchId || autoStartAttempted) return;
+  autoStartRequested = false;
+  autoStartAttempted = true;
+  try { status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {}); }
+  catch { error = 'The candidate simulation could not start automatically. Use Live to retry.'; }
+  publish();
+}
 export async function refreshCandidateStatus(autoStart = false): Promise<CandidateStreamStatus | null> {
-  if (requestInFlight) { await requestInFlight; return status; }
-  const task = request<CandidateStreamStatus>('simulation/candidate/status').then(async result => {
+  if (autoStart && !autoStartAttempted) autoStartRequested = true;
+  if (requestInFlight) {
+    await requestInFlight;
+    await startAfterStatusIfRequested();
+    return status;
+  }
+  const task = request<CandidateStreamStatus>('simulation/candidate/status').then(result => {
     status = result; error = ''; publish();
-    if (autoStart && !autoStarted && result.matchId) {
-      autoStarted = true;
-      if (!result.isStreaming) {
-        try { status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {}); }
-        catch { error = 'The candidate simulation could not start automatically. Use Live to retry.'; }
-        publish();
-      }
-    }
   }).catch(() => { error = 'Candidate simulation status is unavailable.'; publish(); });
-  requestInFlight = task; await task; requestInFlight = null; return status;
+  requestInFlight = task; await task; requestInFlight = null;
+  await startAfterStatusIfRequested();
+  return status;
 }
 export async function toggleCandidateStream() {
   if (pending) return;

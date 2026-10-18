@@ -50,6 +50,11 @@ internal static class CandidateFeedApiEndpoints
                 return Problem(context, 404, "CANDIDATE_MATCH_NOT_FOUND", "Candidate source is unavailable.");
             return Results.Ok(new { transport = "aspnetcore-signalr", url = "/hubs/matches", accessToken = (string?)null });
         });
+        group.MapPost("/analyst", (HttpContext context) =>
+            Problem(context, StatusCodes.Status503ServiceUnavailable,
+                "CANONICAL_MATCH_DATA_UNAVAILABLE",
+                "Tactical analysis is unavailable until canonical match evidence is configured."))
+            .RequireRateLimiting("analyst");
         return endpoints;
     }
     private static IResult Problem(HttpContext context, int status, string code, string title) =>
