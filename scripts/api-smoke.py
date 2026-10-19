@@ -53,19 +53,25 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         return response_body
 
     request("/api/health")
-    ready_req = urllib.request.Request(base + "/health/ready")
-    try:
-        ready_response = open_url(ready_req, timeout=10)
-    except urllib.error.HTTPError as error:
-        ready_response = error
-    assert ready_response.status == 200, ("/health/ready", ready_response.status)
-    assert ready_response.headers.get("X-Correlation-ID"), "/health/ready"
-    page_req = urllib.request.Request(base + "/welcome")
-    page = open_url(page_req, timeout=10)
-    assert page.status == 200, ("/welcome", page.status)
-    assert "text/html" in page.headers.get("Content-Type", ""), ("/welcome", page.headers)
+    if args.expect_auth_required:
+        # Azure release smoke must prove the private PostgreSQL endpoint and
+        # current schema are reachable. Local contract smoke intentionally
+        # runs without PostgreSQL and only validates the HTTP/auth contract.
+        ready_req = urllib.request.Request(base + "/health/ready")
+        try:
+            ready_response = open_url(ready_req, timeout=10)
+        except urllib.error.HTTPError as error:
+            ready_response = error
+        assert ready_response.status == 200, ("/health/ready", ready_response.status)
+        assert ready_response.headers.get("X-Correlation-ID"), "/health/ready"
+    if args.expect_auth_required:
+        # The SPA is served from the application root in the container image.
+        # Local API contract tests run the API project without frontend assets.
+        page_req = urllib.request.Request(base + "/")
+        page = open_url(page_req, timeout=10)
+        assert page.status == 200, ("/", page.status)
+        assert "text/html" in page.headers.get("Content-Type", ""), ("/", page.headers)
     match_routes = [
-        ("/api/v1/simulation/candidate/status", None),
         ("/api/v1/matches", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/state", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/events", None),
@@ -74,6 +80,10 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight/replay", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
     ]
+    if args.expect_auth_required:
+        # Candidate-feed routes are only composed when the deployed runtime
+        # has its event stream configured; DEV must expose and protect it.
+        match_routes.insert(0, ("/api/v1/simulation/candidate/status", None))
     expected_status = 401 if args.expect_auth_required else 503
     for route, payload in match_routes:
         problem = request(route, expected_status, payload)
@@ -82,7 +92,7 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
     if args.expect_identity_unavailable:
         print("PASS: health is available and protected match routes fail closed; Entra sign-in is not configured in DEV")
     elif args.expect_auth_required:
-        print("PASS: welcome page and health are available; protected match routes reject anonymous requests")
+        print("PASS: application page and health are available; protected match routes reject anonymous requests")
     else:
         print("PASS: health is available and match routes fail closed until canonical route composition is implemented")
     return 0

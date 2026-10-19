@@ -596,8 +596,8 @@ class ApiSmokeTests(unittest.TestCase):
                 }
                 response_headers["Content-Type"] = "application/problem+json"
                 return Response(expected_status, response_headers, payload)
-            response_headers["Content-Type"] = "text/html; charset=utf-8" if path == "/welcome" else "application/json"
-            if path == "/welcome":
+            response_headers["Content-Type"] = "text/html; charset=utf-8" if path == "/" else "application/json"
+            if path == "/":
                 return Response(200, response_headers, b"<!doctype html><html></html>")
             return Response(200, response_headers, {"status": "ok"})
 
