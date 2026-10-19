@@ -4,6 +4,10 @@ These tests validate source declarations only. They do not prove Azure RBAC,
 federation, token acquisition, database grants, or denied operations in DEV.
 """
 import json
+import contextlib
+import importlib.util
+import io
+from email.message import Message
 from pathlib import Path
 import re
 import subprocess
@@ -552,6 +556,75 @@ class PrivateDevWhatIfTests(unittest.TestCase):
                 result = self.run_validator(changes)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("outside the approved", result.stderr)
+
+
+class ApiSmokeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("pitchmind_api_smoke", ROOT / "scripts/api-smoke.py")
+        cls.smoke = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.smoke)
+
+    def run_smoke(self, response_code, azure_mode):
+        received_headers = []
+
+        class Response(io.BytesIO):
+            def __init__(self, status, headers, body):
+                super().__init__(json.dumps(body).encode())
+                self.status = status
+                self.headers = Message()
+                for name, value in headers.items():
+                    self.headers[name] = value
+
+        def open_url(request, timeout):
+            self.assertEqual(timeout, 10)
+            headers = {name.casefold(): value for name, value in request.header_items()}
+            received_headers.append(headers)
+            path = request.full_url.removeprefix("http://smoke")
+            correlation = "smoke-correlation"
+            response_headers = {"X-Correlation-ID": correlation}
+            if path.startswith("/api/v1/"):
+                response_headers["X-Contract-Version"] = "1"
+                payload = {
+                    "type": "about:blank",
+                    "title": "API unavailable",
+                    "status": 503,
+                    "code": response_code,
+                    "correlationId": correlation,
+                    "instance": path,
+                }
+                response_headers["Content-Type"] = "application/problem+json"
+                return Response(503, response_headers, payload)
+            response_headers["Content-Type"] = "application/json"
+            return Response(200, response_headers, {"status": "ok"})
+
+        argv = ["http://smoke"]
+        if azure_mode:
+            argv.insert(0, "--expect-identity-unavailable")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            exit_code = self.smoke.main(argv, open_url=open_url)
+        return exit_code, output.getvalue(), received_headers
+
+    def test_local_smoke_uses_development_identity_and_match_unavailable_contract(self):
+        exit_code, _output, headers = self.run_smoke("MATCH_DATA_UNAVAILABLE", azure_mode=False)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(all("x-dev-subject" in request for request in headers))
+        self.assertTrue(all("x-dev-roles" in request for request in headers))
+
+    def test_azure_smoke_expects_fail_closed_identity_without_development_headers(self):
+        exit_code, output, headers = self.run_smoke("IDENTITY_UNAVAILABLE", azure_mode=True)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(all("x-dev-subject" not in request for request in headers))
+        self.assertTrue(all("x-dev-roles" not in request for request in headers))
+        self.assertIn("Entra sign-in is not configured", output)
+
+    def test_azure_smoke_does_not_mask_wrong_fail_closed_response(self):
+        with self.assertRaisesRegex(AssertionError, "MATCH_DATA_UNAVAILABLE"):
+            self.run_smoke("MATCH_DATA_UNAVAILABLE", azure_mode=True)
+
 
 
 if __name__ == "__main__":
