@@ -43,15 +43,24 @@ if (candidateFeedEnabled && !localRealtimeEnabled && !azureRuntime)
 
 if (azureRuntime)
 {
-    var postgresConnectionString = RequiredSetting(
-        builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"],
-        "ConnectionStrings:PitchMind");
-    var credential = AzureManagedIdentity(builder.Configuration);
-    builder.Services.AddSingleton<TokenCredential>(credential);
-    builder.Services.AddSingleton<NpgsqlDataSource>(_ => AzurePostgresDataSourceFactory.Create(postgresConnectionString, credential));
-    builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
-    builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
-    builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
+    var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];
+    if (!string.IsNullOrWhiteSpace(postgresConnectionString))
+    {
+        var credential = AzureManagedIdentity(builder.Configuration);
+        builder.Services.AddSingleton<TokenCredential>(credential);
+        builder.Services.AddSingleton<NpgsqlDataSource>(_ => AzurePostgresDataSourceFactory.Create(postgresConnectionString, credential));
+        builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
+        builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+        builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
+    }
+    else
+    {
+        // Keep the host alive so health/readiness and protected auth remain observable
+        // in incomplete environments and contract tests. Readiness stays unhealthy.
+        builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();
+        builder.Services.AddSingleton<IMatchInsightReader, UnavailableCanonicalReadAdapters>();
+        builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
+    }
 }
 
 if (azureCandidateFeedEnabled)
