@@ -7,6 +7,12 @@ parameters:
 - name: imageRepository
   type: string
   default: pitchmind
+- name: entraTenantId
+  type: string
+- name: entraClientId
+  type: string
+- name: entraApiScope
+  type: string
 steps:
 - task: AzureCLI@2
   displayName: Build immutable application image and release manifest
@@ -27,6 +33,10 @@ steps:
       docker build --platform linux/amd64 --file docker/Dockerfile \
         --build-arg VITE_DEPLOYMENT_VERSION="$tag" \
         --build-arg VITE_BUILD_ID="$(Build.BuildId)" \
+        --build-arg VITE_AUTH_MODE=entra \
+        --build-arg VITE_ENTRA_TENANT_ID='${{ parameters.entraTenantId }}' \
+        --build-arg VITE_ENTRA_CLIENT_ID='${{ parameters.entraClientId }}' \
+        --build-arg VITE_ENTRA_API_SCOPE='${{ parameters.entraApiScope }}' \
         --tag "$loginServer/$repository:$tag" .
       docker push "$loginServer/$repository:$tag"
       digest=$(az acr repository show --name "$registry" --image "$repository:$tag" --query digest -o tsv)

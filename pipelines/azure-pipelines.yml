@@ -87,6 +87,15 @@ parameters:
 - name: devRedisPrivateEndpointName
   type: string
   default: pm-dev-redis-pe
+- name: devEntraTenantId
+  type: string
+  default: 723b667a-983d-46f3-9b90-a9b2580db639
+- name: devEntraClientId
+  type: string
+  default: 4accaf35-1ae9-4e7d-999d-3f86fd7caec4
+- name: devEntraApiScope
+  type: string
+  default: api://4accaf35-1ae9-4e7d-999d-3f86fd7caec4/Match.Read
 trigger:
   branches:
     include:
@@ -230,6 +239,9 @@ stages:
         parameters:
           acrPushServiceConnection: ${{ parameters.acrPushServiceConnection }}
           registryName: ${{ parameters.registryName }}
+          entraTenantId: ${{ parameters.devEntraTenantId }}
+          entraClientId: ${{ parameters.devEntraClientId }}
+          entraApiScope: ${{ parameters.devEntraApiScope }}
           imageRepository: pitchmind
   - stage: OwnerApprovalOfReleaseDigest
     dependsOn: BuildRelease

@@ -570,7 +570,7 @@ class ApiSmokeTests(unittest.TestCase):
 
         class Response(io.BytesIO):
             def __init__(self, status, headers, body):
-                super().__init__(json.dumps(body).encode())
+                super().__init__(body if isinstance(body, bytes) else json.dumps(body).encode())
                 self.status = status
                 self.headers = Message()
                 for name, value in headers.items():
@@ -579,28 +579,31 @@ class ApiSmokeTests(unittest.TestCase):
         def open_url(request, timeout):
             self.assertEqual(timeout, 10)
             headers = {name.casefold(): value for name, value in request.header_items()}
-            received_headers.append(headers)
             path = request.full_url.removeprefix("http://smoke")
+            received_headers.append((path, headers))
             correlation = "smoke-correlation"
             response_headers = {"X-Correlation-ID": correlation}
             if path.startswith("/api/v1/"):
                 response_headers["X-Contract-Version"] = "1"
+                expected_status = 401 if azure_mode else 503
                 payload = {
                     "type": "about:blank",
-                    "title": "API unavailable",
-                    "status": 503,
+                    "title": "Authentication required" if azure_mode else "API unavailable",
+                    "status": expected_status,
                     "code": response_code,
                     "correlationId": correlation,
                     "instance": path,
                 }
                 response_headers["Content-Type"] = "application/problem+json"
-                return Response(503, response_headers, payload)
-            response_headers["Content-Type"] = "application/json"
+                return Response(expected_status, response_headers, payload)
+            response_headers["Content-Type"] = "text/html; charset=utf-8" if path == "/welcome" else "application/json"
+            if path == "/welcome":
+                return Response(200, response_headers, b"<!doctype html><html></html>")
             return Response(200, response_headers, {"status": "ok"})
 
         argv = ["http://smoke"]
         if azure_mode:
-            argv.insert(0, "--expect-identity-unavailable")
+            argv.insert(0, "--expect-auth-required")
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             exit_code = self.smoke.main(argv, open_url=open_url)
@@ -610,16 +613,18 @@ class ApiSmokeTests(unittest.TestCase):
         exit_code, _output, headers = self.run_smoke("MATCH_DATA_UNAVAILABLE", azure_mode=False)
 
         self.assertEqual(exit_code, 0)
-        self.assertTrue(all("x-dev-subject" in request for request in headers))
-        self.assertTrue(all("x-dev-roles" in request for request in headers))
+        api_requests = [request for path, request in headers if path.startswith("/api/v1/")]
+        self.assertTrue(all("x-dev-subject" in request for request in api_requests))
+        self.assertTrue(all("x-dev-roles" in request for request in api_requests))
 
     def test_azure_smoke_expects_fail_closed_identity_without_development_headers(self):
-        exit_code, output, headers = self.run_smoke("IDENTITY_UNAVAILABLE", azure_mode=True)
+        exit_code, output, headers = self.run_smoke("UNAUTHORIZED", azure_mode=True)
 
         self.assertEqual(exit_code, 0)
-        self.assertTrue(all("x-dev-subject" not in request for request in headers))
-        self.assertTrue(all("x-dev-roles" not in request for request in headers))
-        self.assertIn("Entra sign-in is not configured", output)
+        api_requests = [request for path, request in headers if path.startswith("/api/v1/")]
+        self.assertTrue(all("x-dev-subject" not in request for request in api_requests))
+        self.assertTrue(all("x-dev-roles" not in request for request in api_requests))
+        self.assertIn("anonymous requests", output)
 
     def test_azure_smoke_does_not_mask_wrong_fail_closed_response(self):
         with self.assertRaisesRegex(AssertionError, "MATCH_DATA_UNAVAILABLE"):

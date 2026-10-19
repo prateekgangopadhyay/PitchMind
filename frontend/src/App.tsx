@@ -6,6 +6,7 @@ import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
 import { contextHref, currentLocation, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
 import { CandidateLiveMatchPage } from './CandidateLiveMatchPage';
 import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
+import { isEntraAuthMode, signOutMicrosoft } from './entraAuth';
 
 export function App() {
   const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/home');
@@ -15,7 +16,8 @@ export function App() {
   const separator = location.indexOf('?');
   const pathname = separator === -1 ? location : location.slice(0, separator);
   const search = separator === -1 ? '' : location.slice(separator);
-  const route = resolveRoute(pathname);
+  const entraMode = isEntraAuthMode();
+  const route = resolveRoute(entraMode && !authSession ? '/welcome' : pathname);
   const candidateStream = useCandidateStreamStatus(route.kind !== 'welcome');
   const params = new URLSearchParams(search);
   const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined
@@ -100,7 +102,7 @@ export function App() {
                   <div className="popover-meta">
                     <strong>{activeUser.name}</strong>
                     <small>{activeUser.email}</small>
-                    <span className="popover-provider-pill">{activeUser.provider === 'google' ? 'Google Account' : 'Analyst Account'}</span>
+                    <span className="popover-provider-pill">{activeUser.provider === 'entra' ? 'Microsoft Entra ID' : activeUser.provider === 'google' ? 'Google Account' : 'Analyst Account'}</span>
                   </div>
                 </div>
                 <div className="popover-menu-divider"></div>
@@ -109,9 +111,12 @@ export function App() {
                   className="popover-signout-btn"
                   onClick={() => {
                     setShowUserMenu(false);
-                    logoutSimulated();
-                    window.history.pushState({}, '', '/welcome');
-                    window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+                    if (isEntraAuthMode()) void signOutMicrosoft();
+                    else {
+                      logoutSimulated();
+                      window.history.pushState({}, '', '/welcome');
+                      window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+                    }
                   }}
                 >
                   Sign out

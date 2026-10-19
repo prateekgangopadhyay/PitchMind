@@ -33,4 +33,4 @@ steps:
     PITCHMIND_DEV_FQDN: $(PITCHMIND_DEV_FQDN)
   inputs:
     targetType: inline
-    script: python3 scripts/api-smoke.py --expect-identity-unavailable "https://$PITCHMIND_DEV_FQDN"
+    script: python3 scripts/api-smoke.py --expect-auth-required "https://$PITCHMIND_DEV_FQDN"

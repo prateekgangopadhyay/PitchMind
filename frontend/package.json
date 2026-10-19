@@ -15,6 +15,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.30.0",
     "@microsoft/signalr": "^9.0.19",
     "@vitejs/plugin-react": "^4.7.0",
     "react": "^19.1.0",

@@ -75,10 +75,10 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 }
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
-_BUILD_SCRIPT_SHA256 = "fd64aeb45ab1a32ad8e04e7f4a93298c7d192bc5c7e60b74df80e6243fdfc79f"
+_BUILD_SCRIPT_SHA256 = "c03e0e4dac28ab9b9d013deb3424952d31c5bec28399b514ebc85566a6360d9e"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
-_HTTP_SMOKE_SCRIPT_SHA256 = "82c54439f9018613321cd8afac318b6a87bb5cf015c72b4a5e1d3a1f729956f4"
+_HTTP_SMOKE_SCRIPT_SHA256 = "4327266f7b84c27c4cd9b969d564d0adbcc92d6ef0afc6951bd476a1801577a1"
 _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/private-dev-plan.sh": "e7920d8f743afa110ca62f49dffb1ed063f6f394282556b1a3905405f1d782c9",
     "scripts/private-dev-deploy.sh": "b7394328d5a1ceef081005cae8c3f29d978a61a191ca8e2ff471e52494134241",
@@ -360,7 +360,7 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
     parameters = template_doc.get("parameters")
     steps = template_doc.get("steps")
     expected_parameter_names = (
-        ("acrPushServiceConnection", "registryName", "imageRepository")
+        ("acrPushServiceConnection", "registryName", "imageRepository", "entraTenantId", "entraClientId", "entraApiScope")
         if kind == "build" else
         ("devDeploymentServiceConnection", "resourceGroup", "appName")
     )
@@ -369,6 +369,9 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
             {"name": "acrPushServiceConnection", "type": "string"},
             {"name": "registryName", "type": "string"},
             {"name": "imageRepository", "type": "string", "default": "pitchmind"},
+            {"name": "entraTenantId", "type": "string"},
+            {"name": "entraClientId", "type": "string"},
+            {"name": "entraApiScope", "type": "string"},
         ]
         if kind == "build" else
         [
@@ -410,7 +413,7 @@ def _assert_release_template(template_doc: dict[str, Any], *, kind: str, expecte
             "env": {"PITCHMIND_DEV_FQDN": "$(PITCHMIND_DEV_FQDN)"},
             "inputs": {
                 "targetType": "inline",
-            "script": 'python3 scripts/api-smoke.py --expect-identity-unavailable "https://$PITCHMIND_DEV_FQDN"',
+            "script": 'python3 scripts/api-smoke.py --expect-auth-required "https://$PITCHMIND_DEV_FQDN"',
             },
         }:
             raise PipelinePolicyError("The DEV endpoint smoke must run only in its reviewed post-deploy Bash step")
@@ -588,7 +591,7 @@ def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[
             raise PipelinePolicyError("BuildRelease image template call may not contain unreviewed fields")
         parameters = steps[1].get("parameters")
         if not isinstance(parameters, dict) or set(parameters) != {
-            "acrPushServiceConnection", "registryName", "imageRepository"
+            "acrPushServiceConnection", "registryName", "imageRepository", "entraTenantId", "entraClientId", "entraApiScope"
         }:
             raise PipelinePolicyError("BuildRelease image template parameters must remain on the reviewed allowlist")
         return

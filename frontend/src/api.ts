@@ -419,7 +419,7 @@ export interface AuthSession {
     role: string;
     permissions: string[];
     avatarUrl?: string;
-    provider?: 'google' | 'email';
+    provider?: 'google' | 'email' | 'entra';
   };
 }
 

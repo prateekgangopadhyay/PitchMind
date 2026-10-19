@@ -13,16 +13,23 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
     parser.add_argument(
         "--expect-identity-unavailable",
         action="store_true",
-        help="Azure DEV has no Entra API audience configured yet; verify protected routes fail closed.",
+        help="Verify legacy behavior where Azure DEV identity is intentionally unconfigured.",
+    )
+    parser.add_argument(
+        "--expect-auth-required",
+        action="store_true",
+        help="Verify the Azure API is healthy and protected routes require a real bearer token.",
     )
     args = parser.parse_args(argv)
     base = args.base.rstrip("/")
-    expected_code = "IDENTITY_UNAVAILABLE" if args.expect_identity_unavailable else "MATCH_DATA_UNAVAILABLE"
+    if args.expect_identity_unavailable and args.expect_auth_required:
+        parser.error("Choose only one expected identity mode.")
+    expected_code = "IDENTITY_UNAVAILABLE" if args.expect_identity_unavailable else "UNAUTHORIZED" if args.expect_auth_required else "MATCH_DATA_UNAVAILABLE"
 
     def request(path: str, expected: int = 200, payload: dict | None = None) -> dict:
         body = None if payload is None else json.dumps(payload).encode()
         headers = {"Content-Type": "application/json"}
-        if not args.expect_identity_unavailable:
+        if not args.expect_identity_unavailable and not args.expect_auth_required:
             headers["X-Dev-Subject"] = "api-smoke"
             headers["X-Dev-Roles"] = "analyst"
         req = urllib.request.Request(base + path, data=body, headers=headers)
@@ -46,7 +53,19 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         return response_body
 
     request("/api/health")
+    ready_req = urllib.request.Request(base + "/health/ready")
+    try:
+        ready_response = open_url(ready_req, timeout=10)
+    except urllib.error.HTTPError as error:
+        ready_response = error
+    assert ready_response.status == 200, ("/health/ready", ready_response.status)
+    assert ready_response.headers.get("X-Correlation-ID"), "/health/ready"
+    page_req = urllib.request.Request(base + "/welcome")
+    page = open_url(page_req, timeout=10)
+    assert page.status == 200, ("/welcome", page.status)
+    assert "text/html" in page.headers.get("Content-Type", ""), ("/welcome", page.headers)
     match_routes = [
+        ("/api/v1/simulation/candidate/status", None),
         ("/api/v1/matches", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/state", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/events", None),
@@ -55,12 +74,15 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight/replay", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
     ]
+    expected_status = 401 if args.expect_auth_required else 503
     for route, payload in match_routes:
-        problem = request(route, 503, payload)
+        problem = request(route, expected_status, payload)
         assert problem["code"] == expected_code, (route, problem)
-        assert problem["status"] == 503, (route, problem)
+        assert problem["status"] == expected_status, (route, problem)
     if args.expect_identity_unavailable:
         print("PASS: health is available and protected match routes fail closed; Entra sign-in is not configured in DEV")
+    elif args.expect_auth_required:
+        print("PASS: welcome page and health are available; protected match routes reject anonymous requests")
     else:
         print("PASS: health is available and match routes fail closed until canonical route composition is implemented")
     return 0

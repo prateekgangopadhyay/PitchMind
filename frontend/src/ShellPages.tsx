@@ -6,8 +6,10 @@ import {
   request,
   loginSimulated,
   loginWithGoogleSimulated,
+  getStoredAuthSession,
   setStoredAuthSession
 } from './api';
+import { isEntraAuthConfigured, isEntraAuthMode, signInWithMicrosoft } from './entraAuth';
 import type {
   CanonicalMatchPage,
   AuthSession
@@ -100,6 +102,7 @@ function PageState({ loading, error, empty }: { loading: boolean; error?: string
    SCREEN 01: WELCOME / LOGIN (01-login.jpg)
    ========================================================================= */
 export function WelcomePage() {
+  const entraMode = isEntraAuthMode();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -119,6 +122,23 @@ export function WelcomePage() {
       window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Google sign-in is unavailable. Please retry.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMicrosoftSignIn = async () => {
+    setBusy(true);
+    setAuthError('');
+    try {
+      await signInWithMicrosoft();
+      const result = getStoredAuthSession();
+      if (!result) throw new Error('Microsoft sign-in completed without an account session.');
+      setSession(result);
+      window.history.pushState({}, '', '/home');
+      window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Microsoft sign-in is unavailable. Please retry.');
     } finally {
       setBusy(false);
     }
@@ -162,7 +182,13 @@ export function WelcomePage() {
           <p className="auth-subtext">Access match analysis for the match selected in your workspace.</p>
           {authError && <div className="notice error" role="alert">{authError}</div>}
           {session && <div className="notice success" role="status">Signed in as <strong>{session.user.name}</strong></div>}
-            <form onSubmit={handleSignIn} className="auth-form-fields">
+            {entraMode ? <div className="auth-form-fields">
+              <p className="auth-subtext">Use your organization account. PitchMind never stores your Microsoft access token.</p>
+              {!isEntraAuthConfigured() && <p className="notice error" role="status">Sign-in is awaiting the Entra SPA client, API permission, and this site’s redirect URI.</p>}
+              <button type="button" className="auth-submit-btn" onClick={() => { void handleMicrosoftSignIn(); }} disabled={busy || !isEntraAuthConfigured()}>
+                {busy ? 'Connecting…' : 'Sign in with Microsoft'}
+              </button>
+            </div> : <form onSubmit={handleSignIn} className="auth-form-fields">
               <div className="auth-field-group">
                 <label htmlFor="welcome-email">Email address</label>
                 <div className="auth-input-wrap">
@@ -301,7 +327,7 @@ export function WelcomePage() {
                   <small className="provider-option-status">Soon</small>
                 </button>
               </div>
-            </form>
+            </form>}
         </div>
       </div>
     </div>
