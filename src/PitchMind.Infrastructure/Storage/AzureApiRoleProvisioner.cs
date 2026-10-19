@@ -102,11 +102,6 @@ public static class AzureApiRoleProvisioner
             }
         }
 
-        await using (var harden = new NpgsqlCommand(
-                         "ALTER ROLE pitchmind_api WITH LOGIN PASSWORD NULL NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS",
-                         connection))
-            await harden.ExecuteNonQueryAsync(cancellationToken);
-
         await using var grants = new NpgsqlCommand("""
             GRANT CONNECT ON DATABASE pitchmind TO pitchmind_api;
             GRANT USAGE ON SCHEMA pitchmind TO pitchmind_api;
@@ -124,12 +119,23 @@ public static class AzureApiRoleProvisioner
 
         await using var reassign = new NpgsqlCommand("""
             DO $$
+            DECLARE
+                reassigned boolean := false;
             BEGIN
                 IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'azure_pg_admin') THEN
                     BEGIN
                         EXECUTE 'REASSIGN OWNED BY CURRENT_USER TO azure_pg_admin';
+                        reassigned := true;
                     EXCEPTION WHEN OTHERS THEN
-                        RAISE NOTICE 'Could not reassign ownership to azure_pg_admin: %', SQLERRM;
+                        RAISE WARNING 'Could not reassign ownership to azure_pg_admin: %', SQLERRM;
+                    END;
+                END IF;
+
+                IF reassigned THEN
+                    BEGIN
+                        EXECUTE 'DROP OWNED BY CURRENT_USER';
+                    EXCEPTION WHEN OTHERS THEN
+                        RAISE NOTICE 'Could not drop remaining privileges for CURRENT_USER: %', SQLERRM;
                     END;
                 END IF;
             END $$;
@@ -137,3 +143,4 @@ public static class AzureApiRoleProvisioner
         await reassign.ExecuteNonQueryAsync(cancellationToken);
     }
 }
+
