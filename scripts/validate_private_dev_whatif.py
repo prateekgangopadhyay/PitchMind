@@ -20,6 +20,7 @@ ALLOWED_TYPES = {
     "microsoft.network/privateendpoints/privatednszonegroups",
     "microsoft.app/managedenvironments",
     "microsoft.app/containerapps",
+    "microsoft.app/jobs",
     "microsoft.eventhub/namespaces/eventhubs",
     "microsoft.eventhub/namespaces/eventhubs/consumergroups",
 }
@@ -28,7 +29,8 @@ TARGET_RESOURCE_NAMES = {
     "pm-dev-vnet", "postgres", "container-apps", "private-endpoints",
     "pm-dev-private.postgres.database.azure.com", "pm-dev-private-cae-link",
     "pm-dev-private-cae-redis-link", "privatelink.redis.azure.net",
-    "pm-dev-api-vnet", "pm-dev-api-vnet-pull", "pm-dev-private-cae",
+    "pm-dev-api-vnet", "pm-dev-api-vnet-pull", "pm-dev-api-vnet-runtime",
+    "pm-dev-api-vnet-db-migrator", "pm-dev-private-cae",
     "pitchmind-postgresql-dev", "pitchmind", "pm-dev-redis", "default", "pm-dev-redis-pe",
 }
 TARGET_EVENTHUB_NAMESPACE = "pm-dev-eh"

@@ -55,6 +55,25 @@ az deployment group what-if \
 python3 scripts/validate_private_dev_whatif.py "$current_plan" "$PITCHMIND_APPROVED_PLAN"
 
 deployment_name="pitchmind-private-dev-$PITCHMIND_BUILD_ID"
+migrator_object_id="${PITCHMIND_DEV_POSTGRES_MIGRATOR_OBJECT_ID:-dceb4835-bf2e-4794-88b8-cc9c23643c60}"
+cleanup_migration_admin() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "$migrator_object_id" ]]; then
+    if ! az postgres flexible-server microsoft-entra-admin delete \
+      --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
+      --server-name "$PITCHMIND_DEV_POSTGRES_SERVER_NAME" \
+      --object-id "$migrator_object_id" \
+      --yes --only-show-errors; then
+      echo "Could not remove the temporary PostgreSQL migration administrator mapping" >&2
+      [[ "$status" -ne 0 ]] || status=1
+    fi
+  fi
+  exit "$status"
+}
+# The ARM deployment may fail after adding the temporary administrator, so
+# schedule cleanup before starting any Azure mutation.
+trap cleanup_migration_admin EXIT
 deployment=$(az deployment group create \
   --name "$deployment_name" \
   --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
@@ -82,6 +101,48 @@ deployment=$(az deployment group create \
     redisPrivateEndpointName="$PITCHMIND_DEV_REDIS_PE_NAME" \
   --output json)
 fqdn=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["outputs"]["containerAppFqdn"]["value"])' <<< "$deployment")
+database_job=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["outputs"]["postgresMigrationJobName"]["value"])' <<< "$deployment")
+migrator_object_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["properties"]["outputs"]["postgresMigrationAdminObjectId"]["value"])' <<< "$deployment")
 test -n "$fqdn"
+test -n "$database_job"
+test -n "$migrator_object_id"
+
+execution_name=$(az containerapp job start \
+  --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
+  --name "$database_job" \
+  --query name --output tsv)
+test -n "$execution_name"
+echo "Started private PostgreSQL migration execution: $execution_name"
+migration_status=''
+for attempt in $(seq 1 90); do
+  migration_status=$(az containerapp job execution show \
+    --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
+    --name "$database_job" \
+    --job-execution-name "$execution_name" \
+    --query properties.status --output tsv)
+  case "$migration_status" in
+    Succeeded) break ;;
+    Failed|Stopped|Degraded)
+      echo "PostgreSQL schema migration job finished with status: $migration_status" >&2
+      exit 1
+      ;;
+  esac
+  sleep 10
+done
+[[ "$migration_status" == Succeeded ]] || {
+  echo "Timed out waiting for PostgreSQL schema migration; last status: $migration_status" >&2
+  exit 1
+}
+
+# Cleanup runs on success, migration failure, timeout, and deployment errors.
+# Keep the identity attached to the job for the next explicitly gated release.
+az postgres flexible-server microsoft-entra-admin delete \
+  --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
+  --server-name "$PITCHMIND_DEV_POSTGRES_SERVER_NAME" \
+  --object-id "$migrator_object_id" \
+  --yes --only-show-errors
+migrator_object_id=''
+trap - EXIT
+
 echo "##vso[task.setvariable variable=PITCHMIND_DEV_FQDN]$fqdn"
 echo "Provisioned Container App FQDN: $fqdn"

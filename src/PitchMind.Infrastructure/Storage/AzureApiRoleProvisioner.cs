@@ -1,0 +1,82 @@
+using Npgsql;
+
+namespace PitchMind.Infrastructure.Storage;
+
+/// <summary>Maps the API managed identity to its restricted Entra-authenticated PostgreSQL role.</summary>
+public static class AzureApiRoleProvisioner
+{
+    private const string RoleName = "pitchmind_api";
+
+    public static async Task ProvisionAsync(NpgsqlDataSource migrationDataSource, string principalObjectId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(migrationDataSource);
+        if (!Guid.TryParse(principalObjectId, out var objectId))
+            throw new ArgumentException("API managed identity object ID must be a GUID.", nameof(principalObjectId));
+
+        await using var connection = await migrationDataSource.OpenConnectionAsync(cancellationToken);
+        string? mappedObjectId;
+        await using (var mapping = new NpgsqlCommand(
+                         "SELECT objectid FROM pg_catalog.pgaadauth_list_principals(false) WHERE rolename = @role",
+                         connection))
+        {
+            mapping.Parameters.AddWithValue("role", RoleName);
+            mappedObjectId = await mapping.ExecuteScalarAsync(cancellationToken) as string;
+        }
+
+        if (mappedObjectId is not null &&
+            (!Guid.TryParse(mappedObjectId, out var mappedGuid) || mappedGuid != objectId))
+            throw new InvalidOperationException("The existing PostgreSQL API role is mapped to a different Entra identity.");
+
+        if (mappedObjectId is null)
+        {
+            bool roleExists;
+            await using (var exists = new NpgsqlCommand("SELECT 1 FROM pg_roles WHERE rolname = @role", connection))
+            {
+                exists.Parameters.AddWithValue("role", RoleName);
+                roleExists = await exists.ExecuteScalarAsync(cancellationToken) is not null;
+            }
+
+            if (roleExists)
+            {
+                await using var mapExisting = new NpgsqlCommand(
+                    """SELECT format('SECURITY LABEL FOR "pgaadauth" ON ROLE %I IS %L', @role, @label)""", connection);
+                mapExisting.Parameters.AddWithValue("role", RoleName);
+                mapExisting.Parameters.AddWithValue("label", $"aadauth,oid={objectId:D},type=service");
+                var sql = (string)(await mapExisting.ExecuteScalarAsync(cancellationToken)
+                                   ?? throw new InvalidOperationException("Could not prepare the API Entra role mapping."));
+                await using var applyMapping = new NpgsqlCommand(sql, connection);
+                await applyMapping.ExecuteNonQueryAsync(cancellationToken);
+            }
+            else
+            {
+                await using var create = new NpgsqlCommand(
+                    "SELECT * FROM pg_catalog.pgaadauth_create_principal_with_oid(@role, @oid, 'service', false, false)",
+                    connection);
+                create.Parameters.AddWithValue("role", RoleName);
+                create.Parameters.AddWithValue("oid", objectId.ToString("D"));
+                await create.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+
+        await using (var harden = new NpgsqlCommand(
+                         "ALTER ROLE pitchmind_api WITH LOGIN PASSWORD NULL NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS",
+                         connection))
+            await harden.ExecuteNonQueryAsync(cancellationToken);
+
+        await using var grants = new NpgsqlCommand("""
+            GRANT CONNECT ON DATABASE pitchmind TO pitchmind_api;
+            GRANT USAGE ON SCHEMA pitchmind TO pitchmind_api;
+            GRANT SELECT ON TABLE pitchmind.schema_versions TO pitchmind_api;
+            GRANT SELECT ON TABLE pitchmind.matches, pitchmind.match_events, pitchmind.tracking_frames,
+                pitchmind.match_projections, pitchmind.insights, pitchmind.insight_evidence TO pitchmind_api;
+            GRANT SELECT, UPDATE (claim_token, lease_expires_at, attempt_count, published_at,
+                next_attempt_at, failed_at, last_error_code) ON TABLE pitchmind.outbox TO pitchmind_api;
+            GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_outbox TO pitchmind_api;
+            GRANT UPDATE (claim_token, lease_expires_at, attempt_count, published_at)
+                ON TABLE pitchmind.candidate_feed_outbox TO pitchmind_api;
+            GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_events, pitchmind.candidate_feed_poison TO pitchmind_api;
+            """, connection);
+        await grants.ExecuteNonQueryAsync(cancellationToken);
+    }
+}

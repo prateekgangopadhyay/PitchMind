@@ -19,8 +19,13 @@ param registryName string = 'pmdev4iwntkatliy6sacr'
 param appName string = 'pm-dev-api-vnet'
 param environmentName string = 'pm-dev-private-cae'
 param appImage string
+param entraTenantId string = tenant().tenantId
+param entraClientId string = '4accaf35-1ae9-4e7d-999d-3f86fd7caec4'
 
 param postgresServerName string = 'pitchmind-postgresql-dev'
+@description('Object ID of the existing DEV migration identity; its PostgreSQL administrator mapping is removed after migration succeeds.')
+param postgresMigratorObjectId string = 'dceb4835-bf2e-4794-88b8-cc9c23643c60'
+param postgresMigratorIdentityName string = 'pm-dev-demo-identity'
 @allowed(['Burstable', 'GeneralPurpose', 'MemoryOptimized'])
 param postgresSkuTier string = 'Burstable'
 @description('Choose only after dated region availability and cost review. Required when provisionPostgres is true.')
@@ -115,6 +120,14 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing =
   name: registryName
 }
 
+resource existingPostgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' existing = {
+  name: postgresServerName
+}
+
+resource postgresMigratorIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: postgresMigratorIdentityName
+}
+
 // Candidate raw events are isolated from the existing projection-telemetry hub.
 resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
   name: eventHubsNamespaceName
@@ -140,6 +153,13 @@ resource pullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-
   location: location
 }
 
+resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployPrivateDevTopology) {
+  name: '${appName}-runtime'
+  location: location
+}
+
+// Used only by the migration job. The deployment script removes its PostgreSQL
+// administrator mapping after a successful migration run.
 resource registryPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology) {
   name: guid(registry.id, pullIdentity.id, 'AcrPull')
   scope: registry
@@ -198,8 +218,37 @@ resource postgresAdministrator 'Microsoft.DBforPostgreSQL/flexibleServers/admini
   }
 }
 
+resource existingPostgresAdministrator 'Microsoft.DBforPostgreSQL/flexibleServers/administrators@2024-08-01' = if (deployPrivateDevTopology && !provisionPostgres) {
+  parent: existingPostgres
+  name: postgresMigratorObjectId
+  properties: {
+    principalName: postgresMigratorIdentity.name
+    principalType: 'ServicePrincipal'
+    tenantId: tenant().tenantId
+  }
+}
+
+resource postgresMigrationAdministrator 'Microsoft.DBforPostgreSQL/flexibleServers/administrators@2024-08-01' = if (deployPrivateDevTopology && provisionPostgres) {
+  parent: postgres
+  name: postgresMigratorObjectId
+  properties: {
+    principalName: postgresMigratorIdentity.name
+    principalType: 'ServicePrincipal'
+    tenantId: tenant().tenantId
+  }
+}
+
 resource pitchMindDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = if (deployPrivateDevTopology && provisionPostgres) {
   parent: postgres
+  name: 'pitchmind'
+  properties: {
+    charset: 'UTF8'
+    collation: 'en_US.utf8'
+  }
+}
+
+resource existingPitchMindDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = if (deployPrivateDevTopology && !provisionPostgres) {
+  parent: existingPostgres
   name: 'pitchmind'
   properties: {
     charset: 'UTF8'
@@ -318,7 +367,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
   location: location
   identity: {
     type: 'UserAssigned'
-    userAssignedIdentities: { '${pullIdentity.id}': {} }
+    userAssignedIdentities: {
+      '${pullIdentity.id}': {}
+      '${apiIdentity.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: containerEnvironment.id
@@ -345,7 +397,12 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
           env: [
             { name: 'ASPNETCORE_URLS', value: 'http://+:8080' }
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Development' }
-            { name: 'Runtime__Profile', value: 'local' }
+            { name: 'Runtime__Profile', value: 'azure' }
+            { name: 'CandidateFeed__Enabled', value: 'false' }
+            { name: 'Identity__Authority', value: 'https://login.microsoftonline.com/${entraTenantId}/v2.0' }
+            { name: 'Identity__Audience', value: 'api://${entraClientId}' }
+            { name: 'Azure__ManagedIdentityClientId', value: apiIdentity!.properties.clientId }
+            { name: 'ConnectionStrings__PitchMind', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15' }
             // The DEV Container App is reachable outside the developer machine; never trust caller-supplied identity headers.
             { name: 'Identity__DevelopmentHeaderAuthEnabled', value: 'false' }
           ]
@@ -365,7 +422,54 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
     story: 'EP02-S04'
     imageDigestDeployment: 'true'
   }
-  dependsOn: [registryPull]
+  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase]
+}
+
+resource databaseMigrationJob 'Microsoft.App/jobs@2024-03-01' = if (deployPrivateDevTopology) {
+  name: '${appName}-db-migrator'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${pullIdentity.id}': {}
+      '${postgresMigratorIdentity.id}': {}
+    }
+  }
+  properties: {
+    environmentId: containerEnvironment.id
+    configuration: {
+      triggerType: 'Manual'
+      replicaTimeout: 900
+      replicaRetryLimit: 0
+      manualTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      registries: [
+        {
+          server: registry.properties.loginServer
+          identity: pullIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'db-migrator'
+          image: appImage
+          command: ['dotnet', '/app/migrator/PitchMind.DbMigrator.dll']
+          env: [
+            { name: 'Runtime__Profile', value: 'azure' }
+            { name: 'Azure__ManagedIdentityClientId', value: postgresMigratorIdentity.properties.clientId }
+            { name: 'PitchMind__ApiIdentityObjectId', value: apiIdentity!.properties.principalId }
+            { name: 'ConnectionStrings__Postgres', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=${postgresMigratorIdentity.name};SSL Mode=VerifyFull;Timeout=15' }
+          ]
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+    }
+  }
+  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase]
 }
 
 output containerAppsEnvironmentId string = deployPrivateDevTopology ? containerEnvironment!.id : ''
@@ -374,3 +478,5 @@ output containerAppFqdn string = deployPrivateDevTopology ? app!.properties.conf
 output postgresServerFqdn string = deployPrivateDevTopology && provisionPostgres ? postgres!.properties.fullyQualifiedDomainName : ''
 output redisHostName string = deployPrivateDevTopology && provisionRedis ? redis!.properties.hostName : ''
 output redisPort int = deployPrivateDevTopology && provisionRedis ? redisDatabase!.properties.port : 0
+output postgresMigrationJobName string = deployPrivateDevTopology ? databaseMigrationJob!.name : ''
+output postgresMigrationAdminObjectId string = deployPrivateDevTopology ? postgresMigratorObjectId : ''

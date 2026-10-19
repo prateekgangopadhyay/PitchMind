@@ -539,6 +539,37 @@ class PrivateDevWhatIfTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no deletes/out-of-scope types", result.stdout)
 
+    def test_whatif_accepts_only_the_declared_runtime_identity_and_database_job(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        changes = [
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.ManagedIdentity/userAssignedIdentities",
+                "resourceId": f"{resource_group}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pm-dev-api-vnet-runtime",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.App/jobs",
+                "resourceId": f"{resource_group}/providers/Microsoft.App/jobs/pm-dev-api-vnet-db-migrator",
+            },
+        ]
+
+        result = self.run_validator(changes)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no deletes/out-of-scope types", result.stdout)
+
+    def test_whatif_rejects_unapproved_database_job(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        result = self.run_validator([{
+            "changeType": "Create",
+            "resourceType": "Microsoft.App/jobs",
+            "resourceId": f"{resource_group}/providers/Microsoft.App/jobs/other-app-db-migrator",
+        }])
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("approved private DEV resource name", result.stderr)
+
     def test_whatif_rejects_unapproved_event_hub_namespaces_hubs_and_groups(self):
         resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
         mutations = [

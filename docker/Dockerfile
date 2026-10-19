@@ -22,10 +22,12 @@ WORKDIR /source
 COPY Directory.Build.props PitchMind.slnx ./
 COPY src/ src/
 RUN dotnet publish src/PitchMind.Api/PitchMind.Api.csproj -c Release -o /app/publish
+RUN dotnet publish src/PitchMind.DbMigrator/PitchMind.DbMigrator.csproj -c Release -o /app/migrator
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish ./
+COPY --from=build /app/migrator ./migrator/
 COPY --from=web /web/dist ./wwwroot/
 COPY data/ ./data/
 ENV ASPNETCORE_HTTP_PORTS=8080
