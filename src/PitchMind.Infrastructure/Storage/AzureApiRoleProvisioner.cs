@@ -15,13 +15,31 @@ public static class AzureApiRoleProvisioner
             throw new ArgumentException("API managed identity object ID must be a GUID.", nameof(principalObjectId));
 
         await using var connection = await migrationDataSource.OpenConnectionAsync(cancellationToken);
-        string? mappedObjectId;
+        string? mappedObjectId = null;
         await using (var mapping = new NpgsqlCommand(
-                         "SELECT objectid FROM pg_catalog.pgaadauth_list_principals(false) WHERE rolename = @role",
+                         """
+                         SELECT seclabel.label
+                         FROM pg_roles r
+                         JOIN pg_shseclabel seclabel ON seclabel.classoid = 'pg_authid'::regclass AND seclabel.objoid = r.oid
+                         WHERE seclabel.provider = 'pgaadauth' AND r.rolname = @role
+                         """,
                          connection))
         {
             mapping.Parameters.AddWithValue("role", RoleName);
-            mappedObjectId = await mapping.ExecuteScalarAsync(cancellationToken) as string;
+            var label = await mapping.ExecuteScalarAsync(cancellationToken) as string;
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                foreach (var part in label.Split(','))
+                {
+                    var trimmed = part.Trim();
+                    if (trimmed.StartsWith("oid=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mappedObjectId = trimmed["oid=".Length..].Trim();
+                        break;
+                    }
+                }
+                mappedObjectId ??= label.Trim();
+            }
         }
 
         if (mappedObjectId is not null &&
@@ -50,12 +68,37 @@ public static class AzureApiRoleProvisioner
             }
             else
             {
-                await using var create = new NpgsqlCommand(
-                    "SELECT * FROM pg_catalog.pgaadauth_create_principal_with_oid(@role, @oid, 'service', false, false)",
-                    connection);
-                create.Parameters.AddWithValue("role", RoleName);
-                create.Parameters.AddWithValue("oid", objectId.ToString("D"));
-                await create.ExecuteNonQueryAsync(cancellationToken);
+                try
+                {
+                    await using var create = new NpgsqlCommand(
+                        "SELECT * FROM pg_catalog.pgaadauth_create_principal_with_oid(@role, @oid, 'service', false, false)",
+                        connection);
+                    create.Parameters.AddWithValue("role", RoleName);
+                    create.Parameters.AddWithValue("oid", objectId.ToString("D"));
+                    await create.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch (PostgresException)
+                {
+                    await using var createRole = new NpgsqlCommand(
+                        """
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pitchmind_api') THEN
+                                CREATE ROLE pitchmind_api WITH LOGIN;
+                            END IF;
+                        END $$;
+                        """, connection);
+                    await createRole.ExecuteNonQueryAsync(cancellationToken);
+
+                    await using var mapExisting = new NpgsqlCommand(
+                        """SELECT format('SECURITY LABEL FOR "pgaadauth" ON ROLE %I IS %L', @role, @label)""", connection);
+                    mapExisting.Parameters.AddWithValue("role", RoleName);
+                    mapExisting.Parameters.AddWithValue("label", $"aadauth,oid={objectId:D},type=service");
+                    var sql = (string)(await mapExisting.ExecuteScalarAsync(cancellationToken)
+                                       ?? throw new InvalidOperationException("Could not prepare the API Entra role mapping."));
+                    await using var applyMapping = new NpgsqlCommand(sql, connection);
+                    await applyMapping.ExecuteNonQueryAsync(cancellationToken);
+                }
             }
         }
 
@@ -78,5 +121,19 @@ public static class AzureApiRoleProvisioner
             GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_events, pitchmind.candidate_feed_poison TO pitchmind_api;
             """, connection);
         await grants.ExecuteNonQueryAsync(cancellationToken);
+
+        await using var reassign = new NpgsqlCommand("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'azure_pg_admin') THEN
+                    BEGIN
+                        EXECUTE 'REASSIGN OWNED BY CURRENT_USER TO azure_pg_admin';
+                    EXCEPTION WHEN OTHERS THEN
+                        RAISE NOTICE 'Could not reassign ownership to azure_pg_admin: %', SQLERRM;
+                    END;
+                END IF;
+            END $$;
+            """, connection);
+        await reassign.ExecuteNonQueryAsync(cancellationToken);
     }
 }
