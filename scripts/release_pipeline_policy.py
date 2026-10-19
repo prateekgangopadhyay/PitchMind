@@ -78,15 +78,15 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 _BUILD_SCRIPT_SHA256 = "c03e0e4dac28ab9b9d013deb3424952d31c5bec28399b514ebc85566a6360d9e"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
-_HTTP_SMOKE_SCRIPT_SHA256 = "bb07f7440bfbc2584da8b7f6f5017856058f72ea0bce79aed98534c328b05ef3"
+_HTTP_SMOKE_SCRIPT_SHA256 = "819c77bd66750bf8d766f126ae4f7c51f91e1e4780ad972eb8e631b241dc896c"
 _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/private-dev-plan.sh": "e7920d8f743afa110ca62f49dffb1ed063f6f394282556b1a3905405f1d782c9",
-    "scripts/private-dev-deploy.sh": "b7394328d5a1ceef081005cae8c3f29d978a61a191ca8e2ff471e52494134241",
+    "scripts/private-dev-deploy.sh": "2a2ebdc943d062db984e9d677c2bd2d11a252ce62fc5710670d280c90d779a5c",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
-    "scripts/validate_private_dev_whatif.py": "60bf6ec640145568c74111828fb64ec6a767215b77c92825ab97c2ed3dfb353f",
+    "scripts/validate_private_dev_whatif.py": "46e61733e902ba8bdf8c2a101590ff2874dda835b326491dcec598e01f7fe290",
     "pipelines/templates/preview-private-dev.yml": "e5f25b62c3220e762583e5b403f0e4e32d4d555d1ba9bc6338e2113b368353b4",
     "pipelines/templates/provision-private-dev.yml": "da53e22d664207465d36b281e26b0e7b0f02ebb591c04abcb2ef9a62c6e6e2a7",
-    "infra/private-dev-topology.bicep": "4274a9052d36f100f7134913494dfae47a7305fbba41d44077d7580d5f67777c",
+    "infra/private-dev-topology.bicep": "b54afd38a60b172738cff4cc29e0003b77803a1813ebf24be53af845a20d3fd2",
 }
 
 

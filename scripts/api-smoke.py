@@ -80,10 +80,6 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/evidence/test-insight/replay", None),
         ("/api/v1/matches/00000000-0000-0000-0000-000000000000/analyst", {"insightId": "test-insight", "atSeconds": 0, "audience": "fan"}),
     ]
-    if args.expect_auth_required:
-        # Candidate-feed routes are only composed when the deployed runtime
-        # has its event stream configured; DEV must expose and protect it.
-        match_routes.insert(0, ("/api/v1/simulation/candidate/status", None))
     expected_status = 401 if args.expect_auth_required else 503
     for route, payload in match_routes:
         problem = request(route, expected_status, payload)

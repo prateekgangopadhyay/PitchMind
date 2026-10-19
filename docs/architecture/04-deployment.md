@@ -74,11 +74,15 @@ flowchart LR
   ACAIngress --> API["pm-dev-api-vnet / pm-dev-private-cae"]
   subgraph VNet["Existing pm-dev-vnet"]
     ACA["Delegated container-apps subnet /27+"] --> API
-    API -. "private DNS / VNet route" .-> PG[("Optional PostgreSQL Flexible Server\npostgres delegated subnet")]
+    API -->|"UAI token; pitchmind_api role"| PG[("PostgreSQL Flexible Server\nprivate postgres delegated subnet")]
+    MIG["One-shot ACA schema migration job\ntemporary Entra admin mapping"] -->|"managed identity; migrations + role grants"| PG
     API -. "Private Link + private DNS" .-> Redis[("Optional Azure Managed Redis\nprivate-endpoints subnet")]
   end
   ACR["Existing ACR / immutable digest"] --> ACA
-  ADO["Azure DevOps: default-off, what-if, owner gate, protected Environment"] --> ACA
+  ADO["Azure DevOps: what-if, owner gates, protected Environment"] --> MIG
+  ADO --> API
 ```
 
-The candidate deploys an app image and infrastructure but does not configure the app's PostgreSQL managed-identity grants, migration job, Redis Entra data-plane permissions, or Redis connection settings. Those connections are not represented as working application paths until the runtime code and end-to-end evidence are added. Redis's initial low-cost configuration has HA disabled; it is cache-only and does not provide the availability properties of a canonical store. Subnet CIDR/overlap, SKU/region capacity, RBAC, actual private DNS resolution, and connectivity remain to be verified when the owner explicitly runs the guarded pipeline.
+The guarded release candidate now sets the API to `Runtime:Profile=azure`, gives it a dedicated user-assigned identity, creates the `pitchmind` database when reusing the existing PostgreSQL server, and runs a one-shot ACA migration job before the deployment script completes. The job applies the current schema and maps the API identity to the restricted `pitchmind_api` database role. Its separate migration identity is temporarily mapped as a PostgreSQL Entra administrator; the deployment script removes that administrator mapping only after the job succeeds. `/health/ready` verifies authenticated PostgreSQL connectivity and the current schema version. This is source and pipeline behavior only until an owner-approved release runs and passes the health smoke.
+
+The API candidate keeps `CandidateFeed:Enabled=false`; this readiness fix does not claim the live simulation, Event Hubs ingress, Redis projection, or SignalR flow is operational in DEV. Redis's initial low-cost configuration has HA disabled and remains cache-only. Subnet CIDR/overlap, SKU/region capacity, RBAC, private DNS resolution, database role creation, and connectivity still require guarded pipeline execution and smoke evidence.

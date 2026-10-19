@@ -41,6 +41,19 @@ var candidateFeedRuntimeEnabled = azureCandidateFeedEnabled || localCandidateFee
 if (candidateFeedEnabled && !localRealtimeEnabled && !azureRuntime)
     throw new InvalidOperationException("CandidateFeed:Enabled requires Runtime:Profile=local or azure.");
 
+if (azureRuntime)
+{
+    var postgresConnectionString = RequiredSetting(
+        builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"],
+        "ConnectionStrings:PitchMind");
+    var credential = AzureManagedIdentity(builder.Configuration);
+    builder.Services.AddSingleton<TokenCredential>(credential);
+    builder.Services.AddSingleton<NpgsqlDataSource>(_ => AzurePostgresDataSourceFactory.Create(postgresConnectionString, credential));
+    builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
+    builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
+    builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
+}
+
 if (azureCandidateFeedEnabled)
 {
     var signalREndpoint = RequiredSetting(builder.Configuration["Realtime:AzureSignalR:Endpoint"] ?? builder.Configuration["AZURE_SIGNALR_ENDPOINT"],
@@ -111,18 +124,11 @@ if (azureCandidateFeedEnabled)
     var eventHubNamespace = ValidateEventHubNamespace(
         RequiredSetting(builder.Configuration["EventHubs:Namespace"], "EventHubs:Namespace"));
     var eventHubName = RequiredSetting(builder.Configuration["EventHubs:CandidateHubName"], "EventHubs:CandidateHubName");
-    var postgresConnectionString = RequiredSetting(builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"],
-        "ConnectionStrings:PitchMind");
     var checkpointUri = ValidateBlobServiceUri(
         RequiredSetting(builder.Configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
     _ = checkpointUri;
     _ = RequiredSetting(builder.Configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer");
     var credential = AzureManagedIdentity(builder.Configuration);
-    builder.Services.AddSingleton<TokenCredential>(credential);
-    builder.Services.AddSingleton<NpgsqlDataSource>(_ => AzurePostgresDataSourceFactory.Create(postgresConnectionString, credential));
-    builder.Services.AddSingleton<IMatchProjectionReader, PostgresMatchProjectionReader>();
-    builder.Services.AddSingleton<IMatchInsightReader, PostgresMatchInsightReader>();
-    builder.Services.AddSingleton<IMatchTrackingReader, PostgresMatchTrackingReader>();
     builder.Services.AddSingleton(sp => new EventHubProducerClient(eventHubNamespace, eventHubName, credential));
     builder.Services.AddSingleton<ICandidateEventPublisher, AzureCandidateEventHubPublisher>();
     builder.Services.AddSingleton<CandidateFeedPersistence>();
@@ -171,7 +177,7 @@ if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
         builder.Services.AddSingleton<IMatchTrackingReader, UnavailableCanonicalReadAdapters>();
     }
 }
-else if (!azureCandidateFeedEnabled)
+else if (!azureRuntime)
 {
     // Until an Azure PostgreSQL adapter is configured, authenticated canonical reads fail closed.
     builder.Services.AddSingleton<IMatchProjectionReader, UnavailableCanonicalReadAdapters>();

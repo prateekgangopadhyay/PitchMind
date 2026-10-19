@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "12779413165794132238"
+      "templateHash": "15679844952027314318"
     }
   },
   "parameters": {
@@ -72,9 +72,28 @@
     "appImage": {
       "type": "string"
     },
+    "entraTenantId": {
+      "type": "string",
+      "defaultValue": "[tenant().tenantId]"
+    },
+    "entraClientId": {
+      "type": "string",
+      "defaultValue": "4accaf35-1ae9-4e7d-999d-3f86fd7caec4"
+    },
     "postgresServerName": {
       "type": "string",
       "defaultValue": "pitchmind-postgresql-dev"
+    },
+    "postgresMigratorObjectId": {
+      "type": "string",
+      "defaultValue": "dceb4835-bf2e-4794-88b8-cc9c23643c60",
+      "metadata": {
+        "description": "Object ID of the existing DEV migration identity; its PostgreSQL administrator mapping is removed after migration succeeds."
+      }
+    },
+    "postgresMigratorIdentityName": {
+      "type": "string",
+      "defaultValue": "pm-dev-demo-identity"
     },
     "postgresSkuTier": {
       "type": "string",
@@ -161,6 +180,18 @@
     "redisPrivateEndpointName": {
       "type": "string",
       "defaultValue": "pm-dev-redis-pe"
+    },
+    "eventHubsNamespaceName": {
+      "type": "string",
+      "defaultValue": "pm-dev-eh"
+    },
+    "candidateEventHubName": {
+      "type": "string",
+      "defaultValue": "candidate-match-events"
+    },
+    "candidateEventHubConsumerGroup": {
+      "type": "string",
+      "defaultValue": "pitchmind-candidate-worker"
     }
   },
   "resources": [
@@ -224,9 +255,36 @@
     },
     {
       "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
+      "properties": {
+        "partitionCount": 4,
+        "messageRetentionInDays": 7
+      }
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}/{2}', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'), parameters('candidateEventHubConsumerGroup'))]",
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[format('{0}-pull', parameters('appName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-runtime', parameters('appName'))]",
       "location": "[parameters('location')]"
     },
     {
@@ -305,6 +363,31 @@
       ]
     },
     {
+      "condition": "[and(parameters('deployPrivateDevTopology'), not(parameters('provisionPostgres')))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+      "properties": {
+        "principalName": "[parameters('postgresMigratorIdentityName')]",
+        "principalType": "ServicePrincipal",
+        "tenantId": "[tenant().tenantId]"
+      }
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+      "properties": {
+        "principalName": "[parameters('postgresMigratorIdentityName')]",
+        "principalType": "ServicePrincipal",
+        "tenantId": "[tenant().tenantId]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
+      ]
+    },
+    {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionPostgres'))]",
       "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
       "apiVersion": "2024-08-01",
@@ -316,6 +399,16 @@
       "dependsOn": [
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
       ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), not(parameters('provisionPostgres')))]",
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', parameters('postgresServerName'), 'pitchmind')]",
+      "properties": {
+        "charset": "UTF8",
+        "collation": "en_US.utf8"
+      }
     },
     {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
@@ -469,7 +562,8 @@
       "identity": {
         "type": "UserAssigned",
         "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))))]": {}
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))))]": {},
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))))]": {}
         }
       },
       "properties": {
@@ -505,11 +599,31 @@
                 },
                 {
                   "name": "Runtime__Profile",
-                  "value": "local"
+                  "value": "azure"
+                },
+                {
+                  "name": "CandidateFeed__Enabled",
+                  "value": "false"
+                },
+                {
+                  "name": "Identity__Authority",
+                  "value": "[format('https://login.microsoftonline.com/{0}/v2.0', parameters('entraTenantId'))]"
+                },
+                {
+                  "name": "Identity__Audience",
+                  "value": "[format('api://{0}', parameters('entraClientId'))]"
+                },
+                {
+                  "name": "Azure__ManagedIdentityClientId",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "ConnectionStrings__PitchMind",
+                  "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))]"
                 },
                 {
                   "name": "Identity__DevelopmentHeaderAuthEnabled",
-                  "value": "true"
+                  "value": "false"
                 }
               ],
               "resources": {
@@ -551,7 +665,88 @@
         "imageDigestDeployment": "true"
       },
       "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployPrivateDevTopology')]",
+      "type": "Microsoft.App/jobs",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-db-migrator', parameters('appName'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))))]": {},
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('postgresMigratorIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "triggerType": "Manual",
+          "replicaTimeout": 900,
+          "replicaRetryLimit": 0,
+          "manualTriggerConfig": {
+            "parallelism": 1,
+            "replicaCompletionCount": 1
+          },
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "db-migrator",
+              "image": "[parameters('appImage')]",
+              "command": [
+                "dotnet",
+                "/app/migrator/PitchMind.DbMigrator.dll"
+              ],
+              "env": [
+                {
+                  "name": "Runtime__Profile",
+                  "value": "azure"
+                },
+                {
+                  "name": "Azure__ManagedIdentityClientId",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('postgresMigratorIdentityName')), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "PitchMind__ApiIdentityObjectId",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]"
+                },
+                {
+                  "name": "ConnectionStrings__Postgres",
+                  "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username={1};SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'), parameters('postgresMigratorIdentityName'))]"
+                }
+              ],
+              "resources": {
+                "cpu": "[json('0.25')]",
+                "memory": "0.5Gi"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
         "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]"
       ]
@@ -581,6 +776,14 @@
     "redisPort": {
       "type": "int",
       "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionRedis')), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, 0)]"
+    },
+    "postgresMigrationJobName": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), format('{0}-db-migrator', parameters('appName')), '')]"
+    },
+    "postgresMigrationAdminObjectId": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), parameters('postgresMigratorObjectId'), '')]"
     }
   }
 }
