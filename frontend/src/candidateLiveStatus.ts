@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { request } from './api';
+import { ApiRequestError, request } from './api';
 
 export interface CandidateStreamStatus {
   matchId: string | null; isStreaming: boolean; currentSequence: number | null;
@@ -12,6 +12,11 @@ let autoStartRequested = false; let autoStartAttempted = false;
 let poller: ReturnType<typeof setInterval> | null = null; let requestInFlight: Promise<void> | null = null;
 let snapshot: Snapshot = { status, error, pending }; const listeners = new Set<() => void>();
 function publish() { snapshot = { status, error, pending }; listeners.forEach(fn => fn()); }
+function failureMessage(failure: unknown, fallback: string) {
+  if (failure instanceof ApiRequestError && failure.status === 401) return 'Your sign-in expired. Sign in again to load the match feed.';
+  if (failure instanceof ApiRequestError && failure.status === 403) return 'Your account needs the analyst or admin role to control the live simulation.';
+  return fallback;
+}
 export function readCandidateStatus(): Snapshot { return snapshot; }
 export function subscribeCandidateStatus(fn: () => void) {
   listeners.add(fn);
@@ -32,7 +37,7 @@ async function startAfterStatusIfRequested() {
   autoStartRequested = false;
   autoStartAttempted = true;
   try { status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {}); }
-  catch { error = 'The candidate simulation could not start automatically. Use Live to retry.'; }
+  catch (failure) { error = failureMessage(failure, 'The candidate simulation could not start automatically. Use Live to retry.'); }
   publish();
 }
 export async function refreshCandidateStatus(autoStart = false): Promise<CandidateStreamStatus | null> {
@@ -57,7 +62,7 @@ export async function toggleCandidateStream() {
     if (!current?.matchId) throw new Error('Candidate match is unavailable.');
     status = await request<CandidateStreamStatus>(current.isStreaming ? 'simulation/candidate/pause' : 'simulation/candidate/start', undefined, {});
     error = '';
-  } catch { error = 'Could not change the candidate stream. Retry in a moment.'; }
+  } catch (failure) { error = failureMessage(failure, 'Could not change the candidate stream. Retry in a moment.'); }
   finally { pending = false; publish(); }
 }
 export function useCandidateStreamStatus(autoStart = true) {

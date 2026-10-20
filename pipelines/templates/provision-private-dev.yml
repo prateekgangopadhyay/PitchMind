@@ -37,6 +37,16 @@ parameters:
   type: string
 - name: provisionRedis
   type: boolean
+- name: enableCandidateFeed
+  type: boolean
+- name: signalRName
+  type: string
+- name: signalRAllowedOrigin
+  type: string
+- name: storageAccountName
+  type: string
+- name: candidateCheckpointContainer
+  type: string
 - name: redisName
   type: string
 - name: redisSkuName
@@ -65,6 +75,11 @@ steps:
     PITCHMIND_DEV_POSTGRES_DNS_ZONE_NAME: ${{ parameters.postgresDnsZoneName }}
     PITCHMIND_DEV_APP_NAME: ${{ parameters.appName }}
     PITCHMIND_DEV_ENVIRONMENT_NAME: ${{ parameters.environmentName }}
+    PITCHMIND_DEV_ENABLE_CANDIDATE_FEED: ${{ parameters.enableCandidateFeed }}
+    PITCHMIND_DEV_SIGNALR_NAME: ${{ parameters.signalRName }}
+    PITCHMIND_DEV_SIGNALR_ALLOWED_ORIGIN: ${{ parameters.signalRAllowedOrigin }}
+    PITCHMIND_DEV_STORAGE_ACCOUNT_NAME: ${{ parameters.storageAccountName }}
+    PITCHMIND_DEV_CANDIDATE_CHECKPOINT_CONTAINER: ${{ parameters.candidateCheckpointContainer }}
     PITCHMIND_DEV_PROVISION_POSTGRES: ${{ parameters.provisionPostgres }}
     PITCHMIND_DEV_POSTGRES_SERVER_NAME: ${{ parameters.postgresServerName }}
     PITCHMIND_DEV_POSTGRES_SKU_TIER: ${{ parameters.postgresSkuTier }}

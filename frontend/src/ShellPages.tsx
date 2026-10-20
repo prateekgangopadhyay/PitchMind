@@ -17,6 +17,7 @@ import type {
 import type { AppRoute } from './routes';
 import { contextHref, replacePhaseFilterContext, selectedTimeFromSearch } from './routes';
 import { MatchContextAnalystPage, MatchContextInsightsPage, MatchContextPlayersPage, MatchContextTeamsPage, MatchSelectionPage } from './MatchContextPages';
+import { refreshCandidateStatus, useCandidateStreamStatus } from './candidateLiveStatus';
 
 const CANONICAL_PHASES = ['notstarted', 'firsthalf', 'halftime', 'secondhalf', 'fulltime'];
 
@@ -341,6 +342,7 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
   search?: string; selectedMatchId?: string; selectedSeconds?: number;
 }) {
   const { page, error, loading, loadingMore, moreError, retry, loadMore } = useCanonicalFixtures();
+  const candidateStream = useCandidateStreamStatus(false);
   const matches = page?.items ?? [];
   const requestedPhase = new URLSearchParams(search).get('phase') ?? 'all';
   const phases = [...new Set([...CANONICAL_PHASES, ...matches.map(match => match.phase)])].sort();
@@ -359,7 +361,22 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
     </div>
     {loading ? <PageState loading empty="" />
       : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button type="button" onClick={retry}>Try loading matches again</button></div>
-        : matches.length === 0 ? <PageState loading={false} empty="No canonical matches are available yet." />
+        : matches.length === 0 && candidateStream.status?.matchId ? <article className="match-card candidate-home-card">
+          <div className="match-card-copy">
+            <div className="match-card-topline"><span className="badge">Candidate simulation</span><span className="phase-tag">Not canonical</span></div>
+            <h2>Live match feed</h2>
+            <p>Match ID <code translate="no">{candidateStream.status.matchId}</code></p>
+            <p>Source events and player positions are shown with their provenance and validation limits.</p>
+            {candidateStream.error && <p role="status">{candidateStream.error}</p>}
+          </div>
+          <a className="primary-link" href={contextHref('/candidate-live', candidateStream.status.matchId,
+            selectedSeconds ?? candidateStream.status.currentClockValue ?? 0)}>Open live match</a>
+        </article>
+          : matches.length === 0 && candidateStream.error ? <div className="page-state error-copy" role="status">
+            <p>Canonical matches are not available, and the candidate live feed could not be loaded.</p>
+            <button type="button" onClick={() => { void refreshCandidateStatus(); }}>Retry live feed</button>
+          </div>
+          : matches.length === 0 ? <PageState loading={false} empty="No canonical matches are available yet." />
           : visibleMatches.length === 0 ? <p className="page-state" role="status">No matches are available in this phase.</p>
             : <><p className="match-count" role="status" aria-live="polite">{visibleMatches.length} {visibleMatches.length === 1 ? 'match' : 'matches'}</p>
               <ul className="match-list" aria-label="Matches">{visibleMatches.map(match => {

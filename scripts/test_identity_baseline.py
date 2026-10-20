@@ -539,6 +539,58 @@ class PrivateDevWhatIfTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no deletes/out-of-scope types", result.stdout)
 
+    def test_whatif_accepts_candidate_feed_resources_only_at_their_declared_scopes(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        changes = [
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.SignalRService/signalR",
+                "resourceId": f"{resource_group}/providers/Microsoft.SignalRService/signalR/pm-dev-signalr",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Storage/storageAccounts/blobServices/containers",
+                "resourceId": f"{resource_group}/providers/Microsoft.Storage/storageAccounts/pmdev4iwntkatliy6sst/blobServices/default/containers/candidate-checkpoints",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Authorization/roleAssignments",
+                "resourceId": f"{resource_group}/providers/Microsoft.EventHub/namespaces/pm-dev-eh/eventhubs/candidate-match-events/providers/Microsoft.Authorization/roleAssignments/a1",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Authorization/roleAssignments",
+                "resourceId": f"{resource_group}/providers/Microsoft.Storage/storageAccounts/pmdev4iwntkatliy6sst/blobServices/default/containers/candidate-checkpoints/providers/Microsoft.Authorization/roleAssignments/a2",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Authorization/roleAssignments",
+                "resourceId": f"{resource_group}/providers/Microsoft.SignalRService/signalR/pm-dev-signalr/providers/Microsoft.Authorization/roleAssignments/a3",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
+                "resourceId": f"{resource_group}/providers/Microsoft.Cache/redisEnterprise/pm-dev-redis/databases/default/accessPolicyAssignments/pitchmind-api-cursor-cache",
+            },
+        ]
+
+        result = self.run_validator(changes)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_whatif_rejects_candidate_role_assignment_outside_approved_resource_scopes(self):
+        resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
+        changes = [{
+            "changeType": "Create",
+            "resourceType": "Microsoft.Authorization/roleAssignments",
+            "resourceId": f"{resource_group}/providers/Microsoft.Storage/storageAccounts/unapproved/blobServices/default/containers/candidate-checkpoints/providers/Microsoft.Authorization/roleAssignments/a1",
+        }]
+
+        result = self.run_validator(changes)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Role assignment is outside", result.stderr)
+
     def test_whatif_accepts_only_the_declared_runtime_identity_and_database_job(self):
         resource_group = "/subscriptions/sub/resourceGroups/rg-pitchmind-dev-001"
         changes = [

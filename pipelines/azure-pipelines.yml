@@ -72,6 +72,21 @@ parameters:
 - name: provisionRedis
   type: boolean
   default: false
+- name: enableCandidateFeed
+  type: boolean
+  default: false
+- name: devSignalRName
+  type: string
+  default: pm-dev-signalr
+- name: devPublicAppOrigin
+  type: string
+  default: https://pm-dev-api-vnet.icyglacier-6b4ac95d.centralindia.azurecontainerapps.io
+- name: devStorageAccountName
+  type: string
+  default: pmdev4iwntkatliy6sst
+- name: devCandidateCheckpointContainer
+  type: string
+  default: candidate-checkpoints
 - name: devRedisName
   type: string
   default: pm-dev-redis
@@ -272,6 +287,11 @@ stages:
           postgresAdminPrincipalName: ${{ parameters.devPostgresAdminPrincipalName }}
           postgresAdminPrincipalType: ${{ parameters.devPostgresAdminPrincipalType }}
           provisionRedis: ${{ parameters.provisionRedis }}
+          enableCandidateFeed: ${{ parameters.enableCandidateFeed }}
+          signalRName: ${{ parameters.devSignalRName }}
+          signalRAllowedOrigin: ${{ parameters.devPublicAppOrigin }}
+          storageAccountName: ${{ parameters.devStorageAccountName }}
+          candidateCheckpointContainer: ${{ parameters.devCandidateCheckpointContainer }}
           redisName: ${{ parameters.devRedisName }}
           redisSkuName: ${{ parameters.devRedisSkuName }}
           redisPrivateEndpointSubnetName: ${{ parameters.devRedisPrivateEndpointSubnetName }}
@@ -310,6 +330,11 @@ stages:
                 postgresAdminPrincipalName: ${{ parameters.devPostgresAdminPrincipalName }}
                 postgresAdminPrincipalType: ${{ parameters.devPostgresAdminPrincipalType }}
                 provisionRedis: ${{ parameters.provisionRedis }}
+                enableCandidateFeed: ${{ parameters.enableCandidateFeed }}
+                signalRName: ${{ parameters.devSignalRName }}
+                signalRAllowedOrigin: ${{ parameters.devPublicAppOrigin }}
+                storageAccountName: ${{ parameters.devStorageAccountName }}
+                candidateCheckpointContainer: ${{ parameters.devCandidateCheckpointContainer }}
                 redisName: ${{ parameters.devRedisName }}
                 redisSkuName: ${{ parameters.devRedisSkuName }}
                 redisPrivateEndpointSubnetName: ${{ parameters.devRedisPrivateEndpointSubnetName }}

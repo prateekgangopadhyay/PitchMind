@@ -16,6 +16,7 @@ ALLOWED_TYPES = {
     "microsoft.dbforpostgresql/flexibleservers/databases",
     "microsoft.cache/redisenterprise",
     "microsoft.cache/redisenterprise/databases",
+    "microsoft.cache/redisenterprise/databases/accesspolicyassignments",
     "microsoft.network/privateendpoints",
     "microsoft.network/privateendpoints/privatednszonegroups",
     "microsoft.app/managedenvironments",
@@ -23,6 +24,8 @@ ALLOWED_TYPES = {
     "microsoft.app/jobs",
     "microsoft.eventhub/namespaces/eventhubs",
     "microsoft.eventhub/namespaces/eventhubs/consumergroups",
+    "microsoft.signalrservice/signalr",
+    "microsoft.storage/storageaccounts/blobservices/containers",
 }
 TARGET_RESOURCE_GROUP = "rg-pitchmind-dev-001"
 TARGET_RESOURCE_NAMES = {
@@ -30,6 +33,10 @@ TARGET_RESOURCE_NAMES = {
     "pm-dev-private.postgres.database.azure.com", "pm-dev-private-cae-link",
     "pm-dev-private-cae-redis-link", "privatelink.redis.azure.net",
     "pm-dev-api-vnet", "pm-dev-api-vnet-pull", "pm-dev-api-vnet-runtime",
+    "pm-dev-api-vnet-eventworker", "pm-dev-api-vnet-blob-link", "pm-dev-api-vnet-blob-pe",
+    "pm-dev-private-cae-blob-link",
+    "pm-dev-signalr", "pm-dev-blob-pe", "privatelink.blob.core.windows.net",
+    "pmdev4iwntkatliy6sst", "candidate-checkpoints", "pitchmind-api-cursor-cache",
     "pm-dev-api-vnet-db-migrator", "pm-dev-private-cae",
     "pitchmind-postgresql-dev", "pitchmind", "pm-dev-redis", "default", "pm-dev-redis-pe",
 }
@@ -69,8 +76,14 @@ def main() -> int:
                 if f"/resourcegroups/{TARGET_RESOURCE_GROUP}/providers/" not in resource_id:
                     raise ValueError("Planned mutation is outside the approved DEV resource group")
                 if resource_type == "microsoft.authorization/roleassignments":
-                    if "/providers/microsoft.containerregistry/registries/pmdev4iwntkatliy6sacr/providers/microsoft.authorization/roleassignments/" not in resource_id:
-                        raise ValueError("Role assignment is not scoped to the approved ACR")
+                    approved_scopes = (
+                        "/providers/microsoft.containerregistry/registries/pmdev4iwntkatliy6sacr/",
+                        "/providers/microsoft.eventhub/namespaces/pm-dev-eh/eventhubs/candidate-match-events/",
+                        "/providers/microsoft.storage/storageaccounts/pmdev4iwntkatliy6sst/blobservices/default/containers/candidate-checkpoints/",
+                        "/providers/microsoft.signalrservice/signalr/pm-dev-signalr/",
+                    )
+                    if not any(scope in resource_id for scope in approved_scopes) or "/providers/microsoft.authorization/roleassignments/" not in resource_id:
+                        raise ValueError("Role assignment is outside an approved ACR, candidate Event Hub, checkpoint container, or SignalR scope")
                 elif resource_type in {
                     "microsoft.eventhub/namespaces/eventhubs",
                     "microsoft.eventhub/namespaces/eventhubs/consumergroups",
@@ -88,6 +101,10 @@ def main() -> int:
                 elif resource_type.endswith("/subnets"):
                     if not any(f"/subnets/{name}" in resource_id for name in ("postgres", "container-apps")):
                         raise ValueError("Subnet mutation is outside the two approved service subnets")
+                elif resource_type == "microsoft.cache/redisenterprise/databases/accesspolicyassignments":
+                    approved_redis_assignment = "/providers/microsoft.cache/redisenterprise/pm-dev-redis/databases/default/accesspolicyassignments/pitchmind-api-cursor-cache"
+                    if approved_redis_assignment not in resource_id:
+                        raise ValueError("Redis access policy assignment is outside the approved DEV cache identity")
                 elif not any(f"/{name}" in resource_id for name in TARGET_RESOURCE_NAMES):
                     raise ValueError("Planned mutation does not match an approved private DEV resource name")
         if len(sys.argv) == 3:

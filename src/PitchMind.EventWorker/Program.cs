@@ -22,11 +22,14 @@ if (string.Equals(profile, "local", StringComparison.OrdinalIgnoreCase))
 else
 {
     AzureEventWorkerConfiguration.ValidateRuntimeProfile(profile);
-    AzureEventWorkerConfiguration.AddAzureOutboxDispatch(builder.Services, builder.Configuration);
+    var outboxDispatchEnabled = builder.Configuration.GetValue<bool?>("EventHubs:OutboxDispatchEnabled") ?? true;
+    if (outboxDispatchEnabled)
+        AzureEventWorkerConfiguration.AddAzureOutboxDispatch(builder.Services, builder.Configuration);
     if (builder.Configuration.GetValue<bool>("CandidateFeed:Enabled"))
         AzureEventWorkerConfiguration.AddAzureCandidateFeedConsumer(builder.Services, builder.Configuration);
     if (AzureEventWorkerConfiguration.IsProjectionConsumerEnabled(builder.Configuration))
         AzureEventWorkerConfiguration.AddAzureProjectionConsumer(builder.Services, builder.Configuration);
-    builder.Services.AddHostedService<Worker>();
+    if (outboxDispatchEnabled)
+        builder.Services.AddHostedService<Worker>();
 }
 await builder.Build().RunAsync();

@@ -537,6 +537,37 @@ it('shows a clear canonical-unavailable state and retries without demo substitut
   }
 });
 
+it('offers the API-backed candidate live feed when canonical fixtures are empty', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/home');
+  const matchId = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+  const sourceSha256 = 'a'.repeat(64);
+  const status = { matchId, isStreaming: true, currentSequence: 8, currentClockValue: 410,
+    period: 1, sourceSha256, sourceStatus: 'candidate_not_canonical', coordinateStatus: 'unverified',
+    playerMetricsStatus: 'unvalidated' };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (path.endsWith('/simulation/candidate/status') || path.endsWith('/simulation/candidate/start'))
+      return { ok: true, json: async () => status };
+    if (path.endsWith('/canonical/fixtures')) return { ok: true, json: async () => ({ items: [], nextMatchId: null, hasMore: false }) };
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+    expect(container.textContent).toContain('Candidate simulation');
+    expect(container.textContent).toContain(matchId);
+    expect(container.querySelector<HTMLAnchorElement>('a.primary-link')?.getAttribute('href'))
+      .toContain('/candidate-live?matchId=');
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+
 it('follows the canonical fixtures cursor when more persisted matches exist', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';

@@ -80,13 +80,13 @@ _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "c3d37212570bba7ee89c2e5752d3257c8ff35ddceaa48d3820e288495fff3b1b"
 _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
-    "scripts/private-dev-plan.sh": "e7920d8f743afa110ca62f49dffb1ed063f6f394282556b1a3905405f1d782c9",
-    "scripts/private-dev-deploy.sh": "2a2ebdc943d062db984e9d677c2bd2d11a252ce62fc5710670d280c90d779a5c",
+    "scripts/private-dev-plan.sh": "822fb8caa4d62c92e9a508d7c9c3ff66046492fe60899e734d44dcc757b5b2a7",
+    "scripts/private-dev-deploy.sh": "642252d9e860d260e663b43668647a4318ec61f7eed0452f5a57f749a14d4ef1",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
-    "scripts/validate_private_dev_whatif.py": "46e61733e902ba8bdf8c2a101590ff2874dda835b326491dcec598e01f7fe290",
-    "pipelines/templates/preview-private-dev.yml": "e5f25b62c3220e762583e5b403f0e4e32d4d555d1ba9bc6338e2113b368353b4",
-    "pipelines/templates/provision-private-dev.yml": "da53e22d664207465d36b281e26b0e7b0f02ebb591c04abcb2ef9a62c6e6e2a7",
-    "infra/private-dev-topology.bicep": "b54afd38a60b172738cff4cc29e0003b77803a1813ebf24be53af845a20d3fd2",
+    "scripts/validate_private_dev_whatif.py": "72cc936f562d38752b3c84125474a3714fa3bd280dee4aa807110c6430d12d44",
+    "pipelines/templates/preview-private-dev.yml": "c4cd3b3355194aedafa4b529b58b3132d5b92263e78fa7cafa49da56b3fce971",
+    "pipelines/templates/provision-private-dev.yml": "642cc09a646e8cd7bd642dcf94df46470dda402c9f2425332d3d26d789ef6b6f",
+    "infra/private-dev-topology.bicep": "f1739f07bb3a2b4018216104dc7094003b6c08be6a966b3bb0dc2f822e4215e3",
 }
 
 
@@ -116,7 +116,7 @@ def validate_pipeline_policy(
     )
     if delivery_parameter is None or delivery_parameter.get("type") != "boolean":
         raise PipelinePolicyError("DEV delivery must remain a boolean parameter")
-    for parameter_name in ("provisionPostgres", "provisionRedis"):
+    for parameter_name in ("provisionPostgres", "provisionRedis", "enableCandidateFeed"):
         option = next(
             (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
             None,
@@ -249,6 +249,11 @@ def validate_pipeline_policy(
         "postgresSubnetName": "${{ parameters.devPostgresSubnetName }}",
         "postgresSubnetCidr": "${{ parameters.devPostgresSubnetCidr }}",
         "provisionRedis": "${{ parameters.provisionRedis }}",
+        "enableCandidateFeed": "${{ parameters.enableCandidateFeed }}",
+        "signalRName": "${{ parameters.devSignalRName }}",
+        "signalRAllowedOrigin": "${{ parameters.devPublicAppOrigin }}",
+        "storageAccountName": "${{ parameters.devStorageAccountName }}",
+        "candidateCheckpointContainer": "${{ parameters.devCandidateCheckpointContainer }}",
         "redisName": "${{ parameters.devRedisName }}",
         "redisSkuName": "${{ parameters.devRedisSkuName }}",
         "redisPrivateEndpointSubnetName": "${{ parameters.devRedisPrivateEndpointSubnetName }}",

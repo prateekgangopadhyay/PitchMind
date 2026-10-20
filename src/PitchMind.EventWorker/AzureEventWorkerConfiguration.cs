@@ -6,6 +6,7 @@ using Azure.Storage.Blobs;
 using Azure.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using PitchMind.Application.Abstractions;
 using PitchMind.Infrastructure.Storage;
@@ -83,6 +84,17 @@ public static class AzureEventWorkerConfiguration
 
     public static void AddAzureCandidateFeedConsumer(this IServiceCollection services, IConfiguration configuration)
     {
+        var managedIdentityClientId = configuration["Azure:ManagedIdentityClientId"];
+        if (managedIdentityClientId is not null &&
+            (managedIdentityClientId.Length > 128 || !Guid.TryParse(managedIdentityClientId, out _)))
+            throw new InvalidOperationException("Azure:ManagedIdentityClientId must be a valid GUID when supplied.");
+        var postgresConnectionString = Required(configuration.GetConnectionString("PitchMind"), "ConnectionStrings:PitchMind");
+        services.TryAddSingleton<TokenCredential>(_ => new ManagedIdentityCredential(
+            managedIdentityClientId is null
+                ? ManagedIdentityId.SystemAssigned
+                : ManagedIdentityId.FromUserAssignedClientId(managedIdentityClientId)));
+        services.TryAddSingleton<NpgsqlDataSource>(serviceProvider =>
+            CreatePostgresDataSource(postgresConnectionString, serviceProvider.GetRequiredService<TokenCredential>()));
         _ = ValidateEventHubNamespace(Required(configuration["EventHubs:Namespace"], "EventHubs:Namespace"));
         _ = ValidateResourceName(Required(configuration["EventHubs:CandidateHubName"], "EventHubs:CandidateHubName"), "EventHubs:CandidateHubName");
         _ = ValidateResourceName(Required(configuration["EventHubs:CandidateConsumerGroup"], "EventHubs:CandidateConsumerGroup"), "EventHubs:CandidateConsumerGroup");

@@ -36,6 +36,9 @@ else if (string.Equals(runtimeProfile, "azure", StringComparison.OrdinalIgnoreCa
     await using var dataSource = AzurePostgresDataSourceFactory.Create(connectionString, credential);
     await PostgresSchemaMigrator.ApplyAsync(dataSource, CancellationToken.None);
     await AzureApiRoleProvisioner.ProvisionAsync(dataSource, apiIdentityObjectId, CancellationToken.None);
+    var workerIdentityObjectId = Environment.GetEnvironmentVariable("PitchMind__WorkerIdentityObjectId");
+    if (!string.IsNullOrWhiteSpace(workerIdentityObjectId))
+        await AzureWorkerRoleProvisioner.ProvisionAsync(dataSource, workerIdentityObjectId, CancellationToken.None);
     Console.WriteLine($"Applied Azure PostgreSQL schema migrations through version {PostgresSchemaMigrator.CurrentSchemaVersion} and provisioned the restricted API Entra role.");
 }
 else
