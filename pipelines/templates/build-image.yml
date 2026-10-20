@@ -30,15 +30,22 @@ steps:
       tag="$(Build.SourceVersion)"
       loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
       az acr login --name "$registry" --output none
-      docker build --platform linux/amd64 --file docker/Dockerfile \
+      cache_ref="$loginServer/$repository:buildcache"
+      cache_from_args=()
+      if az acr repository show --name "$registry" --image "$repository:buildcache" --query digest -o tsv --only-show-errors >/dev/null 2>&1; then
+        cache_from_args+=(--cache-from "type=registry,ref=$cache_ref")
+      fi
+      docker buildx build --platform linux/amd64 --file docker/Dockerfile \
+        "${cache_from_args[@]}" \
+        --cache-to "type=registry,ref=$cache_ref,mode=max" \
         --build-arg VITE_DEPLOYMENT_VERSION="$tag" \
         --build-arg VITE_BUILD_ID="$(Build.BuildId)" \
         --build-arg VITE_AUTH_MODE=entra \
         --build-arg VITE_ENTRA_TENANT_ID='${{ parameters.entraTenantId }}' \
         --build-arg VITE_ENTRA_CLIENT_ID='${{ parameters.entraClientId }}' \
         --build-arg VITE_ENTRA_API_SCOPE='${{ parameters.entraApiScope }}' \
-        --tag "$loginServer/$repository:$tag" .
-      docker push "$loginServer/$repository:$tag"
+        --tag "$loginServer/$repository:$tag" \
+        --push .
       digest=$(az acr repository show --name "$registry" --image "$repository:$tag" --query digest -o tsv)
       loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
       test -n "$digest"

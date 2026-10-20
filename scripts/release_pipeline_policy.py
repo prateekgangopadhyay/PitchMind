@@ -31,6 +31,7 @@ _VALIDATION_TEMPLATES = {
 _ALLOWED_VALIDATION_TASKS = {
     "UseDotNet@2",
     "NodeTool@0",
+    "Cache@2",
     "PublishTestResults@2",
 }
 _AZ_COMMAND = re.compile(r"\baz\s+([a-z][a-z0-9-]*)\s*([a-z][a-z0-9-]*)?", re.IGNORECASE)
@@ -50,7 +51,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
     ),
     "Verify source-feed preflight and planning artifacts": (
         None,
-        "6a908bcbe1f8adac680370f2c079bcb2a72659891cbd10f42f159b3ff6d71cae",
+        "d9e245c81045129e7d2c473c8fac571147cb078c5a20c5ccac107e27bc6d54e1",
     ),
     "Docker Compose health and real PostgreSQL integration": (
         None,
@@ -58,11 +59,11 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
     ),
     "Restore, build and test solution": (
         None,
-        "50457ab85c225fa012c8901aed6db71d15216a938068330ad77392c372013f9f",
+        "8e625219cf0d9e77190ff1ae79509b362644a20a503a3dbd55c6102e1212fa40",
     ),
     "Frontend install, build, test and lint": (
         "frontend",
-        "d8213e33397bdaceb693b78d88b5f69de0ed456ebff8f0db4f45899dd13fe1e6",
+        "d7973f8d2cab09c731b4c73c0a6460517fb0e8e49e878fb03624006093d52d69",
     ),
     "Compile DEV/STAGE/PROD Bicep and check environment isolation (no deployment)": (
         None,
@@ -75,7 +76,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 }
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
-_BUILD_SCRIPT_SHA256 = "c03e0e4dac28ab9b9d013deb3424952d31c5bec28399b514ebc85566a6360d9e"
+_BUILD_SCRIPT_SHA256 = "57ae3c52a2a996f1492b92e69ba6721f1666c5263912eec810882034605f59e7"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "c3d37212570bba7ee89c2e5752d3257c8ff35ddceaa48d3820e288495fff3b1b"
@@ -688,6 +689,7 @@ def _assert_validation_step(step: Any, label: str) -> None:
     task_fields = {
         "UseDotNet@2": frozenset({"task", "inputs"}),
         "NodeTool@0": frozenset({"task", "inputs"}),
+        "Cache@2": frozenset({"task", "inputs"}),
         "PublishTestResults@2": frozenset({"task", "inputs"}),
     }
     base_fields = task_fields[task_name]
@@ -703,6 +705,31 @@ def _assert_validation_step(step: Any, label: str) -> None:
         raise PipelinePolicyError(f"UseDotNet inputs changed without a policy review in {label}")
     if task_name == "NodeTool@0" and inputs != {"versionSpec": "22.x"}:
         raise PipelinePolicyError(f"NodeTool inputs changed without a policy review in {label}")
+    if task_name == "Cache@2":
+        approved_caches = {
+            (
+                '"nuget" | "$(Agent.OS)" | **/packages.lock.json',
+                '"nuget" | "$(Agent.OS)"\n',
+                "$(Pipeline.Workspace)/.nuget/packages",
+            ),
+            (
+                '"npm" | "$(Agent.OS)" | frontend/package-lock.json',
+                '"npm" | "$(Agent.OS)"\n',
+                "$(Pipeline.Workspace)/.npm",
+            ),
+            (
+                '"pip" | "$(Agent.OS)" | scripts/requirements-policy.txt',
+                '"pip" | "$(Agent.OS)"\n',
+                "$(Pipeline.Workspace)/.cache/pip",
+            ),
+        }
+        cache = (
+            inputs.get("key"),
+            inputs.get("restoreKeys"),
+            inputs.get("path"),
+        ) if set(inputs) == {"key", "restoreKeys", "path"} else None
+        if cache not in approved_caches:
+            raise PipelinePolicyError(f"Cache@2 key, restore keys, or path changed without a policy review in {label}")
     if task_name == "PublishTestResults@2":
         allowed_inputs = {
             "testResultsFormat",

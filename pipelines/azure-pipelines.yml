@@ -143,9 +143,17 @@ stages:
         test -f docker/.env.example
         docker compose --env-file docker/.env.example -f docker/compose.yml config --quiet
       displayName: Validate repository and Compose configuration
+    - task: Cache@2
+      displayName: Cache policy Python packages
+      inputs:
+        key: '"pip" | "$(Agent.OS)" | scripts/requirements-policy.txt'
+        restoreKeys: |
+          "pip" | "$(Agent.OS)"
+        path: $(Pipeline.Workspace)/.cache/pip
     - bash: |
         set -euo pipefail
         python3 -m unittest discover -s scripts -p 'test_profile_simulation_feed.py' -v
+        export PIP_CACHE_DIR="$(Pipeline.Workspace)/.cache/pip"
         python3 -m pip install --disable-pip-version-check -r scripts/requirements-policy.txt
         python3 -m unittest scripts.test_identity_baseline scripts.test_validate_release_identity_inputs -v
         test -f docs/backlog/STORY-WORKPACK-INDEX.md

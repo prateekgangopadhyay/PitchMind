@@ -54,6 +54,32 @@ def _validate_pipeline_policy(
 
 
 class IdentityBaselineTests(unittest.TestCase):
+    def test_pipeline_caches_are_scoped_and_explicit_audit_remains(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+        frontend_template = (ROOT / "pipelines/templates/validate-frontend.yml").read_text()
+        dotnet_template = (ROOT / "pipelines/templates/validate-dotnet.yml").read_text()
+
+        self.assertIn("npm ci --no-audit", frontend_template)
+        self.assertIn("npm audit --audit-level=low", frontend_template)
+        self.assertIn("dotnet restore PitchMind.slnx --locked-mode", dotnet_template)
+        self.assertIn("--cache-to \"type=registry,ref=$cache_ref,mode=max\"", build_template)
+        self.assertIn("--push .", build_template)
+
+        unapproved_cache = frontend_template.replace(
+            "path: $(Pipeline.Workspace)/.npm",
+            "path: $(Pipeline.Workspace)/",
+            1,
+        )
+        with self.assertRaises(PipelinePolicyError):
+            _validate_pipeline_policy(
+                pipeline,
+                build_template,
+                deploy_template,
+                {"templates/validate-frontend.yml": unapproved_cache},
+            )
+
     def test_candidate_analyst_uses_least_privilege_foundry_project_agent_consumer(self):
         topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
         validator = (ROOT / "scripts/validate_private_dev_whatif.py").read_text()
@@ -151,8 +177,8 @@ class IdentityBaselineTests(unittest.TestCase):
             ),
             "build script mutation": (
                 build_template.replace(
-                    '      docker push "$loginServer/$repository:$tag"',
-                    '      docker push "$loginServer/$repository:$tag"\n      az group delete --name unreviewed',
+                    '      cache_ref="$loginServer/$repository:buildcache"',
+                    '      cache_ref="$loginServer/$repository:buildcache"\n      az group delete --name unreviewed',
                     1,
                 ), deploy_template,
             ),

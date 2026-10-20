@@ -4,8 +4,16 @@ steps:
   inputs:
     packageType: sdk
     version: 10.0.x
+- task: Cache@2
+  displayName: Cache NuGet packages
+  inputs:
+    key: '"nuget" | "$(Agent.OS)" | **/packages.lock.json'
+    restoreKeys: |
+      "nuget" | "$(Agent.OS)"
+    path: $(Pipeline.Workspace)/.nuget/packages
 - bash: |
     set -euo pipefail
+    export NUGET_PACKAGES="$(Pipeline.Workspace)/.nuget/packages"
     dotnet restore PitchMind.slnx --locked-mode
     python3 scripts/check_nuget_vulnerabilities.py PitchMind.slnx
     dotnet build PitchMind.slnx --no-restore -c Release

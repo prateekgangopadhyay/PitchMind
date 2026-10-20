@@ -74,3 +74,79 @@ The file `data/simulations/manu-liv-match-dataset.json` is committed and structu
 ## AI-assisted engineering and CodeGraph
 
 For concurrent story implementation and safe integration, see the [59-story execution directive](docs/operating-model/AI-EXECUTION-DIRECTIVE.md) and [optional CodeGraph MCP integration](docs/engineering/CODEGRAPH-INTEGRATION.md). The repository includes `.vscode/mcp.json` and a read-only `bash scripts/codegraph-pr-context.sh` helper; install the CodeGraph engine locally before use. Azure DevOps remains the sole CI/CD orchestrator, and no Azure resource changes are authorized by this tooling.
+
+## Current C4 architecture
+
+These diagrams summarize the currently implemented and observed architecture in C4 order. Solid paths show code or recorded deployment evidence; dashed paths and labels identify unavailable or target capabilities. The detailed, maintained sources are [C4 Level 1](docs/architecture/01-system-context.md), [Level 2](docs/architecture/02-container.md), [Level 3](docs/architecture/03-components.md), and [Level 4](docs/architecture/04-deployment.md).
+
+### C4 Level 1 — System context
+
+```mermaid
+flowchart LR
+  Fan["Fan / supporter"] --> PM["PitchMind football intelligence"]
+  Analyst["Tactical analyst / broadcaster"] --> PM
+  Operator["Authorized operator"] --> PM
+  JSON["Owner-confirmed synthetic JSON; data quality gates open"] -. "not yet admitted" .-> PM
+  PM -. "TARGET authentication" .-> Entra["Microsoft Entra External ID"]
+  PM -. "TARGET grounded explanations" .-> Foundry["Microsoft Foundry"]
+  PM -. "TARGET observability" .-> Azure["Azure Monitor"]
+```
+
+### C4 Level 2 — Containers and data flow
+
+```mermaid
+flowchart LR
+  U["Browser / React UI"] --> A["ASP.NET Core read-only BFF"]
+  A --> H["Health endpoints"]
+  A --> MR["Fixture/demo routes: fail-closed 503"]
+  A -->|restricted pitchmind_api: canonical SELECT + leased outbox column updates| C["Canonical BFF + LOCAL outbox dispatch"]
+  ID["Entra issuer / audience"] -. "JWT bearer in Azure; local header adapter only when explicitly enabled" .-> A
+  C --> Q["IMatchProjectionReader / IMatchInsightReader / IMatchTrackingReader"]
+  Q --> PG[("Local PostgreSQL projections, events, insights, evidence, tracking frames")]
+  Operator["LOCAL developer: explicit dev-migrate.py"] --> Migrator["PitchMind.DbMigrator: owner identity; versioned DDL + API-role grants"] --> PG
+  T["Deterministic test golden generator"] -. test assemblies only .-> Tests["Automated tests"]
+  L["Separate PostgreSQL event ledger"] --> P[("Local PostgreSQL (standalone tests)")]
+  J["Candidate synthetic JSON"] -. "bounded raw schema parsing" .-> R["ManuLivCandidateFeedReader"]
+  R -. "LOCAL paced raw replay" .-> RP["LocalCandidateFeedReplayProducer"]
+  RP --> Session["LocalCandidateFeedReplaySession"]
+  Session --> Checkpoint["FileCandidateFeedReplayCheckpointStore — local file"]
+  Session -. "no canonical admission or persistence" .-> X["Clock / units / identity semantics unresolved"]
+  CandidateSimulation["LOCAL candidate simulation API"] -->|source-order raw envelopes| KafkaLocal[("Docker Kafka")]
+  KafkaLocal --> CandidateConsumer["EventWorker candidate Kafka consumer"]
+  CandidateConsumer -->|durable stage before offset commit| CandidateOutbox[("PostgreSQL candidate outbox")]
+  CandidateOutbox --> CandidateDispatcher["API candidate outbox dispatcher"]
+  CandidateDispatcher -->|parallel idempotent writes| CandidateHistory[("PostgreSQL raw candidate history")]
+  CandidateDispatcher -->|parallel cursor projection| RedisCandidate[("Docker Redis")]
+  CandidateDispatcher -->|cursor after durable write + cache attempt| CandidateHub["Local ASP.NET Core SignalR"]
+  CandidateHub --> LiveUI["/candidate-live · backfill + two-team position/detail display"]
+  CandidateHistory -->|ordered raw-event pages| LiveUI
+```
+
+### C4 Level 3 — Candidate stream components
+
+```mermaid
+flowchart LR
+  Source["Synthetic candidate JSON"] --> Sim["Simulation Service"]
+  Sim -->|raw event + source hash, ID, sequence| Kafka[("Docker Kafka")]
+  Kafka --> Worker["EventWorker candidate consumer"]
+  Worker -->|durable stage before Kafka offset commit| Outbox[("PostgreSQL candidate_feed_outbox")]
+  Outbox --> Dispatch["API CandidateOutboxDispatchWorker"]
+  Dispatch -->|parallel| History[("PostgreSQL candidate_feed_events")]
+  Dispatch -->|parallel latest cursor| Redis[("Docker Redis")]
+  Dispatch -->|cursor after durable write + cache attempt| Hub["LOCAL SignalR candidate group"]
+  History -->|ordered raw pages| UI["React /candidate-live"]
+  Hub -->|cursor-only wakeup| UI
+```
+
+### C4 Level 4 — Observed DEV deployment
+
+```mermaid
+flowchart LR
+  Browser["Public browser"] --> TLS["TLS-only ACA ingress"]
+  TLS --> API["pm-dev-api — React + offline ASP.NET Core"]
+  API --> Fixture["Seeded in-memory synthetic fixture"]
+  API -. "not connected" .-> PG[("Azure PostgreSQL canonical target")]
+  API -. "not connected" .-> Foundry["Foundry target"]
+```
+
+The Level 4 diagram records the limited previously observed DEV prototype; it is not evidence that the target Azure data plane is connected. See [deployment boundaries and evidence](docs/architecture/04-deployment.md) for the full distinction.

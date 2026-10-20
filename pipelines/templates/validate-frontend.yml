@@ -3,10 +3,18 @@ steps:
   displayName: Install Node 22
   inputs:
     versionSpec: 22.x
+- task: Cache@2
+  displayName: Cache npm packages
+  inputs:
+    key: '"npm" | "$(Agent.OS)" | frontend/package-lock.json'
+    restoreKeys: |
+      "npm" | "$(Agent.OS)"
+    path: $(Pipeline.Workspace)/.npm
 - bash: |
     set -euo pipefail
+    export npm_config_cache="$(Pipeline.Workspace)/.npm"
     test -f package-lock.json
-    npm ci
+    npm ci --no-audit
     # Low is the minimum npm advisory severity; fail on any reported severity.
     npm audit --audit-level=low
     npm run build
