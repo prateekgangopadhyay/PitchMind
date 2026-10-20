@@ -1,5 +1,13 @@
 # Azure delivery implementation delta
 
+**History note:** the original assessment below was written on 2026-10-08. It remains a record of the state observed on that date; the Azure candidate-feed implementation and owner-supplied later DEV UI evidence are summarized in [current integration status](AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [Azure DEV HLD](../architecture/06-target-azure-hld.md). Do not read the dated rows below as the current source-code state.
+
+## Current source/configuration delta (2026-10-21)
+
+The application repository now contains an Azure candidate-feed adapter path: the ACA API reads the packaged synthetic source and publishes to Event Hubs; the separate ACA EventWorker stages raw records or poison rows to PostgreSQL before its Blob checkpoint; the API dispatcher writes candidate history and a rebuildable Redis cursor and sends a cursor-only Azure SignalR notification. The Azure profile includes managed-identity PostgreSQL, Event Hubs, Blob, Redis, SignalR and Foundry project-agent composition. The guarded private DEV Bicep/release templates declare these resources/settings/roles. This path stores candidate records outside canonical football tables and does not validate or admit them as match truth.
+
+Owner-supplied screenshots from 2026-10-20 show candidate events and player positions rendered in DEV. A supplied browser request returned `401` with a null audience. These facts establish UI rendering and a specific auth failure, not successful Azure data-plane integration. Current deployment revision/resource inventory, migration status, worker consumption, Redis/SignalR flow and successful Foundry invocation require fresh read-only Azure and authenticated end-to-end evidence. The 2026-10-08 assessment below must not be used as a claim about current Azure resources.
+
 Inspected 2026-10-08. Current Bicep and pipeline are foundation/validation artifacts. Azure CLI account context was readable; DEV inventory confirms existing Log Analytics, ACR, Event Hubs, storage, Key Vault, ACA environment, VNet and Service Bus in centralindia. No PostgreSQL or Container App workload existed at inspection. The subsequent bounded offline DEV workload deployment and HTTP smoke succeeded; [actual evidence](evidence/2026-10-08-DEV-DEPLOYMENT.md) records the digest, revision and endpoint. No canonical Azure database/feed/model connectivity has been tested. Subscription identity is deliberately not reproduced here.
 
 | Target | Current reality | Required delta / gate |
@@ -18,7 +26,7 @@ The network module now derives /24 subnet addresses from configured VNet CIDR ra
 
 ## Delivery contract
 
-Azure DevOps owns all CI/CD; GitHub owns source. One build produces API/worker/frontend image digests plus migration and release-evidence artifacts. DEV deploys automatically after validation on main once service connection, topology and smoke gates are configured. STAGE and PROD are separate deployment jobs consuming that manifest; protected Environment checks require owner/admin approval outside YAML. Never rebuild on promotion. Record deployment/revision, digest, schema, fixtures, health, smoke results and rollback digest. Configuration is environment-specific, images are immutable.
+Azure DevOps owns all CI/CD; GitHub owns source. One build produces the application image digest plus migration and release-evidence artifacts. `enableDevDelivery` defaults to false. When the owner explicitly enables the release path, DEV deployment still requires the exact-plan approval and protected Azure DevOps Environment gates. STAGE and PROD are separate deployment jobs consuming the same manifest; protected Environment checks require owner/admin approval outside YAML. Never rebuild on promotion. Record deployment/revision, digest, schema, fixtures, health, smoke results and rollback digest. Configuration is environment-specific, images are immutable.
 
 Canonical deployment remains unconfigured. Do not replace its gates with a green echo or treat the synthetic-only prototype as the Azure-backed service. Avoid creating costly cloud resources until region, identity, capacity, private paths and quota preflight are verified. No production-readiness assertion is possible from static compilation.
 

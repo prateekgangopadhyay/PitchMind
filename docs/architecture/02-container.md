@@ -2,6 +2,28 @@
 
 **CURRENT code view:** solid lines are implemented under their stated settings. **Legend:** **IMPLEMENTED IN CODE** means a runtime adapter or route is composed under the stated settings. **OBSERVED** means dated deployment evidence exists. Neither implies current Azure connectivity. **TARGET** is a proposed end-to-end design. [Azure HLD](06-target-azure-hld.md) | [Deployment view](04-deployment.md) | [DEV live integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
+## DEV — Azure candidate-feed containers and data stores
+
+```mermaid
+flowchart LR
+  Browser["Browser / React UI"] --> ACA["Azure Container Apps HTTPS ingress"]
+  ACA --> API["PitchMind API + static UI — Azure Container Apps"]
+  API -->|"candidate source order; managed identity"| EH[("Azure Event Hubs candidate hub")]
+  EH -->|"at-least-once; dedicated consumer group"| Worker["PitchMind EventWorker — Azure Container Apps"]
+  Worker -->|"raw envelope / durable poison row"| PGOutbox[("Azure Database for PostgreSQL — candidate outbox")]
+  Worker -->|"durable stage then checkpoint"| Blob[("Azure Blob checkpoint container")]
+  PGOutbox --> Dispatch["API CandidateOutboxDispatchWorker"]
+  Dispatch --> PGHistory[("Azure Database for PostgreSQL — candidate history")]
+  Dispatch -->|"rebuildable cursor"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
+  PGHistory -->|"ordered event pages"| API
+  SignalR -. "wake-up hint; no match facts" .-> Browser
+  API --> Entra["Microsoft Entra ID — user access token"]
+  API -. "bounded evidence hypothesis; unverified live call" .-> Foundry["Microsoft Foundry project agent"]
+```
+
+This is the Azure DEV implementation path represented by current source and the guarded release template. It persists unvalidated source records in separate candidate tables; it does not perform canonical match admission. User-supplied screenshots show candidate events and player positions in the DEV UI, but are not evidence that each Azure service link in this diagram succeeded. See the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+
 ## LOCAL — canonical reads and isolated candidate-feed path
 
 ```mermaid

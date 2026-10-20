@@ -1,45 +1,43 @@
-# M03 — Azure DEV infrastructure baseline
+# M03 — Azure DEV runtime and delivery
 
-**Scope:** reviewed DEV foundation and safe validation tooling. **Not a record of an Azure deployment.**
+**Purpose:** describe the Azure-only DEV runtime defined by the application and guarded release path. This is not an Azure resource inventory or deployment approval. For the latest evidence, see [Azure DEV live integration status](AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
-## Architecture and boundaries
+## Runtime topology
 
-- LOCAL uses Docker PostgreSQL and Redis from M02. No Azure dependencies are required locally.
-- DEV uses Azure resources only. STAGE/PROD remain explicitly opt-out of the new DEV-only VNet and vault.
-- Baseline modules: Log Analytics, Storage, Container Registry, Event Hubs, Service Bus, Container Apps environment, DEV VNet and RBAC Key Vault.
-- No application images, production ingress, PostgreSQL Flexible Server, Azure Managed Redis, private endpoints, private DNS, RBAC role assignments, or application secret bootstrap are provisioned in this milestone. Those require reviewed network topology, service SKUs, identity bindings, and cost approval.
-- Storage and Key Vault have public access disabled. They will not be reachable by public build agents; connectivity through private endpoints and approved networking must be implemented before workloads consume them.
-- Container Registry uses Basic SKU and retains public endpoint access with admin user disabled. This is a documented DEV exception: a private registry requires Premium SKU and private networking. Do not promote this policy to production.
-- Event Hubs, Service Bus, and Container Apps environment are baseline resources, not yet hardened application runtimes. Do not expose workloads or production data.
+DEV uses Azure services only. The API and React static assets run in Azure Container Apps; a separate EventWorker Container App consumes Azure Event Hubs. PostgreSQL Flexible Server stores candidate outbox/history and canonical schemas. Azure Blob Storage holds Event Hubs processor checkpoints; Azure Managed Redis stores rebuildable candidate cursors; Azure SignalR sends cursor-only notifications. Microsoft Entra ID handles user tokens and workload identity. The candidate AI Analyst API can call an allowlisted agent in the existing Microsoft Foundry project with bounded selected-match source evidence.
 
-## Preflight and deployment safety
+The candidate feed is read from `data/simulations/manu-liv-match-dataset.json` packaged in the application image and published in source order to Event Hubs. EventWorker stages each raw envelope or poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. The API dispatcher persists candidate event history and updates the Redis cursor; SignalR carries a cursor hint, and the UI retrieves facts from API event pages. Candidate records are not canonical match facts. The candidate analyst response is a hypothesis; the code does not establish an automatic durable hot-event reporting workflow.
 
-1. Install Azure CLI and Bicep: `az version`, `az bicep version`.
-2. Sign in using an approved identity: `az login`, `az account set --subscription <subscription-id>`.
-3. Ensure resource providers are registered and target region supports each selected SKU.
-4. Obtain approved DEV subscription, resource group, region, cost budget, RBAC access, and CIDR allocation. Default DEV VNet is `10.42.0.0/16` and its two subnets are fixed `10.42.1.0/24` and `10.42.2.0/24`; change all three together if allocation differs.
-5. Compile: `az bicep build --file infra/main.bicep`; compile each `infra/environments/*.bicepparam`.
-6. Preview: `./scripts/azure-dev-whatif.sh --resource-group <existing-dev-resource-group>`.
-7. Security, SRE, and FinOps reviewers must approve the **full** what-if output and estimated monthly charges.
-8. Deploy only from an explicitly approved Azure DevOps deployment stage/service connection. M03 deliberately does not add an automatic deploy trigger.
+## Azure resources and identity boundaries
 
-## Acceptance criteria and evidence
+`infra/private-dev-topology.bicep` declares the guarded private DEV topology and conditional candidate-feed components. Depending on parameters and existing resource IDs, the path can configure/reuse PostgreSQL Flexible Server and Azure Managed Redis, and declares Azure Container Apps, Event Hubs, a Blob checkpoint container/private endpoint, Azure SignalR, managed identities and scoped role assignments. The API and worker receive `Runtime:Profile=azure`; the Bicep module itself defaults candidate provisioning off, while the release template parameter defaults it on inside the separately gated release path.
 
-- Bicep and all three parameter files compile without diagnostics on an approved Bicep version.
-- DEV what-if has no unapproved deletion/replacement, unexpected public access, or out-of-scope resource.
-- DEV resources are deployed by an authorized pipeline and are inspectable through Azure Resource Graph.
-- Key Vault RBAC, purge protection, and network isolation are verified.
-- Storage disallows anonymous blob and shared-key access.
-- Resource costs, logs, quotas, region availability, and rollback strategy are reviewed.
-- No credentials or environment-specific secrets are committed.
-- LOCAL Docker and application test suites remain green.
+- API identity: Event Hubs sender, PostgreSQL candidate/read access, Redis data access, Azure SignalR server access, and Foundry project-agent invocation as declared by the template.
+- EventWorker identity: Event Hubs receiver, Blob checkpoint access, and restricted PostgreSQL candidate-outbox access.
+- Migration identity: applies schema changes separately from runtime principals. Runtime identities must not own schema objects.
+- Browser identity: Entra access token validated by API issuer, audience, expiry and role policy. A service connection is not a user identity and never belongs in browser configuration.
 
-**Current evidence:** code committed for review only; Bicep compilation, what-if, Azure DevOps execution, and Azure deployment have **not** been verified in this environment.
+Role assignment declarations do not prove that the principal has the effective role or can reach the resource. Validate VNet/subnet delegation, private endpoints, private DNS, routing, service firewall, identity object IDs, PostgreSQL principal/grants, Redis access policy, SignalR endpoint and Foundry role before claiming runtime readiness.
 
-## Follow-up risks / next milestones
+## CI/CD and deployment controls
 
-- Configure private endpoints and DNS for Storage, Key Vault, ACR and managed services, plus subnet routing and workload identity.
-- Validate PostgreSQL Flexible Server private access and Azure Managed Redis SKU/networking before provisioning.
-- Replace ACR DEV public endpoint exception with Premium private connectivity for hardened environments.
-- Apply least-privilege role assignments for Azure DevOps workload identity federation; never use stored client secrets.
-- Enforce budget alerts, resource tags, diagnostics, Defender policies and disaster-recovery controls before production.
+Azure DevOps owns delivery. CI validates code, tests, frontend, pipeline contracts and Bicep without applying infrastructure. The release parameter `enableDevDelivery` is default-off. When explicitly enabled through the approved pipeline, the release builds one immutable image digest, validates the topology, captures what-if and estimated cost, waits for exact-change owner approval and the protected `pitchmind-dev` environment, applies the approved plan, then runs post-deployment smoke checks. A green CI run alone does not deploy.
+
+This documentation update did not provision Azure resources, apply Bicep, alter environment settings, or deploy an image. Do not deploy from a local shell. Any deployment requires review of the exact what-if, image digest, cost and rollback before the protected approval gates.
+
+## Verification status and remaining evidence
+
+Owner-provided DEV screenshots dated 2026-10-20 show builds labelled 68/69, with candidate source events and player positions rendered. A separate captured network response shows candidate status failing with `401` and `audience (null)`. The screenshots do not prove the Event Hubs → EventWorker → PostgreSQL → Redis → SignalR chain or a successful Foundry response. The last repository-recorded Azure resource inventory is dated 2026-10-19 and must be treated as historical; a current inventory and runtime probe are still required.
+
+Before calling DEV end to end, retain evidence for each of the following:
+
+1. Current Azure Resource Graph inventory and active ACA revisions/image digest.
+2. API and worker app settings, attached identities, role assignments, VNet and private DNS.
+3. PostgreSQL migration job status, schema version and narrowly scoped runtime grants.
+4. Authenticated Event Hubs publish/consume and Blob checkpoint advance for a source event.
+5. PostgreSQL candidate history, Redis cursor update, SignalR negotiate/notification and UI page refresh for the same match/sequence.
+6. Entra browser login and API audience/role checks for the intended user.
+7. Successful live Foundry request and response validation, if generated explanations are in scope.
+8. Health/readiness and rollback evidence from the immutable deployed revision.
+
+See [C4 deployment view](../architecture/04-deployment.md), [Azure HLD](../architecture/06-target-azure-hld.md), [API contract](../api/API.md), and [delivery pipeline guide](../../pipelines/README.md).

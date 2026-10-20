@@ -1,13 +1,13 @@
 # PitchMind — Living architecture index
 
-Architecture documents explicitly distinguish **CURRENT OBSERVED**, **TARGET PROPOSED**, and **OPTIONAL** service integration. A diagram never proves deployment or functional acceptance.
+Architecture documents explicitly distinguish **implemented in source/configuration**, **observed in the deployed UI**, **verified service connectivity**, **TARGET PROPOSED**, and **OPTIONAL** integration. A diagram never proves deployment or functional acceptance. DEV diagrams use Azure services only; local Docker topology is described in the local development guide.
 
 - [C4 Level 1 — System Context](01-system-context.md)
-- [C4 Level 2 — Containers, current versus target](02-container.md)
+- [C4 Level 2 — Containers, Azure DEV and local/target views](02-container.md)
 - [C4 Level 3 — Components and ports/adapters](03-components.md)
 - [C4 Level 4 — Deployment/trust and environments](04-deployment.md)
 - [Football analytics baseline LLD](05-football-lld.md) and [detailed football LLD](07-football-analytics-detailed-lld.md)
-- [Azure HLD](06-target-azure-hld.md)
+- [Azure DEV HLD and canonical target](06-target-azure-hld.md)
 - [Football knowledge RAG design and local-to-Azure runbook](../ai/FOOTBALL-KNOWLEDGE-RAG-PIPELINE.md)
 - [Architecture review + findings](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) and [ADR index](../adr/README.md)
 - [Observed source profile](../data/MANU-LIV-SOURCE-PROFILE.md) and [source feed contract](../data/SIMULATION-FEED-CONTRACT.md)
@@ -20,5 +20,5 @@ Architecture documents explicitly distinguish **CURRENT OBSERVED**, **TARGET PRO
 3. Event Hubs partitions by matchId; consumers enforce unique EventId/sequence, at-least-once + idempotency and explicit gap/quarantine. No global exactly-once claim.
 4. PostgreSQL commits canonical facts+outbox transactionally; projections/search/Redis/SignalR never become football truth.
 5. Generated AI text is untrusted until independent evidence validation; deterministic fallback remains available.
-6. LOCAL Docker adapters; DEV/STAGE/PROD Azure-only. Deployment requires explicit repository-owner approval for **each DEV change set**, then Azure DevOps protected/manual gate.
+6. DEV/STAGE/PROD use Azure services only; LOCAL uses separate Docker adapters. Deployment requires explicit repository-owner approval for **each DEV change set**, then Azure DevOps protected/manual gate.
 7. Every PR that changes an architecture boundary must update the relevant C4/ADR, source contract, LLD, API, tests, threat model and runbook with proof and decision-maker. Never invent a "deployed" arrow because Bicep contains a resource.

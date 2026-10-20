@@ -1,8 +1,34 @@
 # C4 Level 3 — Implemented components and runtime boundaries
 
-This document describes the **CURRENT** composition in `src/`, the routes in `PitchMind.Api`, and the separate React clients. It distinguishes the candidate demonstration path from canonical match processing. Adapter registration is source-level evidence; cloud connectivity and story acceptance require their own evidence. Full canonical Azure ingestion remains **TARGET** design in [the Azure HLD](06-target-azure-hld.md).
+This document describes the **CURRENT** Azure DEV composition in `src/`, the routes in `PitchMind.Api`, and the React client. It distinguishes the candidate-feed path from canonical match processing. Adapter registration is source-level evidence; cloud connectivity and story acceptance require their own evidence. Full canonical Azure ingestion remains **TARGET** design in [the Azure HLD](06-target-azure-hld.md).
 
-## Candidate-live path — raw source events, non-canonical
+## DEV Azure component topology
+
+```mermaid
+flowchart LR
+  JSON["Candidate JSON + SHA-256"] --> Reader["CandidateFeedSourceCatalog / reader"]
+  Reader --> Simulation["API-hosted candidate simulation service"]
+  Simulation -->|"ordered source envelopes"| EH[("Azure Event Hubs")]
+  EH --> Worker["EventWorker on Azure Container Apps"]
+  Worker -->|"durable before checkpoint"| CandidateOutbox[("Azure PostgreSQL candidate_feed_outbox")]
+  Worker -->|"checkpoint state"| Blob[("Azure Blob Storage")]
+  CandidateOutbox --> Dispatch["API CandidateOutboxDispatchWorker"]
+  Dispatch -->|"event history"| CandidateHistory[("Azure PostgreSQL candidate_feed_events")]
+  Dispatch -->|"latest cursor"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
+  CandidateHistory --> API["Candidate page API"]
+  API --> UI["React Match / AI Analyst views"]
+  SignalR -. "refresh hint; no facts" .-> UI
+  UI -->|"bounded match-scoped request"| Analyst["Candidate analyst API"]
+  Analyst -->|"selected persisted evidence"| CandidateHistory
+  Analyst -. "hypothesis response; runtime call not verified" .-> Foundry["Microsoft Foundry project agent"]
+```
+
+All infrastructure shown for the DEV runtime is Azure-managed. The Candidate Simulation Service and outbox dispatcher are application components hosted by the API container; they are not separate Azure services. EventWorker is a separate Container App. The screenshots supplied for DEV show rendered candidate event/position data, but do not verify the broker, database, cache, SignalR, or model calls. Historical cloud inventory and current evidence limits are in the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+
+## Candidate-live adapters — raw source events, non-canonical
+
+The Azure-only DEV topology is shown above. The following source-level view compares the separately configured LOCAL adapter with the Azure adapter; it is not a DEV deployment diagram.
 
 ```mermaid
 flowchart LR

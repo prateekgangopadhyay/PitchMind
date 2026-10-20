@@ -1,143 +1,105 @@
-# PitchMind target Azure High-Level Design (C4 extension)
-**Status:** **TARGET** design only; not proof of integrated Azure deployment. **CURRENT** adapter/code boundaries are summarized below. **Change governance:** same-PR C4, LLD, API and ADR for material architecture changes.
+# Azure DEV High-Level Design
 
-## Principles
-Hexagonal/Clean Architecture (Domain zero external dependencies); DDD match/fixture/possession/evidence bounded contexts; domain clocks deterministic; schema/versioned source provenance; append-only PostgreSQL as correctness boundary, at-least-once Event Hubs/Service Bus transport; Redis/search/ADX projections only; zero facts sourced from frontend or LLM; selected-time replay isolated from live head and canonical writes. LOCAL adapters via Docker; deployed environments Azure-only.
+**Scope:** Azure-only DEV application architecture, as represented by the current API/EventWorker code and guarded Bicep release path. This document distinguishes the implemented candidate-feed path from the future canonical football ingestion design. A configured template or compiled Bicep is not proof of current resource state or healthy connections. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for observed evidence and limits.
 
-## Target architecture
-```mermaid
-flowchart LR
- U[Browser React] --> FD[Public edge; required when ACA is internal/private]
- FD --> API[ASP.NET Core BFF on ACA]
- U -. PKCE .-> AUTH[Entra External ID]
- SR -->|authorized cursor notification| U
- API --> PG[(Azure PostgreSQL Flexible Server)]
-FEED[Approved synthetic JSON Blob] --> GEN[ACA feeder Job / source mapper]
-GEN --> EH[Event Hubs ingress partition=matchId]
-EH --> EW[.NET Event Worker ingress consumer]
-EW --> TX[Validate, map, idempotently admit]
-TX --> PG
-PG --> OUT[Transactional outbox committed atomically with canonical event/revision]
-EW --> BLOB[Azure Blob checkpoint after PostgreSQL commit or durable quarantine]
-OUT --> PUB[Outbox dispatcher]
-PUB --> CACHE[Cache projection writer]
-PUB --> SR
-PUB -. future adapter .-> SB[Service Bus commands + DLQ]
- SB --> AW[Agent Worker ACA]
- AW --> TOOLS[Read-only evidence tools]
- TOOLS --> PG
- AW --> FO[Microsoft Foundry]
- AW -. "profile-filtered hybrid retrieval; read-only" .-> KBSEARCH[Azure AI Search tactical knowledge index]
- AW --> CV[Claim validator]
- CV --> PG
- CACHE --> REDIS[Azure Managed Redis P1]
- SB -. Recap P1 .-> FN[Azure Functions]
- FN --> BLOB[Storage export P1]
- PG -. Indexed canonical-evidence read P2 .-> SEARCH[Azure AI Search]
- EH -. History P2 .-> ADX[Data Lake + Data Explorer]
- API -. OTEL .-> MON[Azure Monitor App Insights]
- EW -. OTEL .-> MON
- AW -. OTEL .-> MON
- ```
+## Design principles
 
-For the current `canonical-dev-topology.bicep` candidate, ACA is internal with public network access disabled, so direct public browser ingress does not apply. Front Door Premium with a Private Link origin is one possible public path, but no edge module or configuration is included; the public path remains blocked pending architecture review. The separate offline demo's public ingress is not evidence for this canonical topology.
+- DEV, STAGE and PRODUCTION use Azure services only. LOCAL Docker adapters are documented separately in M02 and are not part of these diagrams.
+- PostgreSQL Flexible Server is the durable store. Redis is a rebuildable cursor/cache projection. SignalR is a cursor notification channel, not a match-facts transport.
+- Candidate source records remain explicitly non-canonical until domain/data admission is approved. Preserve event ID, source order, provenance, raw payload, and original clock/period values.
+- Microsoft Foundry can explain only bounded persisted evidence. Its output is a hypothesis; it cannot create canonical facts, score changes, tactical events or causal claims.
+- Azure resources are accessed by managed identity and scoped data-plane roles. Schema migration identity and runtime identity are separate.
 
-## Platform service and local-equivalent matrix
-| Boundary | LOCAL | DEV/STAGE/PROD | Verification |
-|---|---|---|---|
-| Web/API | .NET + Vite or same-origin Docker | ACA workload, TLS, managed identity | BFF smoke, auth, health, CSP |
-| Stream | Docker Kafka for raw candidate simulation | Event Hubs adapter for candidate records; no canonical source admission | local replay/order tests; cloud connectivity still unverified |
-| Canonical truth | PostgreSQL Docker | Flexible Server private DNS/VNet, independent migration ID | restart/PITR/transaction/roles |
-| Cache | Redis Docker (optional) | Azure Managed Redis | outage bypass and revision-keyed invalidation |
-| Commands | local queue adapter | Service Bus DLQ, idempotent inbox | retry poison and recovery |
-| Live | ASP.NET Core SignalR; cursor-only updates | Azure SignalR provider in candidate profile | deployed identity, group authorization, reconnect + backfill |
-| AI | candidate question route calls a configured Foundry project agent; canonical AgentWorker is a scaffold | Project-agent or model-deployment adapters in code; no end-to-end canonical workflow | live call, response-grounding and outage evidence |
-| Tactical knowledge RAG | embedded, bounded lexical retrieval | Azure AI Search vector + semantic hybrid query using managed identity | corpus provenance, profile allowlist, grounding/refusal and outage tests; target only |
-| Jobs | local worker | Azure Functions / ACA Job | idempotent status, export permissions |
-| Identity | explicit dev-only test auth | Entra auth code+PKCE, roles `fan/analyst/admin` | unauthenticated/denied cases |
-| Infra | Compose | Bicep, VNet integrated ACA, private endpoints, managed identity, Key Vault | preflight what-if, DNS and TLS proofs |
-| CI/CD | local validation | Azure DevOps OIDC + ACR immutable digest promotion | green pipeline, release manifest, gates |
-
-## Component boundaries
-- Domain owns `MatchId, EventId, MatchClock, MatchState, Team, Player, Possession, Phase, PitchCoordinate, Mechanism, Evidence`. Forbidden: Azure SDK, Npgsql, HTTP, UI concepts, LLM prompts.
-- Application owns `IngestEvent, NormalizeFrame, ProjectMatch, DetectMechanism, BuildEvidence, QuerySnapshot, ReplayAt, ExplainInsight, DispatchOutbox` and `IEventLedger, ITrackingStore, IOutbox, IModelClient, IRealtimeNotifier, ISimulationFeedReader` ports.
-- Infrastructure implements adapters: feed parser, Blob, Event Hubs, PostgreSQL, Service Bus, Foundry, SignalR, Redis, OTEL. Never embed policy in adapters.
-- API enforces version, identity/authorization, pagination, query bounds, problem details, correlation, selectedTime/revision consistency.
-- **Target ingress flow:** the feeder streams source events to Event Hubs first. EventWorker validates schema, identity, ordering and source semantics, then commits the canonical event/revision and transactional outbox record together in PostgreSQL. The Event Hubs checkpoint advances only after that commit or a durable quarantine decision. Independent outbox handlers fan out after commit: one updates the revision-fenced, rebuildable Redis cache; another sends cursor-only SignalR notifications. Those handlers may run in parallel and retry independently. SignalR never carries canonical football facts; clients fetch the revisioned snapshot/evidence through the BFF. If a pre-database durable staging step is required, model it as an inbox/staging ledger and do not call it the transactional outbox.
-- AgentWorker accesses **read-only** typed tools, invokes Foundry with bounded evidence, deterministically validates claims, writes validated output via authorized application port; returns fallback on timeout/reject.
-- Tactical knowledge search is a separate read-only corpus of reviewed educational summaries and source links. It is profile-topic-filtered, hybrid-ranked and limited to three bounded passages. It may explain a general concept but cannot establish that an event, player action, intent or outcome occurred. The canonical-evidence search projection is distinct from this knowledge index.
-- React shell renders factual DTOs only; no hardcoded football results or derived metric business logic.
-
-## Implemented code paths versus target
-
-The canonical ingress diagram above is a **target**, not the current candidate pipeline. Current code has these separate paths:
+## Azure DEV — current candidate-feed implementation
 
 ```mermaid
 flowchart LR
-  Source["Candidate JSON in application image"] --> API["PitchMind.Api candidate simulation"]
-  API -->|"LOCAL"| Kafka[("Docker Kafka")]
-  API -. "Azure profile" .-> EH[("Azure Event Hubs")]
-  Kafka --> Worker["EventWorker candidate consumer"]
-  EH --> Worker
-  Worker -->|"raw candidate outbox before broker checkpoint"| PG[("PostgreSQL candidate tables")]
-  PG --> Dispatcher["API candidate outbox dispatcher"]
-  Dispatcher -->|"history"| PG
-  Dispatcher -->|"cursor projection"| Redis["Redis"]
-  Dispatcher -->|"cursor only"| SignalR["SignalR"]
-  PG --> UI["React candidate event pages"]
-  SignalR -. "refresh hint" .-> UI
-  UI -->|"candidate analyst question"| AnalystAPI["API Foundry project-agent adapter"]
-  AnalystAPI -->|"bounded source records"| PG
-  AnalystAPI -. "hypothesis response" .-> Foundry["Foundry project agent"]
-  BFF["Canonical BFF"] -->|"persisted canonical readers"| PGCanonical[("PostgreSQL canonical schema")]
-  AgentWorker["AgentWorker scaffold; no queue consumer"]
+  Browser["React browser"] -->|"HTTPS"| ACAIngress["Azure Container Apps ingress"]
+  ACAIngress --> API["PitchMind API + static UI — Azure Container Apps"]
+  Entra["Microsoft Entra ID"] -->|"user JWT validation"| API
+  JSON["Candidate JSON packaged in API image"] --> Simulation["API-hosted Candidate Simulation Service"]
+  Simulation -->|"ordered source envelopes; managed identity"| EH[("Azure Event Hubs candidate hub")]
+  EH -->|"dedicated consumer group"| Worker["PitchMind EventWorker — Azure Container Apps"]
+  Worker -->|"raw candidate or durable poison record"| Outbox[("Azure PostgreSQL — candidate outbox")]
+  Worker -->|"checkpoint after durable stage"| Blob[("Azure Blob checkpoint container")]
+  Outbox --> Dispatch["API CandidateOutboxDispatchWorker"]
+  Dispatch -->|"persist event history"| History[("Azure PostgreSQL — candidate history")]
+  Dispatch -->|"rebuildable cursor projection"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"after durable processing; cursor only"| SignalR["Azure SignalR Service"]
+  History -->|"match event pages / source positions"| API
+  SignalR -. "refresh hint only" .-> Browser
+  API -->|"bounded selected-match evidence"| Foundry["Microsoft Foundry project agent"]
+  Foundry -. "labeled hypothesis; no canonical write" .-> API
 ```
 
-LOCAL uses Kafka, Docker PostgreSQL/Redis and local SignalR. In Azure profile, source code composes Event Hubs producer/consumer, Blob checkpoints, managed-identity PostgreSQL/Redis, and Azure SignalR when settings and identities are supplied. The private DEV Bicep/pipeline code declares an API app, separate EventWorker app, candidate Event Hubs entity, checkpoint storage, SignalR, role assignments, and database migration configuration. `enableCandidateFeed` defaults true in the YAML parameter set, while `enableDevDelivery` defaults false. These are code/configuration facts only; no deployment is implied.
+### Runtime sequence
 
-Canonical BFF readers can use PostgreSQL in either profile when the connection string and corresponding identity/configuration are present. If no Azure connection is configured, the Azure composition registers unavailable adapters. The EventWorker's projection publisher/consumer handles `ProjectionPublishedV1` and its own inbox/snapshot/checkpoint path; it does not map this raw candidate JSON into canonical events. Candidate analysis is a direct API-to-Foundry project-agent request with bounded persisted source events; `AgentWorker` does not consume a queue or host the candidate AI Analyst route. There is no demonstrated canonical, end-to-end Azure ingestion or explanation flow.
+1. An authorized UI action starts or pauses the candidate simulation. The API-hosted service reads the versioned source asset and publishes original events in source order to Event Hubs.
+2. EventWorker consumes the dedicated candidate hub. It stores the raw event or a durable poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. Delivery is at least once; the candidate persistence key preserves idempotency.
+3. The API dispatcher processes the committed candidate outbox. It writes the ordered candidate event history to PostgreSQL and updates the latest Redis cursor as independent projections. SignalR sends a cursor notification after durable processing; it does not carry event facts.
+4. The React UI fetches event pages and source player-position fields from the API. It can pause/resume the feed and update the pitch from returned data. Candidate data remains separate from canonical match/insight records.
+5. The AI Analyst API reads only a bounded selected-match event prefix and may call an allowlisted Foundry project agent. It returns a source-bounded hypothesis. An automatic durable hot-event report worker and a canonical multi-agent workflow are not currently implemented.
 
-## Critical flows
+### Service boundaries
+
+| Azure component | Responsibility in DEV | Authority / limitation |
+|---|---|---|
+| Azure Container Apps | Hosts API/static React app and separate EventWorker app | Application compute; exact deployed topology must be confirmed in Azure |
+| Azure Event Hubs | Ordered candidate event transport | Transport only; not canonical storage |
+| Azure Database for PostgreSQL Flexible Server | Candidate outbox/history and canonical schema/read models | Durable database; candidate tables are not canonical truth |
+| Azure Blob Storage | Event Hubs processor checkpoint container | Consumer progress only |
+| Azure Managed Redis | Latest candidate cursor/cache projection | Rebuildable; no authoritative event pages |
+| Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API |
+| Microsoft Entra ID | Browser/API identity and managed identity token authority | User auth configuration and data-plane grants must be verified |
+| Microsoft Foundry project agent | Optional bounded candidate explanation | Hypothesis only; current UI/API execution is not verified as a live model call |
+
+## Canonical football pipeline — target, not current candidate flow
+
+Canonical ingestion remains separate from the raw candidate simulation. This target is the gate for interpreting a feed as match truth; do not label the candidate-feed path as canonical until its source semantics and mapping are approved.
+
 ```mermaid
-sequenceDiagram
- participant J as JSON feed
- participant F as Feeder/mapper
- participant H as Event Hubs ingress
- participant W as EventWorker
- participant P as PostgreSQL
- participant O as Outbox dispatcher
- participant C as Redis cache projection
- participant S as Azure SignalR
- participant B as BFF
- participant R as React
- participant A as AgentWorker/Foundry
- J->>F: read source file/hash/schema/provenance
- F->>H: stream source event in source order, keyed by matchId
- H-->>W: at-least-once event delivery
- W->>W: validate/map; preserve source ID, sequence, provenance and clock semantics
- W->>P: canonical event/revision + outbox in one transaction
- P-->>W: committed / duplicate / durable quarantine
- W-->>H: advance Blob checkpoint only after durable outcome
- P-->>O: committed outbox record becomes dispatchable
- par post-commit parallel fan-out
- O->>C: idempotently update revision-fenced cache
- O->>S: publish cursor/revision only
- end
- S-->>R: match revision/lastSequence only
- R->>B: snapshot?atSeconds=X&revision=N
- B->>P: canonical snapshot, evidence
- P-->>R: same selected-time view through BFF
- O->>A: durable explanation command
- A->>P: read-only evidence
- A->>A: validate source claims
- A->>P: publish validated text or deterministic fallback
- ```
+flowchart LR
+  Feed["Rights-cleared, validated source feed"] --> Producer["Azure simulation / ingestion workload"]
+  Producer --> EH["Azure Event Hubs ingress"]
+  EH --> Worker["Azure EventWorker: validate, map, deduplicate"]
+  Worker -->|"single transaction: canonical event + revision + outbox"| PG[("Azure PostgreSQL canonical ledger")]
+  Worker -->|"checkpoint only after commit or durable quarantine"| Blob["Azure Blob checkpoint"]
+  PG --> Outbox["PostgreSQL transactional outbox"]
+  Outbox --> Dispatcher["Independent idempotent fan-out"]
+  Dispatcher --> Redis["Azure Managed Redis projection"]
+  Dispatcher --> SignalR["Azure SignalR cursor notification"]
+  SignalR -. "revision / sequence cursor only" .-> UI["React browser"]
+  UI -->|"snapshot and bounded backfill"| API["Azure Container Apps API/BFF"]
+  API --> PG
+  API -. "read-only bounded evidence" .-> Agent["Azure-hosted explanation worker — future"]
+  Agent --> Foundry["Microsoft Foundry"]
+  Agent -. "validated explanation proposal" .-> PG
+  API -. "Azure Monitor / OpenTelemetry" .-> Monitor["Azure Monitor and Application Insights"]
+```
 
-## Security, operations and cost
-Private endpoint DNS/route and ACA VNet integration REQUIRED: inaccessible resources are not fixed by disabling network policies. Runtime least privilege, separate schema migration principal, Entra JWT audience/issuer/role verification, managed identity in Azure, no secrets in browser or logs. Public anonymous demo only with explicit PO approval and scoped read-only rate limit.
-Failure: Event Hubs lag delays canonical admission; PostgreSQL transaction failure prevents checkpoint advancement and causes safe redelivery; PostgreSQL loss -> stale/503, not invented live state; Redis down -> canonical read; SignalR down -> polling/backfill; a failed outbox handler retries independently without rolling back canonical admission; Foundry down -> labeled deterministic fallback; Service Bus down -> transactional outbox recovery; invalid/late input -> durable quarantine or append correction/revision, never rewrite canonical history.
-Monitor: correlation IDs, lag/offset, error/quarantine, transaction retry, replay mismatch, p50/p95/p99 API latency, AI costs/tokens, user-facing staleness, uptime and monthly burn. FinOps approval required for model and ingestion quotas. Restore drills, backup/PITR and immutable rollback are release gates.
+The canonical target commits the event/revision/outbox atomically, checkpoints after durable outcome, and fans out cache and notification work after commit. It is not what the candidate staging tables do today. Azure Service Bus, Azure Functions, Azure AI Search, Data Explorer, or a separate agent worker are optional future components and are not required to describe the current DEV candidate-feed path.
 
-## Deployment and verification status
+## Security, reliability and operations
 
-A dated Azure deployment record proves a minimal offline API workload and health probes, not the candidate stream or the target canonical pipeline. The latest repository-recorded read-only resource/runtime observation is in [DEV live integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md); it must not be treated as a fresh Azure inspection. Current adapter code requires change-specific approval, resource/identity/network configuration and an end-to-end smoke before any cloud integration can be called operational. The repository's deployment restrictions and owner gates remain mandatory.
+- API validates Entra issuer, audience, expiry and configured roles. Browser tokens are short-lived and never replaced by a service-connection credential. The UI/network evidence includes an `audience (null)` 401; therefore user identity configuration is not considered verified.
+- API and EventWorker use their assigned managed identities for PostgreSQL, Event Hubs, Blob, Redis and SignalR. Grant only required data-plane roles. Migration runs use a separate privileged identity; runtime roles do not own schema objects.
+- Private endpoints, VNet routing, private DNS, subnet delegation, ACA ingress mode and service egress must match the reviewed DEV topology. Do not infer network reachability from Bicep declarations.
+- Event Hubs delivery is at least once. PostgreSQL idempotency keys and durable staging protect against duplicate delivery. A failed durable write must not advance the checkpoint. Redis failure must not replace or corrupt PostgreSQL data; SignalR failure requires API polling/backfill.
+- Health/readiness, authenticated candidate-status checks, event-page retrieval, worker checkpoints, migration result, SignalR negotiation, and one live Foundry request each need explicit runtime evidence before claiming the full path is operational.
+
+## Delivery and verification
+
+`enableDevDelivery` remains default-off. The guarded Azure DevOps path compiles Bicep, checks topology and what-if, records the immutable image digest and cost estimate, pauses at the owner approval gate, applies only the reviewed plan in the protected DEV environment, then runs smoke checks. `enableCandidateFeed` defaults on only within that release path; the Bicep module default remains off. CI success alone does not deploy.
+
+The screenshots supplied by the owner on 2026-10-20 show DEV UI builds labelled 68/69, candidate-feed event/position rendering, and an analyst screen with selected source events. They do not identify the backend resource connections or demonstrate a successful generated Foundry report. The last repository-recorded read-only Azure resource inventory is dated 2026-10-19; no current Azure inventory was available during this documentation update. No Azure operation was performed.
+
+## Related designs
+
+- [C4 system context](01-system-context.md)
+- [C4 containers](02-container.md)
+- [C4 components](03-components.md)
+- [C4 Azure DEV deployment](04-deployment.md)
+- [Football domain LLD](05-football-lld.md)
+- [Football analytics target LLD](07-football-analytics-detailed-lld.md)
+- [API contract and implementation registry](../api/API.md)
+- [Azure DEV integration evidence](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md)

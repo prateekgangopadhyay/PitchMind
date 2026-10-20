@@ -1,64 +1,45 @@
-# C4 Level 4 — Deployment and trust boundaries
+# C4 Level 4 — Azure DEV deployment
 
-This diagram separates the **CURRENT** local runtime, the last dated DEV observation, and the Azure **TARGET** topology declared in code. Bicep compilation or adapter registration is not deployment evidence. The [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) holds detailed configuration and dated observations.
+This view describes the Azure-only DEV design implemented by `infra/private-dev-topology.bicep`, the Azure API/EventWorker composition, and the guarded Azure DevOps release template. It separates what the repository declares from what has been observed in the deployed app. A Bicep resource, environment setting, or successful compile is not proof of an existing resource or a working data-plane connection. See the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for dated evidence.
 
-## LOCAL — runnable development topology
-
-```mermaid
-flowchart LR
-  Browser["Browser"] --> Vite["Vite React dev server"]
-  Browser --> API["PitchMind.Api host process"]
-  API --> Kafka[("Docker Kafka")]
-  Worker["PitchMind.EventWorker host process"] --> Kafka
-  API --> PG[("Docker PostgreSQL 17")]
-  Worker --> PG
-  API --> Redis[("Docker Redis 7.4")]
-  API --> Hub["ASP.NET Core SignalR"]
-  Hub -. "cursor notification" .-> Browser
-```
-
-PostgreSQL, Redis and Kafka are defined in `docker/compose.yml`; the frontend, API and EventWorker run as host processes. The candidate simulation starts from the API and publishes to Kafka. EventWorker stages raw events in PostgreSQL, and the API dispatches persisted candidate events/cursors to PostgreSQL, Redis and SignalR. The local API performs PostgreSQL schema checks at readiness. Startup commands and limitations are in the [local development guide](../engineering/M02-LOCAL-DEVELOPMENT.md) and [Docker guide](../../docker/README.md).
-
-## DEV — last dated observation
+## Azure DEV candidate-feed deployment path
 
 ```mermaid
 flowchart LR
-  Browser["Public browser"] --> TLS["TLS ACA ingress"]
-  TLS --> ACA["PitchMind Container App"]
-  ACA --> API["React static assets + ASP.NET Core API"]
-  API -. "source file is packaged in image" .-> JSON["Candidate JSON"]
-  API -. "last observed: local runtime profile; not Azure candidate adapters" .-> Data["PostgreSQL / Event Hubs / Redis / SignalR"]
+  Browser["Browser"] --> Ingress["Azure Container Apps HTTPS ingress"]
+  Ingress --> API["PitchMind API + React assets — Azure Container Apps"]
+  Browser <-->|"interactive sign-in / access token"| Entra["Microsoft Entra ID"]
+  Browser -->|"bearer access token"| API
+  Source["Candidate JSON packaged in API image"] --> Simulation["API-hosted candidate Simulation Service"]
+  Simulation -->|"source-order events; managed identity"| EH[("Azure Event Hubs candidate hub")]
+  EH -->|"consumer group; at-least-once"| Worker["PitchMind EventWorker — separate Azure Container App"]
+  Worker -->|"durable raw event / poison record"| Outbox[("Azure Database for PostgreSQL — candidate outbox")]
+  Worker -->|"checkpoint after durable stage; managed identity"| Blob[("Azure Blob checkpoint container")]
+  Outbox --> Dispatch["API CandidateOutboxDispatchWorker"]
+  Dispatch -->|"idempotent event history"| History[("Azure Database for PostgreSQL — candidate history")]
+  Dispatch -->|"latest cursor; rebuildable"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"after durable history; cursor only"| SignalR["Azure SignalR Service"]
+  History -->|"selected match event pages"| API
+  SignalR -. "refresh hint; no football facts" .-> Browser
+  API -. "bounded source evidence; hypothesis only" .-> Foundry["Microsoft Foundry project agents"]
 ```
 
-The latest dated read-only inventory in the repository is 2026-10-19. It records an API-only DEV revision with local runtime configuration, no EventWorker app, and no runtime endpoint settings for candidate Event Hubs, PostgreSQL, Redis or Blob checkpointing; SignalR was also absent at that observation. This is a historical snapshot, not a fresh inspection of Azure. The previously recorded Azure demo proves external HTTPS ingress and health checks only; it does not prove live candidate streaming or Foundry analysis.
+The API simulation service publishes records to Event Hubs; it does not send the UI a local fixture or bypass the broker. EventWorker persists the source envelope or a durable poison record in the candidate outbox before committing the Blob checkpoint. The API dispatcher writes persisted candidate history and the Redis cursor, then sends SignalR a cursor-only hint. The UI retrieves event pages from the API. PostgreSQL is the durable store; Redis is a rebuildable cursor cache. These candidate tables are isolated from canonical match tables, and replayed source records do not establish canonical football facts.
 
-## Azure candidate topology — declared in code, not deployment proof
+The analyst route is a separate API request: it reads a bounded prefix of persisted candidate events and can call an allowlisted Microsoft Foundry project agent. Its response is an evidence-bounded hypothesis. The repository does not implement a durable, automatic per-event Foundry report pipeline or a hosted multi-agent orchestration worker.
 
-```mermaid
-flowchart LR
-  Browser["Public browser"] --> ACAIngress["TLS-only Container Apps ingress"]
-  ACAIngress --> API["API Container App + React assets"]
-  API -->|"packaged raw candidate source"| JSON["Candidate JSON"]
-  subgraph VNet["Existing pm-dev-vnet"]
-    API -->|"managed identity + PostgreSQL runtime role"| PG[("PostgreSQL Flexible Server")]
-    API -->|"managed identity"| EH[("Event Hubs candidate stream")]
-    EH --> Worker["Separate EventWorker Container App"]
-    Worker -->|"Blob checkpoint after durable stage"| Blob[("Private Blob checkpoint")]
-    Worker --> PG
-    API -->|"candidate history + cursor"| Redis[("Azure Managed Redis")]
-    API --> SignalR["Azure SignalR"]
-  end
-  API -. "bounded hypothesis request" .-> Foundry["Existing Foundry project agents"]
-  SignalR -. "cursor only" .-> Browser
-```
+## Azure implementation evidence
 
-`infra/private-dev-topology.bicep` and the Azure DevOps templates declare this opt-in integration against the existing `pm-dev-vnet`, PostgreSQL server, Redis and Foundry project. The pipeline parameter `enableCandidateFeed` defaults to `true`; the separate deployment parameter `enableDevDelivery` defaults to `false`. A release still requires owner approval for the exact plan and protected environment gates. The API can compose Azure PostgreSQL, Event Hubs, managed-identity Redis, SignalR and candidate Foundry adapters only when the required settings and identities exist. The EventWorker is a separate image process/app in the topology. No arrow here claims that resources, role assignments, private DNS or the full end-to-end route are currently connected.
+- **Implemented in source/configuration:** the API and EventWorker Azure profiles; Event Hubs candidate producer/consumer; PostgreSQL Entra data-source and candidate persistence; Redis Entra access; Azure SignalR provider; Blob checkpoints; Foundry project-agent request adapter; Bicep resource/settings/role declarations; and a separate EventWorker Container App.
+- **Observed in owner-supplied DEV screenshots dated 2026-10-20:** application builds labelled `68` and `69`; the candidate-live page rendered a source-feed state, event count, selected match, and player positions; the analyst screen displayed six selected source events. This is browser/UI evidence only; it does not identify which Azure services served the data or prove event-bus, database, cache, SignalR, or Foundry connectivity.
+- **Additional observed UI/network evidence:** a supplied browser capture showed candidate status requests returning `401` with `invalid_token` and audience `(null)`. This demonstrates an authentication/configuration failure for those requests, not a successful authenticated session.
+- **Not established by these observations:** current Azure resource inventory, successful database migration, end-to-end Event Hubs consumption, private Blob checkpoint access, Redis writes, Azure SignalR negotiation/notifications, successful Foundry answers, or automatic hot-event reporting.
 
-The candidate stream writes to separate candidate staging/history records and does not admit canonical facts. Canonical Event Hubs-to-match-ledger admission, a public edge for any internal-only topology, and a consuming AgentWorker explanation workflow remain distinct design/release decisions. See [target Azure HLD](06-target-azure-hld.md), [IaC reconciliation](../engineering/EP02-S01-IAC-RECONCILIATION.md), and the [live integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+The repository's last read-only Azure inventory is dated 2026-10-19 and is historical. This session could not read current Azure account state, so it does not replace that inventory with new cloud claims. The screenshots are retained as later app-surface evidence in the [integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
 ## Environment and release controls
 
-- LOCAL uses Docker PostgreSQL, Redis and Kafka plus explicit local adapters.
-- DEV/STAGE/PRODUCTION use Azure services; local adapters are rejected outside Development.
-- Azure DevOps owns CI/CD. Image publishing and app/infrastructure deployment use separate workload identities and immutable image digests.
-- What-if, static compilation, or a green CI pipeline does not authorize Azure mutation. DEV requires change-specific owner approval and protected gates; this repository cannot assert external Azure DevOps permission configuration.
+- DEV, STAGE and PRODUCTION use Azure services only. LOCAL uses its separate Docker adapters, documented in the [local development guide](../engineering/M02-LOCAL-DEVELOPMENT.md); it is not part of this deployment diagram.
+- `enableDevDelivery` is default-off. Within the guarded path `enableCandidateFeed` defaults on; the Bicep module itself defaults candidate provisioning off unless the pipeline passes the flag.
+- The release requires reviewed what-if output, immutable image digest, exact-change owner approval, and the protected Azure DevOps environment. A successful validation pipeline does not deploy by itself.
+- No Azure resource was provisioned or changed for this documentation update.

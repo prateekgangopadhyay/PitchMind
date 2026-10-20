@@ -1,46 +1,55 @@
 # PitchMind
 
-Evidence-first football intelligence for match exploration and analysis. The local candidate-live path streams source events for visualization; it does not treat the unvalidated feed as canonical football facts.
+Evidence-first football intelligence for match exploration and analysis. The application includes a DEV candidate-live path for visualizing source events; it does not treat the unvalidated feed as canonical football facts.
 
 ## Architecture at a glance
 
-The diagrams below summarize the implemented application boundaries. **LOCAL** is the runnable Docker-backed path. Azure adapters exist in code, but their end-to-end cloud configuration is not verified by these diagrams.
+The C4 views below describe the **Azure DEV application path implemented in the repository**. They use Azure services only. The release template declares these resources, identities and settings, but the diagrams do not prove that every resource, network route, identity grant or runtime connection is healthy. Owner-supplied DEV screenshots show the candidate UI rendering source events and positions; see the [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the evidence limits. LOCAL Docker topology is documented in the [local development guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
 
 ### C4 Level 1 — System context
 
 ```mermaid
 flowchart LR
-  User["Fan / analyst"] --> App["PitchMind"]
-  Source["Candidate match JSON"] -. "local simulation input" .-> App
-  Entra["Microsoft Entra ID"] -. "Azure identity provider" .-> App
-  App -. "bounded explanation integration; runtime composition unverified" .-> Foundry["Microsoft Foundry"]
+  User["Fan / analyst"] --> Web["PitchMind React UI"]
+  Web -->|"bearer access token"| API["PitchMind API — Azure Container Apps"]
+  Web <-->|"interactive sign-in / token"| Entra["Microsoft Entra ID"]
+  Source["Synthetic candidate JSON packaged with API image"] --> API
+  API --> EH["Azure Event Hubs"]
+  EH --> Worker["PitchMind EventWorker — Azure Container Apps"]
+  Worker --> PG[("Azure Database for PostgreSQL Flexible Server")]
+  PG --> Dispatch["Candidate outbox dispatcher"]
+  Dispatch --> Redis[("Azure Managed Redis — cursor cache")]
+  Dispatch --> SignalR["Azure SignalR Service"]
+  SignalR -. "cursor notification" .-> Web
+  Web -->|"selected-match event pages"| API
+  API -. "bounded evidence hypothesis; runtime call unverified" .-> Foundry["Microsoft Foundry project agents"]
 ```
 
-### C4 Level 2 — Containers
+### C4 Level 2 — Azure DEV containers and data stores
 
 ```mermaid
 flowchart LR
-  Browser["React UI"] --> API["ASP.NET Core API / BFF"]
-  API -->|"ordered candidate events"| Kafka[("Kafka — LOCAL")]
-  Kafka --> Worker["EventWorker"]
-  Worker -->|"durable stage before broker acknowledgement"| Outbox[("PostgreSQL candidate outbox")]
+  Browser["React UI"] --> API["ASP.NET Core API — Azure Container Apps"]
+  API -->|"source-order candidate events"| EH[("Azure Event Hubs")]
+  EH --> Worker["EventWorker — Azure Container Apps"]
+  Worker -->|"durable stage before checkpoint"| Outbox[("Azure PostgreSQL — candidate outbox")]
   Outbox --> Dispatch["API outbox dispatcher"]
-  Dispatch -->|"event history"| PostgreSQL[("PostgreSQL")]
-  Dispatch -->|"latest cursor"| Redis[("Redis — rebuildable cache")]
-  Dispatch -->|"cursor only"| SignalR["SignalR"]
+  Dispatch -->|"event history"| PostgreSQL[("Azure PostgreSQL — candidate history")]
+  Dispatch -->|"latest cursor"| Redis[("Azure Managed Redis — rebuildable cache")]
+  Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
   SignalR -. "refresh notification" .-> Browser
   PostgreSQL -->|"ordered event pages"| API
   API -->|"match data"| Browser
 ```
 
-### C4 Level 3 — Application components
+### C4 Level 3 — Azure DEV application components
 
 ```mermaid
 flowchart LR
   subgraph Simulation["Simulation service"]
     JSON["Candidate JSON reader"] --> Publisher["Source-order event publisher"]
   end
-  Publisher --> Broker[("Kafka — LOCAL")]
+  Publisher --> Broker[("Azure Event Hubs")]
   Broker --> Consumer["EventWorker consumer"]
   Consumer --> Stage["PostgreSQL candidate outbox"]
   Stage --> Dispatcher["Outbox dispatcher"]
@@ -56,37 +65,39 @@ flowchart LR
   AI -. "candidate text; not canonical facts" .-> UI
 ```
 
-### C4 Level 4 — Local deployment
+### C4 Level 4 — Azure DEV deployment boundary
 
 ```mermaid
 flowchart TB
-  Browser["Browser"] --> Vite["React dev server"]
-  Browser --> API["ASP.NET Core API — host process"]
-  API --> Kafka[("Docker Kafka")]
-  Worker["EventWorker — host process"] --> Kafka
-  API --> PostgreSQL[("Docker PostgreSQL")]
-  Worker --> PostgreSQL
-  API --> Redis[("Docker Redis")]
-  API --> SignalR["ASP.NET Core SignalR"]
-  SignalR -. "cursor notification" .-> Browser
+  Browser["Browser"] --> ACAIngress["Azure Container Apps HTTPS ingress"]
+  ACAIngress --> API["PitchMind API + React assets — ACA"]
+  API -->|"managed identity"| EH[("Azure Event Hubs")]
+  EH --> Worker["PitchMind EventWorker — separate ACA"]
+  Worker -->|"managed identity"| Blob[("Azure Blob checkpoint container")]
+  Worker -->|"Entra PostgreSQL principal"| PG[("Azure Database for PostgreSQL Flexible Server")]
+  API -->|"candidate outbox/history"| PG
+  API -->|"Entra data access"| Redis[("Azure Managed Redis")]
+  API --> SignalR["Azure SignalR Service"]
+  SignalR -. "cursor notification only" .-> Browser
+  API -. "configured project-agent request; live call unverified" .-> Foundry["Microsoft Foundry"]
 ```
 
 ### High-level application flow
 
-1. The local Simulation Service reads the candidate JSON and publishes each source-ordered event to Kafka.
-2. EventWorker stores the raw envelope in the PostgreSQL outbox before acknowledging it to Kafka.
-3. The API dispatcher writes event history to PostgreSQL and updates the Redis cursor. It then sends a cursor-only SignalR notification.
-4. The UI loads ordered event pages from the API/PostgreSQL path. SignalR prompts refresh; it does not carry match facts. Redis is a rebuildable projection, not the source of truth.
-5. The candidate AI Analyst can request a source-bounded hypothesis from a configured Foundry project agent; its output is not canonical match truth. The local request path is implemented, while a successful live Azure Foundry call and a canonical multi-agent explanation workflow are not verified.
+1. The API-hosted Simulation Service reads the candidate JSON packaged in its image and publishes source-order events to Azure Event Hubs.
+2. The separate EventWorker consumes Event Hubs, durably stages each raw envelope or poison record in the PostgreSQL candidate outbox, then advances the Blob checkpoint.
+3. The API dispatcher writes candidate event history to PostgreSQL and updates the rebuildable Redis cursor; it publishes a cursor-only Azure SignalR notification after durable processing.
+4. The UI reads ordered event pages and player-position fields from the API. SignalR prompts refresh; it does not carry match facts. PostgreSQL remains authoritative for persisted candidate records, which remain non-canonical.
+5. The AI Analyst API can send bounded, selected-match source evidence to an allowlisted Foundry project agent and return a labeled hypothesis. Automatic per-event report generation, successful live Foundry calls, and a canonical multi-agent workflow are not established by available evidence.
 
-The Azure profile has adapters for Event Hubs, PostgreSQL identity, Redis and Azure SignalR. Provisioning, identity configuration, and end-to-end Azure verification are separate from this local flow. Candidate source clock semantics, coordinate units and orientation, player metric definitions, event mappings, and football realism remain unverified.
+The DEV release template declares Azure runtime settings, services, identities and roles. The supplied screenshots show the deployed UI rendering candidate events and positions, but do not prove each data-plane connection. Candidate source clock semantics, coordinate units and orientation, player metric definitions, event mappings, and football realism remain unverified; see the [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
 ## Run locally
 
 Follow the [local infrastructure guide](docker/README.md) for the full setup and candidate-live walkthrough. Run each application process in its own terminal:
 
 ```bash
-# Terminal 1: Docker dependencies and schema
+# Terminal 1: Docker dependencies and schema (LOCAL only)
 ./scripts/dev-up.sh
 ./scripts/dev-migrate.py
 # Terminal 2
@@ -97,7 +108,7 @@ Follow the [local infrastructure guide](docker/README.md) for the full setup and
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-Open the Vite URL printed by the frontend command. Local infrastructure uses Docker PostgreSQL, Redis and Kafka; Azure credentials are not required. Do not use local adapters in DEV, STAGE or PRODUCTION.
+Open the Vite URL printed by the frontend command. LOCAL infrastructure uses Docker PostgreSQL, Redis and Kafka; Azure credentials are not required. DEV, STAGE and PRODUCTION use Azure services only.
 
 ## Project references
 
