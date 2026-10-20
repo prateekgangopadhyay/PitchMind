@@ -74,10 +74,25 @@ public static class AzureWorkerRoleProvisioner
             }
         }
 
-        await using (var harden = new NpgsqlCommand(
-                         "ALTER ROLE pitchmind_worker WITH LOGIN PASSWORD NULL NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS",
-                         connection))
-            await harden.ExecuteNonQueryAsync(cancellationToken);
+        await using (var verifyLeastPrivilege = new NpgsqlCommand("""
+                         SELECT rolcanlogin
+                            AND NOT rolsuper
+                            AND NOT rolcreatedb
+                            AND NOT rolcreaterole
+                            AND NOT rolreplication
+                            AND NOT rolbypassrls
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM pg_auth_members membership
+                                WHERE membership.member = role.oid)
+                         FROM pg_roles role
+                         WHERE role.rolname = @role
+                         """, connection))
+        {
+            verifyLeastPrivilege.Parameters.AddWithValue("role", RoleName);
+            if (await verifyLeastPrivilege.ExecuteScalarAsync(cancellationToken) is not true)
+                throw new InvalidOperationException("The PostgreSQL worker role is missing or has privileges beyond its restricted event-ingress grants.");
+        }
 
         await using var grants = new NpgsqlCommand("""
             GRANT CONNECT ON DATABASE pitchmind TO pitchmind_worker;

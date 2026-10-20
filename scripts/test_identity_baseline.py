@@ -70,6 +70,16 @@ class IdentityBaselineTests(unittest.TestCase):
         # Fail closed if this demo template starts declaring broader role scopes.
         self.assertNotRegex(demo, r"(?m)^\s*scope:\s*(?:resourceGroup\(\)|subscription\(\))")
 
+    def test_azure_worker_role_is_verified_without_altering_managed_role(self):
+        worker_role = (ROOT / "src/PitchMind.Infrastructure/Storage/AzureWorkerRoleProvisioner.cs").read_text()
+
+        self.assertIn("pgaadauth_create_principal_with_oid(@role, @oid, 'service', false, false)", worker_role)
+        self.assertNotIn("ALTER ROLE pitchmind_worker", worker_role)
+        for privilege in ("rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls"):
+            self.assertRegex(worker_role, rf"NOT {privilege}\b")
+        self.assertIn("FROM pg_auth_members membership", worker_role)
+        self.assertIn("has privileges beyond its restricted event-ingress grants", worker_role)
+
     def test_azure_pipeline_yaml_has_no_secret_shaped_parameters(self):
         # Structural scan of this YAML file only. This does not establish that
         # the Azure DevOps service connection exists or uses working federation.
