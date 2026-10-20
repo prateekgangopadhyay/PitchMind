@@ -1,5 +1,5 @@
 # PitchMind target Azure High-Level Design (C4 extension)
-**Status:** target only, not proof of integrated Azure deployment. **Change governance:** same-PR C4, LLD, API and ADR for material architecture changes.
+**Status:** **TARGET** design only; not proof of integrated Azure deployment. **CURRENT** adapter/code boundaries are summarized below. **Change governance:** same-PR C4, LLD, API and ADR for material architecture changes.
 
 ## Principles
 Hexagonal/Clean Architecture (Domain zero external dependencies); DDD match/fixture/possession/evidence bounded contexts; domain clocks deterministic; schema/versioned source provenance; append-only PostgreSQL as correctness boundary, at-least-once Event Hubs/Service Bus transport; Redis/search/ADX projections only; zero facts sourced from frontend or LLM; selected-time replay isolated from live head and canonical writes. LOCAL adapters via Docker; deployed environments Azure-only.
@@ -46,12 +46,12 @@ For the current `canonical-dev-topology.bicep` candidate, ACA is internal with p
 | Boundary | LOCAL | DEV/STAGE/PROD | Verification |
 |---|---|---|---|
 | Web/API | .NET + Vite or same-origin Docker | ACA workload, TLS, managed identity | BFF smoke, auth, health, CSP |
-| Stream | file replay / in-process adapter | Event Hubs with partition by matchId | 500eps defined burst, lag, idempotency |
+| Stream | Docker Kafka for raw candidate simulation | Event Hubs adapter for candidate records; no canonical source admission | local replay/order tests; cloud connectivity still unverified |
 | Canonical truth | PostgreSQL Docker | Flexible Server private DNS/VNet, independent migration ID | restart/PITR/transaction/roles |
 | Cache | Redis Docker (optional) | Azure Managed Redis | outage bypass and revision-keyed invalidation |
 | Commands | local queue adapter | Service Bus DLQ, idempotent inbox | retry poison and recovery |
-| Live | local SignalR server | Azure SignalR | negotiated group access, reconnect + backfill |
-| AI | deterministic fallback/mock | Foundry model deployment via managed identity | grounding/timeout/token budget |
+| Live | ASP.NET Core SignalR; cursor-only updates | Azure SignalR provider in candidate profile | deployed identity, group authorization, reconnect + backfill |
+| AI | candidate question route calls a configured Foundry project agent; canonical AgentWorker is a scaffold | Project-agent or model-deployment adapters in code; no end-to-end canonical workflow | live call, response-grounding and outage evidence |
 | Tactical knowledge RAG | embedded, bounded lexical retrieval | Azure AI Search vector + semantic hybrid query using managed identity | corpus provenance, profile allowlist, grounding/refusal and outage tests; target only |
 | Jobs | local worker | Azure Functions / ACA Job | idempotent status, export permissions |
 | Identity | explicit dev-only test auth | Entra auth code+PKCE, roles `fan/analyst/admin` | unauthenticated/denied cases |
@@ -68,7 +68,34 @@ For the current `canonical-dev-topology.bicep` candidate, ACA is internal with p
 - Tactical knowledge search is a separate read-only corpus of reviewed educational summaries and source links. It is profile-topic-filtered, hybrid-ranked and limited to three bounded passages. It may explain a general concept but cannot establish that an event, player action, intent or outcome occurred. The canonical-evidence search projection is distinct from this knowledge index.
 - React shell renders factual DTOs only; no hardcoded football results or derived metric business logic.
 
-**Observed code slice (different from target):** EP04-S03 currently composes an Azure-only EventWorker publisher over the PostgreSQL leased outbox and an opt-in EventProcessorClient projection consumer. Its publisher sends persisted `ProjectionPublishedV1` records to Event Hubs; its consumer reads those messages and writes a payload-bound inbox receipt and rebuildable latest snapshot to PostgreSQL before updating the Azure Blob checkpoint. This is the reverse of the corrected ingress-first target above. The API Azure profile now has a source path for PostgreSQL Entra-token authentication, and the guarded DEV topology candidate includes a one-shot schema migration job plus a restricted API role. That code has not been deployed or exercised against Azure. `CandidateFeed:Enabled` remains false in the current DEV topology candidate, so this change does not provide source ingestion into the canonical event ledger, post-commit Redis fan-out, Azure SignalR notifications, or a live simulation. The UI/API match read contract also remains incomplete until a canonical match projection is admitted. Existing local automated-test evidence is code-level only; no Azure credential, network connection, cloud checkpoint, or deployment has been exercised.
+## Implemented code paths versus target
+
+The canonical ingress diagram above is a **target**, not the current candidate pipeline. Current code has these separate paths:
+
+```mermaid
+flowchart LR
+  Source["Candidate JSON in application image"] --> API["PitchMind.Api candidate simulation"]
+  API -->|"LOCAL"| Kafka[("Docker Kafka")]
+  API -. "Azure profile" .-> EH[("Azure Event Hubs")]
+  Kafka --> Worker["EventWorker candidate consumer"]
+  EH --> Worker
+  Worker -->|"raw candidate outbox before broker checkpoint"| PG[("PostgreSQL candidate tables")]
+  PG --> Dispatcher["API candidate outbox dispatcher"]
+  Dispatcher -->|"history"| PG
+  Dispatcher -->|"cursor projection"| Redis["Redis"]
+  Dispatcher -->|"cursor only"| SignalR["SignalR"]
+  PG --> UI["React candidate event pages"]
+  SignalR -. "refresh hint" .-> UI
+  UI -->|"candidate analyst question"| AnalystAPI["API Foundry project-agent adapter"]
+  AnalystAPI -->|"bounded source records"| PG
+  AnalystAPI -. "hypothesis response" .-> Foundry["Foundry project agent"]
+  BFF["Canonical BFF"] -->|"persisted canonical readers"| PGCanonical[("PostgreSQL canonical schema")]
+  AgentWorker["AgentWorker scaffold; no queue consumer"]
+```
+
+LOCAL uses Kafka, Docker PostgreSQL/Redis and local SignalR. In Azure profile, source code composes Event Hubs producer/consumer, Blob checkpoints, managed-identity PostgreSQL/Redis, and Azure SignalR when settings and identities are supplied. The private DEV Bicep/pipeline code declares an API app, separate EventWorker app, candidate Event Hubs entity, checkpoint storage, SignalR, role assignments, and database migration configuration. `enableCandidateFeed` defaults true in the YAML parameter set, while `enableDevDelivery` defaults false. These are code/configuration facts only; no deployment is implied.
+
+Canonical BFF readers can use PostgreSQL in either profile when the connection string and corresponding identity/configuration are present. If no Azure connection is configured, the Azure composition registers unavailable adapters. The EventWorker's projection publisher/consumer handles `ProjectionPublishedV1` and its own inbox/snapshot/checkpoint path; it does not map this raw candidate JSON into canonical events. Candidate analysis is a direct API-to-Foundry project-agent request with bounded persisted source events; `AgentWorker` does not consume a queue or host the candidate AI Analyst route. There is no demonstrated canonical, end-to-end Azure ingestion or explanation flow.
 
 ## Critical flows
 ```mermaid
@@ -111,5 +138,6 @@ Private endpoint DNS/route and ACA VNet integration REQUIRED: inaccessible resou
 Failure: Event Hubs lag delays canonical admission; PostgreSQL transaction failure prevents checkpoint advancement and causes safe redelivery; PostgreSQL loss -> stale/503, not invented live state; Redis down -> canonical read; SignalR down -> polling/backfill; a failed outbox handler retries independently without rolling back canonical admission; Foundry down -> labeled deterministic fallback; Service Bus down -> transactional outbox recovery; invalid/late input -> durable quarantine or append correction/revision, never rewrite canonical history.
 Monitor: correlation IDs, lag/offset, error/quarantine, transaction retry, replay mismatch, p50/p95/p99 API latency, AI costs/tokens, user-facing staleness, uptime and monthly burn. FinOps approval required for model and ingestion quotas. Restore drills, backup/PITR and immutable rollback are release gates.
 
-## Explicit differences from current prototype
-`SyntheticMatchService` remains a fixture-backed application component for test scenarios; it is not registered or resolved by the API routes. Match routes currently return `503 MATCH_DATA_UNAVAILABLE` until API route composition is replaced with a canonical, revisioned read port backed by admitted PostgreSQL data. API service registration binds `InMemoryMatchEventStore`; independent `PostgresMatchEventStore` stores only `MatchEvent`. No live Azure adapters/auth/Foundry workers yet. `docs/engineering/evidence/2026-10-08-DEV-DEPLOYMENT.md` proves a **bounded offline** DEV prototype only. No new DEV deployment authorized by this HLD.
+## Deployment and verification status
+
+A dated Azure deployment record proves a minimal offline API workload and health probes, not the candidate stream or the target canonical pipeline. The latest repository-recorded read-only resource/runtime observation is in [DEV live integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md); it must not be treated as a fresh Azure inspection. Current adapter code requires change-specific approval, resource/identity/network configuration and an end-to-end smoke before any cloud integration can be called operational. The repository's deployment restrictions and owner gates remain mandatory.

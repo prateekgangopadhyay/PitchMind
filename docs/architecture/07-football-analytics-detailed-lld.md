@@ -1,7 +1,11 @@
 # Football Intelligence Detailed LLD — canonical match truth to explainable tactical insight
 **Status:** target LLD; reviewed references: [current core LLD](05-football-lld.md), [legacy football vocabulary](https://github.com/prateekgangopadhyay/PitchMind_Old/blob/main/docs/domain/football-intelligence-ubiquitous-language.md). Legacy source is advisory, not imported.
 **Football truth invariants:** Position ≠ Role; Formation ≠ Shape; Event ≠ Tactical Mechanism; Sequence ≠ Causation; possession ≠ territory; a detector never guesses unobserved speed/pressure.
-**Approved demo prerequisite:** owner-supplied JSON is now present on newer main, containing 2,199 event records and event-level player positions (see [source profile](../data/MANU-LIV-SOURCE-PROFILE.md)); no source-specific **canonical importer or licensed/provenance certification** exists yet.
+**Candidate feed status:** owner-supplied JSON is present with 2,199 event records and event-level player positions (see [source profile](../data/MANU-LIV-SOURCE-PROFILE.md)). The owner confirmed synthetic provenance and redistribution permission. No source-specific canonical importer/admission policy exists; clock, coordinates, player metrics, event mappings and football realism remain unverified.
+
+## Current implementation versus this target LLD
+
+This document defines the canonical football analytics target, not a claim that the full analytics engine is running in production. Current code includes canonical domain validation, event replay and revisioned projections, a deterministic pressing-sequence candidate, evidence-graph contracts and PostgreSQL-backed canonical readers. The candidate MANU–Liverpool UI path stores raw source envelopes in separate candidate tables and does not feed these canonical reducers or detectors. The `MatchIntelligenceContextBuilder`, candidate-generation adapter and `ExplanationAgentOrchestrator` are internal Application/AgentWorker components; only the separate candidate Analyst API directly calls a configured Foundry project agent. Its answer is a source-bounded hypothesis, not a persisted canonical explanation. See [C4 component realization](03-components.md), [API registry](../api/API.md) and [execution register](../backlog/STORY-EXECUTION.md) for code/test/acceptance status.
 
 ## A. DDD aggregates and typed objects
 ```mermaid
@@ -72,7 +76,7 @@ Competition context is explicit and optional: `competitionId`, `rulesVersion`, a
 - Late correction: append new source revision/supersession event, invalidate projected descendants and provide correction marker. Never patch raw event row; replay by version gives reproducibility.
 
 ## C. Pitch coordinates and tracking
-Canonical pitch coordinate system = metres, configured length/width (demo 105 × 68 only when feed declares it). Raw stadium orientation and source unit retained with transformation version. Team-relative x increases toward attacking goal:
+Canonical pitch coordinate system = metres, configured length/width (105 × 68 only when the canonical source contract declares it). This coordinate contract does not apply to the unvalidated candidate JSON rendered for preview. Raw stadium orientation and source unit retained with transformation version. Team-relative x increases toward attacking goal:
 - `TeamRelativePoint = Transform(raw, teamId, period, attackingDirection, pitchMetres)`. Both teams transformed to the SAME selected reference when computing pressure/space. Mirror x or y invariance tests preserve detector classification.
 - Reject NaN/Infinity and out-of-bounds points; admit missing ball/player positions as missing (nullable). Track `sampledAt, sourceVersion, observed|interpolated|missing, uncertainty`.
 - 30-second tracking samples represent snapshots, not continuous runs. No line break, body orientation, cover shadow, pressing intensity, pitch control or sprint-speed claim from snapshots alone.

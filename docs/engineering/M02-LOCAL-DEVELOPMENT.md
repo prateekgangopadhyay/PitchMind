@@ -12,21 +12,37 @@
 
 ## First run and readiness
 
-From the repository root:
+From the repository root, start Docker dependencies and apply the local schema:
 
 ```bash
 ./scripts/dev-up.sh
-./scripts/dev-health.sh
-Runtime__Profile=local DOTNET_ENVIRONMENT=Development ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/PitchMind.Api --urls http://127.0.0.1:5080
+./scripts/dev-migrate.py
 ```
 
-In another terminal, verify all three local processes/services:
+Then run each long-lived process in its own terminal from the repository root:
+
+```bash
+# Terminal 1
+./scripts/start-local-api.sh
+```
+
+```bash
+# Terminal 2
+./scripts/start-local-eventworker.sh
+```
+
+```bash
+# Terminal 3
+npm --prefix frontend run dev -- --host 127.0.0.1
+```
+
+In a fourth terminal, check the API and local dependency readiness:
 
 ```bash
 ./scripts/dev-health.sh http://127.0.0.1:5080
 ```
 
-The optional API URL must use `http://127.0.0.1` or `http://localhost`; the script checks the API `/health` readiness endpoint. Run `./scripts/dev-api-health.sh` to check the API independently. Start the frontend separately with `cd frontend && npm ci && npm run dev` when needed.
+The API URL must use `http://127.0.0.1` or `http://localhost`; the script checks API readiness. Open the Vite URL printed by the frontend command. Detailed LOCAL candidate-feed setup, authentication behavior and teardown are in [`docker/README.md`](../../docker/README.md).
 
 The default database image is `postgres:17-alpine`. If an existing local data volume was created by another supported PostgreSQL major version, select the matching image explicitly, for example `POSTGRES_IMAGE=postgres:16-alpine ./scripts/dev-up.sh`. The selector accepts only `postgres:<major>-alpine` tags and can also be set in the private `docker/.env` file. For an existing volume, make sure the selected image is already present locally: the startup guard inspects `PG_VERSION` with `--pull=never`, then Compose starts only if the major versions match. A mismatch stops startup without changing the volume. Back up and perform a PostgreSQL major-version migration before changing an existing volume's version.
 
@@ -55,9 +71,11 @@ Azure DevOps validates .NET restore/build/tests, React `npm ci`/build/test/lint,
 - Existing Bicep baseline was not validated during M01; compilation may reveal errors to resolve before M02 acceptance.
 - No observed Azure DevOps PR run, deliberate failure-gate run, or required-check policy is recorded by this story's local evidence.
 
-## Current limitations and evidence
+## Current implementation boundaries and evidence
 
-- The API and workers do not yet use PostgreSQL or Redis as canonical persistence/cache; these containers provide local infrastructure only.
-- Ordinary match reads return `503 MATCH_DATA_UNAVAILABLE` (the analyst endpoint may return `429` when rate-limited before its handler). Enabling match reads requires replacing API route composition with a canonical, revisioned PostgreSQL-backed read port. Local startup and health do not certify feed clock, coordinate units/orientation, player metrics, event mappings or football realism.
+- The LOCAL candidate simulation path uses Kafka for source envelopes, PostgreSQL for its durable outbox/history, Redis for the rebuildable latest cursor, and SignalR for cursor-only notifications. Candidate records do not enter canonical football tables.
+- The canonical BFF has PostgreSQL-backed readers for persisted canonical projections, events, insights, evidence and tracking frames when its runtime profile, connection, schema and data are configured. Legacy `/api/v1/matches` routes deliberately return `503 MATCH_DATA_UNAVAILABLE`; this does not mean canonical BFF readers are absent. The synthetic Manu–Liverpool candidate feed is not admitted as canonical data.
+- Candidate simulation and candidate analyst routes are separate from canonical football analysis. The local API can call an allowlisted Foundry project agent for a bounded source-evidence hypothesis when configured; the separate AgentWorker explanation orchestrator is library/scaffold code and is not a live canonical explanation consumer. Local startup does not verify Azure identities, services or connectivity.
+- Coordinate units/orientation, clock and period semantics, player metric meanings, event mappings and football realism for the candidate source remain unverified. Candidate positions are previewed without asserting canonical pitch measurements.
 - A Docker daemon is required to execute the Compose start, health, and teardown flow. Static Compose validation does not substitute for a successful fresh-machine Docker smoke.
-- Run `./scripts/validate-all.sh` for repository checks. Run `./scripts/test-postgres.sh` only after local PostgreSQL is healthy; it creates and drops an isolated test database.
+- Run `./scripts/validate-all.sh` for repository checks. Run `./scripts/test-postgres.sh` only after local PostgreSQL is healthy; it creates and drops an isolated test database. Neither command proves Azure runtime integration or story acceptance.

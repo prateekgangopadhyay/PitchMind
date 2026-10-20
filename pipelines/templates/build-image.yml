@@ -30,6 +30,15 @@ steps:
       tag="$(Build.SourceVersion)"
       loginServer=$(az acr show --name "$registry" --query loginServer -o tsv)
       az acr login --name "$registry" --output none
+      # Registry cache export is unsupported by buildx's default Docker driver.
+      # Hosted agents are ephemeral, so create and bootstrap the container driver.
+      builder="pitchmind-ci"
+      if docker buildx inspect "$builder" >/dev/null 2>&1; then
+        docker buildx use "$builder"
+      else
+        docker buildx create --name "$builder" --driver docker-container --use
+      fi
+      docker buildx inspect --bootstrap "$builder"
       cache_ref="$loginServer/$repository:buildcache"
       cache_from_args=()
       if az acr repository show --name "$registry" --image "$repository:buildcache" --query digest -o tsv --only-show-errors >/dev/null 2>&1; then

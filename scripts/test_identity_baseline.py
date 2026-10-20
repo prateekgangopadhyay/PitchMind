@@ -64,6 +64,8 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertIn("npm ci --no-audit", frontend_template)
         self.assertIn("npm audit --audit-level=low", frontend_template)
         self.assertIn("dotnet restore PitchMind.slnx --locked-mode", dotnet_template)
+        self.assertIn('docker buildx create --name "$builder" --driver docker-container --use', build_template)
+        self.assertIn('docker buildx inspect --bootstrap "$builder"', build_template)
         self.assertIn("--cache-to \"type=registry,ref=$cache_ref,mode=max\"", build_template)
         self.assertIn("--push .", build_template)
 
