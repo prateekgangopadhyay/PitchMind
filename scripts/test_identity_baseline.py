@@ -244,6 +244,24 @@ class IdentityBaselineTests(unittest.TestCase):
         with self.subTest(mutation="pre-mutation approval bypasses validation"), self.assertRaises(PipelinePolicyError):
             _validate_pipeline_policy(approval_bypasses_validation, build_template, deploy_template)
 
+    def test_candidate_feed_defaults_on_while_database_and_redis_provisioning_stay_off(self):
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+        build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()
+        deploy_template = (ROOT / "pipelines/templates/deploy-image.yml").read_text()
+
+        for parameter, current, invalid in (
+            ("enableCandidateFeed", "true", "false"),
+            ("provisionPostgres", "false", "true"),
+            ("provisionRedis", "false", "true"),
+        ):
+            candidate = pipeline.replace(
+                f"- name: {parameter}\n  type: boolean\n  default: {current}",
+                f"- name: {parameter}\n  type: boolean\n  default: {invalid}",
+                1,
+            )
+            with self.subTest(parameter=parameter, default=invalid), self.assertRaises(PipelinePolicyError):
+                _validate_pipeline_policy(candidate, build_template, deploy_template)
+
     def test_policy_requires_both_manual_approval_tasks(self):
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
         build_template = (ROOT / "pipelines/templates/build-image.yml").read_text()

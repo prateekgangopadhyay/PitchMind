@@ -15,7 +15,7 @@ Canonical rules:
 - Record status, precise evidence/commit/environment and design changes in the relevant existing docs. Do not invent test results or defer blockers silently.
 - Use [all 59 story dependency routes](../docs/operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) and [28-role registry](../docs/operating-model/COUNCIL-SKILL-REGISTRY.json) to choose a DRI and independent reviewers; do not create a second status authority or fake engineer assignments.
 - The supplied source JSON at `data/simulations/manu-liv-match-dataset.json` is **profiled but not rights/football-certified**; player `heartRate` etc must not be treated as actual biometrics. No hardcoded football facts in C# / React; manifest and source-specific adapter required.
-- In Azure DevOps, DEV release parameters are disabled by default; *two mandatory manual gates plus a protected Environment* are required after obtaining the **owner's explicit change-specific approval**; a pipeline resume without that approval is still forbidden.
+- In Azure DevOps, `enableCandidateFeed` defaults to true, while PostgreSQL and Redis provisioning remain default-off. *Two mandatory manual gates plus a protected Environment* are required after obtaining the **owner's explicit change-specific approval**; a pipeline resume without that approval is still forbidden.
 
 ## EP07 / EP08-S06 — five discoverable design specialist skills
 

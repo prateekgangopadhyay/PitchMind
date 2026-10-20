@@ -1,4 +1,4 @@
-# Azure DevOps is the only CI/CD orchestrator. DEV delivery remains explicitly opt-in.
+# Azure DevOps is the only CI/CD orchestrator. DEV changes remain behind the guarded release stages.
 parameters:
 - name: runGateFailureProbe
   type: boolean
@@ -74,7 +74,7 @@ parameters:
   default: false
 - name: enableCandidateFeed
   type: boolean
-  default: false
+  default: true
 - name: devSignalRName
   type: string
   default: pm-dev-signalr

@@ -116,13 +116,19 @@ def validate_pipeline_policy(
     )
     if delivery_parameter is None or delivery_parameter.get("type") != "boolean":
         raise PipelinePolicyError("DEV delivery must remain a boolean parameter")
-    for parameter_name in ("provisionPostgres", "provisionRedis", "enableCandidateFeed"):
+    for parameter_name in ("provisionPostgres", "provisionRedis"):
         option = next(
             (item for item in parameters if isinstance(item, dict) and item.get("name") == parameter_name),
             None,
         )
         if option is None or option.get("type") != "boolean" or option.get("default") is not False:
             raise PipelinePolicyError(f"{parameter_name} must remain a boolean default-off resource option")
+    candidate_feed_option = next(
+        (item for item in parameters if isinstance(item, dict) and item.get("name") == "enableCandidateFeed"),
+        None,
+    )
+    if candidate_feed_option is None or candidate_feed_option.get("type") != "boolean" or candidate_feed_option.get("default") is not True:
+        raise PipelinePolicyError("enableCandidateFeed must remain a boolean default-on deployment option")
     for parameter_name, allowed_defaults in (
         ("devInfrastructureServiceConnection", ("unconfigured", "pitchmind-dev-infrastructure-wif")),
         ("devAcaSubnetCidr", ("", "10.42.0.0/27")),
