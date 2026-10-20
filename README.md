@@ -1,120 +1,89 @@
 # PitchMind
 
-Evidence-first football intelligence for match exploration and analysis. The application includes a DEV candidate-live path for visualizing source events; it does not treat the unvalidated feed as canonical football facts.
+**Evidence-first football intelligence for exploring a match as it unfolds.** PitchMind brings match events, player positions, replay and tactical questions into one workspace. Its demo uses an owner-approved synthetic Manchester United–Liverpool feed; candidate data is clearly distinguished from verified, canonical match facts.
 
-## Architecture at a glance
+## Hackathon demo
 
-The C4 views below describe the **Azure DEV application path implemented in the repository**. They use Azure services only. The release template declares these resources, identities and settings, but the diagrams do not prove that every resource, network route, identity grant or runtime connection is healthy. Owner-supplied DEV screenshots show the candidate UI rendering source events and positions; see the [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the evidence limits. LOCAL Docker topology is documented in the [local development guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
+1. Open the match workspace and select the available candidate match.
+2. Follow the event timeline and player positions on the pitch as the feed advances.
+3. Pause live playback or move the replay control to inspect an earlier source time.
+4. Ask the Match Analyst a question about the selected match evidence. Responses are intended to be bounded hypotheses, not authoritative facts.
 
-### C4 Level 1 — System context
+**What to look for:** source event sequence and clock, changing player positions, selected-time replay, and the distinction between observed source data and verified analysis. The synthetic feed's clock semantics, coordinate orientation/units, metric definitions and event mappings are still being validated. Do not interpret it as real match data.
 
-```mermaid
-flowchart LR
-  User["Fan / analyst"] --> Web["PitchMind React UI"]
-  Web -->|"bearer access token"| API["PitchMind API — Azure Container Apps"]
-  Web <-->|"interactive sign-in / token"| Entra["Microsoft Entra ID"]
-  Source["Synthetic candidate JSON packaged with API image"] --> API
-  API --> EH["Azure Event Hubs"]
-  EH --> Worker["PitchMind EventWorker — Azure Container Apps"]
-  Worker --> PG[("Azure Database for PostgreSQL Flexible Server")]
-  PG --> Dispatch["Candidate outbox dispatcher"]
-  Dispatch --> Redis[("Azure Managed Redis — cursor cache")]
-  Dispatch --> SignalR["Azure SignalR Service"]
-  SignalR -. "cursor notification" .-> Web
-  Web -->|"selected-match event pages"| API
-  API -. "bounded evidence hypothesis; runtime call unverified" .-> Foundry["Microsoft Foundry project agents"]
-```
+## Azure architecture
 
-### C4 Level 2 — Azure DEV containers and data stores
+The DEV target runs on Azure services. Local development has a separate Docker-based topology.
 
 ```mermaid
 flowchart LR
-  Browser["React UI"] --> API["ASP.NET Core API — Azure Container Apps"]
-  API -->|"source-order candidate events"| EH[("Azure Event Hubs")]
-  EH --> Worker["EventWorker — Azure Container Apps"]
-  Worker -->|"durable stage before checkpoint"| Outbox[("Azure PostgreSQL — candidate outbox")]
-  Outbox --> Dispatch["API outbox dispatcher"]
-  Dispatch -->|"event history"| PostgreSQL[("Azure PostgreSQL — candidate history")]
-  Dispatch -->|"latest cursor"| Redis[("Azure Managed Redis — rebuildable cache")]
-  Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
-  SignalR -. "refresh notification" .-> Browser
-  PostgreSQL -->|"ordered event pages"| API
-  API -->|"match data"| Browser
+  Browser[React web app] -->|HTTPS / Entra token| API["ASP.NET Core API<br/>Azure Container Apps"]
+  Entra[Microsoft Entra ID] -. sign-in .-> Browser
+  API -->|candidate events| EH[Azure Event Hubs]
+  EH --> Worker["EventWorker<br/>Azure Container Apps"]
+  Worker -->|durable stage| PG[(Azure Database for PostgreSQL)]
+  Worker --> Blob[(Azure Blob checkpoint)]
+  PG --> Dispatcher[Candidate outbox dispatcher]
+  Dispatcher --> PG
+  Dispatcher --> Redis[(Azure Managed Redis)]
+  Dispatcher --> SignalR[Azure SignalR Service]
+  SignalR -. cursor notification .-> Browser
+  Browser -->|match pages / selected-time evidence| API
+  API -. bounded explanation request .-> Foundry[Microsoft Foundry agents]
 ```
 
-### C4 Level 3 — Azure DEV application components
+**Flow:** the API-hosted simulation publishes source-order events to Event Hubs. The EventWorker stages raw candidate records in PostgreSQL before advancing its Blob checkpoint. The API dispatcher persists candidate history, refreshes the Redis cursor and sends cursor-only SignalR notifications. The UI obtains match facts and event pages from the API; SignalR prompts a refresh and does not carry facts. PostgreSQL is the canonical store for admitted football data; this demo's candidate records remain separate and non-canonical.
 
-```mermaid
-flowchart LR
-  subgraph Simulation["Simulation service"]
-    JSON["Candidate JSON reader"] --> Publisher["Source-order event publisher"]
-  end
-  Publisher --> Broker[("Azure Event Hubs")]
-  Broker --> Consumer["EventWorker consumer"]
-  Consumer --> Stage["PostgreSQL candidate outbox"]
-  Stage --> Dispatcher["Outbox dispatcher"]
-  Dispatcher --> History["Candidate event history"]
-  Dispatcher --> Cursor["Redis cursor projection"]
-  Dispatcher --> Notifier["SignalR cursor publisher"]
-  History --> ReadAPI["Candidate page API"]
-  ReadAPI --> UI["React match view"]
-  Notifier -. "cursor; no match facts" .-> UI
-  Canonical["Canonical BFF read ports"] --> CanonicalPG[("PostgreSQL canonical projections")]
-  UI --> Canonical
-  Evidence["Selected-time evidence"] -. "read-only input" .-> AI["Foundry explanation adapter"]
-  AI -. "candidate text; not canonical facts" .-> UI
-```
+The diagram describes the intended Azure DEV service path in the repository. It is not evidence that the deployed Azure resources, identities, network routes or end-to-end runtime are healthy. The latest recorded cloud inventory is historical; see [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the dated evidence and outstanding checks.
 
-### C4 Level 4 — Azure DEV deployment boundary
+## AI and data boundaries
 
-```mermaid
-flowchart TB
-  Browser["Browser"] --> ACAIngress["Azure Container Apps HTTPS ingress"]
-  ACAIngress --> API["PitchMind API + React assets — ACA"]
-  API -->|"managed identity"| EH[("Azure Event Hubs")]
-  EH --> Worker["PitchMind EventWorker — separate ACA"]
-  Worker -->|"managed identity"| Blob[("Azure Blob checkpoint container")]
-  Worker -->|"Entra PostgreSQL principal"| PG[("Azure Database for PostgreSQL Flexible Server")]
-  API -->|"candidate outbox/history"| PG
-  API -->|"Entra data access"| Redis[("Azure Managed Redis")]
-  API --> SignalR["Azure SignalR Service"]
-  SignalR -. "cursor notification only" .-> Browser
-  API -. "configured project-agent request; live call unverified" .-> Foundry["Microsoft Foundry"]
-```
+- Microsoft Foundry agents can explain bounded match evidence. They must not create or alter canonical football facts.
+- The project contains tactical and specialist agents, including `TacticalAnalyst`, `HighPressAnalyst`, `DefensiveStructureAnalyst`, `TransitionStrategist`, `SetPieceStrategist`, `MatchStateStrategist`, `GoalkeeperAnalyst`, `ChanceCreationAnalyst` and `CoachFrameworkAnalyst`.
+- A successful live Foundry response and automatic AI reports for every hot event have **not** been verified. The demo should not be described as providing those capabilities until a cloud end-to-end run proves them.
+- Candidate feed provenance and redistribution permission are owner-confirmed. Football semantics and realism checks remain open; the feed is not canonical truth.
 
-### High-level application flow
+## Current status at a glance
 
-1. The API-hosted Simulation Service reads the candidate JSON packaged in its image and publishes source-order events to Azure Event Hubs.
-2. The separate EventWorker consumes Event Hubs, durably stages each raw envelope or poison record in the PostgreSQL candidate outbox, then advances the Blob checkpoint.
-3. The API dispatcher writes candidate event history to PostgreSQL and updates the rebuildable Redis cursor; it publishes a cursor-only Azure SignalR notification after durable processing.
-4. The UI reads ordered event pages and player-position fields from the API. SignalR prompts refresh; it does not carry match facts. PostgreSQL remains authoritative for persisted candidate records, which remain non-canonical.
-5. The AI Analyst API can send bounded, selected-match source evidence to an allowlisted Foundry project agent and return a labeled hypothesis. Automatic per-event report generation, successful live Foundry calls, and a canonical multi-agent workflow are not established by available evidence.
-
-The DEV release template declares Azure runtime settings, services, identities and roles. The supplied screenshots show the deployed UI rendering candidate events and positions, but do not prove each data-plane connection. Candidate source clock semantics, coordinate units and orientation, player metric definitions, event mappings, and football realism remain unverified; see the [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+| Area | Status |
+| --- | --- |
+| Match UI, candidate timeline, replay and pitch positions | Rendered in owner-supplied DEV screenshots (builds 68/69, 20 Oct 2026) |
+| Azure Event Hubs → worker → PostgreSQL → Redis → SignalR path | Declared in code/release topology; complete cloud runtime path not verified |
+| DEV authentication | A supplied browser capture showed `401` with an invalid/null token audience; authenticated service access needs validation |
+| Match-scoped AI answer | UI/API flow exists; successful live Foundry generation not evidenced |
+| Canonical match facts from candidate feed | Not available; feed remains non-canonical |
 
 ## Run locally
 
-Follow the [local infrastructure guide](docker/README.md) for the full setup and candidate-live walkthrough. Run each application process in its own terminal:
+See the [local infrastructure guide](docker/README.md) for setup and troubleshooting. Start the processes in separate terminals:
 
 ```bash
 # Terminal 1: Docker dependencies and schema (LOCAL only)
 ./scripts/dev-up.sh
 ./scripts/dev-migrate.py
+
 # Terminal 2
 ./scripts/start-local-api.sh
+
 # Terminal 3
 ./scripts/start-local-eventworker.sh
+
 # Terminal 4
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-Open the Vite URL printed by the frontend command. LOCAL infrastructure uses Docker PostgreSQL, Redis and Kafka; Azure credentials are not required. DEV, STAGE and PRODUCTION use Azure services only.
+Open the URL printed by Vite. LOCAL uses Docker PostgreSQL, Redis and Kafka. DEV, STAGE and PRODUCTION are Azure-only.
 
-## Project references
+## CI/CD and deployment safety
 
-- [Architecture source documents and C4 details](docs/architecture/README.md)
+Azure DevOps builds and tests the application, produces an immutable image and validates Bicep. DEV delivery is gated by a reviewed what-if plan and protected approvals. Pipeline configuration does not mean a release has completed. Do not apply infrastructure or deploy a DEV revision without approval for the exact reviewed changes.
+
+## Project guide
+
+- [Azure architecture and C4 views](docs/architecture/README.md)
+- [Azure DEV implementation and evidence](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md)
 - [API contract](docs/api/API.md)
+- [Candidate feed profile and validation limits](docs/data/MANU-LIV-SOURCE-PROFILE.md)
 - [Local development guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md)
-- [Simulation source profile and data-quality limits](docs/data/MANU-LIV-SOURCE-PROFILE.md)
-- [Story execution register](docs/backlog/STORY-EXECUTION.md)
-- [CI/CD pipelines](pipelines/README.md)
+- [CI/CD pipeline guide](pipelines/README.md)
+- [Hackathon MVP stories](docs/backlog/HACKATHON-MVP-EPICS.md)
