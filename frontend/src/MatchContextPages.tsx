@@ -7,6 +7,7 @@ import { contextHref } from './routes';
 
 type CandidateStatus = { matchId: string | null; currentSequence: number | null; currentClockValue: number | null; sourceSha256: string | null };
 type CandidateEvent = { eventId: string; matchId: string; sequence: number; clockSeconds: number; period: number; eventType: string; rawPayload: Record<string, unknown> };
+type CandidateLiveReport = { event: CandidateEvent; answer: CandidateAnalystAnswer };
 type ContextPlayer = { id: string; teamId: string; name?: string; x?: number; y?: number; active?: boolean; dismissed?: boolean; yellowCards?: number; metrics?: Record<string, unknown> };
 type ContextTeam = { id: string; name?: string; activePlayers: number };
 type ContextEvent = { id: string; type: string; sequence: number; clockSeconds: number; teamId?: string; playerId?: string };
@@ -281,7 +282,12 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
   const [answer, setAnswer] = useState<CandidateAnalystAnswer | null>(null);
   const [answerError, setAnswerError] = useState('');
   const [asking, setAsking] = useState(false);
+  const [liveReports, setLiveReports] = useState<CandidateLiveReport[]>([]);
+  const [liveReportStatus, setLiveReportStatus] = useState('Waiting for notable live events…');
+  const [liveReportError, setLiveReportError] = useState('');
+  const agentNameRef = useRef(agentName);
   const answerRequest = useRef<AbortController | null>(null);
+  useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
   useEffect(() => {
     answerRequest.current?.abort();
     answerRequest.current = null;
@@ -301,6 +307,68 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     });
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    if (!matchId || !data.context?.candidate) {
+      setLiveReports([]);
+      return;
+    }
+    setLiveReports([]);
+    setLiveReportError('');
+    setLiveReportStatus('Checking recent match events…');
+    const controller = new AbortController();
+    const hotEvents = new Set(['goal', 'shot', 'penalty', 'redcard', 'substitution', 'foul', 'ballrecovery', 'possessionlost']);
+    let afterSequence = -1;
+    let initialized = false;
+    let polling = false;
+    let active = true;
+    const poll = async () => {
+      if (!active || polling || document.visibilityState === 'hidden') return;
+      polling = true;
+      try {
+        const status = await request<CandidateStatus & { isStreaming?: boolean }>('simulation/candidate/status', controller.signal);
+        if (status.matchId !== matchId || status.currentSequence == null || !status.sourceSha256) return;
+        if (!initialized) {
+          afterSequence = Math.max(-1, status.currentSequence - 40);
+          initialized = true;
+        }
+        if (status.currentSequence <= afterSequence) {
+          setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Stream paused; waiting for the next event.');
+          return;
+        }
+        const query = new URLSearchParams({ afterSequence: String(afterSequence), limit: '100' });
+        const page = await request<{ matchId: string; sourceSha256: string; items: CandidateEvent[]; hasMore: boolean }>(
+          `simulation/candidate/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal);
+        if (page.matchId !== matchId || page.sourceSha256 !== status.sourceSha256) throw new Error('Live event evidence changed source identity.');
+        const notable = page.items.filter(item => hotEvents.has(item.eventType.replace(/[^a-z]/gi, '').toLowerCase()));
+        const latest = notable.at(-1);
+        if (latest) {
+          setLiveReportStatus(`Analyzing ${latest.eventType} · sequence ${latest.sequence}…`);
+          setLiveReportError('');
+          const result = await askCandidateAnalyst({
+            matchId, selectedSourceClockValue: latest.clockSeconds, audience: 'analyst', agentName: agentNameRef.current,
+            question: `Create a concise live event report for source event ${latest.eventType} (event ID ${latest.eventId}, sequence ${latest.sequence}) at source clock ${latest.clockSeconds}, period ${latest.period}. Describe only what the supplied records support, explain cautious tactical implications as possibilities, cite the supplied event IDs, and state uncertainty. Do not infer intent, causation, or unobserved facts.`
+          }, controller.signal);
+          if (!active) return;
+          setLiveReports(current => [
+            { event: latest, answer: result },
+            ...current.filter(report => report.event.eventId !== latest.eventId)
+          ].slice(0, 6));
+          setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Latest available event analyzed.');
+        }
+        afterSequence = page.items.at(-1)?.sequence ?? afterSequence;
+      } catch (failure) {
+        if (active && !controller.signal.aborted) {
+          setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
+          setLiveReportStatus('Could not analyze the latest live event. Retrying…');
+        }
+      } finally {
+        polling = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 5000);
+    return () => { active = false; controller.abort(); clearInterval(timer); };
+  }, [matchId, data.context?.candidate]);
   const submitQuestion = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!matchId || !data.context?.candidate || !question.trim() || asking) return;
@@ -319,7 +387,7 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
       if (!controller.signal.aborted) setAsking(false);
     }
   };
-  return <ContextLayout title="AI Analyst" description={`Verified match evidence available to the analyst at ${clock(seconds)}.`} matchId={matchId} seconds={seconds} revision={revision} route={route} candidate={data.context?.candidate}>
+  return <ContextLayout title="AI Analyst" description={`${data.context?.candidate ? 'Candidate source events' : 'Verified match evidence'} available to the analyst at ${clock(seconds)}.`} matchId={matchId} seconds={seconds} revision={revision} route={route} candidate={data.context?.candidate}>
     {data.selector}
     {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match before opening the analyst." />
       : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="Match context is unavailable." />
@@ -330,8 +398,19 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
             : <p role="status">{data.context.candidate ? 'This candidate feed has no canonical insights. The analyst below can offer a source-bounded hypothesis; it is not verified match analysis.' : 'No saved evidence-backed insight is available at this time.'}</p>}
         </section>
         {data.context.candidate ? <section className="panel candidate-analyst-panel">
-          <div className="candidate-analyst-heading"><div><p className="eyebrow">Match-scoped AI</p><h2>Ask about this source evidence</h2></div><span className="badge">Hypothesis only</span></div>
+          <div className="candidate-analyst-heading"><div><p className="eyebrow">Match-scoped AI</p><h2>Live event analysis</h2></div><span className="badge">Hypothesis only</span></div>
           <p className="candidate-analyst-disclaimer">The answer will use records at or before source clock {clock(seconds)}. Candidate event meanings and time semantics are unverified; AI output is not a canonical match fact.</p>
+          <section className="candidate-live-reports" aria-label="Live event analysis reports">
+            <div className="candidate-live-reports-heading"><h3>Reports from notable events</h3><span role="status">{liveReportStatus}</span></div>
+            {liveReportError && <p role="alert" className="candidate-analyst-error">{liveReportError}</p>}
+            {liveReports.length ? <div className="candidate-live-report-list">{liveReports.map(report => <article className="candidate-live-report" key={report.event.eventId}>
+              <div className="candidate-analyst-answer-heading"><span className="badge">{report.event.eventType} · {report.answer.agentName} · hypothesis</span><small>Source clock {clock(report.event.clockSeconds)} · sequence {report.event.sequence}</small></div>
+              <p>{report.answer.answer}</p>
+              {report.answer.claims.length > 0 && <details><summary>Evidence references</summary><ul>{report.answer.claims.flatMap((claim, index) => claim.evidenceIds.map(id => <li key={`${index}:${id}`}>{id}</li>))}</ul></details>}
+              <details><summary>Limitations</summary><ul>{report.answer.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
+            </article>)}</div> : <p className="candidate-live-reports-empty">Reports appear when a notable source event is persisted. No demo analysis is substituted.</p>}
+          </section>
+          <details className="candidate-analyst-ask-details"><summary>Ask a question about the selected match</summary>
           <form onSubmit={submitQuestion} className="candidate-analyst-form">
             <label htmlFor="candidate-analyst-agent">Foundry specialist</label>
             <select id="candidate-analyst-agent" value={agentName} onChange={event => setAgentName(event.target.value)} disabled={!agentCatalog || asking}>
@@ -350,6 +429,7 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
             {answer.claims.length > 0 && <details><summary>Evidence references</summary><ul>{answer.claims.flatMap((claim, index) => claim.evidenceIds.map(id => <li key={`${index}:${id}`}>{id}</li>))}</ul></details>}
             <details><summary>Limitations</summary><ul>{answer.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
           </article>}
+          </details>
         </section> : <p className="page-state" role="status">Generated answers for canonical matches require a persisted, evidence-backed insight at the selected time.</p>}
         {matchSource(data.context)}</>}
   </ContextLayout>;
