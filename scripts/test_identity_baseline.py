@@ -54,6 +54,14 @@ def _validate_pipeline_policy(
 
 
 class IdentityBaselineTests(unittest.TestCase):
+    def test_dev_api_audience_matches_entra_v2_access_token_claim(self):
+        topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
+        pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
+
+        self.assertIn("{ name: 'Identity__Audience', value: entraClientId }", topology)
+        self.assertNotIn("{ name: 'Identity__Audience', value: 'api://${entraClientId}' }", topology)
+        self.assertIn("default: api://4accaf35-1ae9-4e7d-999d-3f86fd7caec4/Match.Read", pipeline)
+
     def test_offline_demo_declares_registry_scoped_acrpull(self):
         demo = (ROOT / "infra/modules/demo-workload.bicep").read_text()
         registry = (ROOT / "infra/modules/registry.bicep").read_text()

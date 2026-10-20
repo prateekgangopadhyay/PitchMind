@@ -557,7 +557,9 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'Runtime__Profile', value: 'azure' }
             { name: 'CandidateFeed__Enabled', value: enableCandidateFeed ? 'true' : 'false' }
             { name: 'Identity__Authority', value: 'https://login.microsoftonline.com/${entraTenantId}/v2.0' }
-            { name: 'Identity__Audience', value: 'api://${entraClientId}' }
+            // Entra v2 access tokens use the API application's client ID GUID as aud.
+            // The SPA still requests the exposed api://<client-id>/Match.Read scope.
+            { name: 'Identity__Audience', value: entraClientId }
             { name: 'Azure__ManagedIdentityClientId', value: apiIdentity!.properties.clientId }
             { name: 'ConnectionStrings__PitchMind', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15' }
             { name: 'EventHubs__Namespace', value: enableCandidateFeed ? '${eventHubsNamespace.name}.servicebus.windows.net' : '' }

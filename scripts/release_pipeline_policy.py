@@ -86,7 +86,7 @@ _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/validate_private_dev_whatif.py": "72cc936f562d38752b3c84125474a3714fa3bd280dee4aa807110c6430d12d44",
     "pipelines/templates/preview-private-dev.yml": "c4cd3b3355194aedafa4b529b58b3132d5b92263e78fa7cafa49da56b3fce971",
     "pipelines/templates/provision-private-dev.yml": "642cc09a646e8cd7bd642dcf94df46470dda402c9f2425332d3d26d789ef6b6f",
-    "infra/private-dev-topology.bicep": "d60cdf0977e5effd385d00a6d0bb93f32a23f7edfde0943f2a219888b7168d93",
+    "infra/private-dev-topology.bicep": "9478efb4f8e65d9b9fff54d5a0c3aaed02df8b6d571d45a91ce0ea602dcf5b76",
 }
 
 
