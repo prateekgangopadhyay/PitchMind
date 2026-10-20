@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getHostAccessToken, request } from './api';
+import { askCandidateAnalyst, getCandidateAnalystAgents, getHostAccessToken, request } from './api';
 
 describe('host access-token boundary', () => {
   afterEach(() => {
@@ -28,5 +28,23 @@ describe('host access-token boundary', () => {
 
     await expect(getHostAccessToken()).resolves.toBeNull();
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).has('Authorization')).toBe(false);
+  });
+
+  it('loads the project agents and sends the selected specialist with the match question', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ defaultAgent: 'TacticalAnalyst', agents: ['TacticalAnalyst', 'GoalkeeperAnalyst'] }))
+      .mockResolvedValueOnce(Response.json({ status: 'answered', answer: 'Evidence-bound answer.', claims: [],
+        matchId: 'match-1', selectedSourceClockValue: 32, sourceSha256: 'abc', agentName: 'GoalkeeperAnalyst',
+        truthClass: 'hypothesis', limitations: [] }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await expect(getCandidateAnalystAgents()).resolves.toEqual({
+      defaultAgent: 'TacticalAnalyst', agents: ['TacticalAnalyst', 'GoalkeeperAnalyst']
+    });
+    const result = await askCandidateAnalyst({ matchId: 'match-1', selectedSourceClockValue: 32,
+      audience: 'analyst', question: 'What does the evidence show?', agentName: 'GoalkeeperAnalyst' });
+
+    expect(result.agentName).toBe('GoalkeeperAnalyst');
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).agentName).toBe('GoalkeeperAnalyst');
   });
 });

@@ -37,6 +37,8 @@ it('loads both teams from the candidate PostgreSQL backfill and labels their pos
     expect(container.textContent).toContain('Away forward');
     expect(container.textContent).toContain('source-event-1');
     expect(container.textContent).toContain('unverified');
+    expect(container.querySelector('.candidate-source-scoreboard')?.getAttribute('aria-label')).toContain('Home FC 0, Away FC 0');
+    expect([...container.querySelectorAll('.source-score-team strong')].map(node => node.textContent)).toEqual(['0', '0']);
     expect(container.querySelector('.candidate-pitch')?.getAttribute('aria-label')).toContain('orientation unverified');
     expect(container.querySelector('.candidate-ball-marker')).not.toBeNull();
     expect(Number(container.querySelector('.candidate-player.home')?.getAttribute('cx'))).toBeCloseTo(7.7);

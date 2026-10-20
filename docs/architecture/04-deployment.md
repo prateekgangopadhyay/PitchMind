@@ -29,6 +29,7 @@ flowchart TB
   subgraph Network["VNet / delegated ACA + PostgreSQL + private-endpoint subnets; private DNS (candidate, unverified)"]
     API --> PG[("PostgreSQL delegated VNet access")]
     API --> Signal["Azure SignalR authorized groups"]
+    API -. "candidate-only question; managed identity; hypothesis, not canonical" .-> Foundry["Existing Foundry project / TacticalAnalyst"]
     Worker["ACA EventWorker managed identity"] --> PG
     EH["Event Hubs ingress private link"] --> Worker
     PG --> Outbox["Committed transactional outbox"]
@@ -37,7 +38,7 @@ flowchart TB
     Fanout --> Signal
     Worker --> SB["Service Bus private link"]
     Agent["ACA AgentWorker read-only evidence role"] --> PG
-    Agent --> Foundry["Foundry approved model / private network as supported"]
+    Agent -. "canonical evidence explanation path remains uncomposed" .-> Foundry
     Agent --> KV["Key Vault / managed identities"]
     Feeder -. "Blob private endpoint + DNS (candidate)" .-> FEED
     Agent -. "Key Vault private endpoint + DNS (candidate)" .-> KV
@@ -66,7 +67,7 @@ The public edge shown above is a target option, not a configured route. The curr
 
 ## Guarded DEV topology candidate (not deployed)
 
-`infra/private-dev-topology.bicep` is an opt-in alternative for the existing `pm-dev-vnet`. It creates a separate ACA environment on a newly delegated `container-apps` subnet while preserving public browser ingress through ACA; PostgreSQL remains private on the `postgres` delegated subnet. An optional Azure Managed Redis instance uses a Private Link endpoint in the existing `private-endpoints` subnet, `privatelink.redis.azure.net` DNS, TLS, and disabled public network access. PostgreSQL and Redis provisioning are separate default-off options. The shared private-endpoints subnet itself is not changed.
+`infra/private-dev-topology.bicep` is an opt-in alternative for the existing `pm-dev-vnet`. It creates a separate ACA environment on a newly delegated `container-apps` subnet while preserving public browser ingress through ACA; PostgreSQL remains private on the `postgres` delegated subnet. An optional Azure Managed Redis instance uses a Private Link endpoint in the existing `private-endpoints` subnet, `privatelink.redis.azure.net` DNS, TLS, and disabled public network access. PostgreSQL and Redis provisioning are separate default-off options. The shared private-endpoints subnet itself is not changed. When the candidate feed is enabled, the API managed identity receives Foundry Agent Consumer on the existing Foundry project so it can call the project's agent endpoints without agent authoring permissions.
 
 ```mermaid
 flowchart LR

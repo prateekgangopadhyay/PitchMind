@@ -81,9 +81,10 @@ def main() -> int:
                         "/providers/microsoft.eventhub/namespaces/pm-dev-eh/eventhubs/candidate-match-events/",
                         "/providers/microsoft.storage/storageaccounts/pmdev4iwntkatliy6sst/blobservices/default/containers/candidate-checkpoints/",
                         "/providers/microsoft.signalrservice/signalr/pm-dev-signalr/",
+                        "/providers/microsoft.cognitiveservices/accounts/pitchmind-ai-resource/projects/pitchmind-ai/",
                     )
                     if not any(scope in resource_id for scope in approved_scopes) or "/providers/microsoft.authorization/roleassignments/" not in resource_id:
-                        raise ValueError("Role assignment is outside an approved ACR, candidate Event Hub, checkpoint container, or SignalR scope")
+                        raise ValueError("Role assignment is outside an approved ACR, candidate Event Hub, checkpoint container, SignalR, or Foundry project scope")
                 elif resource_type in {
                     "microsoft.eventhub/namespaces/eventhubs",
                     "microsoft.eventhub/namespaces/eventhubs/consumergroups",

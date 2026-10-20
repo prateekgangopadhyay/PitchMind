@@ -56,6 +56,9 @@ param candidateEventHubName string = 'candidate-match-events'
 param candidateEventHubConsumerGroup string = 'pitchmind-candidate-worker'
 @description('Opt in to the Azure Event Hubs -> PostgreSQL outbox -> Redis/SignalR candidate simulation path.')
 param enableCandidateFeed bool = false
+param foundryAccountName string = 'pitchmind-ai-resource'
+param foundryProjectName string = 'pitchmind-ai'
+param foundryAgentName string = 'TacticalAnalyst'
 param signalRName string = 'pm-dev-signalr'
 param signalRAllowedOrigin string = 'https://pm-dev-api-vnet.icyglacier-6b4ac95d.centralindia.azurecontainerapps.io'
 @allowed(['Standard_S1'])
@@ -239,6 +242,25 @@ resource pullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-
 resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployPrivateDevTopology) {
   name: '${appName}-runtime'
   location: location
+}
+
+resource foundryAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' existing = {
+  name: foundryAccountName
+}
+
+resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' existing = {
+  parent: foundryAccount
+  name: foundryProjectName
+}
+
+resource apiFoundryAgentConsumer 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
+  scope: foundryProject
+  name: guid(foundryProject.id, apiIdentity.id, 'FoundryAgentConsumer')
+  properties: {
+    principalId: apiIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'eed3b665-ab3a-47b6-8f48-c9382fb1dad6')
+  }
 }
 
 resource workerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployPrivateDevTopology && enableCandidateFeed) {
@@ -568,6 +590,8 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'Storage__CheckpointContainer', value: enableCandidateFeed ? candidateCheckpointContainer : '' }
             { name: 'Redis__Endpoint', value: enableCandidateFeed ? '${provisionRedis ? redis!.properties.hostName : existingRedis.properties.hostName}:${provisionRedis ? redisDatabase!.properties.port : existingRedisDatabase.properties.port}' : '' }
             { name: 'Realtime__AzureSignalR__Endpoint', value: enableCandidateFeed ? 'https://${signalR!.properties.hostName}' : '' }
+            { name: 'Foundry__Endpoint', value: enableCandidateFeed ? 'https://${foundryAccountName}.services.ai.azure.com/api/projects/${foundryProjectName}' : '' }
+            { name: 'Foundry__AgentName', value: enableCandidateFeed ? foundryAgentName : '' }
             // The DEV Container App is reachable outside the developer machine; never trust caller-supplied identity headers.
             { name: 'Identity__DevelopmentHeaderAuthEnabled', value: 'false' }
           ]

@@ -7,6 +7,11 @@ internal static class CandidateFeedApiEndpoints
     public static IEndpointRouteBuilder MapCandidateFeedEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/v1/simulation/candidate").RequireRateLimiting("api").RequireAuthorization("MatchRead");
+        group.MapGet("/analyst/agents", () => Results.Ok(new
+        {
+            defaultAgent = CandidateAnalystAgentCatalog.DefaultAgentName,
+            agents = CandidateAnalystAgentCatalog.All
+        }));
         group.MapGet("/status", async (CandidateFeedPersistence persistence, CandidateFeedSourceCatalog catalog,
             LocalCandidateSimulationService simulation, HttpContext context) =>
         {
@@ -50,10 +55,33 @@ internal static class CandidateFeedApiEndpoints
                 return Problem(context, 404, "CANDIDATE_MATCH_NOT_FOUND", "Candidate source is unavailable.");
             return Results.Ok(new { transport = "aspnetcore-signalr", url = "/hubs/matches", accessToken = (string?)null });
         });
-        group.MapPost("/analyst", (HttpContext context) =>
-            Problem(context, StatusCodes.Status503ServiceUnavailable,
-                "CANONICAL_MATCH_DATA_UNAVAILABLE",
-                "Tactical analysis is unavailable until canonical match evidence is configured."))
+        group.MapPost("/analyst/questions", async (CandidateAnalystQuestion request,
+            CandidateMatchAnalystService analyst, HttpContext context) =>
+        {
+            try
+            {
+                return Results.Ok(await analyst.AskAsync(request, context.RequestAborted).ConfigureAwait(false));
+            }
+            catch (ArgumentException)
+            {
+                return Problem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "The analyst question is invalid.");
+            }
+            catch (CandidateMatchNotFoundException)
+            {
+                return Problem(context, StatusCodes.Status404NotFound, "CANDIDATE_MATCH_NOT_FOUND", "Candidate match not found.");
+            }
+            catch (CandidateEvidenceUnavailableException)
+            {
+                return Problem(context, StatusCodes.Status422UnprocessableEntity, "CANDIDATE_EVIDENCE_UNAVAILABLE",
+                    "No bounded source records are available at the selected source-clock value.");
+            }
+            catch (CandidateAnalystUnavailableException)
+            {
+                return Problem(context, StatusCodes.Status503ServiceUnavailable, "ANALYST_UNAVAILABLE",
+                    "The configured match-scoped analyst is unavailable. No answer was generated.");
+            }
+        })
+            .RequireAuthorization("AnalystAction")
             .RequireRateLimiting("analyst");
         return endpoints;
     }

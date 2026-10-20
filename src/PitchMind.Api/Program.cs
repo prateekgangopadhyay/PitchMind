@@ -145,6 +145,22 @@ if (azureCandidateFeedEnabled)
     builder.Services.AddSingleton<LocalCandidateSimulationService>();
     builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
 }
+if (candidateFeedRuntimeEnabled)
+{
+    builder.Services.AddSingleton<CandidateMatchAnalystService>();
+    var foundryEndpoint = builder.Configuration["Foundry:Endpoint"];
+    if (string.IsNullOrWhiteSpace(foundryEndpoint))
+    {
+        builder.Services.AddSingleton<ICandidateMatchAnswerGenerator, DisabledCandidateMatchAnswerGenerator>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<ICandidateMatchAnswerGenerator>(
+            _ => new FoundryCandidateMatchAnswerGenerator(builder.Configuration, azureRuntime
+                ? AzureManagedIdentity(builder.Configuration)
+                : new DefaultAzureCredential()));
+    }
+}
 if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))
 {
     var postgresConnectionString = builder.Configuration.GetConnectionString("PitchMind") ?? builder.Configuration["PITCHMIND_POSTGRES"];

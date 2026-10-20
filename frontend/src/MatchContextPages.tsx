@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ApiRequestError, clock, request } from './api';
-import type { CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
+import { ApiRequestError, askCandidateAnalyst, clock, getCandidateAnalystAgents, request } from './api';
+import type { CandidateAnalystAgentCatalog, CandidateAnalystAnswer, CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
 import type { AppRoute } from './routes';
 import { contextHref } from './routes';
 
@@ -274,6 +274,51 @@ export function MatchContextInsightsPage({ route, matchId, seconds, revision, in
 export function MatchContextAnalystPage({ route, matchId, seconds, revision }: { route: AppRoute; matchId?: string; seconds: number; revision?: number }) {
   const data = useMatchContext(matchId, seconds, revision);
   const insights = data.context?.insights ?? [];
+  const [question, setQuestion] = useState('');
+  const [agentCatalog, setAgentCatalog] = useState<CandidateAnalystAgentCatalog | null>(null);
+  const [agentName, setAgentName] = useState('TacticalAnalyst');
+  const [agentError, setAgentError] = useState('');
+  const [answer, setAnswer] = useState<CandidateAnalystAnswer | null>(null);
+  const [answerError, setAnswerError] = useState('');
+  const [asking, setAsking] = useState(false);
+  const answerRequest = useRef<AbortController | null>(null);
+  useEffect(() => {
+    answerRequest.current?.abort();
+    answerRequest.current = null;
+    setAnswer(null); setAnswerError(''); setAsking(false); setQuestion('');
+    return () => answerRequest.current?.abort();
+  }, [matchId, seconds, revision]);
+  useEffect(() => {
+    const controller = new AbortController();
+    getCandidateAnalystAgents(controller.signal).then(catalog => {
+      if (!controller.signal.aborted) {
+        setAgentCatalog(catalog);
+        setAgentName(catalog.defaultAgent);
+        setAgentError('');
+      }
+    }).catch(failure => {
+      if (!controller.signal.aborted) setAgentError(failure instanceof Error ? failure.message : 'The Foundry agent list is unavailable.');
+    });
+    return () => controller.abort();
+  }, []);
+  const submitQuestion = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!matchId || !data.context?.candidate || !question.trim() || asking) return;
+    answerRequest.current?.abort();
+    const controller = new AbortController();
+    answerRequest.current = controller;
+    setAsking(true); setAnswer(null); setAnswerError('');
+    try {
+      const result = await askCandidateAnalyst({ matchId, selectedSourceClockValue: seconds, audience: 'analyst', question: question.trim(), agentName }, controller.signal);
+      if (!controller.signal.aborted) setAnswer(result);
+    } catch (failure) {
+      if (!controller.signal.aborted) setAnswerError(failure instanceof ApiRequestError && failure.code === 'ANALYST_UNAVAILABLE'
+        ? 'The AI analyst could not reach its configured Foundry agent. Check the service configuration and access, then retry.'
+        : failure instanceof Error ? failure.message : 'The selected match could not be analyzed. Retry when the service is available.');
+    } finally {
+      if (!controller.signal.aborted) setAsking(false);
+    }
+  };
   return <ContextLayout title="AI Analyst" description={`Verified match evidence available to the analyst at ${clock(seconds)}.`} matchId={matchId} seconds={seconds} revision={revision} route={route} candidate={data.context?.candidate}>
     {data.selector}
     {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match before opening the analyst." />
@@ -282,7 +327,30 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
           <p>{data.context.events.length} events from match {data.context.matchId} through sequence {data.context.throughSequence}.</p>
           {insights.length ? <ul className="context-insight-list">{insights.map(item => <li key={item.id}><span className="badge">{item.truthClass}</span><p>{item.summary}</p>
             <small>{item.evidence.length} evidence references · {item.limitations.length} stated limitations</small></li>)}</ul>
-            : <p role="status">{data.context.candidate ? 'The candidate feed has no canonical insights; analysis is withheld until the facts are admitted and verified.' : 'No saved evidence-backed insight is available at this time.'}</p>}
-        </section><p className="page-state" role="status">A match-scoped generated-answer API is not currently available. No sample question or generated answer is substituted.</p>{matchSource(data.context)}</>}
+            : <p role="status">{data.context.candidate ? 'This candidate feed has no canonical insights. The analyst below can offer a source-bounded hypothesis; it is not verified match analysis.' : 'No saved evidence-backed insight is available at this time.'}</p>}
+        </section>
+        {data.context.candidate ? <section className="panel candidate-analyst-panel">
+          <div className="candidate-analyst-heading"><div><p className="eyebrow">Match-scoped AI</p><h2>Ask about this source evidence</h2></div><span className="badge">Hypothesis only</span></div>
+          <p className="candidate-analyst-disclaimer">The answer will use records at or before source clock {clock(seconds)}. Candidate event meanings and time semantics are unverified; AI output is not a canonical match fact.</p>
+          <form onSubmit={submitQuestion} className="candidate-analyst-form">
+            <label htmlFor="candidate-analyst-agent">Foundry specialist</label>
+            <select id="candidate-analyst-agent" value={agentName} onChange={event => setAgentName(event.target.value)} disabled={!agentCatalog || asking}>
+              {(agentCatalog?.agents ?? [agentName]).map(agent => <option key={agent} value={agent}>{agent}</option>)}
+            </select>
+            {agentError && <p role="status" className="candidate-analyst-error">Could not load the project agent catalog: {agentError}</p>}
+            <label htmlFor="candidate-analyst-question">Your question</label>
+            <textarea id="candidate-analyst-question" value={question} onChange={event => setQuestion(event.target.value)} maxLength={1000} rows={3} required placeholder="Ask what the selected source records show…" />
+            <div className="candidate-analyst-form-footer"><small>Evidence is limited to this match and selected source time.</small><button type="submit" disabled={!question.trim() || asking || !data.context.events.length}>{asking ? 'Analyzing…' : 'Ask the analyst'}</button></div>
+          </form>
+          {asking && <p role="status" className="candidate-analyst-status">Preparing a bounded answer from the selected match evidence…</p>}
+          {answerError && <p role="alert" className="candidate-analyst-error">{answerError}</p>}
+          {answer && <article className="candidate-analyst-answer" aria-live="polite">
+            <div className="candidate-analyst-answer-heading"><span className="badge">AI hypothesis · {answer.agentName}</span><small>Source clock {clock(answer.selectedSourceClockValue)}</small></div>
+            <p>{answer.answer}</p>
+            {answer.claims.length > 0 && <details><summary>Evidence references</summary><ul>{answer.claims.flatMap((claim, index) => claim.evidenceIds.map(id => <li key={`${index}:${id}`}>{id}</li>))}</ul></details>}
+            <details><summary>Limitations</summary><ul>{answer.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
+          </article>}
+        </section> : <p className="page-state" role="status">Generated answers for canonical matches require a persisted, evidence-backed insight at the selected time.</p>}
+        {matchSource(data.context)}</>}
   </ContextLayout>;
 }

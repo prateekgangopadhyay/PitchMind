@@ -555,6 +555,26 @@ export function analyzeSimulationMoment(payload: SimulationAnalystRequest, signa
   return request<SimulationAnalystResponse>('simulation/analyst', signal, payload);
 }
 
+export interface CandidateAnalystQuestion {
+  matchId: string;
+  selectedSourceClockValue: number;
+  audience: 'fan' | 'analyst';
+  question: string;
+  agentName: string;
+}
+export interface CandidateAnalystAgentCatalog { defaultAgent: string; agents: string[] }
+export interface CandidateAnalystClaim { text: string; evidenceIds: string[] }
+export interface CandidateAnalystAnswer {
+  status: 'answered' | 'insufficientEvidence'; answer: string; claims: CandidateAnalystClaim[];
+  matchId: string; selectedSourceClockValue: number; sourceSha256: string; agentName: string; truthClass: 'hypothesis'; limitations: string[];
+}
+export function getCandidateAnalystAgents(signal?: AbortSignal): Promise<CandidateAnalystAgentCatalog> {
+  return request<CandidateAnalystAgentCatalog>('simulation/candidate/analyst/agents', signal);
+}
+export function askCandidateAnalyst(payload: CandidateAnalystQuestion, signal?: AbortSignal): Promise<CandidateAnalystAnswer> {
+  return request<CandidateAnalystAnswer>('simulation/candidate/analyst/questions', signal, payload);
+}
+
 const AUTH_STORAGE_KEY = 'pitchmind_auth_session';
 const AUTH_EVENT = 'pitchmind:authchange';
 

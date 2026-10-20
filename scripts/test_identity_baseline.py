@@ -54,6 +54,15 @@ def _validate_pipeline_policy(
 
 
 class IdentityBaselineTests(unittest.TestCase):
+    def test_candidate_analyst_uses_least_privilege_foundry_project_agent_consumer(self):
+        topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
+        validator = (ROOT / "scripts/validate_private_dev_whatif.py").read_text()
+
+        self.assertIn("Microsoft.CognitiveServices/accounts/projects@2025-06-01", topology)
+        self.assertIn("scope: foundryProject", topology)
+        self.assertIn("eed3b665-ab3a-47b6-8f48-c9382fb1dad6", topology)
+        self.assertIn("/projects/pitchmind-ai/", validator)
+
     def test_dev_api_audience_matches_entra_v2_access_token_claim(self):
         topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()
@@ -602,6 +611,11 @@ class PrivateDevWhatIfTests(unittest.TestCase):
                 "changeType": "Create",
                 "resourceType": "Microsoft.Authorization/roleAssignments",
                 "resourceId": f"{resource_group}/providers/Microsoft.SignalRService/signalR/pm-dev-signalr/providers/Microsoft.Authorization/roleAssignments/a3",
+            },
+            {
+                "changeType": "Create",
+                "resourceType": "Microsoft.Authorization/roleAssignments",
+                "resourceId": f"{resource_group}/providers/Microsoft.CognitiveServices/accounts/pitchmind-ai-resource/projects/pitchmind-ai/providers/Microsoft.Authorization/roleAssignments/a4",
             },
             {
                 "changeType": "Create",

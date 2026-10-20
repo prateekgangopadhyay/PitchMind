@@ -297,7 +297,12 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const teams = [...new Set(players.map(player => (typeof player.teamName === 'string' ? player.teamName : '')).filter(Boolean))];
   const secondSourceTeam = teams[1];
 
-  const sourceTeams = [...new Set(players.map(player => typeof player.teamName === 'string' ? player.teamName : '').filter(Boolean))];
+  const sourceTeams = [...new Set([
+    ...players.map(player => typeof player.teamName === 'string' ? player.teamName : ''),
+    ...visibleEvents.map(event => typeof event.rawPayload.teamName === 'string' ? event.rawPayload.teamName : '')
+  ].filter(Boolean))];
+  const sourceGoals = visibleEvents.filter(event => event.eventType === 'Goal');
+  const sourceScore = sourceTeams.slice(0, 2).map(team => sourceGoals.filter(event => event.rawPayload.teamName === team).length);
 
   const ballX = latest?.rawPayload.ballX;
   const ballY = latest?.rawPayload.ballY;
@@ -338,14 +343,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
               <span className="pulse-dot" aria-hidden="true"></span>
               CANDIDATE LIVE FEED
             </span>
-            {status?.sourceSha256 && (
-              <span className="telemetry-sha-chip" title={`Telemetry SHA-256: ${status.sourceSha256}`}>
-                SHA-256: <code>{status.sourceSha256.slice(0, 12)}…</code>
-              </span>
-            )}
-            <span className="events-counter-chip">
-              {events.length} events streamed
-            </span>
+            <span className="candidate-feed-label">Synthetic source · not canonical</span>
           </div>
 
           <div className="hero-stream-action">
@@ -363,10 +361,14 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
         </div>
 
         <div className="candidate-match-context">
-          <div><p className="eyebrow">Selected source match</p><h1>{matchId ?? 'Waiting for match data'}</h1>
-            <p>Source event feed · clock {currentClockFormatted} · {latest ? `period ${latest.period}` : 'period unavailable'}</p></div>
-          {sourceTeams.length > 0 && <div className="candidate-source-teams" aria-label="Team names reported by the source">
-            {sourceTeams.map((team, index) => <span key={team} className={`source-team-chip source-team-${index % 2}`}>{team}</span>)}
+          <div className="candidate-match-identity"><p className="eyebrow">Selected source match</p>
+            <h1>{sourceTeams.length >= 2 ? `${sourceTeams[0]} · ${sourceTeams[1]}` : 'Match in progress'}</h1>
+            <p>Source clock {currentClockFormatted} · {latest ? `period ${latest.period}` : 'period unavailable'}</p></div>
+          {sourceTeams.length >= 2 && <div className="candidate-source-scoreboard" aria-label={`Source-reported score: ${sourceTeams[0]} ${sourceScore[0] ?? 0}, ${sourceTeams[1]} ${sourceScore[1] ?? 0}; unverified`}>
+            <div className="source-score-team"><span>{sourceTeams[0]}</span><strong>{sourceScore[0] ?? 0}</strong></div>
+            <span className="source-score-separator" aria-hidden="true">–</span>
+            <div className="source-score-team"><span>{sourceTeams[1]}</span><strong>{sourceScore[1] ?? 0}</strong></div>
+            <small>Source-reported goals · unverified</small>
           </div>}
         </div>
 
@@ -428,21 +430,24 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
 
       {/* Refined Methodology & Verification Notice */}
       <div className="candidate-caveat-box">
-        <div className="caveat-summary-row" onClick={() => setShowMethodology(!showMethodology)}>
+        <div className="caveat-summary-row">
           <div className="caveat-badge-wrap">
             <span className="caveat-icon" aria-hidden="true">i</span>
             <strong>Candidate Source Notice:</strong>
             <span className="caveat-short-text">Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.</span>
           </div>
-          <button type="button" className="caveat-expand-btn" aria-expanded={showMethodology}>
+          <button type="button" className="caveat-expand-btn" aria-expanded={showMethodology} aria-controls="candidate-source-methodology" onClick={() => setShowMethodology(value => !value)}>
             {showMethodology ? 'Hide methodology' : 'Show methodology'}
           </button>
         </div>
-        <p className="candidate-caveat" role="note" style={{ display: showMethodology ? 'block' : 'none' }}>
+          <div id="candidate-source-methodology" className="candidate-caveat" role="note" style={{ display: showMethodology ? 'block' : 'none' }}>
           Candidate source only. Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.
           For display only, raw numeric x/y and ball coordinates are proportionally mapped from a 0–100 range to the pitch canvas; this does
           not certify real pitch dimensions or orientation. No clock conversion, interpolation or canonical claim is applied.
-        </p>
+            <dl className="candidate-source-diagnostics"><div><dt>Source match ID</dt><dd>{matchId ?? 'Unavailable'}</dd></div>
+              <div><dt>Records loaded</dt><dd>{events.length}</dd></div>
+              <div><dt>Source SHA-256</dt><dd>{status?.sourceSha256 ?? 'Unavailable'}</dd></div></dl>
+          </div>
       </div>
 
       {statusError && <p role="alert" className="candidate-error-banner">{statusError}</p>}
