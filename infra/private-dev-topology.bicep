@@ -560,7 +560,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'Identity__Audience', value: 'api://${entraClientId}' }
             { name: 'Azure__ManagedIdentityClientId', value: apiIdentity!.properties.clientId }
             { name: 'ConnectionStrings__PitchMind', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15' }
-            { name: 'EventHubs__Namespace', value: enableCandidateFeed ? eventHubsNamespace.name + '.servicebus.windows.net' : '' }
+            { name: 'EventHubs__Namespace', value: enableCandidateFeed ? '${eventHubsNamespace.name}.servicebus.windows.net' : '' }
             { name: 'EventHubs__CandidateHubName', value: enableCandidateFeed ? candidateEventHubName : '' }
             { name: 'Storage__BlobServiceUri', value: enableCandidateFeed ? 'https://${storageAccountName}.blob.core.windows.net' : '' }
             { name: 'Storage__CheckpointContainer', value: enableCandidateFeed ? candidateCheckpointContainer : '' }
@@ -616,7 +616,7 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
             { name: 'Runtime__Profile', value: 'azure' }
             { name: 'CandidateFeed__Enabled', value: 'true' }
             { name: 'EventHubs__OutboxDispatchEnabled', value: 'false' }
-            { name: 'EventHubs__Namespace', value: eventHubsNamespace.name + '.servicebus.windows.net' }
+            { name: 'EventHubs__Namespace', value: '${eventHubsNamespace.name}.servicebus.windows.net' }
             { name: 'EventHubs__CandidateHubName', value: candidateEventHubName }
             { name: 'EventHubs__CandidateConsumerGroup', value: candidateEventHubConsumerGroup }
             { name: 'Storage__BlobServiceUri', value: 'https://${storageAccountName}.blob.core.windows.net' }
