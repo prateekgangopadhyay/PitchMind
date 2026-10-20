@@ -31,6 +31,14 @@ location=$(az group show --name "$PITCHMIND_DEV_RESOURCE_GROUP" --query location
 export PITCHMIND_DEV_VNET_JSON="$vnet_json" PITCHMIND_DEV_SUBNETS_JSON="$subnets_json" PITCHMIND_DEV_LOCATION="$location"
 python3 scripts/validate_private_dev_network.py
 
+if [[ "$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" == 'True' || "$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" == 'true' ]]; then
+  signalr_provider_state=$(az provider show --namespace Microsoft.SignalRService --query registrationState --output tsv)
+  if [[ "$signalr_provider_state" != 'Registered' ]]; then
+    echo "Microsoft.SignalRService is $signalr_provider_state. Register the resource provider in the subscription before reviewing or applying the DEV plan." >&2
+    exit 2
+  fi
+fi
+
 if [[ "$PITCHMIND_DEV_PROVISION_POSTGRES" == 'True' || "$PITCHMIND_DEV_PROVISION_POSTGRES" == 'true' ]]; then
   required_pg=(PITCHMIND_DEV_POSTGRES_SKU_TIER PITCHMIND_DEV_POSTGRES_SKU_NAME PITCHMIND_DEV_POSTGRES_ADMIN_OBJECT_ID PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_NAME PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_TYPE)
   for key in "${required_pg[@]}"; do

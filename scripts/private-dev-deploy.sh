@@ -27,6 +27,14 @@ location=$(az group show --name "$PITCHMIND_DEV_RESOURCE_GROUP" --query location
 export PITCHMIND_DEV_VNET_JSON="$vnet_json" PITCHMIND_DEV_SUBNETS_JSON="$subnets_json" PITCHMIND_DEV_LOCATION="$location"
 python3 scripts/validate_private_dev_network.py
 
+if [[ "$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" == 'True' || "$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" == 'true' ]]; then
+  signalr_provider_state=$(az provider show --namespace Microsoft.SignalRService --query registrationState --output tsv)
+  if [[ "$signalr_provider_state" != 'Registered' ]]; then
+    echo "Microsoft.SignalRService is $signalr_provider_state. Register the resource provider in the subscription before applying the DEV plan." >&2
+    exit 2
+  fi
+fi
+
 current_plan=$(mktemp)
 trap 'rm -f "$current_plan"' EXIT
 az deployment group what-if \
