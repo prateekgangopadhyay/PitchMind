@@ -9,7 +9,15 @@ public sealed class ReadinessHealthCheck(
     IServiceProvider services,
     ILogger<ReadinessHealthCheck> logger) : IHealthCheck
 {
-    private static readonly TimeSpan DatabaseProbeTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DefaultProbeTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan AzureProbeTimeout = TimeSpan.FromSeconds(8);
+
+    private TimeSpan DatabaseProbeTimeout =>
+        configuration.GetValue<int?>("Readiness:DatabaseTimeoutSeconds") is { } seconds && seconds > 0
+            ? TimeSpan.FromSeconds(seconds)
+            : string.Equals(configuration["Runtime:Profile"], "azure", StringComparison.OrdinalIgnoreCase)
+                ? AzureProbeTimeout
+                : DefaultProbeTimeout;
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,

@@ -3,11 +3,12 @@
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 
 
-def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
+def main(argv: list[str] | None = None, open_url=urllib.request.urlopen, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base", nargs="?", default="http://127.0.0.1:5080")
     parser.add_argument(
@@ -58,11 +59,20 @@ def main(argv: list[str] | None = None, open_url=urllib.request.urlopen) -> int:
         # current schema are reachable. Local contract smoke intentionally
         # runs without PostgreSQL and only validates the HTTP/auth contract.
         ready_req = urllib.request.Request(base + "/health/ready")
-        try:
-            ready_response = open_url(ready_req, timeout=10)
-        except urllib.error.HTTPError as error:
-            ready_response = error
-        assert ready_response.status == 200, ("/health/ready", ready_response.status)
+        ready_response = None
+        for attempt in range(15):
+            try:
+                ready_response = open_url(ready_req, timeout=10)
+            except (urllib.error.HTTPError, urllib.error.URLError) as error:
+                ready_response = error
+            if getattr(ready_response, "status", None) == 200:
+                break
+            if attempt < 14:
+                sleep(2)
+        assert ready_response is not None and getattr(ready_response, "status", None) == 200, (
+            "/health/ready",
+            getattr(ready_response, "status", None),
+        )
         assert ready_response.headers.get("X-Correlation-ID"), "/health/ready"
     if args.expect_auth_required:
         # The SPA is served from the application root in the container image.
