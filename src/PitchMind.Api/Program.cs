@@ -353,6 +353,17 @@ match.MapPost("/analyst", (Delegate)ReadAnalystRequestAsync)
     .RequireRateLimiting("analyst");
 app.UseDefaultFiles();
 app.UseStaticFiles();
+// Browser navigation and refreshes must resolve supported client-side routes to the SPA shell.
+// Keep this allowlist scoped to UI routes so unmatched API and hub paths remain real 404s.
+foreach (var route in new[]
+{
+    "welcome", "sign-in", "login", "home", "candidate-live", "matches", "matches/{**path}",
+    "replay/{**path}", "demo", "demo/matches", "demo/matches/{**path}", "teams", "teams/{**path}",
+    "players", "players/{**path}", "insights", "insights/{**path}", "analyst"
+})
+{
+    app.MapFallbackToFile(route, "index.html");
+}
 app.Run();
 
 static string RequiredSetting(string? value, string name) => !string.IsNullOrWhiteSpace(value)
