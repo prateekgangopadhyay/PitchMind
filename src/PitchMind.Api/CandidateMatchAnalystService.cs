@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Azure.Core;
 using Azure.Identity;
 using PitchMind.Infrastructure.Feeds;
@@ -59,9 +60,16 @@ public sealed class CandidateEvidenceUnavailableException : Exception
 public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog catalog,
     CandidateFeedPersistence persistence, ICandidateMatchAnswerGenerator generator)
 {
-    private const int MaximumEvidenceItems = 12;
-    private const int MaximumEvidencePayloadBytes = 6_144;
+    private const int MaximumEvidenceItems = 8;
+    private const int MaximumEvidencePayloadBytes = 4_096;
     private const int MaximumContextBytes = 32_768;
+    private static readonly string[] EvidenceFields =
+    [
+        "eventId", "matchId", "sequence", "clockSeconds", "period", "eventType", "teamId", "teamName",
+        "playerName", "receiverName", "pitchX", "pitchY", "endX", "endY", "outcome", "ballX", "ballY"
+    ];
+    private static readonly string[] PlayerPositionFields =
+    ["playerName", "teamName", "teamId", "jerseyNumber", "position", "x", "y"];
     private static readonly string[] Limitations =
     [
         "This is an AI-generated hypothesis from a synthetic candidate feed, not a canonical match fact.",
@@ -84,6 +92,7 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
             throw new CandidateMatchNotFoundException();
 
         var selected = new List<CandidateKafkaMessage>(MaximumEvidenceItems);
+        CandidateKafkaMessage? latestWithPositions = null;
         long afterSequence = -1;
         const int pageSize = 499;
         // The approved candidate currently contains fewer than 10,000 source records.
@@ -95,9 +104,14 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
             foreach (var item in items)
             {
                 if (item.RawClockValue > request.SelectedSourceClockValue) continue;
-                var payloadBytes = Encoding.UTF8.GetByteCount(item.RawPayload.GetRawText());
+                var evidencePayload = ProjectEvidencePayload(item.RawPayload, includePlayerPositions: true);
+                var payloadBytes = Encoding.UTF8.GetByteCount(evidencePayload.GetRawText());
                 if (payloadBytes > MaximumEvidencePayloadBytes) continue;
-                selected.Add(item);
+                selected.Add(item with
+                {
+                    RawPayload = ProjectEvidencePayload(item.RawPayload, includePlayerPositions: false)
+                });
+                latestWithPositions = item with { RawPayload = evidencePayload };
                 if (selected.Count > MaximumEvidenceItems) selected.RemoveAt(0);
             }
             afterSequence = items[^1].SourceSequence;
@@ -105,6 +119,9 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
         }
 
         if (selected.Count == 0) throw new CandidateEvidenceUnavailableException();
+        // Keep a single full positional snapshot at the selected source time; prior
+        // records provide event context without repeating the same 22-player frame.
+        selected[^1] = latestWithPositions ?? throw new CandidateEvidenceUnavailableException();
         var contextBytes = selected.Sum(item => Encoding.UTF8.GetByteCount(item.RawPayload.GetRawText()) +
             Encoding.UTF8.GetByteCount(item.SourceEventId) + 192);
         if (contextBytes > MaximumContextBytes) throw new CandidateEvidenceUnavailableException();
@@ -128,6 +145,42 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
 
         return new(result.Status, result.Answer, result.Claims, request.MatchId,
             request.SelectedSourceClockValue, source.SourceSha256, request.AgentName, "hypothesis", Limitations);
+    }
+
+    internal static JsonElement ProjectEvidencePayload(JsonElement source, bool includePlayerPositions = true)
+    {
+        if (source.ValueKind != JsonValueKind.Object)
+            throw new CandidateEvidenceUnavailableException();
+
+        var projected = new JsonObject();
+        foreach (var field in EvidenceFields)
+        {
+            if (source.TryGetProperty(field, out var value))
+                projected[field] = JsonNode.Parse(value.GetRawText());
+        }
+
+        if (includePlayerPositions && source.TryGetProperty("playerPositions", out var positions))
+        {
+            if (positions.ValueKind != JsonValueKind.Array || positions.GetArrayLength() > 32)
+                throw new CandidateEvidenceUnavailableException();
+
+            var projectedPositions = new JsonArray();
+            foreach (var position in positions.EnumerateArray())
+            {
+                if (position.ValueKind != JsonValueKind.Object)
+                    throw new CandidateEvidenceUnavailableException();
+                var projectedPosition = new JsonObject();
+                foreach (var field in PlayerPositionFields)
+                {
+                    if (position.TryGetProperty(field, out var value))
+                        projectedPosition[field] = JsonNode.Parse(value.GetRawText());
+                }
+                projectedPositions.Add(projectedPosition);
+            }
+            projected["playerPositions"] = projectedPositions;
+        }
+
+        return JsonSerializer.SerializeToElement(projected);
     }
 }
 
