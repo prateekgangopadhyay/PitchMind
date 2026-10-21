@@ -2,7 +2,9 @@
 
 This view describes the Azure-only DEV design implemented by `infra/private-dev-topology.bicep`, the Azure API/EventWorker composition, and the guarded Azure DevOps release template. It separates what the repository declares from what has been observed in the deployed app. A Bicep resource, environment setting, or successful compile is not proof of an existing resource or a working data-plane connection. See the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for dated evidence.
 
-## Azure DEV candidate-feed deployment path
+## TARGET architecture (declared Azure DEV topology)
+
+The flow below is the target topology declared in source/configuration. It does not claim that every Azure resource or data-plane connection has been deployed or observed.
 
 ```mermaid
 flowchart LR
@@ -28,7 +30,7 @@ The API simulation service publishes records to Event Hubs; it does not send the
 
 The analyst route is a separate API request: it reads a bounded prefix of persisted candidate events and can call an allowlisted Microsoft Foundry project agent. Its response is an evidence-bounded hypothesis. The repository does not implement a durable, automatic per-event Foundry report pipeline or a hosted multi-agent orchestration worker.
 
-## Azure implementation evidence
+## CURRENT implementation and deployment evidence
 
 - **Implemented in source/configuration:** the API and EventWorker Azure profiles; Event Hubs candidate producer/consumer; PostgreSQL Entra data-source and candidate persistence; Redis Entra access; Azure SignalR provider; Blob checkpoints; Foundry project-agent request adapter; Bicep resource/settings/role declarations; and a separate EventWorker Container App.
 - **Observed in owner-supplied DEV screenshots dated 2026-10-20:** application builds labelled `68` and `69`; the candidate-live page rendered a source-feed state, event count, selected match, and player positions; the analyst screen displayed six selected source events. This is browser/UI evidence only; it does not identify which Azure services served the data or prove event-bus, database, cache, SignalR, or Foundry connectivity.
