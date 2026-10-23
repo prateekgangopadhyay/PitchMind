@@ -68,14 +68,92 @@ export function CanonicalEvidenceReplay({ evidence }: { evidence: CanonicalEvide
           <span>Team {teamId} · attacks toward {selected.teamDirections.get(teamId)}</span>
         </li>)}
       </ul>
-      <svg className="canonical-pitch evidence-replay-pitch" style={{ aspectRatio: `${selected.length} / ${selected.width}` }}
-        viewBox={`-1 -1 ${selected.length + 2} ${selected.width + 2}`} role="img"
+      <svg
+        className="canonical-pitch evidence-replay-pitch"
+        style={{ aspectRatio: `${selected.length + 6} / ${selected.width + 4.4}` }}
+        viewBox={`-3 -2.2 ${selected.length + 6} ${selected.width + 4.4}`}
+        role="img"
         aria-label={`Observed tracking frame at ${clock(selected.item.clockSeconds)}, period ${selected.item.period}, sequence ${selected.item.sequence}`}
-        aria-describedby={frameDescriptionId}>
-        <rect className="pitch-boundary" x="0" y="0" width={selected.length} height={selected.width} />
+        aria-describedby={frameDescriptionId}
+      >
+        <defs>
+          <radialGradient id="replay-floodlight" cx="50%" cy="50%" r="62%" fx="50%" fy="48%">
+            <stop offset="0%" stopColor="#1a5a36" />
+            <stop offset="42%" stopColor="#134729" />
+            <stop offset="82%" stopColor="#0b301b" />
+            <stop offset="100%" stopColor="#061e11" />
+          </radialGradient>
+          <linearGradient id="replay-apron" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#0a2517" />
+            <stop offset="100%" stopColor="#05160d" />
+          </linearGradient>
+          <linearGradient id="replay-sheen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.04" />
+            <stop offset="50%" stopColor="#ffffff" stopOpacity="0.01" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0.07" />
+          </linearGradient>
+          <pattern id="replay-net-pattern" width="0.7" height="0.7" patternUnits="userSpaceOnUse">
+            <rect width="0.7" height="0.7" fill="rgba(255, 255, 255, 0.02)" />
+            <path d="M 0 0.7 L 0.7 0 M 0 0 L 0.7 0.7" stroke="rgba(255, 255, 255, 0.38)" strokeWidth="0.08" />
+          </pattern>
+        </defs>
+
+        {/* Outer Apron */}
+        <rect x="-3" y="-2.2" width={selected.length + 6} height={selected.width + 4.4} fill="url(#replay-apron)" />
+
+        {/* Main Pitch Grass */}
+        <rect className="pitch-boundary" x="0" y="0" width={selected.length} height={selected.width} fill="url(#replay-floodlight)" />
+
+        {/* 10 Precision Lawn Mowing Bands */}
+        {Array.from({ length: 10 }, (_, index) => (
+          <rect
+            key={index}
+            x={index * (selected.length / 10)}
+            y="0"
+            width={selected.length / 10}
+            height={selected.width}
+            fill="url(#replay-sheen)"
+            opacity={index % 2 === 0 ? 0.6 : 0.25}
+            pointerEvents="none"
+          />
+        ))}
+
+        {/* Goal Structures */}
+        <g className="canonical-goal-nets" pointerEvents="none">
+          <rect x="-2.2" y={selected.width / 2 - 3.66} width="2.2" height="7.32" rx="0.3" fill="url(#replay-net-pattern)" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.22" />
+          <line x1="0" y1={selected.width / 2 - 3.66} x2="0" y2={selected.width / 2 + 3.66} stroke="#ffffff" strokeWidth="0.45" strokeLinecap="round" />
+          <rect x={selected.length} y={selected.width / 2 - 3.66} width="2.2" height="7.32" rx="0.3" fill="url(#replay-net-pattern)" stroke="rgba(255, 255, 255, 0.65)" strokeWidth="0.22" />
+          <line x1={selected.length} y1={selected.width / 2 - 3.66} x2={selected.length} y2={selected.width / 2 + 3.66} stroke="#ffffff" strokeWidth="0.45" strokeLinecap="round" />
+        </g>
+
+        {/* Regulation Pitch Markings */}
+        <rect className="pitch-marking" x="0" y="0" width={selected.length} height={selected.width} fill="none" />
         <line className="pitch-marking" x1={selected.length / 2} y1="0" x2={selected.length / 2} y2={selected.width} />
-        <circle className="pitch-marking" cx={selected.length / 2} cy={selected.width / 2} r={selected.width * .135} />
+        <circle className="pitch-marking" cx={selected.length / 2} cy={selected.width / 2} r={selected.width * .135} fill="none" />
+        <circle className="pitch-marking" cx={selected.length / 2} cy={selected.width / 2} r={0.5} fill="currentColor" />
+
+        {/* Penalty areas & goal boxes */}
+        <rect className="pitch-marking" x="0" y={selected.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+        <rect className="pitch-marking" x="0" y={selected.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+        <circle className="pitch-marking" cx={11} cy={selected.width / 2} r={0.5} fill="currentColor" />
+        <path className="pitch-marking" d={`M 16.5 ${selected.width / 2 - 7.31} A 9.15 9.15 0 0 1 16.5 ${selected.width / 2 + 7.31}`} fill="none" />
+
+        <rect className="pitch-marking" x={selected.length - 16.5} y={selected.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+        <rect className="pitch-marking" x={selected.length - 5.5} y={selected.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+        <circle className="pitch-marking" cx={selected.length - 11} cy={selected.width / 2} r={0.5} fill="currentColor" />
+        <path className="pitch-marking" d={`M ${selected.length - 16.5} ${selected.width / 2 - 7.31} A 9.15 9.15 0 0 0 ${selected.length - 16.5} ${selected.width / 2 + 7.31}`} fill="none" />
+
+        {/* 4 Corner Arcs */}
+        <path className="pitch-marking" d="M 0 1 A 1 1 0 0 0 1 0" fill="none" />
+        <path className="pitch-marking" d={`M 0 ${selected.width - 1} A 1 1 0 0 1 1 ${selected.width}`} fill="none" />
+        <path className="pitch-marking" d={`M ${selected.length} 1 A 1 1 0 0 1 ${selected.length - 1} 0`} fill="none" />
+        <path className="pitch-marking" d={`M ${selected.length} ${selected.width - 1} A 1 1 0 0 0 ${selected.length - 1} ${selected.width}`} fill="none" />
+
+        {/* Ball Marker */}
+        <circle cx={selected.ball.x} cy={selected.ball.y} r={Math.max(selected.width * .022, .6)} fill="rgba(74, 239, 172, 0.25)" />
         <circle className="ball-marker" cx={selected.ball.x} cy={selected.ball.y} r={Math.max(selected.width * .012, .25)} />
+
+        {/* Players */}
         {selected.players.map((player, index) => {
           const teamIndex = selected.teamIds.indexOf(player.teamId) % 2;
           const highlighted = selected.participants.has(player.playerId);

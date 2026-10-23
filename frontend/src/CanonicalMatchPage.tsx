@@ -494,36 +494,272 @@ export function CanonicalMatchPage({ matchId, selectedSeconds, requestedRevision
           {!view.insights.items.length && view.events.items.length > 0 && <p className="page-state" role="status">AI explanations are not connected; match facts remain available without them.</p>}
           <div className="dashboard canonical-dashboard pitch-dashboard">
             {pitch && selectedFrame && <section ref={pitchPanelRef} className={`panel pitch-panel${cinemaMode ? ' is-cinema' : ''}`} aria-labelledby="pitch-title">
-              <div className="pitch-panel-heading"><h2 id="pitch-title">Observed pitch</h2>
+              <div className="pitch-panel-heading">
+                <div className="pitch-title-meta">
+                  <h2 id="pitch-title">Observed pitch</h2>
+                  <span className="pitch-meta-pills">
+                    <span>{pitch.length} × {pitch.width} m</span>
+                    <span>Period {selectedFrame.period}</span>
+                    <span>Clock {clock(selectedSeconds)}</span>
+                    <span className="observed-players-tag">{pitch.players.length} observed players</span>
+                    <span>{pitch.attackTeamId} attacks right →</span>
+                  </span>
+                </div>
                 <button type="button" className="cinema-mode-toggle" onClick={() => { void toggleCinemaMode(); }} aria-pressed={cinemaMode}>
                   {cinemaMode ? 'Exit cinema view' : 'Cinema view'}
                 </button>
               </div>
               <p>Only a recorded frame at the selected time is shown. Sample gaps are not filled.</p>
               <>
-                <svg className="canonical-pitch" style={{ aspectRatio: `${pitch.length} / ${pitch.width}` }} viewBox={`-1 -1 ${pitch.length + 2} ${pitch.width + 2}`} role="img"
-                  aria-label={`Observed player and ball positions at ${clock(selectedSeconds)}, period ${selectedFrame.period}`} aria-describedby="pitch-description">
-                  <rect className="pitch-boundary" x="0" y="0" width={pitch.length} height={pitch.width} />
-                  {/* Halfway line & center circle */}
-                  <line className="pitch-marking" x1={pitch.length / 2} y1="0" x2={pitch.length / 2} y2={pitch.width} />
-                  <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={pitch.width * .135} />
-                  <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={0.5} fill="currentColor" />
-                  {/* Left penalty area and goal box */}
-                  <rect className="pitch-marking" x="0" y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
-                  <rect className="pitch-marking" x="0" y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
-                  <circle className="pitch-marking" cx={11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
-                  {/* Right penalty area and goal box */}
-                  <rect className="pitch-marking" x={pitch.length - 16.5} y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
-                  <rect className="pitch-marking" x={pitch.length - 5.5} y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
-                  <circle className="pitch-marking" cx={pitch.length - 11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
-                  {/* Ball Marker */}
-                  <circle cx={pitch.ball.x} cy={pitch.ball.y} r={Math.max(pitch.width * .022, .6)} fill="rgba(74, 239, 172, 0.3)" />
-                  <circle className="ball-marker" cx={pitch.ball.x} cy={pitch.ball.y} r={Math.max(pitch.width * .012, .25)} />
-                  {pitch.players.map((player, index) => <g key={player.playerId}>
-                    <circle className={`player-marker team-marker-${pitch.teamIds.indexOf(player.teamId) % 2}`} cx={player.position.x} cy={player.position.y} r={Math.max(pitch.width * .038, 1.1)} />
-                    <text className="pitch-player-label" x={player.position.x} y={player.position.y + Math.max(pitch.width * .009, .2)} textAnchor="middle">{index + 1}</text>
-                    <title>{`${player.teamId} · ${player.playerId}`}</title>
-                  </g>)}
+                <svg
+                  className="canonical-pitch"
+                  style={{ aspectRatio: `${pitch.length + 6} / ${pitch.width + 4.4}` }}
+                  viewBox={`-3 -2.2 ${pitch.length + 6} ${pitch.width + 4.4}`}
+                  role="img"
+                  aria-label={`Observed player and ball positions at ${clock(selectedSeconds)}, period ${selectedFrame.period}`}
+                  aria-describedby="pitch-description"
+                >
+                  <defs>
+                    {/* Deep Stadium Floodlight & Turf Illumination */}
+                    <radialGradient id="canonical-floodlight" cx="50%" cy="50%" r="62%" fx="50%" fy="48%">
+                      <stop offset="0%" stopColor="#1a5a36" />
+                      <stop offset="42%" stopColor="#134729" />
+                      <stop offset="82%" stopColor="#0b301b" />
+                      <stop offset="100%" stopColor="#061e11" />
+                    </radialGradient>
+
+                    {/* Outer Stadium Apron Gradient */}
+                    <linearGradient id="canonical-apron" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0a2517" />
+                      <stop offset="100%" stopColor="#05160d" />
+                    </linearGradient>
+
+                    {/* Lawn Sheen Bands */}
+                    <linearGradient id="canonical-sheen" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.04" />
+                      <stop offset="50%" stopColor="#ffffff" stopOpacity="0.01" />
+                      <stop offset="100%" stopColor="#000000" stopOpacity="0.07" />
+                    </linearGradient>
+
+                    {/* 3D Soccer Ball Shading */}
+                    <radialGradient id="canonical-ball-sphere" cx="35%" cy="30%" r="68%">
+                      <stop offset="0%" stopColor="#ffffff" />
+                      <stop offset="55%" stopColor="#f8fafc" />
+                      <stop offset="85%" stopColor="#cbd5e1" />
+                      <stop offset="100%" stopColor="#64748b" />
+                    </radialGradient>
+
+                    {/* Goal Net Diamond Weave Pattern */}
+                    <pattern id="canonical-net-pattern" width="0.7" height="0.7" patternUnits="userSpaceOnUse">
+                      <rect width="0.7" height="0.7" fill="rgba(255, 255, 255, 0.02)" />
+                      <path d="M 0 0.7 L 0.7 0 M 0 0 L 0.7 0.7" stroke="rgba(255, 255, 255, 0.38)" strokeWidth="0.08" />
+                    </pattern>
+
+                    {/* Ground Soft Shadows */}
+                    <filter id="canonical-ball-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur in="SourceAlpha" stdDeviation="0.25" />
+                      <feColorMatrix type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.5 0" />
+                    </filter>
+                    <filter id="canonical-player-shadow" x="-40%" y="-40%" width="180%" height="180%">
+                      <feGaussianBlur in="SourceAlpha" stdDeviation="0.28" />
+                      <feColorMatrix type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.45 0" />
+                    </filter>
+                  </defs>
+
+                  {/* Outer Stadium Turf Apron & Run-off Track */}
+                  <rect x="-3" y="-2.2" width={pitch.length + 6} height={pitch.width + 4.4} fill="url(#canonical-apron)" />
+
+                  {/* Main Floodlit Playing Turf */}
+                  <rect className="pitch-boundary" x="0" y="0" width={pitch.length} height={pitch.width} fill="url(#canonical-floodlight)" />
+
+                  {/* 10 Precision Lawn Mowing Bands */}
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <rect
+                      key={index}
+                      x={index * (pitch.length / 10)}
+                      y="0"
+                      width={pitch.length / 10}
+                      height={pitch.width}
+                      fill="url(#canonical-sheen)"
+                      opacity={index % 2 === 0 ? 0.6 : 0.25}
+                      pointerEvents="none"
+                    />
+                  ))}
+
+                  {/* Goal Structures & Nets (Behind Goal Lines) */}
+                  <g className="canonical-goal-nets" pointerEvents="none">
+                    {/* Left Goal Net & Posts */}
+                    <rect
+                      x="-2.2"
+                      y={pitch.width / 2 - 3.66}
+                      width="2.2"
+                      height="7.32"
+                      rx="0.3"
+                      fill="url(#canonical-net-pattern)"
+                      stroke="rgba(255, 255, 255, 0.65)"
+                      strokeWidth="0.22"
+                    />
+                    <line
+                      x1="0"
+                      y1={pitch.width / 2 - 3.66}
+                      x2="0"
+                      y2={pitch.width / 2 + 3.66}
+                      stroke="#ffffff"
+                      strokeWidth="0.45"
+                      strokeLinecap="round"
+                    />
+
+                    {/* Right Goal Net & Posts */}
+                    <rect
+                      x={pitch.length}
+                      y={pitch.width / 2 - 3.66}
+                      width="2.2"
+                      height="7.32"
+                      rx="0.3"
+                      fill="url(#canonical-net-pattern)"
+                      stroke="rgba(255, 255, 255, 0.65)"
+                      strokeWidth="0.22"
+                    />
+                    <line
+                      x1={pitch.length}
+                      y1={pitch.width / 2 - 3.66}
+                      x2={pitch.length}
+                      y2={pitch.width / 2 + 3.66}
+                      stroke="#ffffff"
+                      strokeWidth="0.45"
+                      strokeLinecap="round"
+                    />
+                  </g>
+
+                  {/* Sideline Technical Coaching Benches */}
+                  <g className="pitch-sideline-benches" pointerEvents="none">
+                    <rect x={pitch.length / 2 - 14} y="-1.6" width="10" height="1.0" fill="none" stroke="rgba(255, 255, 255, 0.2)" strokeWidth="0.12" strokeDasharray="0.5 0.3" />
+                    <rect x={pitch.length / 2 + 4} y="-1.6" width="10" height="1.0" fill="none" stroke="rgba(255, 255, 255, 0.2)" strokeWidth="0.12" strokeDasharray="0.5 0.3" />
+                  </g>
+
+                  {/* Official Regulation Pitch Markings in Crisp High-Visibility White */}
+                  <g className="canonical-pitch-markings">
+                    {/* Halfway line & center circle */}
+                    <line className="pitch-marking" x1={pitch.length / 2} y1="0" x2={pitch.length / 2} y2={pitch.width} />
+                    <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={pitch.width * 0.135} fill="none" />
+                    <circle className="pitch-marking" cx={pitch.length / 2} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+
+                    {/* Left penalty area and goal box */}
+                    <rect className="pitch-marking" x="0" y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+                    <rect className="pitch-marking" x="0" y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+                    <circle className="pitch-marking" cx={11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+                    {/* Left Penalty Arc (The D) */}
+                    <path
+                      className="pitch-marking"
+                      d={`M 16.5 ${pitch.width / 2 - 7.31} A 9.15 9.15 0 0 1 16.5 ${pitch.width / 2 + 7.31}`}
+                      fill="none"
+                    />
+
+                    {/* Right penalty area and goal box */}
+                    <rect className="pitch-marking" x={pitch.length - 16.5} y={pitch.width / 2 - 20.15} width={16.5} height={40.3} fill="none" />
+                    <rect className="pitch-marking" x={pitch.length - 5.5} y={pitch.width / 2 - 9.15} width={5.5} height={18.3} fill="none" />
+                    <circle className="pitch-marking" cx={pitch.length - 11} cy={pitch.width / 2} r={0.5} fill="currentColor" />
+                    {/* Right Penalty Arc (The D) */}
+                    <path
+                      className="pitch-marking"
+                      d={`M ${pitch.length - 16.5} ${pitch.width / 2 - 7.31} A 9.15 9.15 0 0 0 ${pitch.length - 16.5} ${pitch.width / 2 + 7.31}`}
+                      fill="none"
+                    />
+
+                    {/* 4 Regulation Corner Arcs (1m radius) */}
+                    <path className="pitch-marking" d="M 0 1 A 1 1 0 0 0 1 0" fill="none" />
+                    <path className="pitch-marking" d={`M 0 ${pitch.width - 1} A 1 1 0 0 1 1 ${pitch.width}`} fill="none" />
+                    <path className="pitch-marking" d={`M ${pitch.length} 1 A 1 1 0 0 1 ${pitch.length - 1} 0`} fill="none" />
+                    <path className="pitch-marking" d={`M ${pitch.length} ${pitch.width - 1} A 1 1 0 0 0 ${pitch.length - 1} ${pitch.width}`} fill="none" />
+                  </g>
+
+                  {/* Corner Flag Markers */}
+                  <g className="pitch-corner-flags" pointerEvents="none">
+                    <circle cx="0" cy="0" r="0.45" fill="#facc15" stroke="#a16207" strokeWidth="0.1" />
+                    <circle cx="0" cy={pitch.width} r="0.45" fill="#facc15" stroke="#a16207" strokeWidth="0.1" />
+                    <circle cx={pitch.length} cy="0" r="0.45" fill="#facc15" stroke="#a16207" strokeWidth="0.1" />
+                    <circle cx={pitch.length} cy={pitch.width} r="0.45" fill="#facc15" stroke="#a16207" strokeWidth="0.1" />
+                  </g>
+
+                  {/* Ball Marker Group */}
+                  <g className="canonical-ball-group">
+                    {/* Ball Turf Shadow */}
+                    <ellipse
+                      cx={pitch.ball.x}
+                      cy={pitch.ball.y + 0.3}
+                      rx={Math.max(pitch.width * 0.016, 0.35)}
+                      ry={Math.max(pitch.width * 0.008, 0.18)}
+                      fill="rgba(0, 0, 0, 0.55)"
+                      filter="url(#canonical-ball-shadow)"
+                    />
+                    {/* Tactical Ball Pulse Aura */}
+                    <circle
+                      cx={pitch.ball.x}
+                      cy={pitch.ball.y}
+                      r={Math.max(pitch.width * 0.022, 0.65)}
+                      fill="rgba(74, 239, 172, 0.22)"
+                      stroke="rgba(74, 239, 172, 0.45)"
+                      strokeWidth="0.15"
+                    />
+                    {/* 3D Ball Marker */}
+                    <circle
+                      className="ball-marker"
+                      cx={pitch.ball.x}
+                      cy={pitch.ball.y}
+                      r={Math.max(pitch.width * 0.012, 0.28)}
+                      fill="url(#canonical-ball-sphere)"
+                      stroke="#0f172a"
+                      strokeWidth="0.16"
+                    />
+                    <circle
+                      cx={pitch.ball.x}
+                      cy={pitch.ball.y}
+                      r={Math.max(pitch.width * 0.004, 0.09)}
+                      fill="#0f172a"
+                      pointerEvents="none"
+                    />
+                  </g>
+
+                  {/* Player Markers with Turf Contact Shadow and Sleek Badges */}
+                  {pitch.players.map((player, index) => {
+                    const teamIdx = pitch.teamIds.indexOf(player.teamId) % 2;
+                    const radius = Math.max(pitch.width * 0.038, 1.15);
+                    return (
+                      <g key={player.playerId} className="canonical-player-group">
+                        <ellipse
+                          cx={player.position.x}
+                          cy={player.position.y + 0.32}
+                          rx={radius * 1.05}
+                          ry={radius * 0.42}
+                          fill="rgba(0, 0, 0, 0.5)"
+                          filter="url(#canonical-player-shadow)"
+                        />
+                        <circle
+                          cx={player.position.x}
+                          cy={player.position.y}
+                          r={radius + 0.28}
+                          fill="none"
+                          stroke={teamIdx === 0 ? 'rgba(239, 113, 130, 0.45)' : 'rgba(113, 168, 247, 0.45)'}
+                          strokeWidth="0.2"
+                        />
+                        <circle
+                          className={`player-marker team-marker-${teamIdx}`}
+                          cx={player.position.x}
+                          cy={player.position.y}
+                          r={radius}
+                        />
+                        <text
+                          className="pitch-player-label"
+                          x={player.position.x}
+                          y={player.position.y + Math.max(pitch.width * 0.009, 0.22)}
+                          textAnchor="middle"
+                        >
+                          {index + 1}
+                        </text>
+                        <title>{`${player.teamId} · ${player.playerId}`}</title>
+                      </g>
+                    );
+                  })}
                 </svg>
                 <div id={`canonical-frame-${encodeURIComponent(selectedFrame.frameId)}`} tabIndex={-1}>
                   <p id="pitch-description" className="pitch-caption" role="status" aria-live="polite" aria-atomic="true">
