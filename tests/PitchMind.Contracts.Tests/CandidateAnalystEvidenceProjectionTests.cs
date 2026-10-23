@@ -1,11 +1,43 @@
 using System.Text;
 using System.Text.Json;
+using PitchMind.Api;
 using Xunit;
 
 namespace PitchMind.Contracts.Tests;
 
 public sealed class CandidateAnalystEvidenceProjectionTests
 {
+    [Fact]
+    public void Agent_summary_is_replaced_by_validated_claims_and_duplicate_evidence_ids_are_removed()
+    {
+        var claims = new CandidateAnalystClaim[]
+        {
+            new("The shot was saved.", ["event-121"]),
+            new("Pressure preceded the shot.", ["event-120", "event-120", "event-119"])
+        };
+
+        var normalized = PitchMind.Api.CandidateMatchAnalystService.NormalizeGeneratedAnswer(
+            "answered", "Uncited extra narrative from the agent.", claims,
+            new HashSet<string>(["event-119", "event-120", "event-121"], StringComparer.Ordinal));
+
+        Assert.Equal("The shot was saved. Pressure preceded the shot.", normalized.Answer);
+        Assert.Equal(["event-120", "event-119"], normalized.Claims[1].EvidenceIds);
+    }
+
+    [Fact]
+    public void Agent_claim_with_evidence_outside_the_selected_packet_is_rejected()
+    {
+        var claims = new CandidateAnalystClaim[]
+        {
+            new("Unsupported event claim.", ["event-from-another-match"])
+        };
+
+        Assert.Throws<PitchMind.Api.CandidateAnalystUnavailableException>(() =>
+            PitchMind.Api.CandidateMatchAnalystService.NormalizeGeneratedAnswer(
+                "answered", "Unsupported event claim.", claims,
+                new HashSet<string>(["event-121"], StringComparer.Ordinal)));
+    }
+
     [Fact]
     public void Large_source_event_is_reduced_to_bounded_evidence_without_dropping_identity_or_time()
     {

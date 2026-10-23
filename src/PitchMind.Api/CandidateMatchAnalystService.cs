@@ -129,22 +129,42 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
         var result = await generator.GenerateAsync(request, source.SourceSha256, selected, cancellationToken)
             .ConfigureAwait(false);
         var allowedIds = selected.Select(item => item.SourceEventId).ToHashSet(StringComparer.Ordinal);
-        if (result.Status == "answered")
-        {
-            if (result.Claims.Count is < 1 or > MaximumEvidenceItems ||
-                result.Claims.Any(claim => string.IsNullOrWhiteSpace(claim.Text) || claim.Text.Length > 1_000 ||
-                    claim.Text.Any(char.IsControl) || claim.EvidenceIds.Count is < 1 or > MaximumEvidenceItems ||
-                    claim.EvidenceIds.Distinct(StringComparer.Ordinal).Count() != claim.EvidenceIds.Count ||
-                    claim.EvidenceIds.Any(id => !allowedIds.Contains(id))) ||
-                !string.Equals(result.Answer, string.Join(" ", result.Claims.Select(claim => claim.Text)), StringComparison.Ordinal))
-                throw new CandidateAnalystUnavailableException();
-        }
-        else if (result.Status != "insufficientEvidence" || result.Claims.Count != 0 ||
-                 string.IsNullOrWhiteSpace(result.Answer) || result.Answer.Length > 1_000)
-            throw new CandidateAnalystUnavailableException();
+        var validated = NormalizeGeneratedAnswer(result.Status, result.Answer, result.Claims, allowedIds);
 
-        return new(result.Status, result.Answer, result.Claims, request.MatchId,
+        return new(validated.Status, validated.Answer, validated.Claims, request.MatchId,
             request.SelectedSourceClockValue, source.SourceSha256, request.AgentName, "hypothesis", Limitations);
+    }
+
+    internal static (string Status, string Answer, IReadOnlyList<CandidateAnalystClaim> Claims) NormalizeGeneratedAnswer(
+        string status, string answer, IReadOnlyList<CandidateAnalystClaim> claims, IReadOnlySet<string> allowedEvidenceIds)
+    {
+        if (status == "answered")
+        {
+            if (claims.Count is < 1 or > MaximumEvidenceItems)
+                throw new CandidateAnalystUnavailableException();
+
+            var normalizedClaims = new List<CandidateAnalystClaim>(claims.Count);
+            foreach (var claim in claims)
+            {
+                var evidenceIds = claim.EvidenceIds.Distinct(StringComparer.Ordinal).ToArray();
+                if (string.IsNullOrWhiteSpace(claim.Text) || claim.Text.Length > 1_000 || claim.Text.Any(char.IsControl) ||
+                    evidenceIds.Length is < 1 or > MaximumEvidenceItems || evidenceIds.Any(id => !allowedEvidenceIds.Contains(id)))
+                    throw new CandidateAnalystUnavailableException();
+                normalizedClaims.Add(new CandidateAnalystClaim(claim.Text, Array.AsReadOnly(evidenceIds)));
+            }
+
+            // The agent's separate summary can drift from its cited claims. Only
+            // expose text that is itself attached to validated evidence IDs.
+            var validatedAnswer = string.Join(" ", normalizedClaims.Select(claim => claim.Text));
+            if (validatedAnswer.Length > 2_500)
+                throw new CandidateAnalystUnavailableException();
+            return (status, validatedAnswer, Array.AsReadOnly(normalizedClaims.ToArray()));
+        }
+
+        if (status != "insufficientEvidence" || claims.Count != 0 ||
+            string.IsNullOrWhiteSpace(answer) || answer.Length > 1_000 || answer.Any(char.IsControl))
+            throw new CandidateAnalystUnavailableException();
+        return (status, answer, claims);
     }
 
     internal static JsonElement ProjectEvidencePayload(JsonElement source, bool includePlayerPositions = true)
@@ -192,7 +212,7 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     private const int MaximumOutputTokens = 512;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string ResponseContract = """
-        RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties: {"status":"answered" or "insufficientEvidence","answer":"string","claims":[{"text":"string","evidenceIds":["source event ID"]}]}. Do not include Markdown fences or any text outside the JSON object. Use status "answered" only when every factual claim is supported by the supplied records. Every claim must cite one or more exact records[].evidenceId values; never invent evidence IDs. The answer must equal the claims' text joined with one space. If the records do not support an answer, use status "insufficientEvidence", give a brief reason in answer, and return an empty claims array.
+        RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties: {"status":"answered" or "insufficientEvidence","answer":"string","claims":[{"text":"string","evidenceIds":["source event ID"]}]}. Do not include Markdown fences or any text outside the JSON object. Use status "answered" only when every factual claim is supported by the supplied records. Every claim must cite one or more exact records[].evidenceId values; never invent evidence IDs or repeat an ID within one claim. Keep claims concise and ensure every factual sentence in the report appears in claims. The application builds its displayed answer from validated claim text and ignores any uncited extra summary. If the records do not support an answer, use status "insufficientEvidence", give a brief reason in answer, and return an empty claims array.
         """;
 
     private readonly HttpClient _client;
