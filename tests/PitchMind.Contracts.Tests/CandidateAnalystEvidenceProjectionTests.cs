@@ -36,44 +36,19 @@ public sealed class CandidateAnalystEvidenceProjectionTests
                 sourcePeriod = 1, sourceEventType = "Tackle", rawPayload = index == 7 ? projected : eventOnly
             })
         });
-        var outerRequest = JsonSerializer.Serialize(new
-        {
-            input = innerRequest,
-            max_output_tokens = 512,
-            text = new
-            {
-                format = new
-                {
-                    type = "json_schema", name = "candidate_match_answer", strict = true,
-                    schema = new
-                    {
-                        type = "object", additionalProperties = false,
-                        required = new[] { "status", "answer", "claims" },
-                        properties = new
-                        {
-                            status = new { type = "string", @enum = new[] { "answered", "insufficientEvidence" } },
-                            answer = new { type = "string" },
-                            claims = new
-                            {
-                                type = "array", items = new
-                                {
-                                    type = "object", additionalProperties = false,
-                                    required = new[] { "text", "evidenceIds" },
-                                    properties = new
-                                    {
-                                        text = new { type = "string" },
-                                        evidenceIds = new { type = "array", items = new { type = "string" } }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        var outerRequest = PitchMind.Api.FoundryCandidateMatchAnswerGenerator.CreateResponseRequest(innerRequest);
+        using var requestDocument = JsonDocument.Parse(outerRequest);
+        var requestRoot = requestDocument.RootElement;
         Assert.True(Encoding.UTF8.GetByteCount(innerRequest) < 32_768);
-        Assert.True(Encoding.UTF8.GetByteCount(outerRequest) < 40_960,
-            $"Serialized Foundry request was {Encoding.UTF8.GetByteCount(outerRequest)} bytes.");
+        Assert.True(outerRequest.Length < 40_960,
+            $"Serialized Foundry request was {outerRequest.Length} bytes.");
+        Assert.Equal(2, requestRoot.EnumerateObject().Count());
+        Assert.Equal(512, requestRoot.GetProperty("max_output_tokens").GetInt32());
+        var agentInput = requestRoot.GetProperty("input").GetString();
+        Assert.Contains("RESPONSE CONTRACT", agentInput, StringComparison.Ordinal);
+        Assert.Contains("MATCH EVIDENCE PACKET (JSON)", agentInput, StringComparison.Ordinal);
+        Assert.Contains("source-event-818", agentInput, StringComparison.Ordinal);
+        Assert.False(requestRoot.TryGetProperty("text", out _));
     }
 
     private static object CreateSourceEvent() => new
