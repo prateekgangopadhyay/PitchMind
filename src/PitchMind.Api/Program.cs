@@ -156,9 +156,9 @@ if (candidateFeedRuntimeEnabled)
     else
     {
         builder.Services.AddSingleton<ICandidateMatchAnswerGenerator>(
-            _ => new FoundryCandidateMatchAnswerGenerator(builder.Configuration, azureRuntime
+            services => new FoundryCandidateMatchAnswerGenerator(builder.Configuration, azureRuntime
                 ? AzureManagedIdentity(builder.Configuration)
-                : new DefaultAzureCredential()));
+                : new DefaultAzureCredential(), services.GetRequiredService<ILogger<FoundryCandidateMatchAnswerGenerator>>()));
     }
 }
 if (string.Equals(runtimeProfile, "local", StringComparison.OrdinalIgnoreCase))

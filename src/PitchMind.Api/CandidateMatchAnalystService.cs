@@ -218,9 +218,12 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     private readonly HttpClient _client;
     private readonly TokenCredential _credential;
     private readonly Uri _projectEndpoint;
-    public FoundryCandidateMatchAnswerGenerator(IConfiguration configuration, TokenCredential credential)
+    private readonly ILogger<FoundryCandidateMatchAnswerGenerator> _logger;
+    public FoundryCandidateMatchAnswerGenerator(IConfiguration configuration, TokenCredential credential,
+        ILogger<FoundryCandidateMatchAnswerGenerator> logger)
     {
         _credential = credential;
+        _logger = logger;
         var defaultAgentName = configuration["Foundry:AgentName"] ?? CandidateAnalystAgentCatalog.DefaultAgentName;
         var endpointValue = configuration["Foundry:Endpoint"];
         if (!Uri.TryCreate(endpointValue, UriKind.Absolute, out var endpoint) || endpoint.Scheme != Uri.UriSchemeHttps ||
@@ -260,33 +263,102 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var token = await _credential.GetTokenAsync(new TokenRequestContext(["https://ai.azure.com/.default"]), timeout.Token)
-                .ConfigureAwait(false);
+            AccessToken token;
+            try
+            {
+                token = await _credential.GetTokenAsync(new TokenRequestContext(["https://ai.azure.com/.default"]), timeout.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (AuthenticationFailedException exception)
+            {
+                _logger.LogWarning("Foundry agent token acquisition failed ({FailureType}).", exception.GetType().Name);
+                throw new CandidateAnalystUnavailableException();
+            }
             var endpoint = new Uri(_projectEndpoint.AbsoluteUri.TrimEnd('/') + "/agents/" +
                 Uri.EscapeDataString(question.AgentName) + "/endpoint/protocols/openai/responses?api-version=v1", UriKind.Absolute);
-            using var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
-            message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            message.Content = new ByteArrayContent(body);
-            message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            using var response = await _client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
-                .ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) throw new CandidateAnalystUnavailableException();
-            var bytes = await ReadBoundedAsync(response.Content, MaximumResponseBytes, timeout.Token).ConfigureAwait(false);
-            return ParseResponse(bytes);
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                try
+                {
+                    using var message = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                    message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+                    message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                    message.Content = new ByteArrayContent(body);
+                    message.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                    using var response = await _client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                        .ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var requestId = GetSafeRequestId(response);
+                        if (attempt == 1 && IsTransient(response.StatusCode))
+                        {
+                            await Task.Delay(GetRetryDelay(response), timeout.Token).ConfigureAwait(false);
+                            continue;
+                        }
+                        _logger.LogWarning(
+                            "Foundry agent request failed with HTTP {StatusCode} on attempt {Attempt}. Upstream request ID: {RequestId}.",
+                            (int)response.StatusCode, attempt, requestId);
+                        throw new CandidateAnalystUnavailableException();
+                    }
+                    var bytes = await ReadBoundedAsync(response.Content, MaximumResponseBytes, timeout.Token).ConfigureAwait(false);
+                    try
+                    {
+                        return ParseResponse(bytes);
+                    }
+                    catch (CandidateAnalystUnavailableException)
+                    {
+                        _logger.LogWarning("Foundry agent returned a response that did not satisfy the application response contract.");
+                        throw;
+                    }
+                }
+                catch (HttpRequestException exception) when (attempt == 1)
+                {
+                    _logger.LogWarning("Foundry agent transport failed ({FailureType}); retrying once.", exception.GetType().Name);
+                    await Task.Delay(TimeSpan.FromMilliseconds(500), timeout.Token).ConfigureAwait(false);
+                }
+                catch (HttpRequestException exception)
+                {
+                    _logger.LogWarning("Foundry agent transport failed ({FailureType}) after retry.", exception.GetType().Name);
+                    throw new CandidateAnalystUnavailableException();
+                }
+            }
+            throw new CandidateAnalystUnavailableException();
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning("Foundry agent request timed out.");
             throw new CandidateAnalystUnavailableException();
         }
         catch (AuthenticationFailedException)
         {
             throw new CandidateAnalystUnavailableException();
         }
-        catch (HttpRequestException)
-        {
-            throw new CandidateAnalystUnavailableException();
-        }
+    }
+
+    private static bool IsTransient(System.Net.HttpStatusCode statusCode) =>
+        statusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.BadGateway or
+            System.Net.HttpStatusCode.ServiceUnavailable or System.Net.HttpStatusCode.GatewayTimeout;
+
+    private static TimeSpan GetRetryDelay(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        var delay = retryAfter?.Delta ?? (retryAfter?.Date is DateTimeOffset date
+            ? date - DateTimeOffset.UtcNow
+            : TimeSpan.FromMilliseconds(500));
+        return TimeSpan.FromMilliseconds(Math.Clamp(delay.TotalMilliseconds, 100, 1_000));
+    }
+
+    private static string GetSafeRequestId(HttpResponseMessage response)
+    {
+        foreach (var header in new[] { "x-request-id", "apim-request-id" })
+            if (response.Headers.TryGetValues(header, out var values))
+            {
+                var value = values.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(value) && value.Length <= 128 && value.All(character =>
+                        char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.'))
+                    return value;
+            }
+        return "unavailable";
     }
 
     internal static byte[] CreateResponseRequest(string evidencePacket)

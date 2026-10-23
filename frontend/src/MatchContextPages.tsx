@@ -321,6 +321,9 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     let initialized = false;
     let polling = false;
     let active = true;
+    let pendingEvent: CandidateEvent | null = null;
+    let retryAttempt = 0;
+    let retryAt = 0;
     const poll = async () => {
       if (!active || polling || document.visibilityState === 'hidden') return;
       polling = true;
@@ -331,19 +334,37 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
           afterSequence = Math.max(-1, status.currentSequence - 40);
           initialized = true;
         }
-        if (status.currentSequence <= afterSequence) {
+        if (status.currentSequence > afterSequence) {
+          const query = new URLSearchParams({ afterSequence: String(afterSequence), limit: '100' });
+          const page = await request<{ matchId: string; sourceSha256: string; items: CandidateEvent[]; hasMore: boolean }>(
+            `simulation/candidate/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal);
+          if (page.matchId !== matchId || page.sourceSha256 !== status.sourceSha256) throw new Error('Live event evidence changed source identity.');
+          const notable = page.items.filter(item => hotEvents.has(item.eventType.replace(/[^a-z]/gi, '').toLowerCase()));
+          const latest = notable.at(-1);
+          if (latest) {
+            pendingEvent = latest;
+            retryAttempt = 0;
+            retryAt = 0;
+          }
+          // Advance the event cursor before calling Foundry. If generation fails,
+          // retry the bounded pending event below instead of replaying this page
+          // and submitting the same prompt every polling interval.
+          afterSequence = page.items.at(-1)?.sequence ?? afterSequence;
+        }
+
+        if (!pendingEvent) {
           setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Stream paused; waiting for the next event.');
           return;
         }
-        const query = new URLSearchParams({ afterSequence: String(afterSequence), limit: '100' });
-        const page = await request<{ matchId: string; sourceSha256: string; items: CandidateEvent[]; hasMore: boolean }>(
-          `simulation/candidate/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal);
-        if (page.matchId !== matchId || page.sourceSha256 !== status.sourceSha256) throw new Error('Live event evidence changed source identity.');
-        const notable = page.items.filter(item => hotEvents.has(item.eventType.replace(/[^a-z]/gi, '').toLowerCase()));
-        const latest = notable.at(-1);
-        if (latest) {
-          setLiveReportStatus(`Analyzing ${latest.eventType} · sequence ${latest.sequence}…`);
-          setLiveReportError('');
+        if (Date.now() < retryAt) {
+          setLiveReportStatus(`Foundry is temporarily unavailable. Retrying ${pendingEvent.eventType} shortly…`);
+          return;
+        }
+
+        const latest = pendingEvent;
+        setLiveReportStatus(`Analyzing ${latest.eventType} · sequence ${latest.sequence}…`);
+        setLiveReportError('');
+        try {
           const result = await askCandidateAnalyst({
             matchId, selectedSourceClockValue: latest.clockSeconds, audience: 'analyst', agentName: agentNameRef.current,
             question: `Create a concise live event report for source event ${latest.eventType} (event ID ${latest.eventId}, sequence ${latest.sequence}) at source clock ${latest.clockSeconds}, period ${latest.period}. Describe only what the supplied records support, explain cautious tactical implications as possibilities, cite the supplied event IDs, and state uncertainty. Do not infer intent, causation, or unobserved facts.`
@@ -353,13 +374,27 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
             { event: latest, answer: result },
             ...current.filter(report => report.event.eventId !== latest.eventId)
           ].slice(0, 6));
+          pendingEvent = null;
+          retryAttempt = 0;
+          retryAt = 0;
           setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Latest available event analyzed.');
+        } catch (failure) {
+          if (!active || controller.signal.aborted) return;
+          retryAttempt += 1;
+          if (retryAttempt > 3) {
+            pendingEvent = null;
+            setLiveReportStatus('This event could not be analyzed after several attempts. New notable events will still be analyzed.');
+          } else {
+            const retryDelays = [10_000, 30_000, 60_000];
+            retryAt = Date.now() + retryDelays[retryAttempt - 1];
+            setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
+            setLiveReportStatus(`Could not analyze this event. Retrying in ${retryDelays[retryAttempt - 1] / 1000}s…`);
+          }
         }
-        afterSequence = page.items.at(-1)?.sequence ?? afterSequence;
       } catch (failure) {
         if (active && !controller.signal.aborted) {
           setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
-          setLiveReportStatus('Could not analyze the latest live event. Retrying…');
+          setLiveReportStatus('Could not load the latest event evidence. Retrying…');
         }
       } finally {
         polling = false;
