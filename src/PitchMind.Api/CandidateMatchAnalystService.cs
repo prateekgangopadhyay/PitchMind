@@ -191,29 +191,9 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     private const int MaximumResponseBytes = 16_384;
     private const int MaximumOutputTokens = 512;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly object ResponseSchema = new
-    {
-        type = "object", additionalProperties = false,
-        required = new[] { "status", "answer", "claims" },
-        properties = new
-        {
-            status = new { type = "string", @enum = new[] { "answered", "insufficientEvidence" } },
-            answer = new { type = "string" },
-            claims = new
-            {
-                type = "array", items = new
-                {
-                    type = "object", additionalProperties = false,
-                    required = new[] { "text", "evidenceIds" },
-                    properties = new
-                    {
-                        text = new { type = "string" },
-                        evidenceIds = new { type = "array", items = new { type = "string" } }
-                    }
-                }
-            }
-        }
-    };
+    private const string ResponseContract = """
+        RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties: {"status":"answered" or "insufficientEvidence","answer":"string","claims":[{"text":"string","evidenceIds":["source event ID"]}]}. Do not include Markdown fences or any text outside the JSON object. Use status "answered" only when every factual claim is supported by the supplied records. Every claim must cite one or more exact records[].evidenceId values; never invent evidence IDs. The answer must equal the claims' text joined with one space. If the records do not support an answer, use status "insufficientEvidence", give a brief reason in answer, and return an empty claims array.
+        """;
 
     private readonly HttpClient _client;
     private readonly TokenCredential _credential;
@@ -253,12 +233,7 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
                 sourceEventType = item.RawEventType, rawPayload = item.RawPayload
             })
         }, JsonOptions);
-        var body = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            input,
-            max_output_tokens = MaximumOutputTokens,
-            text = new { format = new { type = "json_schema", name = "candidate_match_answer", strict = true, schema = ResponseSchema } }
-        }, JsonOptions);
+        var body = CreateResponseRequest(input);
         if (body.Length > MaximumRequestBytes) throw new CandidateAnalystUnavailableException();
 
         try
@@ -292,6 +267,15 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
         {
             throw new CandidateAnalystUnavailableException();
         }
+    }
+
+    internal static byte[] CreateResponseRequest(string evidencePacket)
+    {
+        // Foundry project-agent endpoints reject the Responses API `text` format
+        // override when an agent is selected. Keep the output contract in the
+        // bounded agent input and validate the returned JSON locally instead.
+        var input = $"{ResponseContract}\n\nMATCH EVIDENCE PACKET (JSON):\n{evidencePacket}";
+        return JsonSerializer.SerializeToUtf8Bytes(new { input, max_output_tokens = MaximumOutputTokens }, JsonOptions);
     }
 
     private static (string Status, string Answer, IReadOnlyList<CandidateAnalystClaim> Claims) ParseResponse(byte[] bytes)
