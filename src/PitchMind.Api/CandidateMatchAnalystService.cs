@@ -390,9 +390,9 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
                     .Select(item => item.GetProperty("text").GetString()).Where(text => !string.IsNullOrWhiteSpace(text)));
             }
             if (string.IsNullOrWhiteSpace(content)) throw new CandidateAnalystUnavailableException();
-            using var answerDocument = JsonDocument.Parse(content);
+            using var answerDocument = JsonDocument.Parse(ExtractJsonObject(content));
             var answerRoot = answerDocument.RootElement;
-            if (!HasExactProperties(answerRoot, "status", "answer", "claims")) throw new CandidateAnalystUnavailableException();
+            if (!HasRequiredProperties(answerRoot, "status", "answer", "claims")) throw new CandidateAnalystUnavailableException();
             var status = answerRoot.GetProperty("status").GetString();
             var answer = answerRoot.GetProperty("answer").GetString();
             var claimItems = answerRoot.GetProperty("claims");
@@ -402,7 +402,7 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
             var claims = new List<CandidateAnalystClaim>();
             foreach (var item in claimItems.EnumerateArray())
             {
-                if (!HasExactProperties(item, "text", "evidenceIds")) throw new CandidateAnalystUnavailableException();
+                if (!HasRequiredProperties(item, "text", "evidenceIds")) throw new CandidateAnalystUnavailableException();
                 var text = item.GetProperty("text").GetString();
                 var idsElement = item.GetProperty("evidenceIds");
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 1_000 || text.Any(char.IsControl) || idsElement.ValueKind != JsonValueKind.Array)
@@ -419,9 +419,34 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
         }
     }
 
-    private static bool HasExactProperties(JsonElement element, params string[] names) =>
-        element.ValueKind == JsonValueKind.Object && element.EnumerateObject().Select(property => property.Name)
-            .Order(StringComparer.Ordinal).SequenceEqual(names.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+    private static string ExtractJsonObject(string content)
+    {
+        var candidate = content.Trim();
+        if (candidate.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstLine = candidate.IndexOf('\n');
+            if (firstLine >= 0) candidate = candidate[(firstLine + 1)..];
+            var closingFence = candidate.LastIndexOf("```", StringComparison.Ordinal);
+            if (closingFence >= 0) candidate = candidate[..closingFence];
+            candidate = candidate.Trim();
+        }
+
+        if (!candidate.StartsWith('{'))
+        {
+            var objectStart = candidate.IndexOf('{');
+            var objectEnd = candidate.LastIndexOf('}');
+            if (objectStart < 0 || objectEnd <= objectStart) throw new CandidateAnalystUnavailableException();
+            candidate = candidate[objectStart..(objectEnd + 1)];
+        }
+        return candidate;
+    }
+
+    private static bool HasRequiredProperties(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return false;
+        var properties = element.EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
+        return names.All(properties.Contains);
+    }
 
     private static async Task<byte[]> ReadBoundedAsync(HttpContent content, int maximumBytes, CancellationToken cancellationToken)
     {
