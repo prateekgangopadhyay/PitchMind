@@ -3,6 +3,7 @@ import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection }
 import { clock, getHostAccessToken, request } from './api';
 import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 import { contextHref } from './routes';
+import { resolveClubLogo } from './clubLogos';
 
 interface CandidateEvent {
   eventId: string;
@@ -55,6 +56,9 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const valueText = (value: unknown) =>
   value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
+const clubInitials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() ?? '').join('');
+const eventLabel = (type: string) => type.replace(/([a-z])([A-Z])/g, '$1 $2').replace('Pressure Applied', 'Pressure');
+
 export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: number } = {}) {
   const { status, error: statusError } = useCandidateStreamStatus();
   const [events, setEvents] = useState<CandidateEvent[]>([]);
@@ -65,8 +69,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const [replaySeconds, setReplaySeconds] = useState<number | null>(selectedSeconds ?? null);
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [cinemaMode, setCinemaMode] = useState(false);
-  const [feedTab, setFeedTab] = useState<'events' | 'telemetry' | 'audit'>('events');
-  const [showMethodology, setShowMethodology] = useState(false);
   const pitchScreenRef = useRef<HTMLDivElement | null>(null);
   const [timelineCategory, setTimelineCategory] = useState<'All' | 'Goals' | 'Shots' | 'Passes' | 'Tackles' | 'Pressures'>('All');
 
@@ -133,7 +135,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
       fetched.forEach(item => merged.set(item.sequence, item));
       bySequence.current = [...merged.values()].sort((a, b) => a.sequence - b.sequence);
       setEvents(bySequence.current);
-      setError(hasMore ? 'More candidate history remains; refreshing on the next cursor update.' : '');
+      setError('');
     } catch (cause) {
       if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Candidate event history unavailable.');
     } finally {
@@ -312,6 +314,23 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
       ? { x: ballX, y: ballY }
       : null;
 
+  // This feed has no explicit possession flag. Highlight a player only when a
+  // tracked location is close to the recorded ball location.
+  const ballCarrier = useMemo(() => {
+    if (!ballPosition || ['Goal', 'HalfTime', 'FullTime'].includes(latest?.eventType ?? '')) return null;
+    const nearby = players.map(player => ({
+      player,
+      distance: typeof player.x === 'number' && typeof player.y === 'number'
+        && player.x >= 0 && player.x <= 100 && player.y >= 0 && player.y <= 100
+        ? Math.hypot(player.x - ballPosition.x, player.y - ballPosition.y)
+        : Number.POSITIVE_INFINITY
+    })).filter(item => Number.isFinite(item.distance)).sort((a, b) => a.distance - b.distance);
+    const nearest = nearby[0];
+    const runnerUp = nearby[1];
+    if (!nearest || nearest.distance > 4 || (runnerUp && runnerUp.distance - nearest.distance < 0.12)) return null;
+    return nearest;
+  }, [ballPosition, latest?.eventType, players]);
+
   // Normalized math strictly preserved for test contract:
   const toPitchX = (value: number) => 3 + value * 0.94;
   const toPitchY = (value: number) => 3 + value * 0.62;
@@ -334,16 +353,15 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
 
   return (
     <section className="content-page candidate-live-page">
-      {/* Broadcast Scoreboard & Live Telemetry Hub */}
+      {/* Match scoreboard */}
       <div className="candidate-match-hero-banner">
-        {/* Top telemetry & status bar */}
         <div className="hero-top-bar">
           <div className="hero-status-pills">
             <span className="live-badge-glow">
               <span className="pulse-dot" aria-hidden="true"></span>
-              CANDIDATE LIVE FEED
+              {status?.isStreaming ? 'LIVE MATCH' : 'MATCH PAUSED'}
             </span>
-            <span className="candidate-feed-label">Synthetic source · not canonical</span>
+            <span className="match-clock-pill">{currentClockFormatted}</span>
           </div>
 
           <div className="hero-stream-action">
@@ -351,24 +369,29 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
               type="button"
               className={`candidate-stream-state ${status?.isStreaming ? 'is-streaming' : ''}`}
               aria-pressed={status?.isStreaming ?? false}
-              aria-label={status?.isStreaming ? 'Pause candidate feed' : 'Resume candidate feed'}
+              aria-label={status?.isStreaming ? 'Pause live match' : 'Resume live match'}
               onClick={() => { void toggleCandidateStream(); }}
             >
               <span className="stream-dot" aria-hidden="true"></span>
-              <span>{status?.isStreaming ? 'Streaming · Click to Pause' : 'Paused · Click to Resume'}</span>
+              <span>{status?.isStreaming ? 'Live · Pause' : 'Paused · Resume'}</span>
             </button>
           </div>
         </div>
 
         <div className="candidate-match-context">
-          <div className="candidate-match-identity"><p className="eyebrow">Selected source match</p>
-            <h1>{sourceTeams.length >= 2 ? `${sourceTeams[0]} · ${sourceTeams[1]}` : 'Match in progress'}</h1>
-            <p>Source clock {currentClockFormatted} · {latest ? `period ${latest.period}` : 'period unavailable'}</p></div>
-          {sourceTeams.length >= 2 && <div className="candidate-source-scoreboard" aria-label={`Source-reported score: ${sourceTeams[0]} ${sourceScore[0] ?? 0}, ${sourceTeams[1]} ${sourceScore[1] ?? 0}; unverified`}>
-            <div className="source-score-team"><span>{sourceTeams[0]}</span><strong>{sourceScore[0] ?? 0}</strong></div>
+          <div className="candidate-match-identity"><p className="eyebrow">Matchday</p>
+            <h1>{sourceTeams.length >= 2 ? `${sourceTeams[0]} vs ${sourceTeams[1]}` : 'Match in progress'}</h1>
+            <p>{latest ? (latest.period === 2 ? 'Second half' : 'First half') : 'Waiting for kick-off'}</p></div>
+          {sourceTeams.length >= 2 && <div className="candidate-source-scoreboard" aria-label={`${sourceTeams[0]} ${sourceScore[0] ?? 0}, ${sourceTeams[1]} ${sourceScore[1] ?? 0}`}>
+            <div className="source-score-team">
+              {resolveClubLogo(sourceTeams[0]) ? <img src={resolveClubLogo(sourceTeams[0])} alt="" /> : <span className="score-team-monogram">{clubInitials(sourceTeams[0])}</span>}
+              <span>{sourceTeams[0]}</span><strong>{sourceScore[0] ?? 0}</strong>
+            </div>
             <span className="source-score-separator" aria-hidden="true">–</span>
-            <div className="source-score-team"><span>{sourceTeams[1]}</span><strong>{sourceScore[1] ?? 0}</strong></div>
-            <small>Source-reported goals · unverified</small>
+            <div className="source-score-team">
+              <strong>{sourceScore[1] ?? 0}</strong><span>{sourceTeams[1]}</span>
+              {resolveClubLogo(sourceTeams[1]) ? <img src={resolveClubLogo(sourceTeams[1])} alt="" /> : <span className="score-team-monogram">{clubInitials(sourceTeams[1])}</span>}
+            </div>
           </div>}
         </div>
 
@@ -377,12 +400,12 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
           <div className="candidate-replay-controls" aria-label="Match event replay">
             <div className="replay-meta">
               <span className="replay-title">Event replay</span>
-              <span className="replay-clock">Source clock · {clock(Math.floor(activeSeconds))}</span>
+              <span className="replay-clock">Match clock · {clock(Math.floor(activeSeconds))}</span>
             </div>
 
             <div className="replay-slider-wrap">
               <input
-                aria-label="Select source event time"
+                  aria-label="Choose match time"
                 type="range"
                 min="0"
                 max={Math.max(1, replayMaximum)}
@@ -398,7 +421,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
               />
               <div className="slider-ticks" aria-hidden="true">
                 <span>0</span>
-                <span>Latest source time · {clock(Math.max(1, replayMaximum))}</span>
+                <span>Latest · {clock(Math.max(1, replayMaximum))}</span>
               </div>
             </div>
 
@@ -428,44 +451,21 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
         )}
       </div>
 
-      {/* Refined Methodology & Verification Notice */}
-      <div className="candidate-caveat-box">
-        <div className="caveat-summary-row">
-          <div className="caveat-badge-wrap">
-            <span className="caveat-icon" aria-hidden="true">i</span>
-            <strong>Candidate Source Notice:</strong>
-            <span className="caveat-short-text">Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.</span>
-          </div>
-          <button type="button" className="caveat-expand-btn" aria-expanded={showMethodology} aria-controls="candidate-source-methodology" onClick={() => setShowMethodology(value => !value)}>
-            {showMethodology ? 'Hide methodology' : 'Show methodology'}
-          </button>
-        </div>
-          <div id="candidate-source-methodology" className="candidate-caveat" role="note" style={{ display: showMethodology ? 'block' : 'none' }}>
-          Candidate source only. Clock semantics, pitch coordinate units/axes/orientation, player metrics and football realism are unverified.
-          For display only, raw numeric x/y and ball coordinates are proportionally mapped from a 0–100 range to the pitch canvas; this does
-          not certify real pitch dimensions or orientation. No clock conversion, interpolation or canonical claim is applied.
-            <dl className="candidate-source-diagnostics"><div><dt>Source match ID</dt><dd>{matchId ?? 'Unavailable'}</dd></div>
-              <div><dt>Records loaded</dt><dd>{events.length}</dd></div>
-              <div><dt>Source SHA-256</dt><dd>{status?.sourceSha256 ?? 'Unavailable'}</dd></div></dl>
-          </div>
-      </div>
-
-      {statusError && <p role="alert" className="candidate-error-banner">{statusError}</p>}
-      {error && <p role="status" className="candidate-warning-banner">{error}</p>}
-      {!matchId && <p role="status" className="candidate-waiting-banner">Waiting for the candidate simulation service.</p>}
+      {statusError && <p role="alert" className="candidate-error-banner">The live match is temporarily unavailable.</p>}
+      {error && <p role="status" className="candidate-warning-banner">Match events are still loading. Please try again shortly.</p>}
+      {!matchId && <p role="status" className="candidate-waiting-banner">Waiting for the match to start.</p>}
 
       {matchId && (
         <div className="candidate-live-grid">
-          {/* Left Column: Tactical Pitch Command Center */}
+          {/* Match pitch */}
           <section className="candidate-panel pitch-command-panel">
             <div className="pitch-panel-toolbar">
               <div className="pitch-title-meta">
-                <h2>Match Pitch</h2>
+                <h2>Match action</h2>
                 <span className="pitch-meta-pills">
-                  <span>Seq #{latest?.sequence ?? '—'}</span>
-                  <span>Period {latest?.period ?? '—'}</span>
-                  <span>Clock {valueText(latest?.clockSeconds)}s</span>
-                  <span className="observed-players-tag">{players.length} source players</span>
+                  <span>{latest ? (latest.period === 2 ? 'Second half' : 'First half') : 'Before kick-off'}</span>
+                  <span>{players.length} players</span>
+                  {ballCarrier && <span className="observed-players-tag">Ball near {ballCarrier.player.playerName ?? 'player'}</span>}
                 </span>
               </div>
 
@@ -494,7 +494,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                   viewBox="-3.5 -2.5 107 73"
                   preserveAspectRatio="xMidYMid meet"
                   role="img"
-                  aria-label="Raw candidate player and ball positions mapped to the pitch canvas; dimensions and orientation unverified"
+                  aria-label="Football pitch showing both teams, player positions and the ball"
                 >
                   <defs>
                     {/* Deep Stadium Turf & Radial Floodlight Gradients */}
@@ -614,11 +614,8 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                       className="candidate-ball-marker"
                       role="img"
                       aria-label={`Match ball at X ${ballPosition.x.toFixed(1)}, Y ${ballPosition.y.toFixed(1)}`}
-                      style={{
-                        transform: `translate(${toPitchX(ballPosition.x)}px, ${toPitchY(ballPosition.y)}px)`,
-                        transition: 'transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                        pointerEvents: 'none',
-                      }}
+                      transform={`translate(${toPitchX(ballPosition.x)} ${toPitchY(ballPosition.y)})`}
+                      style={{ transition: 'transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1)', pointerEvents: 'none' }}
                     >
                       {/* Ground Contact Soft Shadow */}
                       <ellipse cx="0" cy="0.38" rx="0.95" ry="0.4" fill="rgba(0, 0, 0, 0.5)" filter="url(#ball-shadow-filter)" />
@@ -661,6 +658,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                     const side = p.teamName === secondSourceTeam ? 'away' : 'home';
                     const isSelected = selectedPlayer?.playerName === p.playerName;
                     const isHovered = hoveredPlayer?.playerName === p.playerName;
+                    const hasBall = ballCarrier?.player === p;
 
                     return (
                       <g
@@ -669,10 +667,10 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                         onMouseEnter={() => setHoveredPlayer(p)}
                         onMouseLeave={() => setHoveredPlayer(null)}
                         style={{ cursor: 'pointer' }}
-                        className={`player-marker-group ${isSelected ? 'is-selected' : ''}`}
+                        className={`player-marker-group ${side} ${isSelected ? 'is-selected' : ''} ${hasBall ? 'has-ball' : ''}`}
                         role="button"
                         tabIndex={0}
-                        aria-label={`Inspect ${p.playerName ?? p.playerId ?? 'source player'} from ${p.teamName ?? 'the source feed'}`}
+                        aria-label={`${p.playerName ?? p.playerId ?? 'Player'}${hasBall ? ', closest to the ball' : ''}${p.teamName ? `, ${p.teamName}` : ''}`}
                         onKeyDown={event => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
@@ -689,6 +687,8 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                         {isHovered && !isSelected && (
                           <circle cx={x} cy={y} r="2.3" fill="none" stroke="#ffffff" strokeWidth="0.35" opacity="0.8" />
                         )}
+                        {hasBall && <circle cx={x} cy={y} r="2.2" className="player-ball-ring" />}
+                        <circle cx={x} cy={y} r="1.72" className="player-marker-halo" />
 
                         {/* Player Turf Shadow */}
                         <ellipse cx={x} cy={y + 0.3} rx="1.35" ry="0.5" fill="rgba(0, 0, 0, 0.45)" filter="url(#player-shadow-filter)" />
@@ -701,9 +701,15 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                           className={`candidate-player ${side}`}
                         />
 
+                        {hasBall && <g className="player-ball-tag" transform={`translate(${x + 2.1} ${y - 2.1})`} aria-hidden="true">
+                          <rect x="-1.8" y="-1.05" width="7.5" height="2.1" rx="1.05" />
+                          <circle cx="-0.55" cy="0" r="0.48" />
+                          <text x="2.05" y="0.08">BALL</text>
+                        </g>}
+
                         {/* High-Legibility Jersey Number in Tabular Figures */}
                         <text x={x} y={y + 0.5} className="candidate-player-num">
-                          {valueText(p.jerseyNumber)}
+                          {p.jerseyNumber ?? '•'}
                         </text>
                       </g>
                     );
@@ -729,13 +735,9 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
               </div>
             ) : (
               <div className="pitch-loading-state">
-                <p>{loading ? 'Loading player tracking telemetry from candidate feed…' : 'No player positions recorded in this source event.'}</p>
+                <p>{loading ? 'Loading players…' : 'Player positions are not available for this moment.'}</p>
               </div>
             )}
-
-            <p className="candidate-coordinate-note">
-              Raw source coordinates are displayed proportionally for preview · pitch scale and attack direction are unverified.
-            </p>
 
             {/* Selected Player Tactical Intelligence Card */}
             {selectedPlayer ? (
@@ -748,7 +750,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                     <div>
                       <h3 className="player-card-name">{valueText(selectedPlayer.playerName)}</h3>
                       <span className="player-card-sub">
-                        {valueText(selectedPlayer.teamName)} · Position {valueText(selectedPlayer.position)}
+                        {valueText(selectedPlayer.teamName)}{selectedPlayer.position ? ` · ${selectedPlayer.position}` : ''}
                       </span>
                     </div>
                   </div>
@@ -770,46 +772,19 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                   </div>
                 </div>
 
-                <p className="candidate-metric-note">Player performance metrics are withheld until their definitions and units are validated.</p>
               </div>
             ) : (
               <div className="player-selection-hint">
-                <span>Select a source marker to inspect its identifier and source-reported fields.</span>
+                <span>Select a player to see their match details.</span>
               </div>
             )}
           </section>
 
-          {/* Right Column: Live Match Operations & Event Feed */}
+          {/* Match events */}
           <aside className="candidate-panel candidate-feed-section">
             <div className="feed-header-row">
-              <h2>Match Operations</h2>
-              <div className="feed-segmented-tabs">
-                <button
-                  type="button"
-                  className={`feed-tab-btn ${feedTab === 'events' ? 'is-active' : ''}`}
-                  onClick={() => setFeedTab('events')}
-                >
-                  Live Feed ({filteredEvents.length})
-                </button>
-                <button
-                  type="button"
-                  className={`feed-tab-btn ${feedTab === 'telemetry' ? 'is-active' : ''}`}
-                  onClick={() => setFeedTab('telemetry')}
-                >
-                  Telemetry
-                </button>
-                <button
-                  type="button"
-                  className={`feed-tab-btn ${feedTab === 'audit' ? 'is-active' : ''}`}
-                  onClick={() => setFeedTab('audit')}
-                >
-                  Audit
-                </button>
-              </div>
+              <h2>Match events</h2>
             </div>
-
-            {/* TAB 1: Live Event Feed */}
-            {feedTab === 'events' && (
               <div className="feed-tab-content">
                 {/* Event Filter Pills */}
                 <div className="category-filter-bar">
@@ -833,11 +808,9 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                       .map(event => (
                         <li key={event.eventId} className={`event-history-item ${event.eventType === 'Goal' ? 'is-goal-event' : ''}`}>
                           <div className="event-item-top">
-                            <span className="event-seq-time">
-                              #{event.sequence} · {valueText(event.clockSeconds)}s
-                            </span>
+                            <span className="event-seq-time">{clock(Math.floor(event.clockSeconds))}</span>
                             <strong className="event-type-label">
-                              {event.eventType}
+                              {eventLabel(event.eventType)}
                             </strong>
                           </div>
                           <div className="event-item-meta">
@@ -845,91 +818,16 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                             {Boolean(event.rawPayload.playerName) && (
                               <span className="event-player-name">· {valueText(event.rawPayload.playerName)}</span>
                             )}
-                            <span className="event-id-pill">· <code>{event.eventId}</code></span>
                           </div>
                         </li>
                       ))}
                   </ol>
                 </div>
               </div>
-            )}
-
-            {/* TAB 2: Telemetry & Raw Payload */}
-            {feedTab === 'telemetry' && (
-              <div className="feed-tab-content">
-                {latest ? (
-                  <div className="telemetry-details-card">
-                    <dl className="telemetry-dl">
-                      <div className="dl-row">
-                        <dt>Event Type</dt>
-                        <dd className="bold-emerald">{latest.eventType}</dd>
-                      </div>
-                      <div className="dl-row">
-                        <dt>Clock / Period</dt>
-                        <dd>{valueText(latest.clockSeconds)}s / Period {latest.period}</dd>
-                      </div>
-                      <div className="dl-row">
-                        <dt>Sequence #</dt>
-                        <dd>{latest.sequence}</dd>
-                      </div>
-                      <div className="dl-row">
-                        <dt>Event ID</dt>
-                        <dd><code>{latest.eventId}</code></dd>
-                      </div>
-                      <div className="dl-row">
-                        <dt>Ball Location</dt>
-                        <dd>{ballPosition ? `X: ${ballPosition.x.toFixed(1)}, Y: ${ballPosition.y.toFixed(1)}` : 'No ball position recorded'}</dd>
-                      </div>
-                    </dl>
-
-                    <details className="raw-payload-collapsible" open>
-                      <summary>Original Event Payload (JSON)</summary>
-                      <pre className="candidate-raw-payload">{JSON.stringify(latest.rawPayload, null, 2)}</pre>
-                    </details>
-                  </div>
-                ) : (
-                  <p>{loading ? 'Loading candidate telemetry…' : 'No persisted source event yet.'}</p>
-                )}
-              </div>
-            )}
-
-            {/* TAB 3: Feed Audit Status */}
-            {feedTab === 'audit' && (
-              <div className="feed-tab-content">
-                <div className="audit-specs-card">
-                  <h3 className="audit-subheading">Data Provenance & Rigor</h3>
-                  <dl className="telemetry-dl">
-                    <div className="dl-row">
-                      <dt>Source Status</dt>
-                      <dd><code>{status?.sourceStatus ?? 'candidate_not_canonical'}</code></dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Coordinates</dt>
-                      <dd><code>{status?.coordinateStatus ?? 'unverified'}</code></dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Player Metrics</dt>
-                      <dd><code>{status?.playerMetricsStatus ?? 'unvalidated'}</code></dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>SignalR Stream</dt>
-                      <dd>{status?.isStreaming ? 'Active · PostgreSQL Backfill Synced' : 'Paused'}</dd>
-                    </div>
-                    <div className="dl-row">
-                      <dt>Source SHA-256</dt>
-                      <dd><code className="full-hash-break">{status?.sourceSha256 ?? '—'}</code></dd>
-                    </div>
-                  </dl>
-                </div>
-              </div>
-            )}
           </aside>
         </div>
       )}
 
-      <footer className="candidate-provenance-footer">
-        Source state: {status?.sourceStatus ?? 'candidate_not_canonical'} · coordinates {status?.coordinateStatus ?? 'unverified'} · player metrics {status?.playerMetricsStatus ?? 'unvalidated'}
-      </footer>
     </section>
   );
 }

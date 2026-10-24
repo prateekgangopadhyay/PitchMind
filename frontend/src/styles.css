@@ -10755,3 +10755,32 @@ button:active,
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Broadcast styling for the live match view. */
+.match-clock-pill { padding: 6px 11px; border: 1px solid rgba(112, 157, 169, .22); border-radius: 999px; color: #eef7f8; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 700; }
+.candidate-source-scoreboard { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 18px; min-width: min(620px, 58%); padding: 16px 22px; border-color: rgba(109, 173, 157, .27); border-radius: 14px; background: linear-gradient(135deg, rgba(8, 29, 34, .98), rgba(11, 39, 37, .94)); box-shadow: 0 10px 30px rgba(0, 0, 0, .18), inset 0 1px rgba(255, 255, 255, .035); }
+.source-score-team { justify-content: center; gap: 11px; color: #eef7f7; font-size: clamp(12px, 1.3vw, 16px); }
+.source-score-team img,.score-team-monogram { flex: 0 0 36px; width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .32)); }
+.score-team-monogram { display: grid; place-items: center; border: 1px solid rgba(196, 226, 219, .3); border-radius: 50%; background: rgba(255, 255, 255, .07); color: #d8ece7; font-size: 10px; font-weight: 800; }
+.source-score-team strong { font-size: clamp(34px, 4vw, 46px); font-weight: 760; letter-spacing: -.04em; text-shadow: 0 3px 18px rgba(0, 0, 0, .3); }
+.source-score-separator { color: #6f918e; font-size: 26px; font-weight: 350; }
+.player-marker-halo { fill: rgba(3, 16, 21, .86); stroke: rgba(255, 255, 255, .92); stroke-width: .18; filter: drop-shadow(0 .24px .4px rgba(0, 0, 0, .45)); pointer-events: none; }
+.candidate-player.home { fill: #e9435b; stroke: #fff; stroke-width: .25; }
+.candidate-player.away { fill: #168bd2; stroke: #fff; stroke-width: .25; }
+.candidate-player-num { font-size: 1.32px; font-weight: 850; paint-order: stroke; stroke: rgba(0, 0, 0, .16); stroke-width: .06; }
+.player-marker-group { outline: none; }
+.player-marker-group:focus-visible .candidate-player,.player-marker-group.is-selected .candidate-player { stroke: #fff; stroke-width: .42; filter: drop-shadow(0 0 .7px rgba(255, 255, 255, .95)); }
+.player-ball-ring { fill: none; stroke: #f7c948; stroke-width: .34; stroke-dasharray: .85 .45; filter: drop-shadow(0 0 .35px rgba(0, 0, 0, .8)); animation: ball-holder-pulse 1.8s ease-in-out infinite; pointer-events: none; }
+.player-ball-tag rect { fill: #f5c84b; stroke: #fff4cf; stroke-width: .12; filter: drop-shadow(0 .2px .4px rgba(0, 0, 0, .55)); }
+.player-ball-tag circle { fill: #10242a; stroke: #fff; stroke-width: .12; }
+.player-ball-tag text { fill: #172328; font-size: .83px; font-weight: 900; letter-spacing: .03em; }
+.candidate-ball-marker { filter: drop-shadow(0 .15px .35px rgba(0, 0, 0, .72)); }
+.candidate-ball-marker circle:first-of-type { fill: #fff; stroke: #17272b; stroke-width: .18; }
+@keyframes ball-holder-pulse { 0%, 100% { opacity: .9; } 50% { opacity: .48; } }
+@media (max-width: 760px) {
+  .candidate-source-scoreboard { min-width: 0; padding: 12px 10px; gap: 8px; }
+  .source-score-team { gap: 6px; font-size: 11px; }
+  .source-score-team img,.score-team-monogram { flex-basis: 27px; width: 27px; height: 27px; }
+  .source-score-team strong { font-size: 29px; }
+}
+@media (prefers-reduced-motion: reduce) { .player-ball-ring { animation: none; } }
