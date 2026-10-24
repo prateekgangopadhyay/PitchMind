@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "15679844952027314318"
+      "templateHash": "15415877163663420336"
     }
   },
   "parameters": {
@@ -192,6 +192,49 @@
     "candidateEventHubConsumerGroup": {
       "type": "string",
       "defaultValue": "pitchmind-candidate-worker"
+    },
+    "enableCandidateFeed": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Opt in to the Azure Event Hubs -> PostgreSQL outbox -> Redis/SignalR candidate simulation path."
+      }
+    },
+    "foundryAccountName": {
+      "type": "string",
+      "defaultValue": "pitchmind-ai-resource"
+    },
+    "foundryProjectName": {
+      "type": "string",
+      "defaultValue": "pitchmind-ai"
+    },
+    "foundryAgentName": {
+      "type": "string",
+      "defaultValue": "TacticalAnalyst"
+    },
+    "signalRName": {
+      "type": "string",
+      "defaultValue": "pm-dev-signalr"
+    },
+    "signalRAllowedOrigin": {
+      "type": "string",
+      "defaultValue": "https://pm-dev-api-vnet.icyglacier-6b4ac95d.centralindia.azurecontainerapps.io"
+    },
+    "signalRSkuName": {
+      "type": "string",
+      "defaultValue": "Free_F1",
+      "allowedValues": [
+        "Free_F1",
+        "Standard_S1"
+      ]
+    },
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "pmdev4iwntkatliy6sst"
+    },
+    "candidateCheckpointContainer": {
+      "type": "string",
+      "defaultValue": "candidate-checkpoints"
     }
   },
   "resources": [
@@ -254,6 +297,119 @@
       ]
     },
     {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer'))]",
+      "properties": {
+        "publicAccess": "None"
+      }
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "privatelink.blob.core.windows.net",
+      "location": "global"
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}', 'privatelink.blob.core.windows.net', format('{0}-blob-link', parameters('environmentName')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "pm-dev-blob-pe",
+      "location": "[parameters('location')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('redisPrivateEndpointSubnetName'))]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "[format('{0}-blob-connection', parameters('storageAccountName'))]",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "groupIds": [
+                "blob"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', 'pm-dev-blob-pe', 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "blob",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'privatelink.blob.core.windows.net', format('{0}-blob-link', parameters('environmentName')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.blob.core.windows.net')]",
+        "[resourceId('Microsoft.Network/privateEndpoints', 'pm-dev-blob-pe')]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.SignalRService/signalR",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('signalRName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('signalRSkuName')]",
+        "capacity": 1
+      },
+      "properties": {
+        "features": [
+          {
+            "flag": "ServiceMode",
+            "value": "Default"
+          },
+          {
+            "flag": "EnableConnectivityLogs",
+            "value": "True"
+          }
+        ],
+        "cors": {
+          "allowedOrigins": [
+            "[parameters('signalRAllowedOrigin')]"
+          ]
+        },
+        "tls": {
+          "clientCertEnabled": false
+        },
+        "publicNetworkAccess": "Enabled"
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP06-S02"
+      }
+    },
+    {
       "condition": "[parameters('deployPrivateDevTopology')]",
       "type": "Microsoft.EventHub/namespaces/eventhubs",
       "apiVersion": "2024-01-01",
@@ -286,6 +442,92 @@
       "apiVersion": "2023-01-31",
       "name": "[format('{0}-runtime', parameters('appName'))]",
       "location": "[parameters('location')]"
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('foundryAccountName'), parameters('foundryProjectName'))]",
+      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('foundryAccountName'), parameters('foundryProjectName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'FoundryAgentConsumer')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'eed3b665-ab3a-47b6-8f48-c9382fb1dad6')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-eventworker', parameters('appName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
+      "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'EventHubsDataSender')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2b629674-e913-4c01-ae53-ef4638d8f975')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
+      "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'EventHubsDataReceiver')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a638d3c7-ab3a-418d-83e6-5f17a39d4fde')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'StorageBlobDataContributor')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.SignalRService/signalR', parameters('signalRName'))]",
+      "name": "[guid(resourceId('Microsoft.SignalRService/signalR', parameters('signalRName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'SignalRAppServer')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '420fcaa2-552c-430f-98ca-3264be4806c7')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[resourceId('Microsoft.SignalRService/signalR', parameters('signalRName'))]"
+      ]
     },
     {
       "condition": "[parameters('deployPrivateDevTopology')]",
@@ -448,6 +690,39 @@
       ]
     },
     {
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), not(parameters('provisionRedis')))]",
+      "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
+      "apiVersion": "2026-05-01-preview",
+      "name": "[format('{0}/{1}/{2}', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+      "properties": {
+        "accessPolicyName": "default",
+        "accessString": "+@read +@write ~candidate-live:v1:*",
+        "user": {
+          "objectId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), parameters('provisionRedis'))]",
+      "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
+      "apiVersion": "2026-05-01-preview",
+      "name": "[format('{0}/{1}/{2}', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+      "properties": {
+        "accessPolicyName": "default",
+        "accessString": "+@read +@write ~candidate-live:v1:*",
+        "user": {
+          "objectId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default')]"
+      ]
+    },
+    {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('provisionRedis'))]",
       "type": "Microsoft.Network/privateDnsZones",
       "apiVersion": "2020-06-01",
@@ -603,7 +878,7 @@
                 },
                 {
                   "name": "CandidateFeed__Enabled",
-                  "value": "false"
+                  "value": "[if(parameters('enableCandidateFeed'), 'true', 'false')]"
                 },
                 {
                   "name": "Identity__Authority",
@@ -611,7 +886,7 @@
                 },
                 {
                   "name": "Identity__Audience",
-                  "value": "[format('api://{0}', parameters('entraClientId'))]"
+                  "value": "[parameters('entraClientId')]"
                 },
                 {
                   "name": "Azure__ManagedIdentityClientId",
@@ -620,6 +895,38 @@
                 {
                   "name": "ConnectionStrings__PitchMind",
                   "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))]"
+                },
+                {
+                  "name": "EventHubs__Namespace",
+                  "value": "[if(parameters('enableCandidateFeed'), format('{0}.servicebus.windows.net', parameters('eventHubsNamespaceName')), '')]"
+                },
+                {
+                  "name": "EventHubs__CandidateHubName",
+                  "value": "[if(parameters('enableCandidateFeed'), parameters('candidateEventHubName'), '')]"
+                },
+                {
+                  "name": "Storage__BlobServiceUri",
+                  "value": "[if(parameters('enableCandidateFeed'), format('https://{0}.blob.core.windows.net', parameters('storageAccountName')), '')]"
+                },
+                {
+                  "name": "Storage__CheckpointContainer",
+                  "value": "[if(parameters('enableCandidateFeed'), parameters('candidateCheckpointContainer'), '')]"
+                },
+                {
+                  "name": "Redis__Endpoint",
+                  "value": "[if(parameters('enableCandidateFeed'), format('{0}:{1}', if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName), if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port)), '')]"
+                },
+                {
+                  "name": "Realtime__AzureSignalR__Endpoint",
+                  "value": "[if(parameters('enableCandidateFeed'), format('https://{0}', reference(resourceId('Microsoft.SignalRService/signalR', parameters('signalRName')), '2024-03-01').hostName), '')]"
+                },
+                {
+                  "name": "Foundry__Endpoint",
+                  "value": "[if(parameters('enableCandidateFeed'), format('https://{0}.services.ai.azure.com/api/projects/{1}', parameters('foundryAccountName'), parameters('foundryProjectName')), '')]"
+                },
+                {
+                  "name": "Foundry__AgentName",
+                  "value": "[if(parameters('enableCandidateFeed'), parameters('foundryAgentName'), '')]"
                 },
                 {
                   "name": "Identity__DevelopmentHeaderAuthEnabled",
@@ -653,7 +960,7 @@
             }
           ],
           "scale": {
-            "minReplicas": 1,
+            "minReplicas": 0,
             "maxReplicas": 1
           }
         }
@@ -666,13 +973,127 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'EventHubsDataSender'))]",
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default')]",
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]",
+        "[resourceId('Microsoft.SignalRService/signalR', parameters('signalRName'))]",
+        "[extensionResourceId(resourceId('Microsoft.SignalRService/signalR', parameters('signalRName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.SignalRService/signalR', parameters('signalRName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'SignalRAppServer'))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-eventworker', parameters('appName'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))))]": {},
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))))]": {}
+        }
+      },
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "eventworker",
+              "image": "[parameters('appImage')]",
+              "command": [
+                "dotnet",
+                "/app/worker/PitchMind.EventWorker.dll"
+              ],
+              "env": [
+                {
+                  "name": "Runtime__Profile",
+                  "value": "azure"
+                },
+                {
+                  "name": "CandidateFeed__Enabled",
+                  "value": "true"
+                },
+                {
+                  "name": "EventHubs__OutboxDispatchEnabled",
+                  "value": "false"
+                },
+                {
+                  "name": "EventHubs__Namespace",
+                  "value": "[format('{0}.servicebus.windows.net', parameters('eventHubsNamespaceName'))]"
+                },
+                {
+                  "name": "EventHubs__CandidateHubName",
+                  "value": "[parameters('candidateEventHubName')]"
+                },
+                {
+                  "name": "EventHubs__CandidateConsumerGroup",
+                  "value": "[parameters('candidateEventHubConsumerGroup')]"
+                },
+                {
+                  "name": "Storage__BlobServiceUri",
+                  "value": "[format('https://{0}.blob.core.windows.net', parameters('storageAccountName'))]"
+                },
+                {
+                  "name": "Storage__CheckpointContainer",
+                  "value": "[parameters('candidateCheckpointContainer')]"
+                },
+                {
+                  "name": "Azure__ManagedIdentityClientId",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "ConnectionStrings__PitchMind",
+                  "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_worker;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))]"
+                }
+              ],
+              "resources": {
+                "cpu": "[json('0.25')]",
+                "memory": "0.5Gi"
+              }
+            }
+          ],
+          "scale": {
+            "minReplicas": 0,
+            "maxReplicas": 1
+          }
+        }
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP03-S03"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints/privateDnsZoneGroups', 'pm-dev-blob-pe', 'default')]",
+        "[extensionResourceId(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'EventHubsDataReceiver'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer'))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]"
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]",
+        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'StorageBlobDataContributor'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
       ]
     },
     {
@@ -728,6 +1149,10 @@
                   "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]"
                 },
                 {
+                  "name": "PitchMind__WorkerIdentityObjectId",
+                  "value": "[if(parameters('enableCandidateFeed'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').principalId, '')]"
+                },
+                {
                   "name": "ConnectionStrings__Postgres",
                   "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username={1};SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'), parameters('postgresMigratorIdentityName'))]"
                 }
@@ -748,7 +1173,8 @@
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]"
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
       ]
     }
   ],
@@ -776,6 +1202,18 @@
     "redisPort": {
       "type": "int",
       "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionRedis')), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, 0)]"
+    },
+    "redisEndpoint": {
+      "type": "string",
+      "value": "[if(parameters('deployPrivateDevTopology'), format('{0}:{1}', if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName), if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port)), '')]"
+    },
+    "azureSignalREndpoint": {
+      "type": "string",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), format('https://{0}', reference(resourceId('Microsoft.SignalRService/signalR', parameters('signalRName')), '2024-03-01').hostName), '')]"
+    },
+    "eventWorkerName": {
+      "type": "string",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), format('{0}-eventworker', parameters('appName')), '')]"
     },
     "postgresMigrationJobName": {
       "type": "string",

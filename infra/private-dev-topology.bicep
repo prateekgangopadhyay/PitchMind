@@ -61,8 +61,11 @@ param foundryProjectName string = 'pitchmind-ai'
 param foundryAgentName string = 'TacticalAnalyst'
 param signalRName string = 'pm-dev-signalr'
 param signalRAllowedOrigin string = 'https://pm-dev-api-vnet.icyglacier-6b4ac95d.centralindia.azurecontainerapps.io'
-@allowed(['Standard_S1'])
-param signalRSkuName string = 'Standard_S1'
+@allowed([
+  'Free_F1'
+  'Standard_S1'
+])
+param signalRSkuName string = 'Free_F1'
 param storageAccountName string = 'pmdev4iwntkatliy6sst'
 param candidateCheckpointContainer string = 'candidate-checkpoints'
 
@@ -602,7 +605,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
           ]
         }
       ]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
   tags: {
@@ -653,7 +656,7 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
   tags: { application: 'PitchMind', environment: 'dev', story: 'EP03-S03' }
