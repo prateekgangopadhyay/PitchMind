@@ -752,7 +752,9 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      // This is a continuously running Event Hubs processor with ingress disabled.
+      // Keep one replica so it can consume events and cannot be stranded at zero.
+      scale: { minReplicas: 1, maxReplicas: 1 }
     }
   }
   tags: { application: 'PitchMind', environment: 'dev', story: 'EP03-S03' }
