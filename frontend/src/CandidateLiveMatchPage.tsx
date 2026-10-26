@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection } from '@microsoft/signalr';
-import { clock, getHostAccessToken, request } from './api';
+import { getHostAccessToken, request } from './api';
 import { useCandidateStreamStatus } from './candidateLiveStatus';
 import { contextHref } from './routes';
 import { LinearEventsTimeline, type LinearTimelineEvent } from './LinearEventsTimeline';
@@ -56,8 +56,6 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const valueText = (value: unknown) =>
   value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-const eventLabel = (type: string) => type.replace(/([a-z])([A-Z])/g, '$1 $2').replace('Pressure Applied', 'Pressure');
-
 export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: number } = {}) {
   const { status, error: statusError } = useCandidateStreamStatus();
   const [events, setEvents] = useState<CandidateEvent[]>([]);
@@ -69,7 +67,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [cinemaMode, setCinemaMode] = useState(false);
   const pitchScreenRef = useRef<HTMLDivElement | null>(null);
-  const [timelineCategory, setTimelineCategory] = useState<'All' | 'Goals' | 'Shots' | 'Passes' | 'Tackles' | 'Pressures'>('All');
 
   const bySequence = useRef<CandidateEvent[]>([]);
   const busy = useRef(false);
@@ -333,17 +330,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const toPitchY = (value: number) => 3 + value * 0.62;
 
 
-
-  // Filtered timeline events
-  const filteredEvents = useMemo(() => {
-    if (timelineCategory === 'All') return visibleEvents;
-    if (timelineCategory === 'Goals') return visibleEvents.filter(e => e.eventType === 'Goal');
-    if (timelineCategory === 'Shots') return visibleEvents.filter(e => e.eventType === 'Shot');
-    if (timelineCategory === 'Passes') return visibleEvents.filter(e => e.eventType.includes('Pass'));
-    if (timelineCategory === 'Tackles') return visibleEvents.filter(e => e.eventType === 'Tackle');
-    if (timelineCategory === 'Pressures') return visibleEvents.filter(e => e.eventType.includes('Pressure'));
-    return visibleEvents;
-  }, [visibleEvents, timelineCategory]);
 
   const linearTimelineEvents: LinearTimelineEvent[] = useMemo(() => {
     return events.map(e => ({

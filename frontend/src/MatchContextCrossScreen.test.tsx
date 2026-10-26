@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MatchContextAnalystPage, MatchContextInsightsPage, MatchContextPlayersPage, MatchContextTeamsPage } from './MatchContextPages';
+import { MatchContextAnalystPage, MatchContextPlayersPage, MatchContextTeamsPage } from './MatchContextPages';
 import { RoutePage } from './ShellPages';
 
 afterEach(() => {

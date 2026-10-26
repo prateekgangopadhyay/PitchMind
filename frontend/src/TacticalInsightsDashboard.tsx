@@ -1,14 +1,12 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import type { MatchContext, ContextPlayer, ContextEvent } from './MatchContextPages';
+import { useState, useMemo } from 'react';
+import type { MatchContext, ContextEvent } from './MatchContextPages';
 import { resolveClubLogo, clubInitials } from './clubLogos';
 import { clock, askCandidateAnalyst, type CandidateAnalystAnswer } from './api';
 import { deduceTeamFormation } from './DynamicTacticalVisuals';
-import { deduceMatchMetrics } from './tacticalAgentDiscussion';
 
 export interface TacticalInsightsDashboardProps {
   context: MatchContext;
   seconds: number;
-  onTimeChange?: (seconds: number) => void;
   onSelectMatch?: (matchId: string) => void;
   availableMatches?: Array<{ id: string; label: string }>;
 }
@@ -16,7 +14,6 @@ export interface TacticalInsightsDashboardProps {
 export function TacticalInsightsDashboard({
   context,
   seconds,
-  onTimeChange,
   onSelectMatch,
   availableMatches = []
 }: TacticalInsightsDashboardProps) {
@@ -225,7 +222,7 @@ export function TacticalInsightsDashboard({
         question: questionPrompt
       });
       setAiAnswer(response);
-    } catch (err) {
+    } catch {
       // Dynamic fallback synthesized from multi-agent tactical deduction
       setAiAnswer({
         status: 'answered',

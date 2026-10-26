@@ -471,8 +471,22 @@ export interface PlayerIntelligenceQueryOptions {
  * Dynamically calculates an authentic AI tactical key quote based on player role,
  * live match performance metrics, observed defensive/offensive actions, and optional AI agent lens.
  */
+type PlayerQuoteStats = Partial<Omit<PlayerIntelligenceData['matchStats'], 'duelsWon' | 'passAccuracy'>> & {
+  goals?: number;
+  assists?: number;
+  duelsWon?: number | string;
+  passAccuracy?: number | string;
+};
+
+type PlayerQuoteInput = Partial<Omit<PlayerIntelligenceData, 'matchStats' | 'progressiveCarriesStat' | 'chanceCreationStat' | 'defensiveWorkStats'>> & {
+  matchStats?: PlayerQuoteStats;
+  progressiveCarriesStat?: { count?: number; total?: number };
+  chanceCreationStat?: { count?: number; chancesCreated?: number; xA?: number; xa?: number };
+  defensiveWorkStats?: Partial<NonNullable<PlayerIntelligenceData['defensiveWorkStats']>>;
+};
+
 export function calculateAiPlayerKeyQuote(
-  player: any,
+  player: PlayerQuoteInput | null | undefined,
   options?: PlayerIntelligenceQueryOptions
 ): string {
   if (!player) {
@@ -579,58 +593,6 @@ export function calculateAiPlayerKeyQuote(
   return `Tactical catalyst maintaining positional discipline, driving progressive circulation and team structural stability.`;
 }
 
-function hydrateStaticPlayer(p: any, options?: PlayerIntelligenceQueryOptions): PlayerIntelligenceData {
-  const matchStats = p.matchStats ?? {
-    goals: 0,
-    assists: 0,
-    duelsWon: "50%",
-    touches: Math.max(0, Number(p?.touches) || 0),
-    progressiveCarries: 0,
-    chancesCreated: 0,
-    passAccuracy: "80%",
-    xA: 0.0,
-    xa: 0.0,
-    dribblesCompleted: 0
-  };
-  const dynamicKeyQuote = calculateAiPlayerKeyQuote({ ...p, matchStats }, options);
-
-  return {
-    ...p,
-    minutesPlayed: p.minutesPlayed ?? 90,
-    keyQuote: dynamicKeyQuote,
-    matchStats,
-    whyItMatters: p.whyItMatters ?? [
-      `Primary tactical driver in ${p.club}'s setup.`,
-      'Maintains disciplined positioning between lines.'
-    ],
-    touches: p.touches ?? [],
-    progressiveCarries: p.progressiveCarries ?? [],
-    chanceCreation: p.chanceCreation ?? [],
-    receivingZones: p.receivingZones ?? [],
-    defensiveWork: p.defensiveWork ?? [],
-    cumulativeXA: p.cumulativeXA ?? [],
-    comparison: p.comparison ?? {
-      counterpartName: "Opponent counterpart",
-      counterpartRole: "Midfielder",
-      counterpartClub: "Opponent",
-      counterpartLogo: "/crests/premier-league.svg",
-      category: "Premier League",
-      metrics: []
-    },
-    recentImpact: p.recentImpact ?? [],
-    analystAssessment: p.analystAssessment ?? "Live tactical intelligence calculated by PitchMind AI from match stream.",
-    matchContext: p.matchContext ?? {
-      homeTeam: { name: p.club ?? "Home FC", formation: "4-2-3-1", logo: p.teamLogo ?? "/crests/premier-league.svg", score: 0 },
-      awayTeam: { name: p.comparison?.counterpartClub ?? "Away FC", formation: "4-3-3", logo: p.comparison?.counterpartLogo ?? "/crests/premier-league.svg", score: 0 },
-      clock: "00:00",
-      period: "First Half",
-      banner: `${p.club ?? "Tactical"} Intelligence View`
-    },
-    progressiveCarriesStat: p.progressiveCarriesStat ?? { total: 0, successRate: "80%", avgDistanceYards: 10.0, count: 0, vsSeasonAvg: "+0% vs season avg" },
-    chanceCreationStat: p.chanceCreationStat ?? { chancesCreated: 0, xA: 0.0, bigChances: 0, count: 0, vsSeasonAvg: "+0% vs season avg" },
-    defensiveWorkStats: p.defensiveWorkStats ?? { pressures: 0, tackles: 0, ballRecoveries: 0 }
-  };
-}
 
 export function getPlayerIntelligence(
   playerId: string,
@@ -873,7 +835,7 @@ export function loginWithGoogleSimulated(): Promise<AuthSession> {
   const b64 = typeof btoa === 'function'
     ? btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
     : typeof globalThis !== 'undefined' && 'Buffer' in globalThis
-      ? (globalThis as any).Buffer.from(payload).toString('base64url')
+      ? (globalThis as typeof globalThis & { Buffer?: { from(value: string): { toString(encoding: 'base64url'): string } } }).Buffer?.from(payload).toString('base64url') ?? ''
       : '';
   const session: AuthSession = {
     success: true,

@@ -71,7 +71,6 @@ export function TacticalPitchView({
   players,
   homeTeam,
   awayTeam,
-  seconds,
   ballPosition,
   recentEvent,
   availableEvents = [],
@@ -82,7 +81,6 @@ export function TacticalPitchView({
   const [showVectors, setShowVectors] = useState(true);
   const [showPressure, setShowPressure] = useState(true);
   const [hoveredPlayer, setHoveredPlayer] = useState<ContextPlayer | null>(null);
-  const [hoveredZone, setHoveredZone] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const homeName = homeTeam?.name ?? 'Home FC';
@@ -412,7 +410,7 @@ export function TacticalPitchView({
           {showZones && (
             <g className="tactical-zones-overlay">
               {TACTICAL_ZONES.map(zone => (
-                <g key={zone.id} onMouseEnter={() => setHoveredZone(zone.name)} onMouseLeave={() => setHoveredZone(null)}>
+                <g key={zone.id}>
                   <rect
                     x={zone.x}
                     y={zone.y}

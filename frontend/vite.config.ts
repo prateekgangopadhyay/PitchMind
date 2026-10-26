@@ -1,13 +1,41 @@
-// @ts-nocheck
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 
+interface CandidateFeedEvent {
+  eventId?: string;
+  matchId?: string;
+  sequence?: number;
+  clockSeconds?: number;
+  period?: number;
+  eventType?: string;
+  playerName?: string;
+  teamName?: string;
+  pitchX?: number;
+  pitchY?: number;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface CandidateManifest {
+  source?: { sha256?: string };
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+interface DevRequest {
+  url?: string;
+  method?: string;
+  on(event: 'data', listener: (chunk: string | Uint8Array) => void): DevRequest;
+  on(event: 'end', listener: () => void): DevRequest;
+}
+
 function candidateFeedDevPlugin(): Plugin {
-  let cachedEvents: any[] | null = null;
-  let cachedManifest: any = null;
+  let cachedEvents: CandidateFeedEvent[] | null = null;
+  let cachedManifest: CandidateManifest | null = null;
 
   function loadDataset() {
     if (!cachedEvents) {
@@ -15,7 +43,8 @@ function candidateFeedDevPlugin(): Plugin {
       const manifestPath = path.resolve(__dirname, '../data/simulations/manu-liv-candidate-manifest.json');
       if (fs.existsSync(datasetPath)) {
         try {
-          cachedEvents = JSON.parse(fs.readFileSync(datasetPath, 'utf8'));
+          const parsed: unknown = JSON.parse(fs.readFileSync(datasetPath, 'utf8'));
+          cachedEvents = Array.isArray(parsed) ? parsed.filter(isRecord) as CandidateFeedEvent[] : [];
         } catch {
           cachedEvents = [];
         }
@@ -24,7 +53,8 @@ function candidateFeedDevPlugin(): Plugin {
       }
       if (fs.existsSync(manifestPath)) {
         try {
-          cachedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          const parsed: unknown = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          cachedManifest = isRecord(parsed) ? parsed as CandidateManifest : null;
         } catch {
           cachedManifest = null;
         }
@@ -37,7 +67,8 @@ function candidateFeedDevPlugin(): Plugin {
     name: 'candidate-feed-dev-plugin',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const url = new URL(req.url || '', 'http://127.0.0.1');
+        const request = req as unknown as DevRequest;
+        const url = new URL(request.url || '', 'http://127.0.0.1');
 
         if (url.pathname === '/api/v1/simulation/candidate/status') {
           const { events, manifest } = loadDataset();
@@ -65,11 +96,11 @@ function candidateFeedDevPlugin(): Plugin {
           const afterSeq = parseInt(url.searchParams.get('afterSequence') || '-1', 10);
           const limit = Math.min(499, parseInt(url.searchParams.get('limit') || '100', 10));
 
-          const filtered = (events || []).filter((e: any) => e.sequence > afterSeq);
+          const filtered = (events || []).filter(e => (e.sequence ?? -1) > afterSeq);
           const page = filtered.slice(0, limit);
           const hasMore = filtered.length > limit;
 
-          const items = page.map((e: any) => ({
+          const items = page.map(e => ({
             eventId: e.eventId,
             matchId: e.matchId,
             sequence: e.sequence,
@@ -110,25 +141,26 @@ function candidateFeedDevPlugin(): Plugin {
           return;
         }
 
-        if (url.pathname === '/api/v1/simulation/candidate/analyst/questions' && req.method === 'POST') {
+        if (url.pathname === '/api/v1/simulation/candidate/analyst/questions' && request.method === 'POST') {
           let body = '';
-          req.on('data', chunk => { body += chunk; });
-          req.on('end', () => {
+          request.on('data', chunk => { body += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk); });
+          request.on('end', () => {
             try {
-              const parsed = JSON.parse(body || '{}');
+              const parsedValue: unknown = JSON.parse(body || '{}');
+              const parsed = isRecord(parsedValue) ? parsedValue : {};
               const { events, manifest } = loadDataset();
-              const matchId = parsed.matchId || events?.[0]?.matchId;
-              const clockSec = parsed.selectedSourceClockValue ?? 854;
-              const agent = parsed.agentName || 'TacticalAnalyst';
+              const matchId = typeof parsed.matchId === 'string' ? parsed.matchId : events?.[0]?.matchId;
+              const clockSec = typeof parsed.selectedSourceClockValue === 'number' ? parsed.selectedSourceClockValue : 854;
+              const agent = typeof parsed.agentName === 'string' ? parsed.agentName : 'TacticalAnalyst';
               const sha = manifest?.source?.sha256 ?? 'e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c';
 
-              const ev = (events || []).find((e: any) => e.clockSeconds === clockSec)
-                || (events || []).find((e: any) => e.eventType === 'Goal')
+              const ev = (events || []).find(e => e.clockSeconds === clockSec)
+                || (events || []).find(e => e.eventType === 'Goal')
                 || (events || [])[0];
 
               const isGoal = ev?.eventType === 'Goal';
               let answer = '';
-              const q = (parsed.question || '').toLowerCase();
+              const q = typeof parsed.question === 'string' ? parsed.question.toLowerCase() : '';
               if (q.includes('tactical shift') || q.includes('minute 14') || q.includes('shift')) {
                 answer = `${agent} consensus evaluation: At clock ${clockSec}s (around minute 14), Manchester United shifted into an aggressive high-press 4-2-3-1, with Bruno Fernandes and Casemiro executing a synchronized turnover trap in Zone 14. This turnover triggered a rapid 3-player vertical transition culminating in Bruno Fernandes's goal (Seq #${ev?.sequence ?? 334}) into the bottom corner.`;
               } else if (q.includes('regain') || q.includes('turnover') || q.includes('press')) {

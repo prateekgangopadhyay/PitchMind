@@ -188,7 +188,7 @@ export function PlayerRosterView({
                 id="sort-select"
                 className="sort-select"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
               >
                 <option value="impact">Highest Impact</option>
                 <option value="chances">Chances Created</option>

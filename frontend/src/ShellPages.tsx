@@ -1,8 +1,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  clock,
-  provenanceLabel,
   request,
   loginSimulated,
   loginWithGoogleSimulated,
@@ -19,7 +17,6 @@ import { contextHref, replacePhaseFilterContext, selectedTimeFromSearch } from '
 import { MatchContextAnalystPage, MatchContextInsightsPage, MatchContextPlayersPage, MatchContextTeamsPage, MatchSelectionPage, useMatchContext } from './MatchContextPages';
 import { LinearEventsTimeline } from './LinearEventsTimeline';
 import { refreshCandidateStatus, useCandidateStreamStatus } from './candidateLiveStatus';
-import { resolveClubLogo } from './clubLogos';
 
 const CANONICAL_PHASES = ['notstarted', 'firsthalf', 'halftime', 'secondhalf', 'fulltime'];
 
@@ -363,13 +360,12 @@ export function WelcomePage() {
 export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
   search?: string; selectedMatchId?: string; selectedSeconds?: number;
 }) {
-  const { page, error, loading, loadingMore, moreError, retry, loadMore } = useCanonicalFixtures();
+  const { page, error, loading, retry } = useCanonicalFixtures();
   const candidateStream = useCandidateStreamStatus(false);
   const matches = page?.items ?? [];
   const requestedPhase = new URLSearchParams(search).get('phase') ?? 'all';
   const phases = [...new Set([...CANONICAL_PHASES, ...matches.map(match => match.phase)])].sort();
   const phaseFilter = requestedPhase === 'all' || phases.includes(requestedPhase) ? requestedPhase : 'all';
-  const visibleMatches = phaseFilter === 'all' ? matches : matches.filter(match => match.phase === phaseFilter);
   const [activeTimelineMatchId, setActiveTimelineMatchId] = useState<string | undefined>(selectedMatchId);
   const activeMatchId = activeTimelineMatchId ?? selectedMatchId;
   const timelineData = useMatchContext(activeMatchId, selectedSeconds ?? 5400);
@@ -484,7 +480,7 @@ export function RoutePage({ route, search, contextMatchId, contextSeconds }: {
 
   if (route.kind === 'players') return <MatchContextPlayersPage route={route} matchId={selectedMatchId} seconds={selectedSeconds} revision={revision} playerId={route.playerId} />;
 
-  if (route.kind === 'insights') return <MatchContextInsightsPage route={route} matchId={selectedMatchId} seconds={selectedSeconds} revision={revision} insightId={route.insightId} />;
+  if (route.kind === 'insights') return <MatchContextInsightsPage route={route} matchId={selectedMatchId} seconds={selectedSeconds} revision={revision} />;
 
   if (route.kind === 'analyst') return <MatchContextAnalystPage route={route} matchId={selectedMatchId} seconds={selectedSeconds} revision={revision} />;
 

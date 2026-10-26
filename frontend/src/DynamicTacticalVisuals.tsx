@@ -50,7 +50,6 @@ export function DynamicPassMapThumbnail({
   events = [],
   players = [],
   homeTeamName,
-  awayTeamName,
   clockSeconds,
   className = '',
   width = '100%',
@@ -351,7 +350,6 @@ export function DynamicHeatmapThumbnail({
 export function DynamicTacticalMomentThumbnail({
   event,
   situation,
-  players = [],
   clockSeconds,
   className = '',
   width = '100%',

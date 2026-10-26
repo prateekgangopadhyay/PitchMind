@@ -491,7 +491,6 @@ export function computeAgentDiscussionAndExplanation(situation: TacticalSituatio
   const eventType = event?.type || 'PositionalPlay';
   const player = event?.playerName || 'Squad unit';
   const teamInAction = event?.teamName || home;
-  const opponentTeam = teamInAction === home ? away : home;
   const evidenceRef = event ? `source-event-${event.sequence}` : `state-${situation.clockSeconds}s`;
   const question = situation.userQuestion?.trim();
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PlayerIntelligenceData } from './api';
 import { getPlayerIntelligence, getPlayersIntelligenceList, calculateAiPlayerKeyQuote } from './api';
 import { resolveClubLogo } from './clubLogos';
@@ -11,8 +11,6 @@ export interface PlayerTacticalDashboardProps {
   revision?: number;
   onSelectPlayer?: (playerId: string) => void;
   onBackToPlayers?: () => void;
-  liveMatchPlayers?: Array<{ id: string; name?: string; teamId: string; active?: boolean; yellowCards?: number; jerseyNumber?: number }>;
-  liveMatchTeams?: Array<{ id: string; name: string; score?: number }>;
 }
 
 export function PlayerTacticalDashboard({
@@ -22,15 +20,11 @@ export function PlayerTacticalDashboard({
   revision,
   onSelectPlayer,
   onBackToPlayers,
-  liveMatchPlayers,
-  liveMatchTeams
 }: PlayerTacticalDashboardProps) {
   const [intelligence, setIntelligence] = useState<PlayerIntelligenceData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'touch' | 'heatmap' | 'actions'>('touch');
-  const [selectedImpactIndex, setSelectedImpactIndex] = useState<number>(2); // 56' card active as in screenshot
-  const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [availablePlayers, setAvailablePlayers] = useState<PlayerIntelligenceData[]>([]);
 
   // Load available players list for dropdown & roster
@@ -81,28 +75,6 @@ export function PlayerTacticalDashboard({
     };
   }, [playerId, matchId, seconds]);
 
-  // Toggle audio speech synthesis for the AI Analyst section
-  const handleToggleAudio = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setIsPlayingAudio(!isPlayingAudio);
-      return;
-    }
-
-    if (isPlayingAudio) {
-      window.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-    } else {
-      const textToSpeak = intelligence?.analystAssessment || 'No analyst assessment available.';
-      const utterance = new SpeechSynthesisUtterance(textToSpeak);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.onend = () => setIsPlayingAudio(false);
-      utterance.onerror = () => setIsPlayingAudio(false);
-      window.speechSynthesis.speak(utterance);
-      setIsPlayingAudio(true);
-    }
-  };
-
   if (loading) {
     return (
       <div className="player-intel-loading" role="status" aria-live="polite">
@@ -129,23 +101,6 @@ export function PlayerTacticalDashboard({
   }
 
   // Format match clock display (e.g. "67:24")
-  const clockDisplay = intelligence.matchContext?.clock ?? `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
-  const periodDisplay = intelligence.matchContext?.period ?? (seconds >= 2700 ? 'Second Half' : 'First Half');
-
-  // Home / Away match details
-  const home = intelligence.matchContext?.homeTeam ?? {
-    name: liveMatchTeams?.[0]?.name ?? 'Home',
-    formation: '4-2-3-1',
-    score: liveMatchTeams?.[0]?.score ?? 2,
-    logo: resolveClubLogo(liveMatchTeams?.[0]?.name ?? '') || ''
-  };
-  const away = intelligence.matchContext?.awayTeam ?? {
-    name: liveMatchTeams?.[1]?.name ?? 'Away',
-    formation: '4-3-3',
-    score: liveMatchTeams?.[1]?.score ?? 1,
-    logo: resolveClubLogo(liveMatchTeams?.[1]?.name ?? '') || ''
-  };
-
   const playerCrest = intelligence.teamLogo || resolveClubLogo(intelligence.club) || '';
   const opponentCrest = resolveClubLogo(intelligence.opponentClub || '') || '';
 

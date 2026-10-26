@@ -19,10 +19,6 @@ export function TopMatchScoreboardAndSlider({
   pathname,
   isLiveCandidate = false
 }: TopMatchScoreboardAndSliderProps) {
-  if (pathname.startsWith('/analyst') || pathname.startsWith('/insights')) {
-    return null;
-  }
-
   const [localSeconds, setLocalSeconds] = useState(selectedSeconds);
 
   useEffect(() => {
@@ -66,6 +62,8 @@ export function TopMatchScoreboardAndSlider({
   const phaseText = context?.phase ? phaseLabel(context.phase) : (localSeconds >= 2700 ? 'Second Half' : 'First Half');
   const effectiveMaxSeconds = 5400;
   const progressPct = Math.min(100, Math.max(0, (localSeconds / effectiveMaxSeconds) * 100));
+
+  if (pathname.startsWith('/analyst') || pathname.startsWith('/insights')) return null;
 
   return (
     <section className="universal-top-scoreboard-banner" aria-label="Live Match Scoreboard and Time Scrubber">

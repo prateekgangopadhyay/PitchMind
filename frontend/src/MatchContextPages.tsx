@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ApiRequestError, askCandidateAnalyst, clock, getCandidateAnalystAgents, request } from './api';
-import type { CandidateAnalystAgentCatalog, CandidateAnalystAnswer, CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
+import type { CandidateAnalystAnswer, CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
 import type { AppRoute } from './routes';
 import { contextHref } from './routes';
 import { clubInitials, resolveClubLogo, KNOWN_MATCH_FIXTURES } from './clubLogos';
@@ -383,8 +383,8 @@ function ContextState({ loading, error, empty }: { loading: boolean; error?: str
 
 export function useMatchContext(matchId: string | undefined, seconds: number, revision?: number) {
   const [context, setContext] = useState<MatchContext | null>(null);
-  const [fixtures, setFixtures] = useState<CanonicalMatchPage | null>(null);
-  const [candidateStatus, setCandidateStatus] = useState<CandidateStatus | null>(null);
+  const [fixtures] = useState<CanonicalMatchPage | null>(null);
+  const [candidateStatus] = useState<CandidateStatus | null>(null);
   const [loading, setLoading] = useState(Boolean(matchId));
   const [error, setError] = useState('');
 
@@ -480,7 +480,6 @@ function ContextLayout({
   onTimeChange,
   selector,
   maxSeconds,
-  hideSubNav = false,
   hideHud = false,
   hideHeaderBar = false
 }: {
@@ -496,7 +495,6 @@ function ContextLayout({
   onTimeChange?: (seconds: number) => void;
   selector?: ReactNode;
   maxSeconds?: number;
-  hideSubNav?: boolean;
   hideHud?: boolean;
   hideHeaderBar?: boolean;
 }) {
@@ -869,8 +867,6 @@ export function MatchContextPlayersPage({ route, matchId, seconds, revision, pla
           revision={revision}
           onSelectPlayer={(id) => setSelectedPlayerId(id)}
           onBackToPlayers={() => setSelectedPlayerId(undefined)}
-          liveMatchPlayers={data.context?.players}
-          liveMatchTeams={data.context?.teams}
         />
       ) : (
         <PlayerRosterView
@@ -885,7 +881,7 @@ export function MatchContextPlayersPage({ route, matchId, seconds, revision, pla
   );
 }
 
-export function MatchContextInsightsPage({ route, matchId, seconds, revision, insightId }: {
+export function MatchContextInsightsPage({ route, matchId, seconds, revision }: {
   route: AppRoute; matchId?: string; seconds: number; revision?: number; insightId?: string;
 }) {
   const data = useMatchContext(matchId, seconds, revision);
@@ -911,7 +907,6 @@ export function MatchContextInsightsPage({ route, matchId, seconds, revision, in
           : <TacticalInsightsDashboard
               context={data.context}
               seconds={seconds}
-              onTimeChange={data.selectTime}
               onSelectMatch={data.selectMatch}
             />}
     </ContextLayout>
@@ -963,37 +958,19 @@ export function deduceAnswerForPrompt(
 
 export function MatchContextAnalystPage({ route, matchId, seconds, revision }: { route: AppRoute; matchId?: string; seconds: number; revision?: number }) {
   const data = useMatchContext(matchId, seconds, revision);
-  const insights = data.context?.insights ?? [];
-  const [question, setQuestion] = useState('');
-  const [agentCatalog, setAgentCatalog] = useState<CandidateAnalystAgentCatalog | null>(null);
   const [agentName, setAgentName] = useState('TacticalAnalyst');
-  const [agentError, setAgentError] = useState('');
-  const [answer, setAnswer] = useState<CandidateAnalystAnswer | null>(null);
-  const [answerError, setAnswerError] = useState('');
-  const [asking, setAsking] = useState(false);
   const [liveReports, setLiveReports] = useState<CandidateLiveReport[]>([]);
   const [liveReportStatus, setLiveReportStatus] = useState('Waiting for notable live events…');
   const [liveReportError, setLiveReportError] = useState('');
   const agentNameRef = useRef(agentName);
-  const answerRequest = useRef<AbortController | null>(null);
   useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
-  useEffect(() => {
-    answerRequest.current?.abort();
-    answerRequest.current = null;
-    setAnswer(null); setAnswerError(''); setAsking(false); setQuestion('');
-    return () => answerRequest.current?.abort();
-  }, [matchId, seconds, revision]);
   useEffect(() => {
     const controller = new AbortController();
     getCandidateAnalystAgents(controller.signal).then(catalog => {
       if (!controller.signal.aborted) {
-        setAgentCatalog(catalog);
         setAgentName(catalog.defaultAgent);
-        setAgentError('');
       }
-    }).catch(failure => {
-      if (!controller.signal.aborted) setAgentError(failure instanceof Error ? failure.message : 'The Foundry agent list is unavailable.');
-    });
+    }).catch(() => { /* Live event reports remain available when the agent catalog cannot load. */ });
     return () => controller.abort();
   }, []);
   useEffect(() => {
@@ -1097,25 +1074,6 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     const timer = setInterval(() => { void poll(); }, 5000);
     return () => { active = false; controller.abort(); clearInterval(timer); };
   }, [matchId, seconds, data.context?.candidate]);
-
-  const submitQuestion = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!matchId || !data.context?.candidate || !question.trim() || asking) return;
-    answerRequest.current?.abort();
-    const controller = new AbortController();
-    answerRequest.current = controller;
-    setAsking(true); setAnswer(null); setAnswerError('');
-    try {
-      const result = await askCandidateAnalyst({ matchId, selectedSourceClockValue: seconds, audience: 'analyst', question: question.trim(), agentName }, controller.signal);
-      if (!controller.signal.aborted) setAnswer(result);
-    } catch (failure) {
-      if (!controller.signal.aborted) setAnswerError(failure instanceof ApiRequestError && failure.code === 'ANALYST_UNAVAILABLE'
-        ? 'The AI analyst could not reach its configured Foundry agent. Check the service configuration and access, then retry.'
-        : failure instanceof Error ? failure.message : 'The selected match could not be analyzed. Retry when the service is available.');
-    } finally {
-      if (!controller.signal.aborted) setAsking(false);
-    }
-  };
 
   const [customQuestion, setCustomQuestion] = useState('');
   const [scenarioInput, setScenarioInput] = useState('');

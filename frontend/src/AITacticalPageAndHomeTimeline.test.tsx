@@ -7,7 +7,7 @@ import { MatchContextAnalystPage } from './MatchContextPages';
 import { RoutePage } from './ShellPages';
 import { computeAgentDiscussionAndExplanation, computeCausalChain, FOUNDRY_AGENTS } from './tacticalAgentDiscussion';
 import { resolveRoute } from './routes';
-import { DynamicPassMapThumbnail, DynamicHeatmapThumbnail, DynamicTacticalMomentThumbnail, deduceTeamFormation } from './DynamicTacticalVisuals';
+import { DynamicPassMapThumbnail, DynamicHeatmapThumbnail, deduceTeamFormation } from './DynamicTacticalVisuals';
 
 describe('Home Page Linear Events Timeline and Differentiated Icons', () => {
   it('differentiates event types with distinct icons and theme classes', () => {
