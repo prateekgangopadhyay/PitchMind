@@ -22,7 +22,7 @@ param appImage string
 param entraTenantId string = tenant().tenantId
 param entraClientId string = '4accaf35-1ae9-4e7d-999d-3f86fd7caec4'
 @description('Name of an existing Key Vault from which DEV secrets (such as database credentials) are resolved.')
-param keyVaultName string = ''
+param keyVaultName string = 'pmdev4iwntkatliy6skv'
 
 param postgresServerName string = 'pitchmind-postgresql-dev'
 @description('Object ID of the existing DEV migration identity; its PostgreSQL administrator mapping is removed after migration succeeds.')
@@ -47,12 +47,14 @@ param postgresAdminPrincipalType string = 'User'
 @description('Create a new Azure Managed Redis instance and private endpoint. Leave false until SKU and cost are approved.')
 param provisionRedis bool = false
 param redisName string = 'pm-dev-redis'
+param redisContainerAppName string = 'pm-dev-redis-cache'
 @description('Azure Managed Redis SKU; verify regional availability and current cost before opting in.')
 @allowed(['Balanced_B0'])
 param redisSkuName string = 'Balanced_B0'
 param redisPrivateEndpointSubnetName string = 'private-endpoints'
 param redisPrivateDnsZoneName string = 'privatelink.redis.azure.net'
 param redisPrivateEndpointName string = 'pm-dev-redis-pe'
+param enableEventHubs bool = false
 param eventHubsNamespaceName string = 'pm-dev-eh'
 param candidateEventHubName string = 'candidate-match-events'
 param candidateEventHubConsumerGroup string = 'pitchmind-candidate-worker'
@@ -145,7 +147,7 @@ resource postgresMigratorIdentity 'Microsoft.ManagedIdentity/userAssignedIdentit
 }
 
 // Candidate raw events are isolated from the existing projection-telemetry hub.
-resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = {
+resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = if (enableEventHubs) {
   name: eventHubsNamespaceName
 }
 
@@ -224,7 +226,7 @@ resource signalR 'Microsoft.SignalRService/signalR@2024-03-01' = if (deployPriva
   tags: { application: 'PitchMind', environment: 'dev', story: 'EP06-S02' }
 }
 
-resource candidateEventHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = if (deployPrivateDevTopology) {
+resource candidateEventHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = if (deployPrivateDevTopology && enableEventHubs) {
   parent: eventHubsNamespace
   name: candidateEventHubName
   properties: {
@@ -233,7 +235,7 @@ resource candidateEventHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' 
   }
 }
 
-resource candidateEventHubConsumerGroupResource 'Microsoft.EventHub/namespaces/eventhubs/consumergroups@2024-01-01' = if (deployPrivateDevTopology) {
+resource candidateEventHubConsumerGroupResource 'Microsoft.EventHub/namespaces/eventhubs/consumergroups@2024-01-01' = if (deployPrivateDevTopology && enableEventHubs) {
   parent: candidateEventHub
   name: candidateEventHubConsumerGroup
   properties: {}
@@ -297,7 +299,7 @@ resource workerKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
-resource candidateEventHubSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
+resource candidateEventHubSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed && enableEventHubs) {
   scope: candidateEventHub
   name: guid(candidateEventHub.id, apiIdentity.id, 'EventHubsDataSender')
   properties: {
@@ -307,7 +309,7 @@ resource candidateEventHubSender 'Microsoft.Authorization/roleAssignments@2022-0
   }
 }
 
-resource candidateEventHubReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
+resource candidateEventHubReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed && enableEventHubs) {
   scope: candidateEventHub
   name: guid(candidateEventHub.id, workerIdentity.id, 'EventHubsDataReceiver')
   properties: {
@@ -464,22 +466,36 @@ resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' = 
   }
 }
 
-resource existingRedis 'Microsoft.Cache/redisEnterprise@2025-07-01' existing = {
-  name: redisName
-}
-
-resource existingRedisDatabase 'Microsoft.Cache/redisEnterprise/databases@2025-07-01' existing = {
-  parent: existingRedis
-  name: 'default'
-}
-
-resource redisCandidateAccess 'Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments@2026-05-01-preview' = if (deployPrivateDevTopology && enableCandidateFeed && !provisionRedis) {
-  parent: existingRedisDatabase
-  name: 'pitchmind-api-cursor-cache'
+resource redisCache 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopology && !provisionRedis) {
+  name: redisContainerAppName
+  location: location
   properties: {
-    accessPolicyName: 'default'
-    accessString: '+@read +@write ~candidate-live:v1:*'
-    user: { objectId: apiIdentity!.properties.principalId }
+    managedEnvironmentId: containerEnvironment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        targetPort: 6379
+        transport: 'Tcp'
+      }
+    }
+    template: {
+      containers: [
+        {
+          name: redisContainerAppName
+          image: 'redis:7-alpine'
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+      }
+    }
+    workloadProfileName: 'Consumption'
   }
 }
 
@@ -638,11 +654,12 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
               name: 'Foundry__ApiKey'
               value: ''
             })
-            { name: 'EventHubs__Namespace', value: enableCandidateFeed ? '${eventHubsNamespace.name}.servicebus.windows.net' : '' }
-            { name: 'EventHubs__CandidateHubName', value: enableCandidateFeed ? candidateEventHubName : '' }
+            { name: 'EventHubs__Namespace', value: (enableCandidateFeed && enableEventHubs) ? '${eventHubsNamespace.name}.servicebus.windows.net' : '' }
+            { name: 'EventHubs__CandidateHubName', value: (enableCandidateFeed && enableEventHubs) ? candidateEventHubName : '' }
             { name: 'Storage__BlobServiceUri', value: enableCandidateFeed ? 'https://${storageAccountName}.blob.core.windows.net' : '' }
             { name: 'Storage__CheckpointContainer', value: enableCandidateFeed ? candidateCheckpointContainer : '' }
-            { name: 'Redis__Endpoint', value: enableCandidateFeed ? '${provisionRedis ? redis!.properties.hostName : existingRedis.properties.hostName}:${provisionRedis ? redisDatabase!.properties.port : existingRedisDatabase.properties.port}' : '' }
+            { name: 'Redis__Endpoint', value: (enableCandidateFeed && provisionRedis) ? '${redis!.properties.hostName}:${redisDatabase!.properties.port}' : '' }
+            { name: 'Redis__ConnectionString', value: !provisionRedis ? '${redisContainerAppName}.internal.${containerEnvironment!.properties.defaultDomain}:6379,ssl=false' : '' }
             { name: 'Realtime__AzureSignalR__Endpoint', value: enableCandidateFeed ? 'https://${signalR!.properties.hostName}' : '' }
             { name: 'Foundry__Endpoint', value: enableCandidateFeed ? 'https://${foundryAccountName}.services.ai.azure.com/api/projects/${foundryProjectName}' : '' }
             { name: 'Foundry__AgentName', value: enableCandidateFeed ? foundryAgentName : '' }
@@ -665,10 +682,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
     story: 'EP02-S04'
     imageDigestDeployment: 'true'
   }
-  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase, candidateEventHubSender, signalRAppServer, redisCandidateAccess, provisionedRedisCandidateAccess, apiKeyVaultSecretsUser]
+  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase, candidateEventHubSender, signalRAppServer, provisionedRedisCandidateAccess, apiKeyVaultSecretsUser, redisCache]
 }
 
-resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
+resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopology && enableCandidateFeed && enableEventHubs) {
   name: '${appName}-eventworker'
   location: location
   identity: {
@@ -781,8 +798,9 @@ output containerAppFqdn string = deployPrivateDevTopology ? app!.properties.conf
 output postgresServerFqdn string = deployPrivateDevTopology && provisionPostgres ? postgres!.properties.fullyQualifiedDomainName : ''
 output redisHostName string = deployPrivateDevTopology && provisionRedis ? redis!.properties.hostName : ''
 output redisPort int = deployPrivateDevTopology && provisionRedis ? redisDatabase!.properties.port : 0
-output redisEndpoint string = deployPrivateDevTopology ? '${provisionRedis ? redis!.properties.hostName : existingRedis.properties.hostName}:${provisionRedis ? redisDatabase!.properties.port : existingRedisDatabase.properties.port}' : ''
+output redisEndpoint string = deployPrivateDevTopology && provisionRedis ? '${redis!.properties.hostName}:${redisDatabase!.properties.port}' : ''
+output redisConnectionString string = deployPrivateDevTopology && !provisionRedis ? '${redisContainerAppName}.internal.${containerEnvironment!.properties.defaultDomain}:6379,ssl=false' : ''
 output azureSignalREndpoint string = deployPrivateDevTopology && enableCandidateFeed ? 'https://${signalR!.properties.hostName}' : ''
-output eventWorkerName string = deployPrivateDevTopology && enableCandidateFeed ? eventWorker!.name : ''
+output eventWorkerName string = deployPrivateDevTopology && enableCandidateFeed && enableEventHubs ? eventWorker!.name : ''
 output postgresMigrationJobName string = deployPrivateDevTopology ? databaseMigrationJob!.name : ''
 output postgresMigrationAdminObjectId string = deployPrivateDevTopology ? postgresMigratorObjectId : ''

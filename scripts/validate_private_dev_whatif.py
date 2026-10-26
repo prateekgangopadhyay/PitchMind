@@ -39,6 +39,7 @@ TARGET_RESOURCE_NAMES = {
     "pmdev4iwntkatliy6sst", "candidate-checkpoints", "pitchmind-api-cursor-cache",
     "pm-dev-api-vnet-db-migrator", "pm-dev-private-cae",
     "pitchmind-postgresql-dev", "pitchmind", "pm-dev-redis", "default", "pm-dev-redis-pe",
+    "pm-dev-redis-cache", "pmdev4iwntkatliy6skv",
 }
 TARGET_EVENTHUB_NAMESPACE = "pm-dev-eh"
 
@@ -82,6 +83,7 @@ def main() -> int:
                         "/providers/microsoft.storage/storageaccounts/pmdev4iwntkatliy6sst/blobservices/default/containers/candidate-checkpoints/",
                         "/providers/microsoft.signalrservice/signalr/pm-dev-signalr/",
                         "/providers/microsoft.cognitiveservices/accounts/pitchmind-ai-resource/projects/pitchmind-ai/",
+                        "/providers/microsoft.keyvault/vaults/pmdev4iwntkatliy6skv",
                     )
                     if not any(scope in resource_id for scope in approved_scopes) or "/providers/microsoft.authorization/roleassignments/" not in resource_id:
                         raise ValueError("Role assignment is outside an approved ACR, candidate Event Hub, checkpoint container, SignalR, or Foundry project scope")

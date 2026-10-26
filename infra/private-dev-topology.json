@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "5359833549918229354"
+      "templateHash": "607381724149355224"
     }
   },
   "parameters": {
@@ -82,7 +82,7 @@
     },
     "keyVaultName": {
       "type": "string",
-      "defaultValue": "",
+      "defaultValue": "pmdev4iwntkatliy6skv",
       "metadata": {
         "description": "Name of an existing Key Vault from which DEV secrets (such as database credentials) are resolved."
       }
@@ -166,6 +166,10 @@
       "type": "string",
       "defaultValue": "pm-dev-redis"
     },
+    "redisContainerAppName": {
+      "type": "string",
+      "defaultValue": "pm-dev-redis-cache"
+    },
     "redisSkuName": {
       "type": "string",
       "defaultValue": "Balanced_B0",
@@ -187,6 +191,10 @@
     "redisPrivateEndpointName": {
       "type": "string",
       "defaultValue": "pm-dev-redis-pe"
+    },
+    "enableEventHubs": {
+      "type": "bool",
+      "defaultValue": false
     },
     "eventHubsNamespaceName": {
       "type": "string",
@@ -417,7 +425,7 @@
       }
     },
     {
-      "condition": "[parameters('deployPrivateDevTopology')]",
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableEventHubs'))]",
       "type": "Microsoft.EventHub/namespaces/eventhubs",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
@@ -427,7 +435,7 @@
       }
     },
     {
-      "condition": "[parameters('deployPrivateDevTopology')]",
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableEventHubs'))]",
       "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
       "apiVersion": "2024-01-01",
       "name": "[format('{0}/{1}/{2}', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'), parameters('candidateEventHubConsumerGroup'))]",
@@ -503,7 +511,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), parameters('enableEventHubs'))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
@@ -519,7 +527,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), parameters('enableEventHubs'))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName'))]",
@@ -727,19 +735,41 @@
       ]
     },
     {
-      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), not(parameters('provisionRedis')))]",
-      "type": "Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments",
-      "apiVersion": "2026-05-01-preview",
-      "name": "[format('{0}/{1}/{2}', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+      "condition": "[and(parameters('deployPrivateDevTopology'), not(parameters('provisionRedis')))]",
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('redisContainerAppName')]",
+      "location": "[parameters('location')]",
       "properties": {
-        "accessPolicyName": "default",
-        "accessString": "+@read +@write ~candidate-live:v1:*",
-        "user": {
-          "objectId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]"
-        }
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 6379,
+            "transport": "Tcp"
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "[parameters('redisContainerAppName')]",
+              "image": "redis:7-alpine",
+              "resources": {
+                "cpu": "[json('0.25')]",
+                "memory": "0.5Gi"
+              }
+            }
+          ],
+          "scale": {
+            "minReplicas": 0,
+            "maxReplicas": 1
+          }
+        },
+        "workloadProfileName": "Consumption"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]"
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]"
       ]
     },
     {
@@ -934,11 +964,11 @@
                 "[if(not(empty(parameters('keyVaultName'))), createObject('name', 'Foundry__ApiKey', 'secretRef', 'foundry-api-key'), createObject('name', 'Foundry__ApiKey', 'value', ''))]",
                 {
                   "name": "EventHubs__Namespace",
-                  "value": "[if(parameters('enableCandidateFeed'), format('{0}.servicebus.windows.net', parameters('eventHubsNamespaceName')), '')]"
+                  "value": "[if(and(parameters('enableCandidateFeed'), parameters('enableEventHubs')), format('{0}.servicebus.windows.net', parameters('eventHubsNamespaceName')), '')]"
                 },
                 {
                   "name": "EventHubs__CandidateHubName",
-                  "value": "[if(parameters('enableCandidateFeed'), parameters('candidateEventHubName'), '')]"
+                  "value": "[if(and(parameters('enableCandidateFeed'), parameters('enableEventHubs')), parameters('candidateEventHubName'), '')]"
                 },
                 {
                   "name": "Storage__BlobServiceUri",
@@ -950,7 +980,11 @@
                 },
                 {
                   "name": "Redis__Endpoint",
-                  "value": "[if(parameters('enableCandidateFeed'), format('{0}:{1}', if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName), if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port)), '')]"
+                  "value": "[if(and(parameters('enableCandidateFeed'), parameters('provisionRedis')), format('{0}:{1}', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port), '')]"
+                },
+                {
+                  "name": "Redis__ConnectionString",
+                  "value": "[if(not(parameters('provisionRedis')), format('{0}.internal.{1}:6379,ssl=false', parameters('redisContainerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), '2025-07-01').defaultDomain), '')]"
                 },
                 {
                   "name": "Realtime__AzureSignalR__Endpoint",
@@ -1019,7 +1053,7 @@
         "[resourceId('Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
         "[resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName'))]",
-        "[resourceId('Microsoft.Cache/redisEnterprise/databases/accessPolicyAssignments', parameters('redisName'), 'default', 'pitchmind-api-cursor-cache')]",
+        "[resourceId('Microsoft.App/containerApps', parameters('redisContainerAppName'))]",
         "[resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default')]",
         "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]",
         "[resourceId('Microsoft.SignalRService/signalR', parameters('signalRName'))]",
@@ -1027,7 +1061,7 @@
       ]
     },
     {
-      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), parameters('enableEventHubs'))]",
       "type": "Microsoft.App/containerApps",
       "apiVersion": "2024-03-01",
       "name": "[format('{0}-eventworker', parameters('appName'))]",
@@ -1241,7 +1275,11 @@
     },
     "redisEndpoint": {
       "type": "string",
-      "value": "[if(parameters('deployPrivateDevTopology'), format('{0}:{1}', if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName), if(parameters('provisionRedis'), reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port)), '')]"
+      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('provisionRedis')), format('{0}:{1}', reference(resourceId('Microsoft.Cache/redisEnterprise', parameters('redisName')), '2025-07-01').hostName, reference(resourceId('Microsoft.Cache/redisEnterprise/databases', parameters('redisName'), 'default'), '2025-07-01').port), '')]"
+    },
+    "redisConnectionString": {
+      "type": "string",
+      "value": "[if(and(parameters('deployPrivateDevTopology'), not(parameters('provisionRedis'))), format('{0}.internal.{1}:6379,ssl=false', parameters('redisContainerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), '2025-07-01').defaultDomain), '')]"
     },
     "azureSignalREndpoint": {
       "type": "string",
@@ -1249,7 +1287,7 @@
     },
     "eventWorkerName": {
       "type": "string",
-      "value": "[if(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), format('{0}-eventworker', parameters('appName')), '')]"
+      "value": "[if(and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), parameters('enableEventHubs')), format('{0}-eventworker', parameters('appName')), '')]"
     },
     "postgresMigrationJobName": {
       "type": "string",

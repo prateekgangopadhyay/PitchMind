@@ -79,12 +79,13 @@ else builder.Services.AddSignalR();
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
     ?? builder.Configuration["Redis:ConnectionString"]
     ?? builder.Configuration["AZURE_REDIS_CONNECTIONSTRING"];
+var redisEndpoint = builder.Configuration["Redis:Endpoint"] ?? builder.Configuration["AZURE_REDIS_ENDPOINT"];
 
-if (azureCandidateFeedEnabled)
+if (azureCandidateFeedEnabled && !string.IsNullOrWhiteSpace(redisEndpoint))
 {
-    var redisEndpoint = RequiredSetting(builder.Configuration["Redis:Endpoint"] ?? builder.Configuration["AZURE_REDIS_ENDPOINT"], "Redis:Endpoint");
+    var validatedEndpoint = RequiredSetting(redisEndpoint, "Redis:Endpoint");
     builder.Services.AddSingleton<IMatchProjectionCache>(sp =>
-        new AzureEntraRedisProjectionCache(redisEndpoint,
+        new AzureEntraRedisProjectionCache(validatedEndpoint,
             sp.GetRequiredService<TokenCredential>(), sp.GetService<ILogger<AzureEntraRedisProjectionCache>>()));
 }
 else if (!string.IsNullOrWhiteSpace(redisConnectionString))
@@ -131,20 +132,27 @@ else if (azureCandidateFeedEnabled)
 else builder.Services.AddSingleton<IRealtimeConnectionNegotiator, UnavailableRealtimeConnectionNegotiator>();
 if (azureCandidateFeedEnabled)
 {
-    var eventHubNamespace = ValidateEventHubNamespace(
-        RequiredSetting(builder.Configuration["EventHubs:Namespace"], "EventHubs:Namespace"));
-    var eventHubName = RequiredSetting(builder.Configuration["EventHubs:CandidateHubName"], "EventHubs:CandidateHubName");
-    var checkpointUri = ValidateBlobServiceUri(
-        RequiredSetting(builder.Configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
-    _ = checkpointUri;
-    _ = RequiredSetting(builder.Configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer");
-    var credential = AzureManagedIdentity(builder.Configuration);
-    builder.Services.AddSingleton(sp => new EventHubProducerClient(eventHubNamespace, eventHubName, credential));
-    builder.Services.AddSingleton<ICandidateEventPublisher, AzureCandidateEventHubPublisher>();
+    var rawEventHubNamespace = builder.Configuration["EventHubs:Namespace"];
+    var rawCandidateHubName = builder.Configuration["EventHubs:CandidateHubName"];
+    if (!string.IsNullOrWhiteSpace(rawEventHubNamespace) && !string.IsNullOrWhiteSpace(rawCandidateHubName))
+    {
+        var eventHubNamespace = ValidateEventHubNamespace(rawEventHubNamespace);
+        var checkpointUri = ValidateBlobServiceUri(
+            RequiredSetting(builder.Configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
+        _ = checkpointUri;
+        _ = RequiredSetting(builder.Configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer");
+        var credential = AzureManagedIdentity(builder.Configuration);
+        builder.Services.AddSingleton(sp => new EventHubProducerClient(eventHubNamespace, rawCandidateHubName, credential));
+        builder.Services.AddSingleton<ICandidateEventPublisher, AzureCandidateEventHubPublisher>();
+        builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<ICandidateEventPublisher, NoOpCandidateEventPublisher>();
+    }
     builder.Services.AddSingleton<CandidateFeedPersistence>();
     builder.Services.AddSingleton<CandidateFeedSourceCatalog>();
     builder.Services.AddSingleton<LocalCandidateSimulationService>();
-    builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
 }
 if (candidateFeedRuntimeEnabled)
 {
@@ -474,6 +482,12 @@ static async Task<IResult> ReadAnalystRequestAsync(HttpContext context)
     }
 
     return MatchDataUnavailable(context);
+}
+
+internal sealed class NoOpCandidateEventPublisher : ICandidateEventPublisher
+{
+    public Task EnsureReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task PublishAsync(CandidateReplayEnvelope envelope, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public partial class Program { }
