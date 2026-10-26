@@ -91,6 +91,14 @@ class IdentityBaselineTests(unittest.TestCase):
         self.assertIn("eed3b665-ab3a-47b6-8f48-c9382fb1dad6", topology)
         self.assertIn("/projects/pitchmind-ai/", validator)
 
+    def test_dev_topology_declares_official_key_vault_secrets_user_role(self):
+        topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
+        validator = (ROOT / "scripts/validate_private_dev_whatif.py").read_text()
+
+        self.assertIn("4633458b-17de-408a-b874-0445c86b69e6", topology)
+        self.assertNotIn("4633458b-17de-40ee-b8d7-50c29e7e35b6", topology)
+        self.assertIn("/vaults/pmdev4iwntkatliy6skv", validator)
+
     def test_dev_api_audience_matches_entra_v2_access_token_claim(self):
         topology = (ROOT / "infra/private-dev-topology.bicep").read_text()
         pipeline = (ROOT / "pipelines/azure-pipelines.yml").read_text()

@@ -285,7 +285,7 @@ resource apiKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04
   properties: {
     principalId: apiIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
   }
 }
 
@@ -295,7 +295,7 @@ resource workerKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022
   properties: {
     principalId: workerIdentity!.properties.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
   }
 }
 
