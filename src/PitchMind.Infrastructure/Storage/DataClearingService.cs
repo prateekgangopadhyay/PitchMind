@@ -5,44 +5,23 @@ namespace PitchMind.Infrastructure.Storage;
 
 public static class DataClearingService
 {
-    public static async Task<int> ClearAllAsync(
-        NpgsqlDataSource? dataSource,
-        IMatchProjectionCache? cache,
+    /// <summary>
+    /// Clears disposable candidate-feed records through the migration-owned, narrowly scoped
+    /// function. Canonical match history and schema metadata remain append-only/preserved.
+    /// </summary>
+    public static async Task<long> ClearCandidateDataAsync(
+        NpgsqlDataSource dataSource,
+        IMatchProjectionCache cache,
         CancellationToken cancellationToken = default)
     {
-        var cleared = 0;
-        if (dataSource is not null)
-        {
-            cleared = await ClearDatabaseAsync(dataSource, cancellationToken).ConfigureAwait(false);
-        }
+        ArgumentNullException.ThrowIfNull(dataSource);
+        ArgumentNullException.ThrowIfNull(cache);
 
-        if (cache is not null)
-        {
-            await cache.ClearAsync(cancellationToken).ConfigureAwait(false);
-        }
+        await cache.ClearAsync(cancellationToken).ConfigureAwait(false);
 
-        return cleared;
-    }
-
-    public static async Task<int> ClearDatabaseAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken = default)
-    {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var tables = new List<string>();
-        await using (var cmd = new NpgsqlCommand(
-            "SELECT tablename FROM pg_tables WHERE schemaname = 'pitchmind' AND tablename <> 'schema_versions';", connection))
-        {
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                tables.Add(reader.GetString(0));
-            }
-        }
-
-        if (tables.Count == 0) return 0;
-
-        var quoted = string.Join(", ", tables.Select(t => $"pitchmind.\"{t.Replace("\"", "\"\"", StringComparison.Ordinal)}\""));
-        await using var truncateCmd = new NpgsqlCommand($"TRUNCATE TABLE {quoted} CASCADE;", connection);
-        await truncateCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        return tables.Count;
+        await using var command = dataSource.CreateCommand("SELECT pitchmind.clear_candidate_feed();");
+        var clearedRecords = (long)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The candidate-feed clear operation returned no result."));
+        return clearedRecords;
     }
 }

@@ -5,7 +5,7 @@ namespace PitchMind.Infrastructure.Storage;
 /// <summary>Explicit migration operation. Use a migration identity, never the runtime data source.</summary>
 public static class PostgresSchemaMigrator
 {
-    public const int CurrentSchemaVersion = 14;
+    public const int CurrentSchemaVersion = 15;
 
     public static async Task ApplyAsync(NpgsqlDataSource migrationDataSource, CancellationToken cancellationToken)
     {
@@ -52,6 +52,8 @@ public static class PostgresSchemaMigrator
             await ExecuteAsync(connection, transaction, ConsumerProjectionPoisonV13Sql, cancellationToken);
         if (currentVersion < 14)
             await ExecuteAsync(connection, transaction, CandidateFeedV14Sql, cancellationToken);
+        if (currentVersion < 15)
+            await ExecuteAsync(connection, transaction, CandidateFeedResetV15Sql, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -601,5 +603,36 @@ public static class PostgresSchemaMigrator
             PRIMARY KEY (transport, partition_id, broker_position)
         );
         INSERT INTO pitchmind.schema_versions(version) VALUES (14) ON CONFLICT DO NOTHING;
+        """;
+
+    /// <summary>Allows the restricted API role to clear only disposable candidate-feed data.</summary>
+    public const string CandidateFeedResetV15Sql = """
+        CREATE OR REPLACE FUNCTION pitchmind.clear_candidate_feed()
+        RETURNS bigint
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path = pg_catalog, pitchmind
+        AS $$
+        DECLARE
+            removed bigint := 0;
+            affected bigint;
+        BEGIN
+            DELETE FROM pitchmind.candidate_feed_events;
+            GET DIAGNOSTICS affected = ROW_COUNT;
+            removed := removed + affected;
+
+            DELETE FROM pitchmind.candidate_feed_poison;
+            GET DIAGNOSTICS affected = ROW_COUNT;
+            removed := removed + affected;
+
+            DELETE FROM pitchmind.candidate_feed_outbox;
+            GET DIAGNOSTICS affected = ROW_COUNT;
+            removed := removed + affected;
+
+            RETURN removed;
+        END;
+        $$;
+        REVOKE ALL ON FUNCTION pitchmind.clear_candidate_feed() FROM PUBLIC;
+        INSERT INTO pitchmind.schema_versions(version) VALUES (15) ON CONFLICT DO NOTHING;
         """;
 }

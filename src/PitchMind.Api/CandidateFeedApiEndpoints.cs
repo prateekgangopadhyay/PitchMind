@@ -55,8 +55,8 @@ internal static class CandidateFeedApiEndpoints
             return Results.Ok(new
             {
                 cleared = true,
-                clearedTables = count,
-                message = "Match data and cache were cleared, and the candidate replay restarted from the beginning."
+                clearedCandidateRecords = count,
+                message = "Candidate match records and cache were cleared; replay restarted from source sequence zero."
             });
         })
             .RequireAuthorization("AnalystAction");

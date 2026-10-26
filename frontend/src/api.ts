@@ -737,7 +737,7 @@ export function stepSimulationStream(signal?: AbortSignal): Promise<SimulationSt
 
 export interface ClearDataResult {
   cleared: boolean;
-  clearedTables: number;
+  clearedCandidateRecords: number;
   message: string;
 }
 

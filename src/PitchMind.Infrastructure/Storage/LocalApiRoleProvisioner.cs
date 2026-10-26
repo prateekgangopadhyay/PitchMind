@@ -142,6 +142,7 @@ public static partial class LocalApiRoleProvisioner
                 ON TABLE pitchmind.candidate_feed_outbox TO pitchmind_api;
             GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_events TO pitchmind_api;
             GRANT SELECT, INSERT ON TABLE pitchmind.candidate_feed_poison TO pitchmind_api;
+            GRANT EXECUTE ON FUNCTION pitchmind.clear_candidate_feed() TO pitchmind_api;
             """, connection);
         await grants.ExecuteNonQueryAsync(cancellationToken);
     }

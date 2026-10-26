@@ -17,10 +17,12 @@ internal static class CandidateSimulationDataReset
         if (simulation is not null)
             await simulation.ResetAsync(cancellationToken).ConfigureAwait(false);
 
-        var count = await DataClearingService.ClearAllAsync(
-            services.GetService<NpgsqlDataSource>(),
-            services.GetService<IMatchProjectionCache>(),
-            cancellationToken).ConfigureAwait(false);
+        var dataSource = services.GetService<NpgsqlDataSource>()
+            ?? throw new InvalidOperationException("PostgreSQL is required to clear candidate-feed records.");
+        var cache = services.GetService<IMatchProjectionCache>()
+            ?? throw new InvalidOperationException("Redis is required to clear candidate-feed cache state.");
+        var count = await DataClearingService.ClearCandidateDataAsync(
+            dataSource, cache, cancellationToken).ConfigureAwait(false);
 
         // CandidateFeedPersistence also maintains an in-process outbox/cursor. Clear it along
         // with PostgreSQL so replayed source sequences are not treated as duplicates.
