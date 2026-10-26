@@ -8,7 +8,7 @@ namespace PitchMind.Api;
 /// <summary>Clears candidate state and starts a fresh replay from the beginning of its source feed.</summary>
 internal static class CandidateSimulationDataReset
 {
-    public static async Task<int> ClearAndRestartAsync(IServiceProvider services, CancellationToken cancellationToken)
+    public static async Task<long> ClearAndRestartAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         var simulation = services.GetService<LocalCandidateSimulationService>();
         var persistence = services.GetService<CandidateFeedPersistence>();
