@@ -29,6 +29,4 @@ steps:
     testResultsFormat: VSTest
     testResultsFiles: $(Agent.TempDirectory)/pitchmind-dotnet-results/**/*.trx
     failTaskOnFailedTests: true
-    # The test command runs only after restore/build succeed. A missing TRX file
-    # should not obscure the earlier restore/build error when tests never started.
-    failTaskOnMissingResultsFile: false
+    failTaskOnMissingResultsFile: true
