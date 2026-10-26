@@ -21,11 +21,6 @@ interface CandidatePage {
   hasMore: boolean;
 }
 
-interface Cursor {
-  matchId: string;
-  sourceSha256: string;
-  sequence: number;
-}
 
 interface SourcePlayer {
   [key: string]: unknown;

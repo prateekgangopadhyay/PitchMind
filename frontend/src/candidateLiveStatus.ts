@@ -217,9 +217,11 @@ export function subscribeCandidateStatus(fn: () => void) {
     void refreshCandidateStatus();
     poller = setInterval(() => {
       if (document.visibilityState !== 'hidden') {
-        void refreshCandidateStatus();
+        if (!globalHub || globalHub.state !== 'Connected') {
+          void refreshCandidateStatus();
+        }
       }
-    }, 1500);
+    }, 3000);
   }
   return () => {
     listeners.delete(fn);

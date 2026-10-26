@@ -63,10 +63,32 @@ function candidateFeedDevPlugin(): Plugin {
     return { events: cachedEvents, manifest: cachedManifest };
   }
 
+  let backendAvailable: boolean | null = null;
+  let lastCheckedBackend = 0;
+
+  async function checkBackend(): Promise<boolean> {
+    const now = Date.now();
+    if (backendAvailable !== null && now - lastCheckedBackend < 3000) {
+      return backendAvailable;
+    }
+    lastCheckedBackend = now;
+    try {
+      const res = await fetch('http://127.0.0.1:5080/health', { signal: AbortSignal.timeout(400) });
+      backendAvailable = res.ok;
+    } catch {
+      backendAvailable = false;
+    }
+    return backendAvailable;
+  }
+
   return {
     name: 'candidate-feed-dev-plugin',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
+        if (await checkBackend()) {
+          next();
+          return;
+        }
         const request = req as unknown as DevRequest;
         const url = new URL(request.url || '', 'http://127.0.0.1');
 

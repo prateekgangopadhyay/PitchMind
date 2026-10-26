@@ -13,7 +13,7 @@ import { PlayerTacticalDashboard } from './PlayerTacticalDashboard';
 import { PlayerRosterView } from './PlayerRosterView';
 import { getPlayersIntelligenceList, calculateAiPlayerKeyQuote, type PlayerIntelligenceData } from './api';
 import { TacticalInsightsDashboard } from './TacticalInsightsDashboard';
-import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus, subscribeCandidateStatus } from './candidateLiveStatus';
+import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus } from './candidateLiveStatus';
 
 
 export type CandidateStatus = {
