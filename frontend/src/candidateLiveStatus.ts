@@ -8,7 +8,8 @@ export interface CandidateStreamStatus {
 }
 interface Snapshot { status: CandidateStreamStatus | null; error: string; pending: boolean }
 let status: CandidateStreamStatus | null = null; let error = ''; let pending = false;
-let autoStartRequested = false; let autoStartAttempted = false;
+let autoStartRequested = false; let autoStartAttempted = false; let autoStartInFlight = false;
+let nextAutoStartAttemptAt = 0;
 let poller: ReturnType<typeof setInterval> | null = null; let requestInFlight: Promise<void> | null = null;
 let snapshot: Snapshot = { status, error, pending }; const listeners = new Set<() => void>();
 function publish() { snapshot = { status, error, pending }; listeners.forEach(fn => fn()); }
@@ -27,18 +28,32 @@ export function subscribeCandidateStatus(fn: () => void) {
   return () => { listeners.delete(fn); if (!listeners.size && poller) { clearInterval(poller); poller = null; } };
 }
 async function startAfterStatusIfRequested() {
-  if (!autoStartRequested) return;
+  if (!autoStartRequested || autoStartInFlight || Date.now() < nextAutoStartAttemptAt) return;
   if (status?.isStreaming) {
     autoStartRequested = false;
     autoStartAttempted = true;
     return;
   }
   if (!status?.matchId || autoStartAttempted) return;
-  autoStartRequested = false;
-  autoStartAttempted = true;
-  try { status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {}); }
-  catch (failure) { error = failureMessage(failure, 'The candidate simulation could not start automatically. Use Live to retry.'); }
-  publish();
+  autoStartInFlight = true;
+  try {
+    status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {});
+    autoStartRequested = false;
+    autoStartAttempted = true;
+    nextAutoStartAttemptAt = 0;
+    error = '';
+  } catch (failure) {
+    if (failure instanceof ApiRequestError && failure.status < 500) {
+      autoStartRequested = false;
+      autoStartAttempted = true;
+    } else {
+      nextAutoStartAttemptAt = Date.now() + 5000;
+    }
+    error = failureMessage(failure, 'The candidate simulation could not start. Retrying automatically.');
+  } finally {
+    autoStartInFlight = false;
+    publish();
+  }
 }
 export async function refreshCandidateStatus(autoStart = false): Promise<CandidateStreamStatus | null> {
   if (autoStart && !autoStartAttempted) autoStartRequested = true;
@@ -56,6 +71,8 @@ export async function refreshCandidateStatus(autoStart = false): Promise<Candida
 }
 export async function toggleCandidateStream() {
   if (pending) return;
+  autoStartRequested = false;
+  autoStartAttempted = true;
   pending = true; publish();
   try {
     const current = await refreshCandidateStatus();

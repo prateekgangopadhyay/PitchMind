@@ -4,7 +4,7 @@ import {
   type AuthenticationResult,
   type Configuration,
 } from '@azure/msal-browser';
-import { DEFAULT_ANALYST_AVATAR, getStoredAuthSession, setStoredAuthSession, type AuthSession } from './api';
+import { DEFAULT_ANALYST_AVATAR, setStoredAuthSession, type AuthSession } from './api';
 
 const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID?.trim() ?? '';
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID?.trim() ?? '';
@@ -66,10 +66,6 @@ export async function signOutMicrosoft(): Promise<void> {
 }
 
 export async function acquireApiToken(): Promise<string | null> {
-  const session = getStoredAuthSession();
-  if (session?.user?.provider === 'google' && session.token) {
-    return session.token;
-  }
   if (!isEntraAuthMode() || !configured) return null;
   await initializeEntraAuth();
   const account = msal.getActiveAccount() ?? msal.getAllAccounts()[0];

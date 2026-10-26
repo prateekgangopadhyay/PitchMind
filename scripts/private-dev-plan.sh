@@ -75,6 +75,7 @@ az deployment group what-if \
     postgresAdminPrincipalType="${PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_TYPE:-User}" \
     provisionRedis="$PITCHMIND_DEV_PROVISION_REDIS" \
     enableCandidateFeed="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
+    enableEventHubs="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
     signalRName="$PITCHMIND_DEV_SIGNALR_NAME" \
     signalRAllowedOrigin="$PITCHMIND_DEV_SIGNALR_ALLOWED_ORIGIN" \
     storageAccountName="$PITCHMIND_DEV_STORAGE_ACCOUNT_NAME" \
@@ -100,6 +101,7 @@ Path(sys.argv[1]).write_text(json.dumps({
     'provisionPostgres': os.environ['PITCHMIND_DEV_PROVISION_POSTGRES'],
     'provisionRedis': os.environ['PITCHMIND_DEV_PROVISION_REDIS'],
     'enableCandidateFeed': os.environ['PITCHMIND_DEV_ENABLE_CANDIDATE_FEED'],
+    'enableEventHubs': os.environ['PITCHMIND_DEV_ENABLE_CANDIDATE_FEED'],
     'redisSkuName': os.environ['PITCHMIND_DEV_REDIS_SKU_NAME'] if os.environ['PITCHMIND_DEV_PROVISION_REDIS'].lower() == 'true' else None,
 }, indent=2) + '\n')
 PY

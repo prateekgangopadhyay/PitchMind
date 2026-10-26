@@ -58,6 +58,7 @@ az deployment group what-if \
     postgresAdminPrincipalType="${PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_TYPE:-User}" \
     provisionRedis="$PITCHMIND_DEV_PROVISION_REDIS" \
     enableCandidateFeed="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
+    enableEventHubs="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
     signalRName="$PITCHMIND_DEV_SIGNALR_NAME" \
     signalRAllowedOrigin="$PITCHMIND_DEV_SIGNALR_ALLOWED_ORIGIN" \
     storageAccountName="$PITCHMIND_DEV_STORAGE_ACCOUNT_NAME" \
@@ -111,6 +112,7 @@ deployment=$(az deployment group create \
     postgresAdminPrincipalType="${PITCHMIND_DEV_POSTGRES_ADMIN_PRINCIPAL_TYPE:-User}" \
     provisionRedis="$PITCHMIND_DEV_PROVISION_REDIS" \
     enableCandidateFeed="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
+    enableEventHubs="$PITCHMIND_DEV_ENABLE_CANDIDATE_FEED" \
     signalRName="$PITCHMIND_DEV_SIGNALR_NAME" \
     signalRAllowedOrigin="$PITCHMIND_DEV_SIGNALR_ALLOWED_ORIGIN" \
     storageAccountName="$PITCHMIND_DEV_STORAGE_ACCOUNT_NAME" \

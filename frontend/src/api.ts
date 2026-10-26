@@ -117,10 +117,6 @@ declare global {
 
 /** The host owns sign-in and token storage; PitchMind only requests short-lived access tokens. */
 export async function getHostAccessToken(): Promise<string | null> {
-  const session = getStoredAuthSession();
-  if (session?.user?.provider === 'google' && session.token) {
-    return session.token;
-  }
   if (typeof window === 'undefined' || typeof window.pitchMindAuth?.getAccessToken !== 'function') return null;
   return window.pitchMindAuth.getAccessToken();
 }
@@ -445,7 +441,7 @@ export interface AuthSession {
     role: string;
     permissions: string[];
     avatarUrl?: string;
-    provider?: 'google' | 'email' | 'entra';
+    provider?: 'email' | 'entra';
   };
 }
 
@@ -838,30 +834,6 @@ export function subscribeAuth(onChange: () => void): () => void {
     window.removeEventListener(AUTH_EVENT, onChange);
     window.removeEventListener('storage', onChange);
   };
-}
-
-export function loginWithGoogleSimulated(): Promise<AuthSession> {
-  const payload = JSON.stringify({ sub: 'google-analyst', roles: ['analyst'] });
-  const b64 = typeof btoa === 'function'
-    ? btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    : typeof globalThis !== 'undefined' && 'Buffer' in globalThis
-      ? (globalThis as typeof globalThis & { Buffer?: { from(value: string): { toString(encoding: 'base64url'): string } } }).Buffer?.from(payload).toString('base64url') ?? ''
-      : '';
-  const session: AuthSession = {
-    success: true,
-    token: `pmdev.v1.${b64}`,
-    authenticatedAt: new Date().toISOString(),
-    user: {
-      name: 'Tactical Analyst (Google)',
-      email: 'analyst@pitchmind.dev',
-      role: 'Lead Tactical Analyst',
-      permissions: ['MatchRead', 'MatchReplay', 'AnalystAction', 'TeamProfileRead', 'FullIntelligence'],
-      avatarUrl: DEFAULT_ANALYST_AVATAR,
-      provider: 'google'
-    }
-  };
-  setStoredAuthSession(session);
-  return Promise.resolve(session);
 }
 
 export function logoutSimulated(): void {

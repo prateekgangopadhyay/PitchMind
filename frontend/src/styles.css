@@ -6083,26 +6083,6 @@ input[type="checkbox"] {
   gap: 0.65rem !important;
 }
 
-.auth-google-btn {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 0.6rem !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 48px !important;
-  background: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  color: #0f172a !important;
-  border-radius: 8px !important;
-  padding: 0.65rem 0.75rem !important;
-  font-size: 0.84rem !important;
-  font-weight: 700 !important;
-  cursor: pointer !important;
-  transition: all 140ms ease !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
-}
-
 .auth-provider-btn {
   display: flex !important;
   align-items: center !important;
@@ -6146,14 +6126,6 @@ input[type="checkbox"] {
   line-height: 1.45 !important;
 }
 
-.auth-google-btn:hover:not(:disabled) {
-  background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
-}
-
-.auth-google-btn:focus-visible,
 .auth-provider-btn:focus-visible {
   outline: 2px solid var(--pm-accent) !important;
   outline-offset: 2px !important;
@@ -12042,8 +12014,6 @@ button:active,
   .candidate-match-context { align-items: flex-start; flex-direction: column; gap: 15px; }
   .candidate-feed-section { position: static; }
 }
-
-.auth-google-btn .provider-option-status { color: #536773 !important; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

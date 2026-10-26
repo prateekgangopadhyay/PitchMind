@@ -157,7 +157,7 @@ export function App() {
                   <div className="popover-meta">
                     <strong>{activeUser.name}</strong>
                     <small>{activeUser.email}</small>
-                    <span className="popover-provider-pill">{activeUser.provider === 'entra' ? 'Microsoft Entra ID' : activeUser.provider === 'google' ? 'Google Account' : 'Analyst Account'}</span>
+                    <span className="popover-provider-pill">{activeUser.provider === 'entra' ? 'Microsoft Entra ID' : 'Analyst Account'}</span>
                   </div>
                 </div>
                 <div className="popover-menu-divider"></div>
@@ -166,12 +166,7 @@ export function App() {
                   className="popover-signout-btn"
                   onClick={() => {
                     setShowUserMenu(false);
-                    const currentSession = getStoredAuthSession();
-                    if (currentSession?.user?.provider === 'google') {
-                      logoutSimulated();
-                      window.history.pushState({}, '', '/welcome');
-                      window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
-                    } else if (isEntraAuthMode()) {
+                    if (isEntraAuthMode()) {
                       void signOutMicrosoft();
                     } else {
                       logoutSimulated();
