@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   request,
+  clock,
   loginSimulated,
   getStoredAuthSession,
   setStoredAuthSession
@@ -371,6 +372,14 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
             <div className="match-card-topline"><span className="badge">Candidate simulation</span><span className="phase-tag">Not canonical</span></div>
             <h2>Live match feed</h2>
             <p>Match ID <code translate="no">{candidateStream.status.matchId}</code></p>
+            {timelineData.context?.homeTeam && (
+              <p className="candidate-match-score-row" style={{ fontWeight: 600, fontSize: '1rem', margin: '6px 0', color: 'var(--text-primary, #fff)' }}>
+                {timelineData.context.homeTeam.name} {timelineData.context.homeTeam.score ?? 0} – {timelineData.context.awayTeam?.score ?? 0} {timelineData.context.awayTeam?.name ?? 'Away'}
+                <span style={{ marginLeft: '10px', fontSize: '0.85rem', color: '#00d26a', fontWeight: 500 }}>
+                  ● Live · {clock(selectedSeconds ?? candidateStream.status?.currentClockValue ?? 0)}
+                </span>
+              </p>
+            )}
             <p>Source events and player positions are shown with their provenance and validation limits.</p>
             {candidateStream.error && <p role="status">{candidateStream.error}</p>}
           </div>
@@ -388,7 +397,7 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
               </button>
             )}
             <a className="primary-link" href={contextHref('/candidate-live', candidateStream.status.matchId,
-              selectedSeconds ?? candidateStream.status.currentClockValue ?? 0)}>Open live match</a>
+              selectedSeconds ?? candidateStream.status.currentClockValue ?? 0, undefined, 'live')}>Open live match</a>
           </div>
         </article>
           : matches.length === 0 && candidateStream.error ? <div className="page-state error-copy" role="status">
@@ -411,7 +420,7 @@ export function RoutePage({ route, search, contextMatchId, contextSeconds }: {
 }) {
   const params = new URLSearchParams(search);
   const selectedMatchId = params.get('matchId') ?? contextMatchId;
-  const hasSelectedTime = params.has('atSeconds');
+  const hasSelectedTime = params.has('atSeconds') && params.get('mode') !== 'live';
   const selectedSeconds = hasSelectedTime ? selectedTimeFromSearch(search) : (contextSeconds ?? 0);
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;

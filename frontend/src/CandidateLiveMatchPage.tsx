@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection } from '@microsoft/signalr';
-import { getHostAccessToken, request } from './api';
-import { useCandidateStreamStatus } from './candidateLiveStatus';
+import { request } from './api';
+import { useCandidateStreamStatus, getCachedCandidateEvents, setCachedCandidateEvents, subscribeCandidateStatus } from './candidateLiveStatus';
 import { contextHref } from './routes';
 import { LinearEventsTimeline, type LinearTimelineEvent } from './LinearEventsTimeline';
 
@@ -131,6 +130,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
       fetched.forEach(item => merged.set(item.sequence, item));
       bySequence.current = [...merged.values()].sort((a, b) => a.sequence - b.sequence);
       setEvents(bySequence.current);
+      setCachedCandidateEvents(bySequence.current, target);
       setError('');
     } catch (cause) {
       if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Candidate event history unavailable.');
@@ -147,12 +147,21 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   }, []);
 
   useEffect(() => {
-    bySequence.current = [];
-    setEvents([]);
-    setLoading(true);
     if (!matchId) {
+      bySequence.current = [];
+      setEvents([]);
       setLoading(false);
       return;
+    }
+    const cached = getCachedCandidateEvents(matchId);
+    if (cached.length > 0) {
+      bySequence.current = cached;
+      setEvents(cached);
+      setLoading(false);
+    } else {
+      bySequence.current = [];
+      setEvents([]);
+      setLoading(true);
     }
     const controller = new AbortController();
     void backfill(matchId, controller.signal);
@@ -160,9 +169,21 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   }, [matchId, backfill]);
 
   useEffect(() => {
+    return subscribeCandidateStatus(() => {
+      if (matchId) {
+        const cached = getCachedCandidateEvents(matchId);
+        if (cached.length > 0 && cached.length !== bySequence.current.length) {
+          bySequence.current = cached;
+          setEvents(cached);
+          setLoading(false);
+        }
+      }
+    });
+  }, [matchId]);
+
+  useEffect(() => {
     if (!matchId || !status?.isStreaming || !sourceHash) return;
     let active = true;
-    let hub: HubConnection | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     const abort = new AbortController();
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -182,77 +203,14 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
         }
       }, 1000);
     };
-    const poll = () => {
-      if (!timer && active)
-        timer = setInterval(() => {
-          if (document.visibilityState !== 'hidden') refresh();
-        }, 2500);
-    };
-    async function connect() {
-      try {
-        const token = await getHostAccessToken();
-        if (!active) return;
-        const local = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        else if (local) {
-          headers['X-Dev-Subject'] = 'local-analyst';
-          headers['X-Dev-Roles'] = 'analyst';
-        }
-        const response = await fetch('/api/v1/simulation/candidate/realtime/negotiate', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ matchId, sourceSha256: sourceHash }),
-          signal: abort.signal
-        });
-        if (!response.ok) throw new Error('Candidate SignalR unavailable.');
-        const negotiation = (await response.json()) as { transport: string; url: string; accessToken: string | null };
-        const url = new URL(negotiation.url, window.location.origin);
-        if (
-          negotiation.transport !== 'aspnetcore-signalr' ||
-          url.origin !== window.location.origin ||
-          url.pathname !== '/hubs/matches' ||
-          negotiation.accessToken
-        )
-          throw new Error('Unsupported SignalR endpoint.');
-        hub = new HubConnectionBuilder()
-          .withUrl(url.toString(), {
-            accessTokenFactory: async () => (await getHostAccessToken()) ?? '',
-            ...(local
-              ? { headers: { 'X-Dev-Subject': 'local-analyst', 'X-Dev-Roles': 'analyst' }, transport: HttpTransportType.LongPolling }
-              : {})
-          })
-          .withAutomaticReconnect()
-          .configureLogging(LogLevel.Error)
-          .build();
-        hub.on('CandidateMatchUpdated', (cursor: Cursor) => {
-          if (active && cursor.matchId === matchId && cursor.sourceSha256 === sourceHash) refresh();
-        });
-        hub.onreconnecting(poll);
-        hub.onclose(poll);
-        hub.onreconnected(() => {
-          if (timer) clearInterval(timer);
-          timer = null;
-          refresh();
-        });
-        await hub.start();
-        if (!active) {
-          await hub.stop();
-          return;
-        }
-        await hub.invoke('SubscribeToCandidateMatch', matchId, sourceHash);
-        refresh();
-      } catch {
-        poll();
-      }
-    }
-    void connect();
+    timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') refresh();
+    }, 2000);
     return () => {
       active = false;
       abort.abort();
       if (throttleTimer) clearTimeout(throttleTimer);
       if (timer) clearInterval(timer);
-      if (hub) void hub.stop().catch(() => undefined);
     };
   }, [matchId, status?.isStreaming, sourceHash, backfill]);
 

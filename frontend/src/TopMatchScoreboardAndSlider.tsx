@@ -38,7 +38,10 @@ export function TopMatchScoreboardAndSlider({
   };
 
   // Avoid firing duplicate canonical BFF network calls when on canonical /matches routes
-  const isCanonicalRoute = Boolean(pathname.startsWith('/matches') && matchId && !matchId.startsWith('sim-'));
+  const isCanonicalRoute = Boolean(
+    (pathname.startsWith('/matches') || pathname.startsWith('/replay')) &&
+    matchId && !matchId.startsWith('sim-')
+  );
   const contextData = useMatchContext(isCanonicalRoute ? undefined : matchId, selectedSeconds, revision);
   const context = isCanonicalRoute ? null : contextData.context;
 
@@ -63,7 +66,11 @@ export function TopMatchScoreboardAndSlider({
   const effectiveMaxSeconds = 5400;
   const progressPct = Math.min(100, Math.max(0, (localSeconds / effectiveMaxSeconds) * 100));
 
-  if (pathname.startsWith('/analyst') || pathname.startsWith('/insights')) return null;
+  const jumpToLive = () => {
+    const currentPath = typeof window === 'undefined' ? (pathname || '/matches') : window.location.pathname;
+    window.history.replaceState(null, '', contextHref(currentPath, matchId, undefined, revision, 'live'));
+    window.dispatchEvent(new Event('pitchmind:locationchange'));
+  };
 
   return (
     <section className="universal-top-scoreboard-banner" aria-label="Live Match Scoreboard and Time Scrubber">
@@ -102,7 +109,15 @@ export function TopMatchScoreboardAndSlider({
             </span>
 
             <div className="clock-phase-cluster">
-              <div className="clock-time-badge">
+              <div
+                className="clock-time-badge"
+                role="button"
+                tabIndex={0}
+                onClick={jumpToLive}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToLive(); } }}
+                title={isLiveCandidate ? 'Live stream synchronized · Click to jump to live' : 'Play time'}
+                style={{ cursor: isLiveCandidate ? 'pointer' : 'default' }}
+              >
                 <span className={`live-pulse-dot ${isLiveCandidate ? 'pulse' : ''}`} aria-hidden="true"></span>
                 <span className="clock-digits">{currentClockFormatted}</span>
               </div>

@@ -13,6 +13,7 @@ import { PlayerTacticalDashboard } from './PlayerTacticalDashboard';
 import { PlayerRosterView } from './PlayerRosterView';
 import { getPlayersIntelligenceList, calculateAiPlayerKeyQuote, type PlayerIntelligenceData } from './api';
 import { TacticalInsightsDashboard } from './TacticalInsightsDashboard';
+import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus, subscribeCandidateStatus } from './candidateLiveStatus';
 
 
 export type CandidateStatus = {
@@ -202,18 +203,30 @@ interface CandidateEventsCache {
 let candidateEventsCache: CandidateEventsCache | null = null;
 
 async function loadCandidateContext(matchId: string, seconds: number, signal: AbortSignal): Promise<MatchContext | null> {
-  const status = await request<CandidateStatus>('simulation/candidate/status', signal).catch(() => null);
+  const currentSnapshot = readCandidateStatus().status;
+  const status = (currentSnapshot && currentSnapshot.matchId === matchId)
+    ? currentSnapshot
+    : await request<CandidateStatus>('simulation/candidate/status', signal).catch(() => null);
   if (!status || status.matchId !== matchId) return null;
 
-  let fetched: CandidateEvent[];
+  let fetched = getCachedCandidateEvents(matchId);
   if (
+    !fetched.length ||
+    (status.currentSequence && (!fetched.length || fetched.at(-1)!.sequence < status.currentSequence))
+  ) {
+    fetched = await syncCandidateEvents(matchId, signal).catch(() => fetched);
+  }
+
+  if (
+    !fetched.length &&
     candidateEventsCache &&
     candidateEventsCache.matchId === matchId &&
-    candidateEventsCache.sourceSha256 === status.sourceSha256 &&
-    (!status.currentSequence || candidateEventsCache.events.some(e => e.sequence >= (status.currentSequence ?? 0)))
+    candidateEventsCache.sourceSha256 === status.sourceSha256
   ) {
     fetched = candidateEventsCache.events;
-  } else {
+  }
+
+  if (!fetched.length) {
     fetched = [];
     let afterSequence = -1;
     let hasMore = true;
@@ -232,9 +245,10 @@ async function loadCandidateContext(matchId: string, seconds: number, signal: Ab
       hasMore = page.hasMore;
       if (hasMore && page.items.length === 0) throw new Error('Candidate match history did not advance.');
     }
-    if (status.sourceSha256) {
-      candidateEventsCache = { matchId, sourceSha256: status.sourceSha256, events: fetched };
-    }
+  }
+
+  if (status.sourceSha256) {
+    candidateEventsCache = { matchId, sourceSha256: status.sourceSha256, events: fetched };
   }
   const atTime = fetched.filter(event => Number.isFinite(event.clockSeconds) && event.clockSeconds <= seconds);
   const selectedEvent = atTime.at(-1);
@@ -387,10 +401,15 @@ export function useMatchContext(matchId: string | undefined, seconds: number, re
   const [candidateStatus] = useState<CandidateStatus | null>(null);
   const [loading, setLoading] = useState(Boolean(matchId));
   const [error, setError] = useState('');
+  const lastMatchIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const controller = new AbortController();
-    setContext(null); setError('');
+    if (lastMatchIdRef.current !== matchId) {
+      setContext(null);
+      lastMatchIdRef.current = matchId;
+    }
+    setError('');
     if (!matchId) {
       setLoading(false);
       return () => controller.abort();

@@ -5,7 +5,7 @@ import { CanonicalMatchPage } from './CanonicalMatchPage';
 import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
 import { contextHref, currentLocation, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
 import { CandidateLiveMatchPage } from './CandidateLiveMatchPage';
-import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
+import { clearCandidateLiveCache, toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 import { isEntraAuthMode, signOutMicrosoft } from './entraAuth';
 
 import { TopMatchScoreboardAndSlider } from './TopMatchScoreboardAndSlider';
@@ -22,6 +22,7 @@ export function App() {
     }
     setClearingData(true);
     try {
+      clearCandidateLiveCache();
       const res = await clearAllDevData();
       if (typeof window !== 'undefined') {
         window.alert(`Data cleared: ${res.message || 'All database records and cache flushed successfully.'}`);
@@ -45,10 +46,13 @@ export function App() {
   const params = new URLSearchParams(search);
   const matchId = route.kind === 'matches' ? route.matchId ?? params.get('matchId') ?? undefined
     : params.get('matchId') ?? (route.kind !== 'welcome' ? candidateStream.status?.matchId ?? undefined : undefined);
-  const selectedSeconds = params.has('atSeconds') ? selectedTimeFromSearch(search)
-    : candidateStream.status?.matchId === matchId ? candidateStream.status?.currentClockValue ?? undefined : undefined;
+  const isCandidateMatch = Boolean(candidateStream.status?.isStreaming && candidateStream.status?.matchId && candidateStream.status.matchId === matchId);
+  const isExplicitHistorical = params.has('atSeconds') && params.get('mode') !== 'live';
+  const realtimeMode = params.get('mode') === 'live' || (!params.has('atSeconds') && isCandidateMatch) ? 'LIVE' : 'HISTORICAL';
+  const selectedSeconds = isCandidateMatch
+    ? (isExplicitHistorical ? selectedTimeFromSearch(search) : candidateStream.status?.currentClockValue ?? undefined)
+    : (params.has('atSeconds') ? selectedTimeFromSearch(search) : undefined);
   const selectedAtSeconds = selectedSeconds ?? (route.kind === 'matches' ? 5400 : 0);
-  const realtimeMode = params.get('mode') === 'live' || selectedSeconds === undefined ? 'LIVE' : 'HISTORICAL';
   const revisionValue = Number(params.get('revision'));
   const revision = Number.isInteger(revisionValue) && revisionValue > 0 ? revisionValue : undefined;
   const links = [
@@ -60,6 +64,7 @@ export function App() {
     { label: 'AI Analyst', path: '/analyst', active: route.kind === 'analyst' }
   ];
   const contextMode = realtimeMode === 'LIVE' ? 'live' : undefined;
+  const targetNavSeconds = isCandidateMatch && realtimeMode === 'LIVE' ? undefined : selectedSeconds;
   const candidateStreamMatchesContext = Boolean(candidateStream.status?.matchId && candidateStream.status.matchId === matchId);
 
   const activeUser = authSession?.user;
@@ -68,13 +73,13 @@ export function App() {
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <header className="site-header">
       <div className="header-brand-nav-group">
-        <a className="brand" href={contextHref('/home', matchId, selectedSeconds, revision, contextMode)} aria-label="PitchMind home">
+        <a className="brand" href={contextHref('/home', matchId, targetNavSeconds, revision, contextMode)} aria-label="PitchMind home">
           <img className="brand-logo-image" src="/brand/pitchmind-symbol.svg" width="32" height="32" alt="" aria-hidden="true" />
           <span className="brand-name">PitchMind</span>
         </a>
         {route.kind !== 'welcome' && (
           <nav className="main-navigation" aria-label="Main navigation">
-            {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, selectedSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
+            {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, targetNavSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
           </nav>
         )}
       </div>

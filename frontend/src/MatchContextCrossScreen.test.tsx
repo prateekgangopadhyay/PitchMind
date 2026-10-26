@@ -174,4 +174,71 @@ describe('Match Context Across All Screens', () => {
       container.remove();
     }
   });
+
+  it('keeps streaming active when navigating across pages and updates streaming details across all screens', async () => {
+    setupCandidateMock();
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+
+    try {
+      // 1. Teams screen receives the streaming candidate context
+      await act(async () => {
+        root.render(
+          <RoutePage
+            route={{ kind: 'teams' }}
+            search="?mode=live"
+            contextMatchId={matchId}
+            contextSeconds={2400}
+          />
+        );
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+
+      // Teams page reflects both teams and scores at 2400s (both goals happened: 1-1)
+      expect(container.textContent).toContain('Manchester United');
+      expect(container.textContent).toContain('Liverpool');
+      expect(container.textContent).toContain('1 goal');
+
+      // 2. Navigate to Players screen in live mode
+      await act(async () => {
+        root.render(
+          <RoutePage
+            route={{ kind: 'players' }}
+            search="?mode=live"
+            contextMatchId={matchId}
+            contextSeconds={2400}
+          />
+        );
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+
+      // Players page displays active players with minutes played matching elapsed clock (40 mins)
+      expect(container.textContent).toContain('Bruno Fernandes');
+      expect(container.textContent).toContain('Mohamed Salah');
+      expect(container.textContent).toContain('40:00');
+
+      // 3. Navigate to Insights screen in live mode
+      await act(async () => {
+        root.render(
+          <RoutePage
+            route={{ kind: 'insights' }}
+            search="?mode=live"
+            contextMatchId={matchId}
+            contextSeconds={2400}
+          />
+        );
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+
+      // Insights page shows tactical dashboard derived from live streamed events
+      expect(container.querySelector('.insights-redesign-wrapper')).not.toBeNull();
+      expect(container.textContent).toContain('Manchester United');
+      expect(container.textContent).toContain('Liverpool');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
 });
+
