@@ -1,7 +1,4 @@
-using Npgsql;
-using PitchMind.Application.Abstractions;
 using PitchMind.Infrastructure.Feeds;
-using PitchMind.Infrastructure.Storage;
 
 namespace PitchMind.Api;
 
@@ -52,24 +49,14 @@ internal static class CandidateFeedApiEndpoints
             .RequireAuthorization("AnalystAction");
         group.MapPost("/clear", async (IServiceProvider services, HttpContext context) =>
         {
-            var dataSource = services.GetService<NpgsqlDataSource>();
-            var cache = services.GetService<IMatchProjectionCache>();
-            var count = await DataClearingService.ClearAllAsync(dataSource, cache, context.RequestAborted).ConfigureAwait(false);
-
-            var candidateSimulation = services.GetService<LocalCandidateSimulationService>();
-            if (candidateSimulation is not null)
-            {
-                await candidateSimulation.ResetAsync(context.RequestAborted).ConfigureAwait(false);
-            }
-
-            var candidatePersistence = services.GetService<CandidateFeedPersistence>();
-            candidatePersistence?.ClearInMemory();
+            var count = await CandidateSimulationDataReset.ClearAndRestartAsync(
+                services, context.RequestAborted).ConfigureAwait(false);
 
             return Results.Ok(new
             {
                 cleared = true,
                 clearedTables = count,
-                message = "All records from the database and cache have been successfully cleared."
+                message = "Match data and cache were cleared, and the candidate replay restarted from the beginning."
             });
         })
             .RequireAuthorization("AnalystAction");

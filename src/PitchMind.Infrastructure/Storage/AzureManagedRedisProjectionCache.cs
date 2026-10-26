@@ -174,7 +174,7 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
             cts.CancelAfter(_timeoutMs);
 
             using var client = await ConnectAsync(cts.Token).ConfigureAwait(false);
-            if (client is null) return;
+            if (client is null) throw new InvalidOperationException("Azure Managed Redis is unavailable for the requested cache clear.");
 
             using var stream = await OpenStreamAsync(client, cts.Token).ConfigureAwait(false);
 
@@ -191,7 +191,8 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Azure Managed Redis FLUSHDB failed; continuing safely");
+            _logger?.LogError(ex, "Azure Managed Redis FLUSHDB failed; the data-clear operation cannot be reported as successful.");
+            throw new InvalidOperationException("Azure Managed Redis could not be cleared.", ex);
         }
     }
 

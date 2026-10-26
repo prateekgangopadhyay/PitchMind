@@ -1,8 +1,5 @@
 using System.Text.Json;
-using Npgsql;
-using PitchMind.Application.Abstractions;
 using PitchMind.Contracts.V1;
-using PitchMind.Infrastructure.Storage;
 
 namespace PitchMind.Api;
 
@@ -227,29 +224,16 @@ internal static class SimulationEndpoints
 
         group.MapPost("/clear-data", async (HttpContext context, IServiceProvider services) =>
         {
-            var dataSource = services.GetService<NpgsqlDataSource>();
-            var cache = services.GetService<IMatchProjectionCache>();
-            var count = await DataClearingService.ClearAllAsync(dataSource, cache, context.RequestAborted).ConfigureAwait(false);
-
-            var candidateSimulation = services.GetService<LocalCandidateSimulationService>();
-            if (candidateSimulation is not null)
-            {
-                await candidateSimulation.ResetAsync(context.RequestAborted).ConfigureAwait(false);
-            }
-
-            var simulationStreamer = services.GetService<ISimulationStreamer>();
-            if (simulationStreamer is not null)
-            {
-                await simulationStreamer.PauseAsync(context.RequestAborted).ConfigureAwait(false);
-            }
+            var count = await CandidateSimulationDataReset.ClearAndRestartAsync(
+                services, context.RequestAborted).ConfigureAwait(false);
 
             return Results.Ok(new
             {
                 cleared = true,
                 clearedTables = count,
-                message = "All records from the database and cache have been successfully cleared."
+                message = "Match data and cache were cleared, and the candidate replay restarted from the beginning."
             });
-        });
+        }).RequireAuthorization("AnalystAction");
 
         return app;
     }

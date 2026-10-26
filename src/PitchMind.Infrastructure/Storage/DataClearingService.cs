@@ -40,28 +40,9 @@ public static class DataClearingService
 
         if (tables.Count == 0) return 0;
 
-        try
-        {
-            var quoted = string.Join(", ", tables.Select(t => $"pitchmind.\"{t}\""));
-            await using var truncateCmd = new NpgsqlCommand($"TRUNCATE TABLE {quoted} CASCADE;", connection);
-            await truncateCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            return tables.Count;
-        }
-        catch
-        {
-            foreach (var table in tables)
-            {
-                try
-                {
-                    await using var deleteCmd = new NpgsqlCommand($"DELETE FROM pitchmind.\"{table}\";", connection);
-                    await deleteCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Ignore individual table permission or dependency issues if non-fatal
-                }
-            }
-            return tables.Count;
-        }
+        var quoted = string.Join(", ", tables.Select(t => $"pitchmind.\"{t.Replace("\"", "\"\"", StringComparison.Ordinal)}\""));
+        await using var truncateCmd = new NpgsqlCommand($"TRUNCATE TABLE {quoted} CASCADE;", connection);
+        await truncateCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return tables.Count;
     }
 }

@@ -56,7 +56,11 @@ public sealed class AzureEntraRedisProjectionCache : IMatchProjectionCache, IAsy
             await db.ExecuteAsync("FLUSHDB").ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex) { _logger?.LogWarning(ex, "Redis flush failed."); }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Redis flush failed; the data-clear operation cannot be reported as successful.");
+            throw new InvalidOperationException("Azure Managed Redis could not be cleared.", ex);
+        }
     }
 
     private async Task<IDatabase> GetDatabaseAsync(CancellationToken cancellationToken)
