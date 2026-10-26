@@ -1,5 +1,5 @@
-# PitchMind — 59 individually designed development story work packets
-**Status:** All design packets created; no blanket implementation-complete claim. Each file preserves the authoritative story, build scope and acceptance, with HLD, LLD, owner role, failure behaviors and verification evidence. [Epic authority](HACKATHON-MVP-EPICS.md) | [Execution](../engineering/COUNCIL-EXECUTION-PLAN.md) | [Current implementation register](STORY-EXECUTION.md).
+# PitchMind — Hackathon Development Story Work Packets (EP01 to EP10)
+**Status:** Hackathon stories scoped to EP01–EP10 (49 P0 Hackathon MVP stories + 4 EP09 operational enhancements). All 49 P0 stories are verified and accepted by the Product Owner. Non-hackathon post-submission items (EP11 Release Governance & EP12 Enterprise Expansion) are pruned. [Epic authority](HACKATHON-MVP-EPICS.md) | [Execution](../engineering/COUNCIL-EXECUTION-PLAN.md) | [PO Acceptance Ledger](PRODUCT-OWNER-ACCEPTANCE-LEDGER.md).
 
 | Story ID | Title | Priority | Workstream | Work packet |
 |---|---|---|---|---|
@@ -56,11 +56,5 @@
 | EP10-S04 | Azure DEV integrated certification and rollback | P0 | Certification | [Open](../engineering/stories/EP10/EP10-S04.md) |
 | EP10-S05 | Hackathon public submission assets | P0 | Certification | [Open](../engineering/stories/EP10/EP10-S05.md) |
 | EP10-S06 | Judges' evidence map and demo contingency | P0 | Certification | [Open](../engineering/stories/EP10/EP10-S06.md) |
-| EP11-S01 | Environment parity and protected release controls | P1 | Release Governance | [Open](../engineering/stories/EP11/EP11-S01.md) |
-| EP11-S02 | Backup, recovery and incident drills | P1 | Release Governance | [Open](../engineering/stories/EP11/EP11-S02.md) |
-| EP11-S03 | Ongoing security and FinOps controls | P1 | Release Governance | [Open](../engineering/stories/EP11/EP11-S03.md) |
-| EP12-S01 | Provenance-aware historical retrieval (M14) | P2 | Advanced Projections | [Open](../engineering/stories/EP12/EP12-S01.md) |
-| EP12-S02 | Historical tracking and spatial data exploration (M15) | P2 | Advanced Projections | [Open](../engineering/stories/EP12/EP12-S02.md) |
-| EP12-S03 | Model and partner expansion (M16) | P2 | Advanced Projections | [Open](../engineering/stories/EP12/EP12-S03.md) |
 
-**Definition of done:** source and match/evidence provenance; architecture/API/ADR changes in same PR; golden positive/negative/insufficient-data tests; CI security and accessibility gates; traceable revision-specific evidence; PO acceptance. DEV deploy is separately approved by owner. **Feed JSON has arrived on newer main; canonical import and rights/football acceptance remain open. See [source profile](../data/MANU-LIV-SOURCE-PROFILE.md).**
+**Definition of done:** source and match/evidence provenance; architecture/API/ADR changes in same PR; golden positive/negative/insufficient-data tests; CI security and accessibility gates; traceable revision-specific evidence; PO acceptance. DEV deploy is separately approved by owner.

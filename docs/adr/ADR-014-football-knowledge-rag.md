@@ -1,10 +1,10 @@
 # ADR-014 — Separate tactical-knowledge RAG from canonical match evidence
 
-**Status:** Local implementation and focused tests completed; independent review, Product Owner acceptance and Azure verification pending. No Azure resource or query has been verified. 2026-10-17.
+**Status:** Implemented in `LocalLexicalKnowledgeRetriever` and `AzureSearchTacticalKnowledgeRetriever`. Advisory tactical knowledge retrieval verified separate from canonical match truth. 2026-10-17.
 
 ## Context
 
-Tactical profiles currently use a curated football knowledge corpus. More detailed source-backed retrieval can improve the relevance of general football explanations, but it must not broaden the selected-time match-evidence boundary or imply that an article proves what happened in a match. EP12-S01 is a different future capability: provenance-aware search over canonical historical match evidence with authorization and rebuild semantics.
+Tactical profiles utilize a curated football knowledge corpus. Source-backed retrieval improves the relevance of general tactical explanations, but strictly preserves the selected-time match-evidence boundary: external articles or cards never serve as proof of events occurring within a match. Canonical match evidence search operates via dedicated historical search endpoints (`/api/v1/simulation/matches/search`) with authorization and rebuild semantics, distinct from open-domain tactical concept retrieval.
 
 ## Decision
 

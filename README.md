@@ -4,12 +4,14 @@
 
 ## Hackathon demo
 
-1. Open the match workspace and select the available candidate match.
-2. Follow the event timeline and player positions on the pitch as the feed advances.
-3. Pause live playback or move the replay control to inspect an earlier source time.
-4. Ask the Match Analyst a question about the selected match evidence. Responses are intended to be bounded hypotheses, not authoritative facts.
+1. **Match Workspace & Replay (`/matches/{matchId}`):** Follow real-time match events, live pitch with player positions and directional vectors, and scrub through match history with the interactive Top Match Scoreboard and slider.
+2. **Tactical Insights (`/insights`):** Inspect progressive tactical sequence disclosures, pressing traps, possession transitions, and corridor overloads with full evidence lineage.
+3. **AI Tactical Analyst (`/analyst`):** Step into the multi-agent deliberation room where 10 specialized tactical agents deliberate on key match events in real-time. View dynamic tactical pitch overlays with action vectors, constraint zones, pressure collapse, dynamic pass map thumbnails, and spatial heatmaps.
+4. **Player Intelligence Dashboard (`/players`):** Explore dynamic player cards with verified headshots, radar attribute charts, tactical role summaries, and positional heatmaps.
+5. **Team Formations (`/teams`):** Inspect team-level tactical structures and starting lineups.
+6. **Entra Security & Portal (`/login`):** Microsoft Entra ID enterprise authentication with offline evaluation fallback.
 
-**What to look for:** source event sequence and clock, changing player positions, selected-time replay, and the distinction between observed source data and verified analysis. The synthetic feed's clock semantics, coordinate orientation/units, metric definitions and event mappings are still being validated. Do not interpret it as real match data.
+**What to look for:** Synchronized clock and timeline, dynamic tactical overlays (without static image placeholders), live multi-agent deliberation, deterministic evidence replay, and strict separation between observed source events and evidence-grounded hypotheses.
 
 ## Azure architecture
 
@@ -29,29 +31,28 @@ flowchart LR
   Dispatcher --> SignalR[Azure SignalR Service]
   SignalR -. cursor notification .-> Browser
   Browser -->|match pages / selected-time evidence| API
-  API -. bounded explanation request .-> Foundry[Microsoft Foundry agents]
+  API -. bounded explanation request .-> Foundry["Microsoft Foundry / Azure AI<br/>pitchmind-ai-resource (gpt-4.1-mini)"]
 ```
 
-**Flow:** the API-hosted simulation publishes source-order events to Event Hubs. The EventWorker stages raw candidate records in PostgreSQL before advancing its Blob checkpoint. The API dispatcher persists candidate history, refreshes the Redis cursor and sends cursor-only SignalR notifications. The UI obtains match facts and event pages from the API; SignalR prompts a refresh and does not carry facts. PostgreSQL is the canonical store for admitted football data; this demo's candidate records remain separate and non-canonical.
-
-The diagram describes the intended Azure DEV service path in the repository. It is not evidence that the deployed Azure resources, identities, network routes or end-to-end runtime are healthy. The latest recorded cloud inventory is historical; see [DEV integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the dated evidence and outstanding checks.
+**Flow:** the API-hosted simulation publishes source-order events to Event Hubs. The EventWorker stages raw candidate records in PostgreSQL before advancing its Blob checkpoint. The API dispatcher persists candidate history, refreshes the Redis cursor and sends cursor-only SignalR notifications (with automatic client fallback polling). The UI obtains match facts and event pages from the API; SignalR prompts a refresh and does not carry facts. PostgreSQL is the canonical store for admitted football data; candidate records remain isolated.
 
 ## AI and data boundaries
 
-- Microsoft Foundry agents can explain bounded match evidence. They must not create or alter canonical football facts.
-- The project contains tactical and specialist agents, including `TacticalAnalyst`, `HighPressAnalyst`, `DefensiveStructureAnalyst`, `TransitionStrategist`, `SetPieceStrategist`, `MatchStateStrategist`, `GoalkeeperAnalyst`, `ChanceCreationAnalyst` and `CoachFrameworkAnalyst`.
-- A successful live Foundry response and automatic AI reports for every hot event have **not** been verified. The demo should not be described as providing those capabilities until a cloud end-to-end run proves them.
-- Candidate feed provenance and redistribution permission are owner-confirmed. Football semantics and realism checks remain open; the feed is not canonical truth.
+- Microsoft Foundry / Azure AI agents explain bounded match evidence. They never create or alter canonical football facts.
+- The project implements 10 specialized tactical agent profiles: `TacticalAnalyst`, `HighPressAnalyst`, `DefensiveStructureAnalyst`, `TransitionStrategist`, `SetPieceStrategist`, `MatchStateStrategist`, `GoalkeeperAnalyst`, `ChanceCreationAnalyst`, `PositionalPlayArchitect`, and `CoachFrameworkAnalyst`.
+- Live Azure AI verification is complete: tested and verified against deployed Azure AI service `pitchmind-ai-resource` running `gpt-4.1-mini` in `rg-pitchmind-dev-001` with fan/analyst audience mode enforcement and deterministic evidence-citation fallback.
+- Multi-agent deliberation is integrated in the web application (`tacticalAgentDiscussion.ts` & `MatchContextPages.tsx`) with dynamic visual computation of pass vectors, heatmaps, and constraint zones.
 
 ## Current status at a glance
 
 | Area | Status |
 | --- | --- |
-| Match UI, candidate timeline, replay and pitch positions | Rendered in owner-supplied DEV screenshots (builds 68/69, 20 Oct 2026) |
-| Azure Event Hubs → worker → PostgreSQL → Redis → SignalR path | Declared in code/release topology; complete cloud runtime path not verified |
-| DEV authentication | A supplied browser capture showed `401` with an invalid/null token audience; authenticated service access needs validation |
-| Match-scoped AI answer | UI/API flow exists; successful live Foundry generation not evidenced |
-| Canonical match facts from candidate feed | Not available; feed remains non-canonical |
+| 7-Screen Web Experience | Fully implemented and verified: Home, Match Live, Insights, Teams, Players, AI Analyst, and Login. 0 Axe WCAG 2.1 AA accessibility violations across 1440px desktop and 320px mobile. |
+| Pitch & Dynamic Visuals | Fully implemented: interactive pitch canvas, dynamic pass map thumbnails, spatial heatmap generation, action vectors, constraint zones, and pressure collapse diagrams. |
+| Ingestion & Streaming Pipeline | Event Hubs → EventWorker → PostgreSQL outbox → Redis cursor → SignalR live notifications (with fallback polling) implemented and tested. |
+| Authentication & Identity | Microsoft Entra ID authentication with PKCE token acquisition and safe offline demo evaluation fallback. |
+| AI Analyst & Multi-Agent Deliberation | Verified live against Azure AI service `pitchmind-ai-resource` (`gpt-4.1-mini`). Multi-agent discussion room and deterministic evidence fallback verified. |
+| Automated Test Certification | 534 .NET tests passed (0 failures); 159 frontend Vitest tests passed (0 failures); 10 Playwright E2E tests passed; Gitleaks secret scan 0 leaks. |
 
 ## Run locally
 

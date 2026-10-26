@@ -17,13 +17,13 @@ The 28 portable GitHub Copilot Agent Skills live in [../../.github/skills](../..
 Treat architecture documents as target intent, integration smoke as environment-scoped proof and clean pipeline output as build-scoped proof.
 ## Executable routing and validation (added)
 - [28-role machine-readable skills registry](COUNCIL-SKILL-REGISTRY.json)
-- [All 59 story routes, owners by skill and dependency DAG](STORY-EXECUTION-ROUTING.json)
+- [All 53 Hackathon story routes, owners by skill and dependency DAG](STORY-EXECUTION-ROUTING.json)
 - [Readable per-story execution roadmap](ALL-STORIES-EXECUTION-ROADMAP.md)
 - [Current-vs-target C4](../architecture/README.md)
 
-Run `node scripts/validate_operating_model.mjs` at repository root (or `node scripts/validate_operating_model.mjs --self-test`). The Node validation checks catalog/frontmatter, 59-story coverage, no missing workpackets, DAG cycles, current-vs-target architecture and two manual DEV gates. It is static validation: **not** .NET/React integration, Azure deployment or rights/football certification. Azure DevOps validates this in the frontend job after installing Node.
+Run `node scripts/validate_operating_model.mjs` at repository root (or `node scripts/validate_operating_model.mjs --self-test`). The Node validation checks catalog/frontmatter, 53-story hackathon coverage, no missing workpackets, DAG cycles, current-vs-target architecture and two manual DEV gates. It is static validation: **not** .NET/React integration, Azure deployment or rights/football certification. Azure DevOps validates this in the frontend job after installing Node.
 
-**Verification status:** [Current static skills, 59-story routing and deployment-control audit](STATIC-VERIFICATION-2026-10-08.md). This does not certify CI, the full feed, or DEV runtime.
+**Verification status:** [Current static skills, 53-story routing and deployment-control audit](STATIC-VERIFICATION-2026-10-08.md). This does not certify CI, the full feed, or DEV runtime.
 
 ## Cross-cutting UI specialists
 The 28 accountable Council role skills remain unchanged in number. Five cross-cutting design specialists (33 discoverable skill directories total) are available under `.github/`: Taste, Impeccable, Emil design engineering, Vercel Web Design Guidelines and Awesome Design audit. For materially changed UI, use them in that order as documented in the [frontend review protocol](../design/FRONTEND-DESIGN-DELIVERY.md). These are design-time review resources; the Product Owner remains the story acceptance owner, and their presence does not mean any visual story or UX audit has passed. See the [design registry](../design/DESIGN-SKILL-REGISTRY.json), [premium brand system](../design/PITCHMIND-DESIGN-SYSTEM.md) and [vendor/license notes](../design/VENDOR-SOURCES.md).
@@ -44,6 +44,6 @@ The **Awesome Design audit rubrics** are also available directly in this reposit
 
 For audit records and execution, use the [source-only baseline UI audit](../design/BASELINE-UI-AUDIT.md) and [per-screen frontend audit workflow](../design/FRONTEND-DESIGN-DELIVERY.md). The baseline audit is explicitly partial; final visual/accessibility acceptance requires rendered-screen evidence, relevant tests and independent review. [Source attribution and licenses](../design/VENDOR-SOURCES.md) document the pinned versions.
 
-## Accelerated delivery and CodeGraph
+## Accelerated delivery and execution directive
 
-The active [AI execution directive](AI-EXECUTION-DIRECTIVE.md) preserves all 59 existing story routes while prioritizing parallel P0 development **and** dependency-safe incremental integration into `main`. The [CodeGraph setup and usage guide](../engineering/CODEGRAPH-INTEGRATION.md) describes optional read-only graph context, cross-agent blast-radius handoffs and real stacked-PR base comparisons. It does not add a Council role, substitute for independent acceptance, create a GitHub Actions pipeline or waive Azure approvals.
+The active [AI execution directive](AI-EXECUTION-DIRECTIVE.md) governs hackathon story delivery while prioritizing parallel P0 development **and** dependency-safe incremental integration into `main`. Cross-agent context sharing and strict automated testing ensure high code quality. All code must pass independent review, unit/integration test suites, and Product Owner acceptance before release.

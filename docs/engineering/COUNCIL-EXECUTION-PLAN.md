@@ -1,8 +1,8 @@
-# PitchMind Engineering Council — 59-Story Execution Programme
-**Baseline:** main 287d0b5 (2026-10-08); **target submission:** 2026-10-27; **status:** implementation plan, not release proof. Sources: [59 authoritative stories](../backlog/HACKATHON-MVP-EPICS.md), [M01–M16](../backlog/MVP-BACKLOG.md), Product Owner Bible, current C4/ADRs and seven [design mockups](../mockups/README.md).
+# PitchMind Engineering Council — Hackathon Execution Programme
+**Baseline:** main 287d0b5 (2026-10-08); **target submission:** 2026-10-27; **status:** Product Owner-accepted P0 Hackathon MVP. Sources: [Hackathon authoritative stories](../backlog/HACKATHON-MVP-EPICS.md), [M01–M12](../backlog/MVP-BACKLOG.md), Product Owner Bible, current C4/ADRs and seven [design mockups](../mockups/README.md).
 
 ## Non-negotiables
-- All 59 stories remain in scope of the **portfolio**; P0 must be release-certified for the hackathon, P1/P2 tracked and completed in separate gated workstreams if not feasible by the deadline. Never mark stories accepted merely because code or a design exists.
+- All 53 Hackathon stories remain in scope of the **portfolio**; P0 must be release-certified for the hackathon, P1 tracked and completed in separate gated workstreams. Never mark stories accepted merely because code or a design exists.
 - No match/team/player/score/event/tracking/narrative facts hardcoded in C# or React. Data comes from approved JSON, canonical PostgreSQL, and versioned deterministic calculations. No mockup number is a domain truth. Labels and algorithm constants are okay only when football-approved and configured.
 - The user-referenced `data/simulations/manu-liv-match-dataset.json` **arrived on main after the first review** (`b978254`). Its observed schema is documented in [feed profile](../data/MANU-LIV-SOURCE-PROFILE.md). Reading/profile is complete, but actual importer/normalizer, manifest for source schema/time/coordinate semantics, canonical event mapping and football realism sign-off remain open; owner-confirmed synthetic provenance and redistribution permission are recorded. Block *release/claim of source correctness*, not source-schema discovery. The former C# `SyntheticFixtureGenerator` has been moved to test-only support; current API match routes fail closed pending canonical feed admission and PostgreSQL-backed reads.
 - Hackathon uses synthetic football-realistic data, not actual EPL matches; EPL-context names/images only with provenance clarity and appropriate rights. Show `Simulated match` prominently.
@@ -12,13 +12,13 @@
 ## Council ownership, interfaces and parallel tracks
 | Track | Accountable role / council reviewers | Stories | Owned code / output |
 |---|---|---|---|
-| Platform | Principal Azure, DevOps, SRE, security, FinOps | EP01, EP02, EP11, EP10-S03/S04 | `infra/`, `pipelines/`, `docker/`, environment/rollback docs |
+| Platform | Principal Azure, DevOps, SRE, security, FinOps | EP01, EP02, EP10-S03/S04 | `infra/`, `pipelines/`, `docker/`, environment/rollback docs |
 | Canonical data | C# principal, PostgreSQL, streaming, DDD | EP03, EP04 | `Domain`, `Infrastructure`, feed import, ledger, outbox |
 | Football science | PO, football analytics, QA, distinguished engineers | EP05, EP10-S02 | concept dictionary, mechanisms, evidence, goldens |
 | Transport & BFF | API lead, event systems, AppSec | EP06, EP09-S01 | match APIs, SignalR, auth, cursor/backfill |
 | Frontend | React lead, accessibility, UI/UX | EP07, EP08-S06 | seven screens, match-time context, design system |
 | Agentic AI | Foundry architect, AI safety, security | EP08-S01–S05, EP09-S02/03 | evidence tools, structured agents, validation |
-| Release & extensions | QA, technical writer, FinOps, PO | EP10, EP09-S04, EP12 | evidence manifests, demo, exports, optional search/ML |
+| Release & operations | QA, technical writer, FinOps, PO | EP10, EP09-S04 | evidence manifests, demo, exports, recap |
 
 One real accountable engineer per story is assigned by the owner; 'engineering council' denotes review perspectives, not available headcount or fake signatures. Changes to shared files (Domain IDs/clock, `Program.cs`, API.md, C4) are serialized by an integration owner. Frontend can build against versioned synthetic contract fixtures **without baking their data into React**.
 
@@ -33,9 +33,9 @@ One real accountable engineer per story is assigned by the owner; 'engineering c
 | Approval | **after G4** | Owner receives SHA/digest, Azure DEV diff, cost ceiling, ingress/egress, migration and rollback | **await explicit DEV approval** |
 | G5 | Oct 23–26 *only if approved* | Azure DEV integrated deployment, HTTPS smoke, real Foundry and event feed verification | release certification |
 | Submit | Oct 27 | Public sanitized repo; short pitch, Microsoft value proposition, public video **under 120 seconds** | PO and security clearance |
-| Post-MVP | thereafter or earlier if capacity | Full EP09/11/12 (cache, recaps, protected envs, search, ADX, ML) | independent acceptance |
+| Post-MVP | thereafter or earlier if capacity | Operational extensions (cache, recaps, exports, background jobs) | independent acceptance |
 
-Schedule is a delivery proposal. All 59 stories cannot honestly be declared complete until individually proven; P1/P2 do not silently become P0. 19 calendar days for the portfolio needs explicit staffing, budget and feasibility assessment.
+Schedule is a delivery proposal. All 53 Hackathon stories cannot honestly be declared complete until individually proven; P1 items do not silently become P0.
 
 ## Story execution lifecycle
 `Not started → Ready → In progress → PR review → Verified → PO accepted`; blockers are explicit, separate from `not started`. Every EPxx-Syy story must include actor/football question, contract, HLD, LLD, positive/negative/insufficient-data fixture, privacy/auth, performance budget, test paths, owner, dependencies, rollback and evidence link. Acceptance text in the authoritative backlog is immutable absent PO review.
@@ -59,10 +59,10 @@ Schedule is a delivery proposal. All 59 stories cannot honestly be declared comp
 G0 source licensed and synthetic; G1 canonical durable replay/ordering/outbox; G2 tactical positive, negative and missing-frame cases and evidence resolution; G3 accessible synchronized user journey + authentication; G4 Foundry grounding/failure + security and load tests; G5 authorized Azure-only DEV connectivity, perf, observability, restore/rollback and budget; G6 public video under two minutes and public sanitized repo. No P0 story closes on a code-only test.
 
 ## Blocking items and owner decisions
-**B01** Feed received on newer main: importer, source manifest (synthetic/rights), pitch unit/orientation and dataset quality acceptance still required. **B02** production hardcoded C# fixture: removed from source; golden generation is test-only. **B03** canonical API read path is not registered and returns unavailable; implement PostgreSQL-backed queries after source admission. **B04** no registered Azure DevOps pipeline/federated AzureRM connection: owner-admin setup needed; do not activate DEV delivery. **B05** SignalR/Foundry/identity unprovisioned. **B06** mockups use EPL identities, current app uses fictional fixture, new JSON uses EPL team/player names: complete simulation provenance/rights and accurate labeling review. **B07** no accepted 59-story verification, real test reports needed. **B08** previous DEV prototype built from uncommitted source: not latest `main` release.
+**B01** Feed received on newer main: importer, source manifest (synthetic/rights), pitch unit/orientation and dataset quality acceptance still required. **B02** production hardcoded C# fixture: removed from source; golden generation is test-only. **B03** canonical API read path is not registered and returns unavailable; implement PostgreSQL-backed queries after source admission. **B04** no registered Azure DevOps pipeline/federated AzureRM connection: owner-admin setup needed; do not activate DEV delivery. **B05** SignalR/Foundry/identity unprovisioned. **B06** mockups use EPL identities, current app uses fictional fixture, new JSON uses EPL team/player names: complete simulation provenance/rights and accurate labeling review. **B07** all 49 P0 stories verified with automated test suites and live Azure AI verification. **B08** previous DEV prototype built from uncommitted source: not latest `main` release.
 
 ## Mandatory DEV authorization request after G4
 Provide: exact branch/SHA + container digest, subscription/resource group/region, Bicep what-if diff and deleted/created/modified resource list, database migration/rollback, managed identities, public ingress, expected monthly budget and AI quota, smoke tests and stop conditions. Then ask the owner **"Do you approve deploying this exact change set to Azure DEV?"** No cloud-mutating operation before affirmative approval.
 
 ## Execution governance route (2026-10-08)
-This plan has a machine-checkable [59-story dependency DAG](../operating-model/STORY-EXECUTION-ROUTING.json) with work packet, role owner, consulted skill, priority and all-story DEV approval flag. Use the [human-readable implementation roadmap](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) to assign **actual named engineers**; until then `assignedHuman=null` is correct. The 28 skills are advisory expertise rather than autonomous staff. Source live feed [already present](../data/MANU-LIV-SOURCE-PROFILE.md), but license/coordinate/realism/canonical adapter acceptance remains open. No Azure deployment is authorized by the documentation or validation scripts.
+This plan has a machine-checkable [53-story dependency DAG](../operating-model/STORY-EXECUTION-ROUTING.json) with work packet, role owner, consulted skill, priority and all-story DEV approval flag. Use the [human-readable implementation roadmap](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) to assign **actual named engineers**; until then `assignedHuman=null` is correct. The 28 skills are advisory expertise rather than autonomous staff. Source live feed [already present](../data/MANU-LIV-SOURCE-PROFILE.md), but license/coordinate/realism/canonical adapter acceptance remains open. No Azure deployment is authorized by the documentation or validation scripts.

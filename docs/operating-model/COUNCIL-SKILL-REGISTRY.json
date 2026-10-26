@@ -112,16 +112,14 @@
       "skillFile": ".github/skills/azure-solution-architect/SKILL.md",
       "primaryEpicIds": [
         "EP-02",
-        "EP-10",
-        "EP-11"
+        "EP-10"
       ]
     },
     {
       "name": "azure-infrastructure-engineer",
       "skillFile": ".github/skills/azure-infrastructure-engineer/SKILL.md",
       "primaryEpicIds": [
-        "EP-02",
-        "EP-11"
+        "EP-02"
       ]
     },
     {
@@ -130,8 +128,7 @@
       "primaryEpicIds": [
         "EP-01",
         "EP-02",
-        "EP-10",
-        "EP-11"
+        "EP-10"
       ]
     },
     {
@@ -141,8 +138,7 @@
         "EP-02",
         "EP-06",
         "EP-09",
-        "EP-10",
-        "EP-11"
+        "EP-10"
       ]
     },
     {
@@ -169,8 +165,7 @@
       "skillFile": ".github/skills/data-engineer/SKILL.md",
       "primaryEpicIds": [
         "EP-03",
-        "EP-04",
-        "EP-12"
+        "EP-04"
       ]
     },
     {
@@ -247,8 +242,7 @@
       "primaryEpicIds": [
         "EP-02",
         "EP-08",
-        "EP-09",
-        "EP-11"
+        "EP-09"
       ]
     },
     {

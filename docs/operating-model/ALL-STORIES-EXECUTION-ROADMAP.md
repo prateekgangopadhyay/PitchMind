@@ -1,5 +1,5 @@
-# PitchMind — Council-routed implementation of all 59 stories
-**Branch:** `docs/engineering-council-skills-operating-model` · **Source:** [canonical epics](../backlog/HACKATHON-MVP-EPICS.md), [HLD/LLD workpackets](../backlog/STORY-WORKPACK-INDEX.md), [execution register](../backlog/STORY-EXECUTION.md). **Status:** DRAFT ROUTING, not proof of delivery. **Priority counts:** 49 P0 / 7 P1 / 3 P2.
+# PitchMind — Council-routed implementation of Hackathon Stories
+**Branch:** `docs/engineering-council-skills-operating-model` · **Source:** [canonical epics](../backlog/HACKATHON-MVP-EPICS.md), [HLD/LLD workpackets](../backlog/STORY-WORKPACK-INDEX.md), [execution register](../backlog/STORY-EXECUTION.md). **Status:** DRAFT ROUTING, not proof of delivery. **Priority counts:** 49 P0 / 4 P1.
 
 ## Owners, parallelism and gates
 Every story has exactly one **role-level accountable skill**, explicit consulted specialists and prerequisite stories in [machine-readable routing](STORY-EXECUTION-ROUTING.json). The `assignedHuman` field is null pending a real engineer or accountable operator assignment; a role skill cannot pretend to be a human employee or approve its own code. Avoid a blanket 28-role committee: engage only 1 DRI and relevant 2–4 reviewers. Use G0–G9 in [Operating Model](ENGINEERING-OPERATING-MODEL.md).
@@ -65,12 +65,6 @@ The [source profile](../data/MANU-LIV-SOURCE-PROFILE.md) reports 2,199 match eve
 | [EP10-S04](../engineering/stories/EP10/EP10-S04.md) | Azure DEV integrated certification and rollback | P0 / W3-W5 | [qa-architect](../../.github/skills/qa-architect/SKILL.md) | EP02-S04, EP10-S02, EP10-S03 | product-owner, devops-architect, performance-engineer, security-architect |
 | [EP10-S05](../engineering/stories/EP10/EP10-S05.md) | Hackathon public submission assets | P0 / W3-W5 | [qa-architect](../../.github/skills/qa-architect/SKILL.md) | EP10-S01, EP10-S02 | product-owner, devops-architect, performance-engineer, security-architect |
 | [EP10-S06](../engineering/stories/EP10/EP10-S06.md) | Judges' evidence map and demo contingency | P0 / W3-W5 | [qa-architect](../../.github/skills/qa-architect/SKILL.md) | EP10-S05 | product-owner, devops-architect, performance-engineer, security-architect |
-| [EP11-S01](../engineering/stories/EP11/EP11-S01.md) | Environment parity and protected release controls | P1 / Post-P0 | [devops-architect](../../.github/skills/devops-architect/SKILL.md) | EP10-S04 | azure-solution-architect, site-reliability-engineer, security-architect |
-| [EP11-S02](../engineering/stories/EP11/EP11-S02.md) | Backup, recovery and incident drills | P1 / Post-P0 | [devops-architect](../../.github/skills/devops-architect/SKILL.md) | EP04-S05, EP11-S01 | azure-solution-architect, site-reliability-engineer, security-architect |
-| [EP11-S03](../engineering/stories/EP11/EP11-S03.md) | Ongoing security and FinOps controls | P1 / Post-P0 | [devops-architect](../../.github/skills/devops-architect/SKILL.md) | EP11-S01 | azure-solution-architect, site-reliability-engineer, security-architect |
-| [EP12-S01](../engineering/stories/EP12/EP12-S01.md) | Provenance-aware historical retrieval (M14) | P2 / Post-P0 | [data-engineer](../../.github/skills/data-engineer/SKILL.md) | EP04-S04, EP06-S04 | finops-engineer, football-analytics-engineer, security-architect |
-| [EP12-S02](../engineering/stories/EP12/EP12-S02.md) | Historical tracking and spatial data exploration (M15) | P2 / Post-P0 | [data-engineer](../../.github/skills/data-engineer/SKILL.md) | EP12-S01, EP03-S02 | finops-engineer, football-analytics-engineer, security-architect |
-| [EP12-S03](../engineering/stories/EP12/EP12-S03.md) | Model and partner expansion (M16) | P2 / Post-P0 | [data-engineer](../../.github/skills/data-engineer/SKILL.md) | EP12-S01, EP08-S05 | finops-engineer, football-analytics-engineer, security-architect |
 
 ## Integration protocol
 1. All developments should be done in the main branch.

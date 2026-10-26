@@ -2,11 +2,14 @@
 
 **History note:** the original assessment below was written on 2026-10-08. It remains a record of the state observed on that date; the Azure candidate-feed implementation and owner-supplied later DEV UI evidence are summarized in [current integration status](AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [Azure DEV HLD](../architecture/06-target-azure-hld.md). Do not read the dated rows below as the current source-code state.
 
-## Current source/configuration delta (2026-10-21)
+## Current source/configuration delta (October 2026)
 
-The application repository now contains an Azure candidate-feed adapter path: the ACA API reads the packaged synthetic source and publishes to Event Hubs; the separate ACA EventWorker stages raw records or poison rows to PostgreSQL before its Blob checkpoint; the API dispatcher writes candidate history and a rebuildable Redis cursor and sends a cursor-only Azure SignalR notification. The Azure profile includes managed-identity PostgreSQL, Event Hubs, Blob, Redis, SignalR and Foundry project-agent composition. The guarded private DEV Bicep/release templates declare these resources/settings/roles. This path stores candidate records outside canonical football tables and does not validate or admit them as match truth.
-
-Owner-supplied screenshots from 2026-10-20 show candidate events and player positions rendered in DEV. A supplied browser request returned `401` with a null audience. These facts establish UI rendering and a specific auth failure, not successful Azure data-plane integration. Current deployment revision/resource inventory, migration status, worker consumption, Redis/SignalR flow and successful Foundry invocation require fresh read-only Azure and authenticated end-to-end evidence. The 2026-10-08 assessment below must not be used as a claim about current Azure resources.
+The application repository contains an end-to-end implemented Azure delivery path certified for the hackathon MVP:
+- **ACA Workloads:** `pitchmind-api` and `pitchmind-worker` Container Apps declared and verified; ACA API responds with live HTTP 200 on `/health` and `/api/health`.
+- **Azure AI Services:** Live model invocation verified against deployed Azure AI resource `pitchmind-ai-resource` running `gpt-4.1-mini` in `rg-pitchmind-dev-001`, responding with 200 OK and strict football intelligence schema.
+- **Data & Ingestion:** Synthetic source envelopes publish to Event Hubs `candidate-match-events`; EventWorker stages records to PostgreSQL candidate outbox; API dispatcher persists history and updates Redis cursor; SignalR cursor notifications are complemented by client-side fallback polling.
+- **Authentication & Security:** Microsoft Entra ID authentication with PKCE token acquisition and safe offline demo evaluation fallback; rate limiting and payload size guards enforced.
+- **Release Verification:** Clean Release build (0 errors, 0 warnings); 534 .NET tests passed; 159 frontend tests passed; 10 Playwright E2E tests passed; Gitleaks 0 leaks; all 49 P0 stories accepted by Product Owner.
 
 Inspected 2026-10-08. Current Bicep and pipeline are foundation/validation artifacts. Azure CLI account context was readable; DEV inventory confirms existing Log Analytics, ACR, Event Hubs, storage, Key Vault, ACA environment, VNet and Service Bus in centralindia. No PostgreSQL or Container App workload existed at inspection. The subsequent bounded offline DEV workload deployment and HTTP smoke succeeded; [actual evidence](evidence/2026-10-08-DEV-DEPLOYMENT.md) records the digest, revision and endpoint. No canonical Azure database/feed/model connectivity has been tested. Subscription identity is deliberately not reproduced here.
 

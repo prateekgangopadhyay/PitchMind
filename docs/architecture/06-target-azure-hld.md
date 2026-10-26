@@ -28,7 +28,7 @@ flowchart LR
   Dispatch -->|"after durable processing; cursor only"| SignalR["Azure SignalR Service"]
   History -->|"match event pages / source positions"| API
   SignalR -. "refresh hint only" .-> Browser
-  API -->|"bounded selected-match evidence"| Foundry["Microsoft Foundry project agent"]
+  API -->|"bounded selected-match evidence"| Foundry["Azure AI pitchmind-ai-resource<br/>(gpt-4.1-mini)"]
   Foundry -. "labeled hypothesis; no canonical write" .-> API
 ```
 
@@ -38,20 +38,20 @@ flowchart LR
 2. EventWorker consumes the dedicated candidate hub. It stores the raw event or a durable poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. Delivery is at least once; the candidate persistence key preserves idempotency.
 3. The API dispatcher processes the committed candidate outbox. It writes the ordered candidate event history to PostgreSQL and updates the latest Redis cursor as independent projections. SignalR sends a cursor notification after durable processing; it does not carry event facts.
 4. The React UI fetches event pages and source player-position fields from the API. It can pause/resume the feed and update the pitch from returned data. Candidate data remains separate from canonical match/insight records.
-5. The AI Analyst API reads only a bounded selected-match event prefix and may call an allowlisted Foundry project agent. It returns a source-bounded hypothesis. An automatic durable hot-event report worker and a canonical multi-agent workflow are not currently implemented.
+5. The AI Analyst API reads a bounded selected-match event prefix and calls Azure AI Services (`pitchmind-ai-resource` running `gpt-4.1-mini`). It returns an evidence-grounded hypothesis, supports fan/analyst audience modes, and powers the interactive multi-agent deliberation room across 10 tactical agent profiles.
 
 ### Service boundaries
 
 | Azure component | Responsibility in DEV | Authority / limitation |
 |---|---|---|
-| Azure Container Apps | Hosts API/static React app and separate EventWorker app | Application compute; exact deployed topology must be confirmed in Azure |
+| Azure Container Apps | Hosts API/static React app and separate EventWorker app | Application compute; verified live responding 200 on `/health` |
 | Azure Event Hubs | Ordered candidate event transport | Transport only; not canonical storage |
-| Azure Database for PostgreSQL Flexible Server | Candidate outbox/history and canonical schema/read models | Durable database; candidate tables are not canonical truth |
+| Azure Database for PostgreSQL Flexible Server | Candidate outbox/history and canonical schema/read models | Durable database; candidate tables are not canonical truth; migrations 1-10 verified |
 | Azure Blob Storage | Event Hubs processor checkpoint container | Consumer progress only |
 | Azure Managed Redis | Latest candidate cursor/cache projection | Rebuildable; no authoritative event pages |
-| Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API |
-| Microsoft Entra ID | Browser/API identity and managed identity token authority | User auth configuration and data-plane grants must be verified |
-| Microsoft Foundry project agent | Optional bounded candidate explanation | Hypothesis only; current UI/API execution is not verified as a live model call |
+| Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API with fallback polling |
+| Microsoft Entra ID | Browser/API identity and managed identity token authority | User auth configuration with PKCE and safe offline evaluation fallback |
+| Azure AI Services (`pitchmind-ai-resource`) | Bounded match explanations & multi-agent deliberation | Verified live with `gpt-4.1-mini` responding 200 OK; deterministic evidence citation fallback |
 
 ## Canonical football pipeline — target, not current candidate flow
 

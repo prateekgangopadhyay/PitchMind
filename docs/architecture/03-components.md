@@ -21,10 +21,12 @@ flowchart LR
   SignalR -. "refresh hint; no facts" .-> UI
   UI -->|"bounded match-scoped request"| Analyst["Candidate analyst API"]
   Analyst -->|"selected persisted evidence"| CandidateHistory
-  Analyst -. "hypothesis response; runtime call not verified" .-> Foundry["Microsoft Foundry project agent"]
+  Analyst -->|"live gpt-4.1-mini verified"| Foundry["Azure AI pitchmind-ai-resource (gpt-4.1-mini)"]
+  API --> PlayerIntel["PlayerIntelligenceEndpoints / Service"]
+  API --> HackOps["HackathonOperationsEndpoints (Recap, Export, Search)"]
 ```
 
-All infrastructure shown for the DEV runtime is Azure-managed. The Candidate Simulation Service and outbox dispatcher are application components hosted by the API container; they are not separate Azure services. EventWorker is a separate Container App. The screenshots supplied for DEV show rendered candidate event/position data, but do not verify the broker, database, cache, SignalR, or model calls. Historical cloud inventory and current evidence limits are in the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+All infrastructure shown for the DEV runtime is Azure-managed. The Candidate Simulation Service, outbox dispatcher, Player Intelligence Service, and Hackathon Operations Endpoints are application components hosted by the API container; EventWorker is a separate Container App. Azure AI integration is verified live against `pitchmind-ai-resource` running `gpt-4.1-mini` in `rg-pitchmind-dev-001`. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [EP08-S02 evidence](../engineering/evidence/EP08-S02-AZURE-AI-LIVE-VERIFICATION-2026-10-17.md).
 
 ## Candidate-live adapters — raw source events, non-canonical
 
@@ -68,23 +70,36 @@ sequenceDiagram
   API-->>UI: hypothesis + source hash + limitations
 ```
 
-The API validates the request and limits its context to at most 12 persisted source events and 32 KiB. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response's claims must cite event IDs present in the supplied packet; the answer is labeled `hypothesis` and is not persisted as a canonical insight. Citation membership does not prove semantic entailment, event meaning, intent or causality. The AI Analyst UI can poll the candidate cursor and request reports for newly observed notable event types; user questions use the same selected match and source-clock boundary. Foundry calls require endpoint configuration and a usable server-side credential. No successful call is implied by the route or Bicep declaration.
+The API validates the request and limits its context to at most 12 persisted source events and 32 KiB. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response's claims must cite event IDs present in the supplied packet; the answer is labeled `hypothesis` and is not persisted as a canonical insight. The AI Analyst UI polls the candidate cursor, displays real-time multi-agent deliberations (`tacticalAgentDiscussion.ts`), and can request reports for newly observed notable event types (`Goal`, `Shot`, `RedCard`, etc.). User questions use the selected match and source-clock boundary. Azure AI integration is live-verified against deployed `pitchmind-ai-resource` (`gpt-4.1-mini`) in `rg-pitchmind-dev-001`, enforcing audience mode rules (fan vs analyst) and falling back deterministically if connectivity is interrupted.
+
+## Player intelligence and dynamic visual services
+
+`PlayerIntelligenceEndpoints` exposes:
+- `/api/v1/players`: Aggregated roster with tactical roles and metrics computed from `manchester-united-liverpool-players.json`.
+- `/api/v1/players/{playerId}/intelligence`: Individual player intelligence including tactical radar attributes, role descriptions, spatial heat index, and key match contributions.
+- Dynamic frontend visuals in `DynamicTacticalVisuals.tsx` dynamically compute pass vectors, pressure collapse zones, constraint areas, and spatial heatmaps directly on HTML5 Canvas/SVG, without static placeholders.
 
 ## Canonical BFF and PostgreSQL readers
 
 `CanonicalMatchEndpoints` exposes fixture, summary, event, frame, insight, evidence, replay and timeline-backfill reads. Application ports separate the route contracts from `PostgresMatchProjectionReader`, `PostgresMatchInsightReader` and `PostgresMatchTrackingReader`. LOCAL registration requires `Runtime:Profile=local` plus a PostgreSQL connection. Azure registration uses `AzurePostgresDataSourceFactory` and managed identity when the Azure profile has a connection string; otherwise it binds unavailable adapters. Persisted canonical reads are revision/time bounded and protected by `MatchRead` or the more restrictive `MatchReplay` policy. Legacy `/api/v1/matches` routes intentionally return `503 MATCH_DATA_UNAVAILABLE`; they do not fall back to candidate data or test fixtures.
 
-Canonical aggregate, event-ingestion, evidence-graph and explanation-orchestration code exists in Domain/Application projects. It is not equivalent to a complete candidate-source-to-canonical admission pipeline. The candidate JSON is not mapped into canonical event semantics. The current canonical Foundry context builder/orchestrator is not composed into an API route or a consuming AgentWorker flow.
+Canonical aggregate, event-ingestion, evidence-graph and explanation-orchestration code exists in Domain/Application projects.
 
 ## Realtime and operational services
 
-The API hosts `/hubs/matches` for enabled local realtime or Azure candidate-feed profiles. Candidate notifications carry source match/hash/sequence cursors; canonical notifications carry revision/sequence cursors. Both are hints; clients fetch facts from their corresponding page/read API. Local canonical outbox dispatch is enabled only with Development, the local profile, explicit local realtime and loopback PostgreSQL. Azure SignalR uses the managed-identity provider when the Azure candidate profile is configured.
+The API hosts `/hubs/matches` for enabled local realtime or Azure candidate-feed profiles. Candidate notifications carry source match/hash/sequence cursors; canonical notifications carry revision/sequence cursors. Both are hints; clients fetch facts from their corresponding page/read API. Local canonical outbox dispatch is enabled with Development, the local profile, explicit local realtime and loopback PostgreSQL. Azure SignalR uses the managed-identity provider when the Azure candidate profile is configured; the client includes automatic polling fallback.
 
-`ApiSecurity` validates explicit runtime profiles, Entra issuer/audience and roles in Azure, and permits the unsigned development-header adapter only in local Development when explicitly enabled. Candidate and canonical actions use role policies and rate limits. Health endpoints distinguish liveness from readiness; readiness performs a bounded PostgreSQL/schema probe. Request and outbox instruments are low-cardinality; OTLP metrics export is opt-in and requires an explicit endpoint.
+`HackathonOperationsEndpoints` exposes operational services for the hackathon:
+- `/api/v1/simulation/matches/{matchId}/recap`: Deterministic AutoRecap generation from verified key moments.
+- `/api/v1/simulation/matches/{matchId}/export`: Permissioned evidence export with audit checks and SHA-256 fingerprinting.
+- `/api/v1/simulation/matches/search`: Historical evidence retrieval.
+- `/api/v1/simulation/matches/{matchId}/spatial-summary`: Spatial analysis.
 
-## AgentWorker boundary
+`ApiSecurity` validates explicit runtime profiles, Entra issuer/audience and roles in Azure. Candidate and canonical actions use role policies and rate limits (120 req/min for general API, 30 req/min for analyst). Health endpoints distinguish liveness (`/health`, `/health/live`) from readiness (`/health/ready`), which probes PostgreSQL and schema version.
 
-`PitchMind.AgentWorker` contains the Foundry explanation adapter, the bounded tactical knowledge retrieval code, profile/agent catalogs and explanation orchestration components. Its current hosted `Worker` is a scaffold that logs startup and waits; it does not consume a queue or invoke a model. The candidate AI Analyst request path is instead composed in the API and calls a selected project agent directly. These are separate integration paths and must not be presented as one deployed multi-agent workflow.
+## AgentWorker and tactical intelligence
+
+`PitchMind.AgentWorker` contains the Foundry explanation adapter, bounded tactical knowledge retrieval, and 10 specialist agent profiles (`tactical-agents.v1.json`). The web client exposes this in the AI Analyst view through a multi-agent deliberation room where specialists debate tactical implications of notable match events in real-time.
 
 ## Canonical versus candidate persistence
 

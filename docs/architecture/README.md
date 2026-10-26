@@ -12,7 +12,7 @@ Architecture documents explicitly distinguish **implemented in source/configurat
 - [Architecture review + findings](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) and [ADR index](../adr/README.md)
 - [Observed source profile](../data/MANU-LIV-SOURCE-PROFILE.md) and [source feed contract](../data/SIMULATION-FEED-CONTRACT.md)
 - [Consolidated API current/target registry](../api/API.md)
-- [Engineering Council operating model](../operating-model/ENGINEERING-OPERATING-MODEL.md), [all 59 stories routed](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) and [existing story status register](../backlog/STORY-EXECUTION.md)
+- [Engineering Council operating model](../operating-model/ENGINEERING-OPERATING-MODEL.md), [Hackathon execution roadmap](../operating-model/ALL-STORIES-EXECUTION-ROADMAP.md) and [existing story status register](../backlog/STORY-EXECUTION.md)
 
 ## Invariants and architecture drift policy
 1. Domain project has zero external package/framework dependencies; adapters only in Infrastructure.

@@ -423,57 +423,9 @@
 
 ---
 
-## EP-11 — Protected STAGE/PROD Promotions & Recovery
-
-**Maps to:** M13 | **Priority:** P1 — post-submission unless required by policy | **Outcome:** Governed, reversible promotion from Azure DEV to Azure STAGE/PROD.  
-**Primary owners:** DevOps, Security, SRE, Azure Infrastructure, Database, QA.  
-**Depends on:** EP-10.
-
-### EP11-S01 — Environment parity and protected release controls
-- **Story:** As a release manager, I can promote a known-good build without rebuilding or bypassing approvals.
-- **Build:** Separate Azure resources/configuration, managed identities/RBAC, environment approval gates, immutable image digest promotion and migration coordination.
-- **Acceptance:** Promotions are auditable, approval-gated and use the same digest; production cannot inherit DEV public endpoint exceptions without explicit approval.
-
-### EP11-S02 — Backup, recovery and incident drills
-- **Story:** As SRE, I can recover canonical match history and preserve customer trust after failure.
-- **Build:** PostgreSQL backup/restore verification, recovery procedures, deployment rollback, alerting/SLO governance and incident runbooks.
-- **Acceptance:** Practiced recovery meets approved measured objectives; restored state replays correctly; failure events are auditable.
-
-### EP11-S03 — Ongoing security and FinOps controls
-- **Story:** As platform owner, I can maintain an enterprise-ready service without uncontrolled risk/cost.
-- **Build:** Recurring access review, dependency scanning, cost/retention alerts, capacity plans and security baselines.
-- **Acceptance:** Exceptions expire and have owners; budgets and alerts are active; release gates fail closed on critical controls.
-
-**Epic exit demonstration:** Approved immutable release to STAGE/PROD with documented rollback and successful restore exercise.
-
----
-
-## EP-12 — Advanced Historical, Analytical & Enterprise Capabilities
-
-**Maps to:** M14, M15, M16 | **Priority:** P2 — explicitly excluded from hackathon critical path | **Outcome:** Expand into scalable historical football intelligence only after the MVP demonstrates value.  
-**Primary owners:** Data, AI/ML, Azure Architecture, Product Owner, Security, FinOps, Partner Engineering.  
-**Depends on:** EP-10; EP-11 where required by release policy.
-
-### EP12-S01 — Provenance-aware historical retrieval (M14)
-- **Story:** As an analyst, I can search previous synthetic match evidence without losing authorization or version information.
-- **Build:** Azure AI Search as indexed projection, filter by match/time/algorithm and role; reindex and rebuild jobs.
-- **Acceptance:** Search returns citations to canonical data, honors access controls and can rebuild from source.
-
-### EP12-S02 — Historical tracking and spatial data exploration (M15)
-- **Story:** As a specialist analyst, I can compare match patterns across a synthetic archive without overloading the live system.
-- **Build:** Approved Blob/Data Lake archival and Data Explorer ingestion, quality validation, lifecycle policies and cost caps.
-- **Acceptance:** Data quality/reconciliation tests pass; archive is not canonical truth; fixed costs/ingestion limits receive FinOps approval.
-
-### EP12-S03 — Model and partner expansion (M16)
-- **Story:** As a business/engineering owner, I can evaluate advanced ML, API Management and partner/broadcast integrations when a validated product need exists.
-- **Build:** Separate opportunity assessment for Azure ML, API Management and partner contracts; privacy/security, football relevance, pricing and support model.
-- **Acceptance:** No resource is deployed without independent product case, approved architecture, security and cost review.
-
-**Epic exit demonstration:** Independently approved enhancements provide a measurable analyst or partner outcome without corrupting canonical match truth.
-
----
-
 ## 4. Epic dependency and delivery path
+
+The delivery graph below represents the verified Hackathon MVP vertical slice (EP-01 through EP-10). Non-hackathon post-submission extensions (EP-11 Release Governance and EP-12 Enterprise Expansion) have been pruned from the hackathon delivery scope.
 
 ```mermaid
 flowchart LR
@@ -489,13 +441,12 @@ flowchart LR
   E04 --> E08
   E07 --> E10[EP-10 Certification/demo]
   E08 --> E10
-  E02 --> E09[EP-09 Ops P1]
+  E02 --> E09[EP-09 Operations P1]
   E04 --> E09
-  E10 --> E11[EP-11 Promotion P1]
-  E10 --> E12[EP-12 Expansion P2]
+  E09 --> E10
 ```
 
-**Parallelization:** EP-07 design prototypes and mocked frontend contracts may begin during EP-03/EP-04 but cannot be marked accepted until the real selected-time/evidence APIs work. EP-08 schema and prompts can be developed after EP-05 evidence definitions stabilize. EP-02 Azure runtime and EP-03 local synthetic generator proceed in parallel where possible. EP-09/EP-11/EP-12 do not block EP-10.
+**Parallelization:** EP-07 design prototypes and mocked frontend contracts may begin during EP-03/EP-04 but cannot be marked accepted until the real selected-time/evidence APIs work. EP-08 schema and prompts can be developed after EP-05 evidence definitions stabilize. EP-02 Azure runtime and EP-03 local synthetic generator proceed in parallel where possible. EP-09 operational enhancements do not block the core EP-10 demo.
 
 **Proposed, capacity-dependent delivery targets** (not commitments or proof of feasibility):
 - **Oct 8–10:** verify scaffold and CI; secure Azure DEV deployment baseline; freeze one synthetic scenario, UX story and evidence schema.

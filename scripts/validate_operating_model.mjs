@@ -80,8 +80,8 @@ function check() {
   const backlog = read('docs/backlog/HACKATHON-MVP-EPICS.md');
   const stories = [...backlog.matchAll(story)];
   const epics = [...backlog.matchAll(epic)];
-  assert.equal(epics.length, 12, 'Exactly 12 source epics required');
-  assert.equal(stories.length, 59, 'Exactly 59 authoritative backlog stories required');
+  assert.equal(epics.length, 10, 'Exactly 10 source epics required');
+  assert.equal(stories.length, 53, 'Exactly 53 authoritative backlog stories required');
   assert.equal(reg.roles.length, 28, 'Exactly 28 Council roles required');
   assert.equal(design.councilRoleCount, 28, 'Design skills are not accountable Council roles');
   assert.equal(design.skillCount, 5, 'Exactly five design skill sources are required');
@@ -89,8 +89,8 @@ function check() {
   assert.deepEqual(design.skills.map(x=>x.name).sort(), ['awesome-design-audit','design-taste-frontend','emil-design-eng','impeccable','web-design-guidelines'],
     'All five named design specialties must be registered');
   assert.equal(new Set(reg.roles.map(x => x.name)).size, 28, 'Duplicate role');
-  assert.equal(plan.stories.length, 59, 'Story routes missing');
-  assert.equal(new Set(plan.stories.map(x => x.storyId)).size, 59, 'Duplicate routed story');
+  assert.equal(plan.stories.length, 53, 'Story routes missing');
+  assert.equal(new Set(plan.stories.map(x => x.storyId)).size, 53, 'Duplicate routed story');
 
   const allSlugs = readdirSync(path.join(root, '.github/skills'), {withFileTypes: true})
     .filter(x => x.isDirectory()).map(x => x.name);
@@ -154,7 +154,7 @@ function check() {
     assert.equal(row.requiresOwnerDevApproval,true,'Every story must require explicit approval if deployed to DEV '+row.storyId);
     assert.ok(row.priority === 'P0'||row.priority === 'P1'||row.priority === 'P2');
   }
-  assert.equal(acyclic(plan.stories),59,'Dependency DAG not complete');
+  assert.equal(acyclic(plan.stories), 53, 'Dependency DAG not complete');
   for (const file of ['01-system-context.md','02-container.md','03-components.md','04-deployment.md']) {
     const diagram=read('docs/architecture/'+file);
     assert.ok(diagram.includes('```mermaid'),'Missing living Mermaid C4 '+file);
@@ -170,7 +170,7 @@ function check() {
   assertGateFailureProbe(pipeline);
   assertStackedPrTrigger(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
-  assert.equal(counts.P0,49); assert.equal(counts.P1,7); assert.equal(counts.P2,3);
+  assert.equal(counts.P0, 49); assert.equal(counts.P1, 4); assert.equal(counts.P2 || 0, 0);
   return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
 }
 

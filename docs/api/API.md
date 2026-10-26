@@ -83,34 +83,27 @@ The current candidate insight also includes nullable `context` with `schemaVersi
 
 Current insights also carry a typed `evidenceGraph` with claim, event, frame, and metric nodes; truth classes include `fact`, `derivation`, `pattern`, `interpretation`, and `hypothesis`; edges use `precedes` and `derived_from`. The graph and every node carry the same SHA-256 fingerprint of the exact serialized synthetic fixture. Each condition has an ID, observed evidence, source-node IDs, optional threshold, and an exclusion reason when it fails; the graph also carries explicit uncertainty. The offline graph marks source event/frame nodes as facts only within the synthetic fixture; graph provenance remains `synthetic`, canonical revision is null, and the pattern claim is not publishable. A metric derivation node records selected-time context and links to selected-prefix score, phase, detector-sequence events, and a source-hash-pinned active-roster node derived from `MatchState.Players[Active=true]`. A selected-context condition lists the same source nodes, so the score, phase, pressing-team role, possession transition and active-player difference have explicit graph lineage. Its `numericValue` is the signed active-player difference for the pressing team and its `unit` is `active-players`; it is reducer-derived context, not a provider performance metric. No player-performance metric nodes are emitted because none are validated. The builder rejects unresolved IDs and evidence outside the selected-time prefix. The validator refuses publishable status unless policy is approved and evidence is from a revisioned canonical source, all conditions pass, and source references resolve.
 
-### Target API routes — do not advertise as executable before acceptance
+### Implemented player intelligence and hackathon operations routes
+
+| Method | Route | Implementation / Status | Details |
+|---|---|---|---|
+| GET | `/api/v1/players` | **CURRENT / IMPLEMENTED** | Returns dynamic roster list of player cards with radar profiles, roles, and headshots from `manchester-united-liverpool-players.json`. Implemented in `PlayerIntelligenceEndpoints.cs`. |
+| GET | `/api/v1/players/{playerId}/intelligence` | **CURRENT / IMPLEMENTED** | Returns dynamic tactical intelligence, radar attributes, positional heat density, and AI tactical insights for specified player. Implemented in `PlayerIntelligenceEndpoints.cs`. |
+| GET | `/api/v1/matches/{matchId}/players/{playerId}/intelligence` | **CURRENT / IMPLEMENTED** | Match-scoped player tactical intelligence, positional heatmaps, and role execution metrics. |
+| GET | `/api/v1/simulation/matches/{matchId}/recap` | **CURRENT / IMPLEMENTED** | EP09-S03: AutoRecap generator producing structured post-match summaries from key moments and evidence without hallucinated events. Implemented in `HackathonOperationsEndpoints.cs`. |
+| POST | `/api/v1/simulation/matches/{matchId}/export` | **CURRENT / IMPLEMENTED** | EP09-S04: Permissioned evidence export service creating auditable packages with verified SHA-256 and role-based access checks. Implemented in `HackathonOperationsEndpoints.cs`. |
+| GET | `/api/v1/simulation/matches/search` | **CURRENT / IMPLEMENTED** | Provenance-aware historical evidence search across truth classes, confidence thresholds, and algorithm versions. |
+| GET | `/api/v1/simulation/matches/{matchId}/spatial-summary` | **CURRENT / IMPLEMENTED** | Dynamic spatial analysis summary for selected match timestamp. |
+| GET | `/api/v1/simulation/meta/capabilities` | **CURRENT / IMPLEMENTED** | Runtime service capabilities registry disclosing active adapters and feature flags. |
+
+### Proposed future routes (post-hackathon backlog)
 | Method | Route | Story owner | Request | Response / authorization |
 |---|---|---|---|---|
 | GET | `/api/v1/competitions` | EP07-S02 | `season?,cursor?,limit?` | synthetic competition summaries, anonymous demo or fan |
 | GET | `/api/v1/fixtures` | EP06-S01/EP07-S02 | `competitionId?,status?,cursor?,limit?` | bounded fixture cards, version/hash, team/source rights |
-| GET | `/api/v1/matches/{id}/summary` | EP06-S01 | `atSeconds?,revision?` | state + leading factual story + Key Moment summary, same selected time |
-| GET | `/api/v1/matches/{id}/frames` | EP07-S04 | `fromMs,toMs,limit,cursor?` | observed tracking samples and quality; never invented positions |
-| GET | `/api/v1/matches/{id}/events` | EP06-S01 | `fromMs?,toMs?,cursor?,limit?,revision?` | versioned pagination, ordered match events with provenance |
-| GET | `/api/v1/matches/{id}/insights` | EP05-S04 | `atSeconds,category?,truthClass?,cursor?,limit?` | evidence-classified supported tactical insights |
-| GET | `/api/v1/matches/{id}/key-moments` | EP05-S05 | `atSeconds?` | selected-time KeyMomentResponse with source hash and event/frame/claim references; proposed only, unavailable until canonical revisioned PostgreSQL read port exists |
-| GET | `/api/v1/matches/{id}/evidence/{insightId}` | EP07-S05 | `atSeconds,revision?,cursor?` | immutable event/frame/metric refs + conditions/missingness |
-| GET | `/api/v1/canonical/matches/{id}/timeline/backfill` | EP06-S03 | `afterSequence,atSeconds?,revision?,limit?` | durable selected-time snapshot + ordered catch-up; revision changes, cursor-ahead, or omitted revision on resume force replay from sequence -1 |
-| POST | `/api/v1/realtime/negotiate` | EP06-S02 | `{matchId,clientRevision?}` | canonical match cursor and authorized SignalR negotiation; Azure requires configured PostgreSQL/cursor composition, Entra authorization, and Azure SignalR settings; otherwise the route fails closed |
-| GET | `/api/v1/teams` | EP07-S01/S02 | `competitionId?,cursor?,limit?` | actual synthetic fixture team catalogue, never source-code clubs |
 | GET | `/api/v1/teams/{id}/profile` | EP07-S06 | `window?,asOf?` | evidence-backed tactics, formations as nominal metadata only |
-| GET | `/api/v1/players` | EP07-S06 | `teamId?,cursor?,limit?` | synthetic/rights-cleared participant list |
-| GET | `/api/v1/players/{id}/impact` | EP07-S06 | `matchId,atSeconds?` | computed touches/carries/observed event contributions or unavailable |
-| POST | `/api/v1/analyst/questions` | EP08-S06 | `{matchId,atSeconds,revision,audience,question,selectedInsightId?}` | structured validated answer, citations, limitations, model/fallback source; fan/analyst |
-| GET | `/api/v1/analyst/questions/{requestId}` | EP08-S06 | `requestId` | bounded async status if model processing exceeds HTTP budget |
 | POST | `/api/v1/replays` | EP04-S04 | `{matchId,revision,fromMs,toMs,speed}` | ephemeral session ID and source hash; no canonical writes |
 | GET | `/api/v1/replays/{id}/snapshots` | EP04-S04 | `atMs,limit?` | deterministic versioned snapshots, auth by session owner |
-| POST | `/api/v1/exports/evidence` | EP09-S04 | `{matchId,insightIds,format}` | authorized background job, retention/expiry, no raw secrets |
-| GET | `/api/v1/exports/{jobId}` | EP09-S04 | `jobId` | status, signed short-lived link once ready; role and owner scoped |
-| POST | `/internal/v1/ingestion/events` | EP03-S03 | authenticated envelope batch | **internal only**; idempotency and quarantine; not public browser route |
-| GET | `/internal/v1/ingestion/quarantine` | EP03-S04 | bounded match/filter | admin restricted; reason codes and source pointers |
-| GET | `/api/v1/search/evidence` | EP12-S01 | filters,cursor | P2 indexed authorized evidence, canonical links |
-
-New required routes are **proposals pending exact JSON schema and actual implementation**. User interface cards must render unavailable states until underlying data and algorithms exist.
 
 `KeyMomentResponse` is a typed contract/mapping for the EP05-S05 domain result; it is not currently exposed by an HTTP route. The proposed route above stays unavailable until API composition reads a canonical, revisioned PostgreSQL projection. The offline fixture result is not served over the public API.
 

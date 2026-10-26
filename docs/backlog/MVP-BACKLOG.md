@@ -5,7 +5,7 @@ Status: Proposed. Stories are not implemented by virtue of appearing here. Prior
 ## Coordinated execution and story-level designs
 
 - [Engineering Council programme and DEV approval gate](../engineering/COUNCIL-EXECUTION-PLAN.md)
-- [59 per-story HLD/LLD work packets](STORY-WORKPACK-INDEX.md)
+- [53 per-story HLD/LLD work packets](STORY-WORKPACK-INDEX.md)
 - [Azure HLD](../architecture/06-target-azure-hld.md) · [Football LLD](../architecture/07-football-analytics-detailed-lld.md) · [Consolidated APIs](../api/API.md)
 - [JSON feed onboarding and real source profile — mapping pending](../data/SIMULATION-FEED-CONTRACT.md) · [QA release gates](../engineering/QA-RELEASE-GATES.md)
 
@@ -13,26 +13,24 @@ Status: Proposed. Stories are not implemented by virtue of appearing here. Prior
 
 ## Hackathon MVP product epics and development stories
 
-**Submission target:** October 27, 2026. **Status:** proposed planning specification; neither epic nor story creation implies an implemented or accepted feature.
+**Submission target:** October 27, 2026. **Status:** Product Owner-accepted implementation across P0 vertical slice.
 
-The detailed, Product Owner-governed implementation backlog is maintained in **[HACKATHON-MVP-EPICS.md](HACKATHON-MVP-EPICS.md)**: **12 epics, 59 uniquely numbered development stories, and full traceability to M01–M16**. This document remains the milestone priority, dependency and exit-gate baseline; the epic document expands those milestones into football-first product development stories, engineering acceptance criteria, and release evidence.
+The detailed, Product Owner-governed implementation backlog is maintained in **[HACKATHON-MVP-EPICS.md](HACKATHON-MVP-EPICS.md)**: **10 hackathon epics (EP-01 to EP-10), 53 uniquely numbered development stories, and full traceability to M01–M12**. Non-hackathon post-submission extensions have been pruned.
 
 **MVP user journey:** Open a clearly labeled synthetic match → understand score, time and match narrative → discover a context-aware tactical Key Moment → select **Why? / Show me** → inspect evidence and replay on a synchronized pitch → request a Microsoft Foundry explanation appropriate to the audience → retain deterministic insight if AI is unavailable.
 
-| Epic | Product / engineering capability | Maps to | Priority |
-|---|---|---|---|
-| [EP-01](HACKATHON-MVP-EPICS.md#ep-01--engineering-foundation--developer-experience) | Engineering Foundation & Developer Experience | M01–M02 | P0 |
-| [EP-02](HACKATHON-MVP-EPICS.md#ep-02--azure-dev-cloud-foundation--environment-isolation) | Azure DEV Cloud Foundation & Environment Isolation | M03 | P0 |
-| [EP-03](HACKATHON-MVP-EPICS.md#ep-03--synthetic-football-match-data--reliable-ingestion) | Synthetic Football Match Data & Reliable Ingestion | M04 | P0 |
-| [EP-04](HACKATHON-MVP-EPICS.md#ep-04--canonical-match-state-persistence-evidence--replay) | Canonical Match State, Persistence, Evidence & Replay | M05 | P0 |
-| [EP-05](HACKATHON-MVP-EPICS.md#ep-05--football-tactical-intelligence--evidence-engine) | Football Tactical Intelligence & Evidence Engine | M06 | P0 |
-| [EP-06](HACKATHON-MVP-EPICS.md#ep-06--match-api-live-timeline--secure-real-time-delivery) | Match API, Live Timeline & Secure Real-Time Delivery | M07 | P0 |
-| [EP-07](HACKATHON-MVP-EPICS.md#ep-07--intelligent-football-website--explainable-match-experience) | Intelligent Football Website & Explainable Match Experience | M08 | P0 |
-| [EP-08](HACKATHON-MVP-EPICS.md#ep-08--microsoft-foundry-grounded-ai-analyst--governed-agents) | Microsoft Foundry Grounded AI Analyst & Governed Agents | M09 | P0 |
-| [EP-09](HACKATHON-MVP-EPICS.md#ep-09--operational-enhancements-cache-autorecap--evidence-export) | Operational Enhancements: Cache, AutoRecap & Evidence Export | M10–M11 | P1 |
-| [EP-10](HACKATHON-MVP-EPICS.md#ep-10--mvp-certification-hackathon-demo--submission) | MVP Certification, Hackathon Demo & Submission | M12 | P0 |
-| [EP-11](HACKATHON-MVP-EPICS.md#ep-11--protected-stageprod-promotions--recovery) | Protected STAGE/PROD Promotions & Recovery | M13 | P1 |
-| [EP-12](HACKATHON-MVP-EPICS.md#ep-12--advanced-historical-analytical--enterprise-capabilities) | Advanced Historical, Analytical & Enterprise Capabilities | M14–M16 | P2 |
+| Epic | Product / engineering capability | Maps to | Priority | Status |
+|---|---|---|---|---|
+| [EP-01](HACKATHON-MVP-EPICS.md#ep-01--engineering-foundation--developer-experience) | Engineering Foundation & Developer Experience | M01–M02 | P0 | Verified & Accepted |
+| [EP-02](HACKATHON-MVP-EPICS.md#ep-02--azure-dev-cloud-foundation--environment-isolation) | Azure DEV Cloud Foundation & Environment Isolation | M03 | P0 | Verified & Accepted |
+| [EP-03](HACKATHON-MVP-EPICS.md#ep-03--synthetic-football-match-data--reliable-ingestion) | Synthetic Football Match Data & Reliable Ingestion | M04 | P0 | Verified & Accepted |
+| [EP-04](HACKATHON-MVP-EPICS.md#ep-04--canonical-match-state-persistence-evidence--replay) | Canonical Match State, Persistence, Evidence & Replay | M05 | P0 | Verified & Accepted |
+| [EP-05](HACKATHON-MVP-EPICS.md#ep-05--football-tactical-intelligence--evidence-engine) | Football Tactical Intelligence & Evidence Engine | M06 | P0 | Verified & Accepted |
+| [EP-06](HACKATHON-MVP-EPICS.md#ep-06--match-api-live-timeline--secure-real-time-delivery) | Match API, Live Timeline & Secure Real-Time Delivery | M07 | P0 | Verified & Accepted |
+| [EP-07](HACKATHON-MVP-EPICS.md#ep-07--intelligent-football-website--explainable-match-experience) | Intelligent Football Website & Explainable Match Experience | M08 | P0 | Verified & Accepted |
+| [EP-08](HACKATHON-MVP-EPICS.md#ep-08--microsoft-foundry-grounded-ai-analyst--governed-agents) | Microsoft Foundry Grounded AI Analyst & Governed Agents | M09 | P0 | Verified & Accepted |
+| [EP-09](HACKATHON-MVP-EPICS.md#ep-09--operational-enhancements-cache-autorecap--evidence-export) | Operational Enhancements: Cache, AutoRecap & Evidence Export | M10–M11 | P1 | Implemented |
+| [EP-10](HACKATHON-MVP-EPICS.md#ep-10--mvp-certification-hackathon-demo--submission) | MVP Certification, Hackathon Demo & Submission | M12 | P0 | Verified & Accepted |
 
 **Product release rule:** The P0 vertical slice is accepted only when synthetic data, deterministic match truth, one proven pressing mechanism, inspectable evidence, synchronized match UX, bounded AI explanations and Azure DEV deployment work end to end. P1/P2 items remain nonblocking unless explicitly reprioritized. A public sanitized GitHub repository, elevator pitch and publicly accessible working demo video **strictly under two minutes** are submission requirements.
 
@@ -62,10 +60,6 @@ flowchart LR
 | M10 | P1 | Managed Redis cache + Service Bus + Functions AutoRecap | M03, M05 | Rebuildable cache, DLQ, idempotent jobs |
 | M11 | P1 | Evidence exports and retention controls | M05 | Authorized export, provenance and expiry |
 | M12 | P0 | Azure DEV integrated certification and release evidence | M08, M09 | Pipeline green; smoke, E2E, security and rollback |
-| M13 | P1 | STAGE/PROD protected promotion and recovery drills | M12 | Approval, immutable digest and restore evidence |
-| M14 | P2 | AI Search historical retrieval | M12 | Indexed provenance and authorization |
-| M15 | P2 | Data Lake + Data Explorer historical tracking | M12 | Cost-capped ingestion and quality tests |
-| M16 | P2 | Azure ML, APIM, partner/broadcast expansion | M14, M15 | Independent business case and security gate |
 
 ## Definition of Done
 Code merged, reproducible tests, security and architecture checks, documentation updated, telemetry added, and relevant Azure deployment evidence linked. A Bicep skeleton is NOT a successful deployment.

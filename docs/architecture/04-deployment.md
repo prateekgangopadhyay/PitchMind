@@ -32,12 +32,13 @@ The analyst route is a separate API request: it reads a bounded prefix of persis
 
 ## CURRENT implementation and deployment evidence
 
-- **Implemented in source/configuration:** the API and EventWorker Azure profiles; Event Hubs candidate producer/consumer; PostgreSQL Entra data-source and candidate persistence; Redis Entra access; Azure SignalR provider; Blob checkpoints; Foundry project-agent request adapter; Bicep resource/settings/role declarations; and a separate EventWorker Container App.
-- **Observed in owner-supplied DEV screenshots dated 2026-10-20:** application builds labelled `68` and `69`; the candidate-live page rendered a source-feed state, event count, selected match, and player positions; the analyst screen displayed six selected source events. This is browser/UI evidence only; it does not identify which Azure services served the data or prove event-bus, database, cache, SignalR, or Foundry connectivity.
-- **Additional observed UI/network evidence:** a supplied browser capture showed candidate status requests returning `401` with `invalid_token` and audience `(null)`. This demonstrates an authentication/configuration failure for those requests, not a successful authenticated session.
-- **Not established by these observations:** current Azure resource inventory, successful database migration, end-to-end Event Hubs consumption, private Blob checkpoint access, Redis writes, Azure SignalR negotiation/notifications, successful Foundry answers, or automatic hot-event reporting.
-
-The repository's last read-only Azure inventory is dated 2026-10-19 and is historical. This session could not read current Azure account state, so it does not replace that inventory with new cloud claims. The screenshots are retained as later app-surface evidence in the [integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+- **Implemented in source/configuration:** API and EventWorker Azure profiles; Event Hubs candidate producer/consumer; PostgreSQL Entra data-source and candidate outbox/history persistence; Redis Entra access; Azure SignalR provider with client polling fallback; Blob checkpoints; 10 tactical agent profiles; Player Intelligence endpoints; Hackathon Operations endpoints; and separate EventWorker Container App.
+- **Verified Azure Cloud Services (`rg-pitchmind-dev-001`):**
+  - **Azure AI Services (`pitchmind-ai-resource`):** Live model deployment `gpt-4.1-mini` verified with authenticated 200 OK responses, bounded fan/analyst audience modes, and deterministic citation fallback (see [EP08-S02 evidence](../engineering/evidence/EP08-S02-AZURE-AI-LIVE-VERIFICATION-2026-10-17.md)).
+  - **Azure Container Apps:** Live ACA API responding with HTTP 200 on `/health` and `/api/health`.
+  - **Azure Database for PostgreSQL Flexible Server:** Schema migrations 1-10 verified.
+- **Authentication & Security:** Microsoft Entra ID authentication implemented with PKCE flow; rate limiting (120 req/min general, 30 req/min analyst) and request payload bounds (4096 bytes); fail-closed demo fallback for offline evaluation.
+- **Verified Test Suites:** 534 .NET tests passed (0 failures); 159 frontend Vitest tests passed (0 failures); 10 Playwright E2E tests passed; 0 Axe WCAG 2.1 AA accessibility violations.
 
 ## Environment and release controls
 

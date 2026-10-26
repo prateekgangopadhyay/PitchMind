@@ -75,12 +75,6 @@
 | EP10-S04 — Azure DEV integrated certification and rollback | P0 | Pass | — | `cbd68598` | [EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md](../engineering/evidence/EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md) | Azure DEV integration (ACA health 200, live Azure AI gpt-4.1-mini) and rollback verified. | 2026-10-17 |
 | EP10-S05 — Hackathon public submission assets | P0 | Pass | — | `e1a3ee01` | [EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md](../engineering/evidence/EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md) | Seven high-resolution screen mockups generated in docs/mockups/ verified. | 2026-10-17 |
 | EP10-S06 — Judges' evidence map and demo contingency | P0 | Pass | — | `e1a3ee01` | [EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md](../engineering/evidence/EP10-CERTIFICATION-AND-SUBMISSION-2026-10-17.md) | Judges' evidence map and offline deterministic demo contingency verified. | 2026-10-17 |
-| EP11-S01 — Environment parity and protected release controls | P1 | Pending | — | — | — | Post-P0 backlog item. | — |
-| EP11-S02 — Backup, recovery and incident drills | P1 | Pending | — | — | — | Post-P0 backlog item. | — |
-| EP11-S03 — Ongoing security and FinOps controls | P1 | Pending | — | — | — | Post-P0 backlog item. | — |
-| EP12-S01 — Provenance-aware historical retrieval (M14) | P2 | Pending | — | — | — |  |  |
-| EP12-S02 — Historical tracking and spatial data exploration (M15) | P2 | Pending | — | — | — |  |  |
-| EP12-S03 — Model and partner expansion (M16) | P2 | Pending | — | — | — |  |  |
 
 ## Current integrated review status — All P0 Stories Accepted (2026-10-17)
 
