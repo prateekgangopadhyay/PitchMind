@@ -134,23 +134,32 @@ if (azureCandidateFeedEnabled)
 {
     var rawEventHubNamespace = builder.Configuration["EventHubs:Namespace"];
     var rawCandidateHubName = builder.Configuration["EventHubs:CandidateHubName"];
+    ICandidateEventPublisher? secondaryPublisher = null;
     if (!string.IsNullOrWhiteSpace(rawEventHubNamespace) && !string.IsNullOrWhiteSpace(rawCandidateHubName))
     {
-        var eventHubNamespace = ValidateEventHubNamespace(rawEventHubNamespace);
-        var checkpointUri = ValidateBlobServiceUri(
-            RequiredSetting(builder.Configuration["Storage:BlobServiceUri"], "Storage:BlobServiceUri"));
-        _ = checkpointUri;
-        _ = RequiredSetting(builder.Configuration["Storage:CheckpointContainer"], "Storage:CheckpointContainer");
-        var credential = AzureManagedIdentity(builder.Configuration);
-        builder.Services.AddSingleton(sp => new EventHubProducerClient(eventHubNamespace, rawCandidateHubName, credential));
-        builder.Services.AddSingleton<ICandidateEventPublisher, AzureCandidateEventHubPublisher>();
-        builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
+        try
+        {
+            var eventHubNamespace = ValidateEventHubNamespace(rawEventHubNamespace);
+            var rawBlobUri = builder.Configuration["Storage:BlobServiceUri"];
+            if (!string.IsNullOrWhiteSpace(rawBlobUri))
+            {
+                _ = ValidateBlobServiceUri(rawBlobUri);
+            }
+            var credential = AzureManagedIdentity(builder.Configuration);
+            var producerClient = new EventHubProducerClient(eventHubNamespace, rawCandidateHubName, credential);
+            builder.Services.AddSingleton(producerClient);
+            secondaryPublisher = new AzureCandidateEventHubPublisher(producerClient);
+        }
+        catch
+        {
+            // Event Hubs producer optional in dev fallback
+        }
     }
-    else
-    {
-        builder.Services.AddSingleton<ICandidateEventPublisher, NoOpCandidateEventPublisher>();
-    }
-    builder.Services.AddSingleton<CandidateFeedPersistence>();
+
+    builder.Services.AddSingleton(sp => new CandidateFeedPersistence(sp.GetService<NpgsqlDataSource>()));
+    builder.Services.AddSingleton<ICandidateEventPublisher>(sp =>
+        new DirectCandidateEventPublisher(sp.GetRequiredService<CandidateFeedPersistence>(), secondaryPublisher));
+    builder.Services.AddHostedService<CandidateOutboxDispatchWorker>();
     builder.Services.AddSingleton<CandidateFeedSourceCatalog>();
     builder.Services.AddSingleton<LocalCandidateSimulationService>();
 }
@@ -482,12 +491,6 @@ static async Task<IResult> ReadAnalystRequestAsync(HttpContext context)
     }
 
     return MatchDataUnavailable(context);
-}
-
-internal sealed class NoOpCandidateEventPublisher : ICandidateEventPublisher
-{
-    public Task EnsureReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task PublishAsync(CandidateReplayEnvelope envelope, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public partial class Program { }

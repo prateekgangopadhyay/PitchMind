@@ -78,7 +78,7 @@ public sealed class LocalCandidateSimulationService(CandidateFeedSourceCatalog c
                 // read-only application directory. Replay checkpoints are ephemeral
                 // producer state, so keep them in the runtime's writable temp directory.
                 var checkpoint = new FileCandidateFeedReplayCheckpointStore(Path.Combine(
-                    Path.GetTempPath(), "pitchmind", "candidate-feed", source.SourceSha256,
+                    ResolveTempDirectory(), "pitchmind", "candidate-feed", source.SourceSha256,
                     Guid.NewGuid().ToString("N")));
                 var rate = configuration.GetValue("CandidateFeed:RecordsPerSecond", 10);
                 if (rate is < 1 or > LocalCandidateFeedReplayProducer.MaximumRecordsPerSecond)
@@ -131,6 +131,19 @@ public sealed class LocalCandidateSimulationService(CandidateFeedSourceCatalog c
             _streaming = false;
         }
         finally { _gate.Release(); }
+    }
+
+    private static string ResolveTempDirectory()
+    {
+        var temp = Path.GetTempPath();
+        if (OperatingSystem.IsMacOS())
+        {
+            if (temp.StartsWith("/var/", StringComparison.Ordinal))
+                temp = "/private" + temp;
+            else if (temp.StartsWith("/tmp/", StringComparison.Ordinal))
+                temp = "/private" + temp;
+        }
+        return temp;
     }
 
     public async ValueTask DisposeAsync()

@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { ApiRequestError, request } from './api';
+import { ApiRequestError, request, subscribeAuth } from './api';
 
 export interface CandidateStreamStatus {
   matchId: string | null; isStreaming: boolean; currentSequence: number | null;
@@ -27,6 +27,15 @@ export function subscribeCandidateStatus(fn: () => void) {
   }
   return () => { listeners.delete(fn); if (!listeners.size && poller) { clearInterval(poller); poller = null; } };
 }
+
+if (typeof window !== 'undefined') {
+  subscribeAuth(() => {
+    autoStartAttempted = false;
+    nextAutoStartAttemptAt = 0;
+    void refreshCandidateStatus(true);
+  });
+}
+
 async function startAfterStatusIfRequested() {
   if (!autoStartRequested || autoStartInFlight || Date.now() < nextAutoStartAttemptAt) return;
   if (status?.isStreaming) {
@@ -43,11 +52,11 @@ async function startAfterStatusIfRequested() {
     nextAutoStartAttemptAt = 0;
     error = '';
   } catch (failure) {
-    if (failure instanceof ApiRequestError && failure.status < 500) {
+    if (failure instanceof ApiRequestError && failure.status === 403) {
       autoStartRequested = false;
       autoStartAttempted = true;
     } else {
-      nextAutoStartAttemptAt = Date.now() + 5000;
+      nextAutoStartAttemptAt = Date.now() + 2000;
     }
     error = failureMessage(failure, 'The candidate simulation could not start. Retrying automatically.');
   } finally {
@@ -56,7 +65,12 @@ async function startAfterStatusIfRequested() {
   }
 }
 export async function refreshCandidateStatus(autoStart = false): Promise<CandidateStreamStatus | null> {
-  if (autoStart && !autoStartAttempted) autoStartRequested = true;
+  if (autoStart) {
+    if (!status?.isStreaming) {
+      autoStartRequested = true;
+      autoStartAttempted = false;
+    }
+  }
   if (requestInFlight) {
     await requestInFlight;
     await startAfterStatusIfRequested();

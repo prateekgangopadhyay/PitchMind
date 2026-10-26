@@ -62,6 +62,9 @@ internal static class CandidateFeedApiEndpoints
                 await candidateSimulation.ResetAsync(context.RequestAborted).ConfigureAwait(false);
             }
 
+            var candidatePersistence = services.GetService<CandidateFeedPersistence>();
+            candidatePersistence?.ClearInMemory();
+
             return Results.Ok(new
             {
                 cleared = true,
