@@ -9,6 +9,11 @@ This document separates source-code implementation, owner-supplied DEV applicati
 - A supplied browser Network capture for `/api/v1/simulation/candidate/status` shows `401 Unauthorized` with `invalid_token` and audience `(null)`. At least that browser/API token configuration was not valid. Do not use the UI screenshots as proof of authenticated, end-to-end service health.
 - The repository-recorded Azure resource inventory below is dated 2026-10-19. No newer direct resource inventory is available in this update, so the resource status must be treated as unknown after that date.
 
+## Latest deployment log — 2026-10-26
+
+- The reviewed DEV what-if completed with 45 changes and matched the then-approved plan. The ARM apply then failed because the parent namespace `Microsoft.EventHub/namespaces/pm-dev-eh` was not present in `rg-pitchmind-dev-001`; creation of `candidate-match-events` therefore failed with `ParentResourceNotFound`.
+- `infra/private-dev-topology.bicep` now declares the conditional Standard namespace itself, with one throughput unit, alongside the candidate hub and consumer group. This is a source change only; it has not been applied. The next what-if will differ from the previously approved plan and must go through the existing exact-plan approval gate with an updated cost estimate.
+
 ## Adapter settings
 
 Set `Runtime:Profile=azure` and `CandidateFeed:Enabled=true` in both the API and EventWorker. The API requires:
@@ -38,7 +43,7 @@ EventWorker also retains its existing projection-outbox settings (`EventHubs:Hub
 
 ## Required provisioning and release work
 
-1. Add `candidate-match-events` and a dedicated `pitchmind-candidate-worker` consumer group to the existing `pm-dev-eh`, then grant the runtime identity Event Hubs sender/receiver data roles. Decide whether to retain public namespace access or move it behind a private endpoint and DNS.
+1. Review the new what-if for the conditional `pm-dev-eh` Standard namespace, `candidate-match-events`, and `pitchmind-candidate-worker`; update the monthly estimate and approve only the exact plan. Grant the runtime identity Event Hubs sender/receiver data roles, and decide whether to retain public namespace access or move it behind a private endpoint and DNS.
 2. Create a Blob checkpoint container and private endpoint/DNS path for the existing storage account, then grant the EventWorker identity Blob Data Contributor at the narrowest applicable scope.
 3. Create an Azure SignalR DEV service and grant the runtime identity the SignalR App Server role.
 4. Create/map the Entra principal in PostgreSQL, apply schema version 14 with a migration identity, and grant only the candidate outbox/history/poison permissions needed by API and EventWorker. The current DbMigrator deliberately supports LOCAL only.

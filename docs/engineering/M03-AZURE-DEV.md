@@ -10,7 +10,7 @@ The candidate feed is read from `data/simulations/manu-liv-match-dataset.json` p
 
 ## Azure resources and identity boundaries
 
-`infra/private-dev-topology.bicep` declares the guarded private DEV topology and conditional candidate-feed components. Depending on parameters and existing resource IDs, the path can configure/reuse PostgreSQL Flexible Server and Azure Managed Redis, and declares Azure Container Apps, Event Hubs, a Blob checkpoint container/private endpoint, Azure SignalR, managed identities and scoped role assignments. The API and worker receive `Runtime:Profile=azure`; the Bicep module itself defaults candidate provisioning off, while the release template parameter defaults it on inside the separately gated release path.
+`infra/private-dev-topology.bicep` declares the guarded private DEV topology and conditional candidate-feed components. Depending on parameters and existing resource IDs, the path can configure/reuse PostgreSQL Flexible Server and Azure Managed Redis, and declares Azure Container Apps, a Standard Event Hubs namespace with one throughput unit, the candidate event hub and consumer group, a Blob checkpoint container/private endpoint, Azure SignalR, managed identities and scoped role assignments. The candidate hub is separate from projection telemetry. The API and worker receive `Runtime:Profile=azure`; the Bicep module itself defaults candidate provisioning off, while the release template parameter defaults it on inside the separately gated release path.
 
 - API identity: Event Hubs sender, PostgreSQL candidate/read access, Redis data access, Azure SignalR server access, and Foundry project-agent invocation as declared by the template.
 - EventWorker identity: Event Hubs receiver, Blob checkpoint access, and restricted PostgreSQL candidate-outbox access.
@@ -23,7 +23,7 @@ Role assignment declarations do not prove that the principal has the effective r
 
 Azure DevOps owns delivery. CI validates code, tests, frontend, pipeline contracts and Bicep without applying infrastructure. The release parameter `enableDevDelivery` is default-off. When explicitly enabled through the approved pipeline, the release builds one immutable image digest, validates the topology, captures what-if and estimated cost, waits for exact-change owner approval and the protected `pitchmind-dev` environment, applies the approved plan, then runs post-deployment smoke checks. A green CI run alone does not deploy.
 
-This documentation update did not provision Azure resources, apply Bicep, alter environment settings, or deploy an image. Do not deploy from a local shell. Any deployment requires review of the exact what-if, image digest, cost and rollback before the protected approval gates.
+The 2026-10-26 release log showed that `pm-dev-eh` was absent from the target resource group, so the prior existing-resource declaration failed when creating the candidate hub. The template now provisions the namespace when candidate Event Hubs are enabled. This adds a billable Standard namespace to the release plan; the existing monthly estimate must be reviewed and updated before approval. This documentation update did not provision Azure resources, apply Bicep, alter environment settings, or deploy an image. Do not deploy from a local shell. Any deployment requires review of the exact what-if, image digest, cost and rollback before the protected approval gates.
 
 ## Verification status and remaining evidence
 

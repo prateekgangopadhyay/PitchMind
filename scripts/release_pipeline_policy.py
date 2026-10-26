@@ -84,10 +84,10 @@ _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
     "scripts/private-dev-plan.sh": "1023285f4dbda3a7054ad78517132db2a092b8605e43b25d61e91027cdcc5b5f",
     "scripts/private-dev-deploy.sh": "c2efe76b3466c1e4e147c1c65ee7ec85c28d125319584c3fa47242a90db3394c",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
-    "scripts/validate_private_dev_whatif.py": "3685cd93dcd68b102b6a935ded1e117b063d12a40839307e7142175f65ec72b1",
+    "scripts/validate_private_dev_whatif.py": "e37bad37fd7cb9d8eb8b06f908ceb2e88433bfa45b9747635439e5c2c9ccacab",
     "pipelines/templates/preview-private-dev.yml": "c4cd3b3355194aedafa4b529b58b3132d5b92263e78fa7cafa49da56b3fce971",
     "pipelines/templates/provision-private-dev.yml": "642cc09a646e8cd7bd642dcf94df46470dda402c9f2425332d3d26d789ef6b6f",
-    "infra/private-dev-topology.bicep": "32ff7297a5f92edb8176253960ab88dd1ff5cb698ee0f752272708ef186a86b6",
+    "infra/private-dev-topology.bicep": "84e2d024013c67ffccd766cc8e34f2c6aa6136c6e3391dba8a80d143075fee67",
 }
 
 

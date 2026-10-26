@@ -22,6 +22,7 @@ ALLOWED_TYPES = {
     "microsoft.app/managedenvironments",
     "microsoft.app/containerapps",
     "microsoft.app/jobs",
+    "microsoft.eventhub/namespaces",
     "microsoft.eventhub/namespaces/eventhubs",
     "microsoft.eventhub/namespaces/eventhubs/consumergroups",
     "microsoft.signalrservice/signalr",
@@ -87,6 +88,10 @@ def main() -> int:
                     )
                     if not any(scope in resource_id for scope in approved_scopes) or "/providers/microsoft.authorization/roleassignments/" not in resource_id:
                         raise ValueError("Role assignment is outside an approved ACR, candidate Event Hub, checkpoint container, SignalR, or Foundry project scope")
+                elif resource_type == "microsoft.eventhub/namespaces":
+                    expected_namespace_path = f"/providers/microsoft.eventhub/namespaces/{TARGET_EVENTHUB_NAMESPACE}"
+                    if not resource_id.endswith(expected_namespace_path):
+                        raise ValueError("Event Hubs namespace mutation is outside the approved candidate namespace")
                 elif resource_type in {
                     "microsoft.eventhub/namespaces/eventhubs",
                     "microsoft.eventhub/namespaces/eventhubs/consumergroups",

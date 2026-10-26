@@ -146,9 +146,24 @@ resource postgresMigratorIdentity 'Microsoft.ManagedIdentity/userAssignedIdentit
   name: postgresMigratorIdentityName
 }
 
-// Candidate raw events are isolated from the existing projection-telemetry hub.
-resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' existing = if (enableEventHubs) {
+// Candidate raw events use a dedicated hub, separate from projection telemetry.
+resource eventHubsNamespace 'Microsoft.EventHub/namespaces@2024-01-01' = if (deployPrivateDevTopology && enableEventHubs) {
   name: eventHubsNamespaceName
+  location: location
+  sku: {
+    name: 'Standard'
+    tier: 'Standard'
+    capacity: 1
+  }
+  properties: {
+    // Preserve namespace compatibility for existing projection telemetry; application roles use Entra RBAC.
+    disableLocalAuth: false
+    isAutoInflateEnabled: false
+    minimumTlsVersion: '1.2'
+    publicNetworkAccess: 'Enabled'
+    zoneRedundant: false
+  }
+  tags: { application: 'PitchMind', environment: 'dev', story: 'EP03-S03' }
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
