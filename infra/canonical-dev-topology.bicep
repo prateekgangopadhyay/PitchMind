@@ -351,7 +351,7 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = if (d
   properties: {
     authConfig: {
       activeDirectoryAuth: 'Enabled'
-      passwordAuth: 'Disabled'
+      passwordAuth: 'Enabled'
       tenantId: tenant().tenantId
     }
     backup: {

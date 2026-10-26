@@ -8,13 +8,19 @@ namespace PitchMind.Infrastructure.Tests;
 public sealed class AzureCandidateAdapterConfigurationTests
 {
     [Fact]
-    public void AzurePostgresDataSourceRequiresAzureHostAndRejectsPasswordAuthentication()
+    public void AzurePostgresDataSourceRequiresAzureHost()
     {
         var credential = new ManagedIdentityCredential(Azure.Identity.ManagedIdentityId.SystemAssigned);
         Assert.Throws<InvalidOperationException>(() => AzurePostgresDataSourceFactory.Create(
             "Host=localhost;Database=pitchmind;Username=app", credential));
-        Assert.Throws<InvalidOperationException>(() => AzurePostgresDataSourceFactory.Create(
-            "Host=pm.postgres.database.azure.com;Database=pitchmind;Username=app;Password=secret", credential));
+    }
+
+    [Fact]
+    public void AzurePostgresDataSourceAcceptsUserPasswordAuthentication()
+    {
+        using var source = AzurePostgresDataSourceFactory.Create(
+            "Host=pm.postgres.database.azure.com;Database=pitchmind;Username=app;Password=secret");
+        Assert.NotNull(source);
     }
 
     [Fact]

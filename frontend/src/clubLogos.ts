@@ -43,3 +43,14 @@ export function resolveClubLogo(name?: string, logoUrl?: string): string {
   }
   return '';
 }
+
+export function clubInitials(name?: string): string {
+  if (!name) return '—';
+  return name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() ?? '').join('');
+}
+
+export const KNOWN_MATCH_FIXTURES: Record<string, { home: string; away: string; venue?: string }> = {
+  'sim-match-ars-che': { home: 'Arsenal', away: 'Chelsea', venue: 'Emirates Stadium' },
+  'sim-match-mci-tot': { home: 'Manchester City', away: 'Tottenham', venue: 'Etihad Stadium' },
+  'sim-match-avl-new': { home: 'Aston Villa', away: 'Newcastle United', venue: 'Villa Park' }
+};

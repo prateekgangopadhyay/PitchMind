@@ -107,6 +107,7 @@ builder.Services.AddSingleton<IEvidenceExportService, EvidenceExportService>();
 builder.Services.AddSingleton<IHistoricalEvidenceSearchService, HistoricalEvidenceSearchService>();
 builder.Services.AddSingleton<ISpatialAnalysisService, SpatialAnalysisService>();
 builder.Services.AddSingleton<IPartnerIntegrationService, PartnerIntegrationService>();
+builder.Services.AddSingleton<IPlayerIntelligenceService, PlayerIntelligenceService>();
 
 builder.Services.AddSingleton<ISimulationStreamer, SimulationStreamerService>();
 builder.Services.AddSingleton<IMatchRealtimeAccessPolicy, MatchRealtimeAccessPolicy>();
@@ -351,6 +352,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSimulationEndpoints();
+app.MapPlayerIntelligenceEndpoints();
 app.MapHackathonOperationsEndpoints();
 if (localRealtimeEnabled || azureCandidateFeedEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
 if (candidateFeedRuntimeEnabled) app.MapCandidateFeedEndpoints();

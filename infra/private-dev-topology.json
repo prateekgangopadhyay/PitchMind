@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "15415877163663420336"
+      "templateHash": "5359833549918229354"
     }
   },
   "parameters": {
@@ -79,6 +79,13 @@
     "entraClientId": {
       "type": "string",
       "defaultValue": "4accaf35-1ae9-4e7d-999d-3f86fd7caec4"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of an existing Key Vault from which DEV secrets (such as database credentials) are resolved."
+      }
     },
     "postgresServerName": {
       "type": "string",
@@ -466,6 +473,36 @@
       "location": "[parameters('location')]"
     },
     {
+      "condition": "[and(parameters('deployPrivateDevTopology'), not(empty(parameters('keyVaultName'))))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'KeyVaultSecretsUser')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]"
+      ]
+    },
+    {
+      "condition": "[and(and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed')), not(empty(parameters('keyVaultName'))))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'KeyVaultSecretsUser')]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
+      ]
+    },
+    {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -557,7 +594,7 @@
       "properties": {
         "authConfig": {
           "activeDirectoryAuth": "Enabled",
-          "passwordAuth": "Disabled",
+          "passwordAuth": "Enabled",
           "tenantId": "[tenant().tenantId]"
         },
         "backup": {
@@ -856,7 +893,8 @@
               "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
               "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
             }
-          ]
+          ],
+          "secrets": "[if(not(empty(parameters('keyVaultName'))), createArray(createObject('name', 'postgres-connection-string', 'keyVaultUrl', format('{0}secrets/postgres-connection-string', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))), createObject('name', 'foundry-api-key', 'keyVaultUrl', format('{0}secrets/foundry-api-key', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))))), createArray())]"
         },
         "template": {
           "containers": [
@@ -892,10 +930,8 @@
                   "name": "Azure__ManagedIdentityClientId",
                   "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), '2023-01-31').clientId]"
                 },
-                {
-                  "name": "ConnectionStrings__PitchMind",
-                  "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))]"
-                },
+                "[if(not(empty(parameters('keyVaultName'))), createObject('name', 'ConnectionStrings__PitchMind', 'secretRef', 'postgres-connection-string'), createObject('name', 'ConnectionStrings__PitchMind', 'value', format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))))]",
+                "[if(not(empty(parameters('keyVaultName'))), createObject('name', 'Foundry__ApiKey', 'secretRef', 'foundry-api-key'), createObject('name', 'Foundry__ApiKey', 'value', ''))]",
                 {
                   "name": "EventHubs__Namespace",
                   "value": "[if(parameters('enableCandidateFeed'), format('{0}.servicebus.windows.net', parameters('eventHubsNamespaceName')), '')]"
@@ -973,6 +1009,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'KeyVaultSecretsUser'))]",
         "[extensionResourceId(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'EventHubsDataSender'))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
@@ -1011,7 +1048,8 @@
               "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), '2023-07-01').loginServer]",
               "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]"
             }
-          ]
+          ],
+          "secrets": "[if(not(empty(parameters('keyVaultName'))), createArray(createObject('name', 'postgres-worker-connection-string', 'keyVaultUrl', format('{0}secrets/postgres-worker-connection-string', reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2023-07-01').vaultUri), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))))), createArray())]"
         },
         "template": {
           "containers": [
@@ -1059,10 +1097,7 @@
                   "name": "Azure__ManagedIdentityClientId",
                   "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), '2023-01-31').clientId]"
                 },
-                {
-                  "name": "ConnectionStrings__PitchMind",
-                  "value": "[format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_worker;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))]"
-                }
+                "[if(not(empty(parameters('keyVaultName'))), createObject('name', 'ConnectionStrings__PitchMind', 'secretRef', 'postgres-worker-connection-string'), createObject('name', 'ConnectionStrings__PitchMind', 'value', format('Host={0}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_worker;SSL Mode=VerifyFull;Timeout=15', parameters('postgresServerName'))))]"
               ],
               "resources": {
                 "cpu": "[json('0.25')]",
@@ -1093,7 +1128,8 @@
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName')))]",
         "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('registryName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-pull', parameters('appName'))), 'AcrPull'))]",
         "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'StorageBlobDataContributor'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'KeyVaultSecretsUser'))]"
       ]
     },
     {

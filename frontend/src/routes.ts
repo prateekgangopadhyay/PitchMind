@@ -29,7 +29,7 @@ export function resolveRoute(pathname: string): AppRoute {
   if (parts.length === 2 && parts[0] === 'players') return { kind: 'players', playerId: parts[1] };
   if (parts.length === 1 && parts[0] === 'insights') return { kind: 'insights' };
   if (parts.length === 2 && parts[0] === 'insights') return { kind: 'insights', insightId: parts[1] };
-  if (parts.length === 1 && parts[0] === 'analyst') return { kind: 'analyst' };
+  if (parts.length === 1 && (parts[0] === 'analyst' || parts[0] === 'tactical')) return { kind: 'analyst' };
   return { kind: 'not-found' };
 }
 

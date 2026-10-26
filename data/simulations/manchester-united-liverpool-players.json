@@ -1,0 +1,400 @@
+[
+  {
+    "id": "bruno-fernandes",
+    "name": "Bruno Fernandes",
+    "number": 8,
+    "role": "Attacking Midfielder (AM)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/bruno-fernandes.jpg",
+    "photo": "/players/bruno-fernandes.jpg",
+    "nationality": "Portugal",
+    "age": 30,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#8",
+      "AM",
+      "Captain",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "marcus-rashford",
+    "name": "Marcus Rashford",
+    "number": 10,
+    "role": "Left Winger (LW)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/marcus-rashford.jpg",
+    "photo": "/players/marcus-rashford.jpg",
+    "nationality": "England",
+    "age": 27,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#10",
+      "LW",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "kobbie-mainoo",
+    "name": "Kobbie Mainoo",
+    "number": 37,
+    "role": "Central Midfielder (CM)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/kobbie-mainoo.jpg",
+    "photo": "/players/kobbie-mainoo.jpg",
+    "nationality": "England",
+    "age": 19,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#37",
+      "CM",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "rasmus-hojlund",
+    "name": "Rasmus Højlund",
+    "number": 9,
+    "role": "Striker (ST)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/rasmus-hojlund.jpg",
+    "photo": "/players/rasmus-hojlund.jpg",
+    "nationality": "Denmark",
+    "age": 21,
+    "preferredFoot": "Left foot",
+    "tags": [
+      "#9",
+      "ST",
+      "Left foot"
+    ]
+  },
+  {
+    "id": "alejandro-garnacho",
+    "name": "Alejandro Garnacho",
+    "number": 17,
+    "role": "Right Winger (RW)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/alejandro-garnacho.jpg",
+    "photo": "/players/alejandro-garnacho.jpg",
+    "nationality": "Argentina",
+    "age": 20,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#17",
+      "RW",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "casemiro",
+    "name": "Casemiro",
+    "number": 18,
+    "role": "Defensive Midfielder (DM)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/casemiro.jpg",
+    "photo": "/players/casemiro.jpg",
+    "nationality": "Brazil",
+    "age": 32,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#18",
+      "DM",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "diogo-dalot",
+    "name": "Diogo Dalot",
+    "number": 20,
+    "role": "Right Back (RB)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/diogo-dalot.jpg",
+    "photo": "/players/diogo-dalot.jpg",
+    "nationality": "Portugal",
+    "age": 25,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#20",
+      "RB",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "lisandro-martinez",
+    "name": "Lisandro Martínez",
+    "number": 6,
+    "role": "Center Back (CB)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/lisandro-martinez.jpg",
+    "photo": "/players/lisandro-martinez.jpg",
+    "nationality": "Argentina",
+    "age": 26,
+    "preferredFoot": "Left foot",
+    "tags": [
+      "#6",
+      "CB",
+      "Left foot"
+    ]
+  },
+  {
+    "id": "matthijs-de-ligt",
+    "name": "Matthijs de Ligt",
+    "number": 4,
+    "role": "Center Back (CB)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/matthijs-de-ligt.jpg",
+    "photo": "/players/matthijs-de-ligt.jpg",
+    "nationality": "Netherlands",
+    "age": 25,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#4",
+      "CB",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "noussair-mazraoui",
+    "name": "Noussair Mazraoui",
+    "number": 3,
+    "role": "Left Back (LB)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/noussair-mazraoui.jpg",
+    "photo": "/players/noussair-mazraoui.jpg",
+    "nationality": "Morocco",
+    "age": 26,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#3",
+      "LB",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "andre-onana",
+    "name": "André Onana",
+    "number": 24,
+    "role": "Goalkeeper (GK)",
+    "club": "Manchester United",
+    "teamLogo": "/crests/manchester-united.svg",
+    "photoUrl": "/players/andre-onana.jpg",
+    "photo": "/players/andre-onana.jpg",
+    "nationality": "Cameroon",
+    "age": 28,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#24",
+      "GK",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "mohamed-salah",
+    "name": "Mohamed Salah",
+    "number": 11,
+    "role": "Right Winger (RW)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/mohamed-salah.jpg",
+    "photo": "/players/mohamed-salah.jpg",
+    "nationality": "Egypt",
+    "age": 32,
+    "preferredFoot": "Left foot",
+    "tags": [
+      "#11",
+      "RW",
+      "Left foot"
+    ]
+  },
+  {
+    "id": "virgil-van-dijk",
+    "name": "Virgil van Dijk",
+    "number": 4,
+    "role": "Center Back (CB)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/virgil-van-dijk.jpg",
+    "photo": "/players/virgil-van-dijk.jpg",
+    "nationality": "Netherlands",
+    "age": 33,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#4",
+      "CB",
+      "Captain",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "luis-diaz",
+    "name": "Luis Díaz",
+    "number": 7,
+    "role": "Left Winger (LW)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/luis-diaz.jpg",
+    "photo": "/players/luis-diaz.jpg",
+    "nationality": "Colombia",
+    "age": 27,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#7",
+      "LW",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "alexis-mac-allister",
+    "name": "Alexis Mac Allister",
+    "number": 10,
+    "role": "Central Midfielder (CM)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/alexis-mac-allister.jpg",
+    "photo": "/players/alexis-mac-allister.jpg",
+    "nationality": "Argentina",
+    "age": 25,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#10",
+      "CM",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "dominik-szoboszlai",
+    "name": "Dominik Szoboszlai",
+    "number": 8,
+    "role": "Attacking Midfielder (AM)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/dominik-szoboszlai.jpg",
+    "photo": "/players/dominik-szoboszlai.jpg",
+    "nationality": "Hungary",
+    "age": 24,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#8",
+      "AM",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "trent-alexander-arnold",
+    "name": "Trent Alexander-Arnold",
+    "number": 66,
+    "role": "Right Back (RB)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/trent-alexander-arnold.jpg",
+    "photo": "/players/trent-alexander-arnold.jpg",
+    "nationality": "England",
+    "age": 26,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#66",
+      "RB",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "ryan-gravenberch",
+    "name": "Ryan Gravenberch",
+    "number": 38,
+    "role": "Defensive Midfielder (DM)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/ryan-gravenberch.jpg",
+    "photo": "/players/ryan-gravenberch.jpg",
+    "nationality": "Netherlands",
+    "age": 22,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#38",
+      "DM",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "darwin-nunez",
+    "name": "Darwin Núñez",
+    "number": 9,
+    "role": "Striker (ST)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/darwin-nunez.jpg",
+    "photo": "/players/darwin-nunez.jpg",
+    "nationality": "Uruguay",
+    "age": 25,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#9",
+      "ST",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "ibrahima-konate",
+    "name": "Ibrahima Konaté",
+    "number": 5,
+    "role": "Center Back (CB)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/ibrahima-konate.jpg",
+    "photo": "/players/ibrahima-konate.jpg",
+    "nationality": "France",
+    "age": 25,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#5",
+      "CB",
+      "Right foot"
+    ]
+  },
+  {
+    "id": "andy-robertson",
+    "name": "Andy Robertson",
+    "number": 26,
+    "role": "Left Back (LB)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/andy-robertson.jpg",
+    "photo": "/players/andy-robertson.jpg",
+    "nationality": "Scotland",
+    "age": 30,
+    "preferredFoot": "Left foot",
+    "tags": [
+      "#26",
+      "LB",
+      "Left foot"
+    ]
+  },
+  {
+    "id": "alisson-becker",
+    "name": "Alisson Becker",
+    "number": 1,
+    "role": "Goalkeeper (GK)",
+    "club": "Liverpool",
+    "teamLogo": "/crests/liverpool.svg",
+    "photoUrl": "/players/alisson-becker.jpg",
+    "photo": "/players/alisson-becker.jpg",
+    "nationality": "Brazil",
+    "age": 32,
+    "preferredFoot": "Right foot",
+    "tags": [
+      "#1",
+      "GK",
+      "Right foot"
+    ]
+  }
+]

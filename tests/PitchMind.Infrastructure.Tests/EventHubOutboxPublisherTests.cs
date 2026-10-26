@@ -160,11 +160,12 @@ public sealed class EventHubOutboxPublisherTests
     }
 
     [Fact]
-    public void RejectsPasswordBasedPostgresConfiguration()
+    public void AcceptsPasswordBasedPostgresConfigurationWithoutCallingEntraCredential()
     {
         var credential = new NeverCalledCredential();
-        Assert.Throws<InvalidOperationException>(() => AzureEventWorkerConfiguration.CreatePostgresDataSource(
-            "Host=pm.postgres.database.azure.com;Database=pitchmind;Username=worker;Password=plaintext", credential));
+        using var dataSource = AzureEventWorkerConfiguration.CreatePostgresDataSource(
+            "Host=pm.postgres.database.azure.com;Database=pitchmind;Username=worker;Password=plaintext", credential);
+        Assert.NotNull(dataSource);
         Assert.False(credential.WasCalled);
     }
 

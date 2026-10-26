@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HubConnectionBuilder, HttpTransportType, LogLevel, type HubConnection } from '@microsoft/signalr';
 import { clock, getHostAccessToken, request } from './api';
-import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
+import { useCandidateStreamStatus } from './candidateLiveStatus';
 import { contextHref } from './routes';
-import { resolveClubLogo } from './clubLogos';
+import { LinearEventsTimeline, type LinearTimelineEvent } from './LinearEventsTimeline';
 
 interface CandidateEvent {
   eventId: string;
@@ -56,7 +56,6 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const valueText = (value: unknown) =>
   value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
-const clubInitials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() ?? '').join('');
 const eventLabel = (type: string) => type.replace(/([a-z])([A-Z])/g, '$1 $2').replace('Pressure Applied', 'Pressure');
 
 export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: number } = {}) {
@@ -303,8 +302,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     ...players.map(player => typeof player.teamName === 'string' ? player.teamName : ''),
     ...visibleEvents.map(event => typeof event.rawPayload.teamName === 'string' ? event.rawPayload.teamName : '')
   ].filter(Boolean))];
-  const sourceGoals = visibleEvents.filter(event => event.eventType === 'Goal');
-  const sourceScore = sourceTeams.slice(0, 2).map(team => sourceGoals.filter(event => event.rawPayload.teamName === team).length);
 
   const ballX = latest?.rawPayload.ballX;
   const ballY = latest?.rawPayload.ballY;
@@ -335,10 +332,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const toPitchX = (value: number) => 3 + value * 0.94;
   const toPitchY = (value: number) => 3 + value * 0.62;
 
-  const currentClockFormatted = useMemo(() => {
-    const raw = latest?.clockSeconds ?? status?.currentClockValue;
-    return typeof raw === 'number' ? clock(Math.floor(raw)) : '—';
-  }, [latest, status?.currentClockValue]);
+
 
   // Filtered timeline events
   const filteredEvents = useMemo(() => {
@@ -351,114 +345,32 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     return visibleEvents;
   }, [visibleEvents, timelineCategory]);
 
+  const linearTimelineEvents: LinearTimelineEvent[] = useMemo(() => {
+    return events.map(e => ({
+      id: e.eventId,
+      type: e.eventType,
+      sequence: e.sequence,
+      clockSeconds: e.clockSeconds,
+      teamName: typeof e.rawPayload.teamName === 'string' ? e.rawPayload.teamName : undefined,
+      playerName: typeof e.rawPayload.playerName === 'string' ? e.rawPayload.playerName : undefined,
+      description: typeof e.rawPayload.action === 'string' ? e.rawPayload.action : undefined
+    }));
+  }, [events]);
+
   return (
     <section className="content-page candidate-live-page">
-      {/* Match scoreboard */}
-      <div className="candidate-match-hero-banner">
-        <div className="hero-top-bar">
-          <div className="hero-status-pills">
-            <span className="live-badge-glow">
-              <span className="pulse-dot" aria-hidden="true"></span>
-              {status?.isStreaming ? 'LIVE MATCH' : 'MATCH PAUSED'}
-            </span>
-            <span className="match-clock-pill">{currentClockFormatted}</span>
-          </div>
-
-          <div className="hero-stream-action">
-            <button
-              type="button"
-              className={`candidate-stream-state ${status?.isStreaming ? 'is-streaming' : ''}`}
-              aria-pressed={status?.isStreaming ?? false}
-              aria-label={status?.isStreaming ? 'Pause live match' : 'Resume live match'}
-              onClick={() => { void toggleCandidateStream(); }}
-            >
-              <span className="stream-dot" aria-hidden="true"></span>
-              <span>{status?.isStreaming ? 'Live · Pause' : 'Paused · Resume'}</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="candidate-match-context">
-          <div className="candidate-match-identity"><p className="eyebrow">Matchday</p>
-            <h1>{sourceTeams.length >= 2 ? `${sourceTeams[0]} vs ${sourceTeams[1]}` : 'Match in progress'}</h1>
-            <p>{latest ? (latest.period === 2 ? 'Second half' : 'First half') : 'Waiting for kick-off'}</p></div>
-          {sourceTeams.length >= 2 && <div className="candidate-source-scoreboard" aria-label={`${sourceTeams[0]} ${sourceScore[0] ?? 0}, ${sourceTeams[1]} ${sourceScore[1] ?? 0}`}>
-            <div className="source-score-team">
-              {resolveClubLogo(sourceTeams[0]) ? <img src={resolveClubLogo(sourceTeams[0])} alt="" /> : <span className="score-team-monogram">{clubInitials(sourceTeams[0])}</span>}
-              <span>{sourceTeams[0]}</span><strong>{sourceScore[0] ?? 0}</strong>
-            </div>
-            <span className="source-score-separator" aria-hidden="true">–</span>
-            <div className="source-score-team">
-              <strong>{sourceScore[1] ?? 0}</strong><span>{sourceTeams[1]}</span>
-              {resolveClubLogo(sourceTeams[1]) ? <img src={resolveClubLogo(sourceTeams[1])} alt="" /> : <span className="score-team-monogram">{clubInitials(sourceTeams[1])}</span>}
-            </div>
-          </div>}
-        </div>
-
-        {/* Integrated Scrubber Timeline Bar */}
-        {matchId && (
-          <div className="candidate-replay-controls" aria-label="Match event replay">
-            <div className="replay-meta">
-              <span className="replay-title">Event replay</span>
-              <span className="replay-clock">Match clock · {clock(Math.floor(activeSeconds))}</span>
-            </div>
-
-            <div className="replay-slider-wrap">
-              <input
-                  aria-label="Choose match time"
-                type="range"
-                min="0"
-                max={Math.max(1, replayMaximum)}
-                step="1"
-                value={activeSeconds}
-                className="replay-range-slider"
-                onChange={event => {
-                  const seconds = Number(event.target.value);
-                  setReplayPlaying(false);
-                  setReplaySeconds(seconds);
-                  syncReplayLocation(seconds);
-                }}
-              />
-              <div className="slider-ticks" aria-hidden="true">
-                <span>0</span>
-                <span>Latest · {clock(Math.max(1, replayMaximum))}</span>
-              </div>
-            </div>
-
-            <div className="replay-btn-group">
-              <button
-                type="button"
-                className="replay-toggle-btn"
-                onClick={() => setReplayPlaying(value => !value)}
-                disabled={activeSeconds >= replayMaximum}
-                aria-pressed={replayPlaying}
-              >
-                {replayPlaying ? 'Pause replay' : 'Play replay'}
-              </button>
-              <button
-                type="button"
-                className="return-live-btn"
-                onClick={() => {
-                  setReplayPlaying(false);
-                  setReplaySeconds(null);
-                  syncReplayLocation(undefined, 'live');
-                }}
-              >
-                Return to live
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
 
       {statusError && <p role="alert" className="candidate-error-banner">The live match is temporarily unavailable.</p>}
       {error && <p role="status" className="candidate-warning-banner">Match events are still loading. Please try again shortly.</p>}
       {!matchId && <p role="status" className="candidate-waiting-banner">Waiting for the match to start.</p>}
 
       {matchId && (
-        <div className="candidate-live-grid">
-          {/* Match pitch */}
-          <section className="candidate-panel pitch-command-panel">
+        <div className={`candidate-live-match-layout match-screen-fullwidth-layout ${cinemaMode ? 'is-cinema-mode' : ''}`}>
+          {/* Match pitch taking the whole width (100%) */}
+          <section
+            className={`candidate-panel pitch-command-panel match-screen-pitch-col is-full-width ${cinemaMode ? 'is-cinema-fullscreen' : ''}`}
+            style={{ width: '100%', maxWidth: '100%', flex: '0 0 100%' }}
+          >
             <div className="pitch-panel-toolbar">
               <div className="pitch-title-meta">
                 <h2>Match action</h2>
@@ -494,7 +406,7 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                   viewBox="-3.5 -2.5 107 73"
                   preserveAspectRatio="xMidYMid meet"
                   role="img"
-                  aria-label="Football pitch showing both teams, player positions and the ball"
+                  aria-label="Raw candidate player and ball positions mapped to the pitch canvas; dimensions and orientation unverified"
                 >
                   <defs>
                     {/* Deep Stadium Turf & Radial Floodlight Gradients */}
@@ -780,54 +692,29 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
             )}
           </section>
 
-          {/* Match events */}
-          <aside className="candidate-panel candidate-feed-section">
-            <div className="feed-header-row">
-              <h2>Match events</h2>
+          {/* Linear Events Timeline below the pitch taking the whole width */}
+          {!cinemaMode && (
+            <div className="match-screen-timeline-row candidate-timeline-row is-full-width" style={{ width: '100%', maxWidth: '100%' }}>
+              <LinearEventsTimeline
+                events={linearTimelineEvents}
+                matchId={matchId}
+                matchTitle={sourceTeams.length >= 2 ? `${sourceTeams[0]} vs ${sourceTeams[1]}` : undefined}
+                selectedSeconds={Math.floor(activeSeconds)}
+                vertical={false}
+                onSelectEvent={ev => {
+                  setReplayPlaying(false);
+                  setReplaySeconds(ev.clockSeconds);
+                  syncReplayLocation(ev.clockSeconds);
+                }}
+              />
             </div>
-              <div className="feed-tab-content">
-                {/* Event Filter Pills */}
-                <div className="category-filter-bar">
-                  {(['All', 'Goals', 'Shots', 'Passes', 'Tackles', 'Pressures'] as const).map(cat => (
-                    <button
-                      key={cat}
-                      type="button"
-                      className={`cat-pill-btn ${timelineCategory === cat ? 'active' : ''}`}
-                      onClick={() => setTimelineCategory(cat)}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="events-scroll-container">
-                  <ol className="candidate-history">
-                    {filteredEvents
-                      .slice(-40)
-                      .reverse()
-                      .map(event => (
-                        <li key={event.eventId} className={`event-history-item ${event.eventType === 'Goal' ? 'is-goal-event' : ''}`}>
-                          <div className="event-item-top">
-                            <span className="event-seq-time">{clock(Math.floor(event.clockSeconds))}</span>
-                            <strong className="event-type-label">
-                              {eventLabel(event.eventType)}
-                            </strong>
-                          </div>
-                          <div className="event-item-meta">
-                            <span className="event-team-name">{valueText(event.rawPayload.teamName)}</span>
-                            {Boolean(event.rawPayload.playerName) && (
-                              <span className="event-player-name">· {valueText(event.rawPayload.playerName)}</span>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                  </ol>
-                </div>
-              </div>
-          </aside>
+          )}
         </div>
       )}
 
+      <footer className="candidate-provenance-footer">
+        Source state: {status?.sourceStatus ?? 'candidate_not_canonical'} · coordinates {status?.coordinateStatus ?? 'unverified'} · player metrics {status?.playerMetricsStatus ?? 'unvalidated'}
+      </footer>
     </section>
   );
 }

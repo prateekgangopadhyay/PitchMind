@@ -84,37 +84,31 @@ internal static class SimulationEndpoints
             return Problem(context, StatusCodes.Status404NotFound, "TEAM_NOT_FOUND", "Team profile not found.");
         });
 
-        group.MapGet("/players", (HttpContext context) =>
+        group.MapGet("/players", async (IPlayerIntelligenceService intelligenceService, HttpContext context) =>
         {
-            var data = GetSimulationData();
-            if (data == null || !data.RootElement.TryGetProperty("players", out var element))
-                return Problem(context, StatusCodes.Status503ServiceUnavailable, "SIMULATION_UNAVAILABLE", "Simulation data is unavailable.");
+            var list = new List<object>();
+            var ids = new List<string>();
+            var path = FindRepositoryFile("data/simulations/manchester-united-liverpool-players.json");
+            if (File.Exists(path))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(path));
+                foreach (var el in doc.RootElement.EnumerateArray())
+                    if (el.TryGetProperty("id", out var idProp) && idProp.GetString() is { } id)
+                        ids.Add(id);
+            }
 
-            return Results.Json(element, contentType: "application/json");
+            foreach (var id in ids)
+            {
+                var p = await intelligenceService.GetPlayerIntelligenceAsync(id, null, null, null, invokeAiAgent: false, context.RequestAborted);
+                list.Add(p);
+            }
+            return Results.Ok(list);
         });
 
-        group.MapGet("/players/{playerId}", (string playerId, HttpContext context) =>
+        group.MapGet("/players/{playerId}", async (string playerId, IPlayerIntelligenceService intelligenceService, HttpContext context) =>
         {
-            var data = GetSimulationData();
-            if (data == null || !data.RootElement.TryGetProperty("players", out var element))
-                return Problem(context, StatusCodes.Status503ServiceUnavailable, "SIMULATION_UNAVAILABLE", "Simulation data is unavailable.");
-
-            foreach (var player in element.EnumerateArray())
-            {
-                if (player.TryGetProperty("id", out var idProp) &&
-                    string.Equals(idProp.GetString(), playerId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Results.Json(player, contentType: "application/json");
-                }
-            }
-
-            // Fallback to first player if id not found
-            if (element.GetArrayLength() > 0)
-            {
-                return Results.Json(element[0], contentType: "application/json");
-            }
-
-            return Problem(context, StatusCodes.Status404NotFound, "PLAYER_NOT_FOUND", "Player intelligence profile not found.");
+            var result = await intelligenceService.GetPlayerIntelligenceAsync(playerId, null, null, null, context.RequestAborted);
+            return Results.Ok(result);
         });
 
         group.MapGet("/insights", (HttpContext context) =>

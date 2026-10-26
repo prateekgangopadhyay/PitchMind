@@ -36,14 +36,24 @@ it('loads both teams from the candidate PostgreSQL backfill and labels their pos
     expect(container.textContent).toContain('Home keeper');
     expect(container.textContent).toContain('Away forward');
     expect(container.textContent).toContain('source-event-1');
-    expect(container.textContent).toContain('unverified');
-    expect(container.querySelector('.candidate-source-scoreboard')?.getAttribute('aria-label')).toContain('Home FC 0, Away FC 0');
-    expect([...container.querySelectorAll('.source-score-team strong')].map(node => node.textContent)).toEqual(['0', '0']);
+    expect(container.querySelector('.candidate-match-hero-banner')).toBeNull();
     expect(container.querySelector('.candidate-pitch')?.getAttribute('aria-label')).toContain('orientation unverified');
     expect(container.querySelector('.candidate-ball-marker')).not.toBeNull();
     expect(Number(container.querySelector('.candidate-player.home')?.getAttribute('cx'))).toBeCloseTo(7.7);
+
+    // Verify whole-width pitch and timeline below it
+    const pitchSection = container.querySelector('.match-screen-pitch-col');
+    const timelineRow = container.querySelector('.match-screen-timeline-row');
+    expect(pitchSection).not.toBeNull();
+    expect(timelineRow).not.toBeNull();
+    expect(pitchSection?.classList.contains('is-full-width')).toBe(true);
+    expect(timelineRow?.classList.contains('is-full-width')).toBe(true);
+
+    // Timeline is positioned after the pitch section in document order
+    expect(pitchSection!.compareDocumentPosition(timelineRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   } finally {
     await act(async () => root.unmount());
     container.remove();
   }
 });
+

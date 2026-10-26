@@ -83,6 +83,24 @@ internal static class ApiSecurity
                         // Never accept access_token from query strings on other API routes.
                         if (GetMatchHubQueryToken(context.Request) is { } token)
                             context.Token = token;
+
+                        if (builder.Environment.IsDevelopment())
+                        {
+                            var candidateToken = context.Token;
+                            if (string.IsNullOrWhiteSpace(candidateToken))
+                            {
+                                var authorization = context.Request.Headers.Authorization.ToString();
+                                if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) && authorization.Length <= 8200)
+                                    candidateToken = authorization[7..].Trim();
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(candidateToken) &&
+                                TryCreateDevelopmentPrincipalFromToken(candidateToken, BearerScheme, out var devPrincipal))
+                            {
+                                context.Principal = devPrincipal;
+                                context.Success();
+                            }
+                        }
                         return Task.CompletedTask;
                     }
                 };
@@ -125,7 +143,7 @@ internal static class ApiSecurity
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
             headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-            headers["Content-Security-Policy"] = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'self' https://login.microsoftonline.com; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://login.microsoftonline.com https://*.service.signalr.net wss://*.service.signalr.net";
+            headers["Content-Security-Policy"] = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'self' https://login.microsoftonline.com https://accounts.google.com; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; connect-src 'self' https://login.microsoftonline.com https://accounts.google.com https://*.service.signalr.net wss://*.service.signalr.net";
             if (localSyntheticDemo)
                 headers["X-PitchMind-Data-Class"] = "synthetic-demo";
             return Task.CompletedTask;
@@ -170,6 +188,59 @@ internal static class ApiSecurity
                 throw new InvalidOperationException("Cors:AllowedOrigins must contain explicit HTTPS origins (or loopback HTTP in Development); wildcards and paths are not allowed.");
         }
         return origins;
+    }
+
+    internal static bool TryCreateDevelopmentPrincipalFromToken(string token, string schemeName, out ClaimsPrincipal principal)
+    {
+        principal = null!;
+        const string prefix = "pmdev.v1.";
+        if (!token.StartsWith(prefix, StringComparison.Ordinal) || token.Length > 4096)
+            return false;
+
+        try
+        {
+            var encoded = token[prefix.Length..].Replace('-', '+').Replace('_', '/');
+            encoded = encoded.PadRight((encoded.Length + 3) / 4 * 4, '=');
+            var payload = Convert.FromBase64String(encoded);
+            using var document = JsonDocument.Parse(payload, new JsonDocumentOptions { MaxDepth = 4 });
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 2 ||
+                root.EnumerateObject().Select(property => property.Name).Distinct(StringComparer.Ordinal).Count() != 2 ||
+                !root.TryGetProperty("sub", out var subject) || subject.ValueKind != JsonValueKind.String ||
+                !root.TryGetProperty("roles", out var roles) || roles.ValueKind != JsonValueKind.Array)
+                return false;
+
+            var roleValues = roles.EnumerateArray()
+                .Where(role => role.ValueKind == JsonValueKind.String)
+                .Select(role => role.GetString()!)
+                .ToArray();
+            if (roleValues.Length != roles.GetArrayLength() ||
+                !TryCreateDevelopmentPrincipal(subject.GetString() ?? string.Empty, roleValues, schemeName, out principal))
+                return false;
+
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool TryCreateDevelopmentPrincipal(string subject, IReadOnlyCollection<string> requestedRoles,
+        string schemeName, out ClaimsPrincipal principal)
+    {
+        principal = new ClaimsPrincipal();
+        var allowedRoles = new HashSet<string>(StringComparer.Ordinal) { "fan", "analyst", "admin" };
+        if (subject.Length is < 1 or > 128 || subject.Any(char.IsControl) || requestedRoles.Count == 0 ||
+            requestedRoles.Count > allowedRoles.Count || requestedRoles.Any(role => !allowedRoles.Contains(role)) ||
+            requestedRoles.Distinct(StringComparer.Ordinal).Count() != requestedRoles.Count)
+            return false;
+
+        var claims = new List<Claim> { new("sub", subject), new("name", subject) };
+        claims.AddRange(requestedRoles.Select(role => new Claim("roles", role)));
+        var identity = new ClaimsIdentity(claims, schemeName, "sub", "roles");
+        principal = new ClaimsPrincipal(identity);
+        return true;
     }
 }
 
@@ -237,55 +308,16 @@ internal sealed class DevelopmentHeaderAuthenticationHandler(
     private bool TryCreateDevelopmentTicket(string token, out AuthenticationTicket ticket)
     {
         ticket = null!;
-        const string prefix = "pmdev.v1.";
-        if (!token.StartsWith(prefix, StringComparison.Ordinal) || token.Length > 4096)
+        if (!ApiSecurity.TryCreateDevelopmentPrincipalFromToken(token, Scheme.Name, out var principal))
             return false;
 
-        try
-        {
-            var encoded = token[prefix.Length..].Replace('-', '+').Replace('_', '/');
-            encoded = encoded.PadRight((encoded.Length + 3) / 4 * 4, '=');
-            var payload = Convert.FromBase64String(encoded);
-            using var document = JsonDocument.Parse(payload, new JsonDocumentOptions { MaxDepth = 4 });
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 2 ||
-                root.EnumerateObject().Select(property => property.Name).Distinct(StringComparer.Ordinal).Count() != 2 ||
-                !root.TryGetProperty("sub", out var subject) || subject.ValueKind != JsonValueKind.String ||
-                !root.TryGetProperty("roles", out var roles) || roles.ValueKind != JsonValueKind.Array)
-                return false;
-
-            var roleValues = roles.EnumerateArray()
-                .Where(role => role.ValueKind == JsonValueKind.String)
-                .Select(role => role.GetString()!)
-                .ToArray();
-            if (roleValues.Length != roles.GetArrayLength() ||
-                !TryCreateDevelopmentPrincipal(subject.GetString() ?? string.Empty, roleValues, out var principal))
-                return false;
-
-            ticket = new AuthenticationTicket(principal, Scheme.Name);
-            return true;
-        }
-        catch (Exception exception) when (exception is FormatException or JsonException)
-        {
-            return false;
-        }
+        ticket = new AuthenticationTicket(principal, Scheme.Name);
+        return true;
     }
 
     private bool TryCreateDevelopmentPrincipal(string subject, IReadOnlyCollection<string> requestedRoles,
-        out ClaimsPrincipal principal)
-    {
-        principal = new ClaimsPrincipal();
-        if (subject.Length is < 1 or > 128 || subject.Any(char.IsControl) || requestedRoles.Count == 0 ||
-            requestedRoles.Count > Roles.Count || requestedRoles.Any(role => !Roles.Contains(role)) ||
-            requestedRoles.Distinct(StringComparer.Ordinal).Count() != requestedRoles.Count)
-            return false;
-
-        var claims = new List<Claim> { new("sub", subject) };
-        claims.AddRange(requestedRoles.Select(role => new Claim("roles", role)));
-        var identity = new ClaimsIdentity(claims, Scheme.Name, "sub", "roles");
-        principal = new ClaimsPrincipal(identity);
-        return true;
-    }
+        out ClaimsPrincipal principal) =>
+        ApiSecurity.TryCreateDevelopmentPrincipal(subject, requestedRoles, Scheme.Name, out principal);
 
     protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
     {

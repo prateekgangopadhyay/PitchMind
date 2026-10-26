@@ -8,6 +8,8 @@ import { CandidateLiveMatchPage } from './CandidateLiveMatchPage';
 import { toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 import { isEntraAuthMode, signOutMicrosoft } from './entraAuth';
 
+import { TopMatchScoreboardAndSlider } from './TopMatchScoreboardAndSlider';
+
 export function App() {
   const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/home');
   const authSession = useSyncExternalStore(subscribeAuth, getStoredAuthSession, () => null);
@@ -111,8 +113,14 @@ export function App() {
                   className="popover-signout-btn"
                   onClick={() => {
                     setShowUserMenu(false);
-                    if (isEntraAuthMode()) void signOutMicrosoft();
-                    else {
+                    const currentSession = getStoredAuthSession();
+                    if (currentSession?.user?.provider === 'google') {
+                      logoutSimulated();
+                      window.history.pushState({}, '', '/welcome');
+                      window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+                    } else if (isEntraAuthMode()) {
+                      void signOutMicrosoft();
+                    } else {
                       logoutSimulated();
                       window.history.pushState({}, '', '/welcome');
                       window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
@@ -129,6 +137,15 @@ export function App() {
       <DeploymentVersionBanner />
       <span className="tag sr-only">Match data with source details</span>
     </header>
+    {route.kind !== 'welcome' && (
+      <TopMatchScoreboardAndSlider
+        matchId={matchId}
+        selectedSeconds={selectedSeconds ?? (candidateStream.status?.matchId === matchId ? candidateStream.status?.currentClockValue ?? 0 : 0)}
+        revision={revision}
+        pathname={pathname}
+        isLiveCandidate={Boolean(candidateStream.status?.matchId)}
+      />
+    )}
     <main id="main-content" tabIndex={-1}>
       {route.kind === 'candidate-live' || (route.kind === 'matches' && !route.matchId && !params.has('matchId') && Boolean(candidateStream.status?.matchId))
         ? <CandidateLiveMatchPage selectedSeconds={selectedSeconds} />
@@ -138,7 +155,7 @@ export function App() {
           <CanonicalMatchPage key={`${matchId}:${route.replay}`} matchId={matchId} selectedSeconds={selectedAtSeconds}
             requestedRevision={revision} replay={route.replay} initialMode={realtimeMode} />
         </RealtimeAuthProvider>
-        : <RoutePage route={route} search={search} />}
+        : <RoutePage route={route} search={search} contextMatchId={matchId} contextSeconds={selectedSeconds} />}
     </main>
   </div>;
 }

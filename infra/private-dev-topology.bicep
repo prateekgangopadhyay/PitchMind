@@ -21,6 +21,8 @@ param environmentName string = 'pm-dev-private-cae'
 param appImage string
 param entraTenantId string = tenant().tenantId
 param entraClientId string = '4accaf35-1ae9-4e7d-999d-3f86fd7caec4'
+@description('Name of an existing Key Vault from which DEV secrets (such as database credentials) are resolved.')
+param keyVaultName string = ''
 
 param postgresServerName string = 'pitchmind-postgresql-dev'
 @description('Object ID of the existing DEV migration identity; its PostgreSQL administrator mapping is removed after migration succeeds.')
@@ -271,6 +273,30 @@ resource workerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-0
   location: location
 }
 
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = if (deployPrivateDevTopology && !empty(keyVaultName)) {
+  name: keyVaultName
+}
+
+resource apiKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && !empty(keyVaultName)) {
+  scope: keyVault
+  name: guid(keyVault.id, apiIdentity.id, 'KeyVaultSecretsUser')
+  properties: {
+    principalId: apiIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')
+  }
+}
+
+resource workerKeyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed && !empty(keyVaultName)) {
+  scope: keyVault
+  name: guid(keyVault.id, workerIdentity.id, 'KeyVaultSecretsUser')
+  properties: {
+    principalId: workerIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-40ee-b8d7-50c29e7e35b6')
+  }
+}
+
 resource candidateEventHubSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
   scope: candidateEventHub
   name: guid(candidateEventHub.id, apiIdentity.id, 'EventHubsDataSender')
@@ -333,7 +359,7 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = if (d
   properties: {
     authConfig: {
       activeDirectoryAuth: 'Enabled'
-      passwordAuth: 'Disabled'
+      passwordAuth: 'Enabled'
       tenantId: tenant().tenantId
     }
     backup: {
@@ -570,6 +596,18 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
           identity: pullIdentity.id
         }
       ]
+      secrets: !empty(keyVaultName) ? [
+        {
+          name: 'postgres-connection-string'
+          keyVaultUrl: '${keyVault!.properties.vaultUri}secrets/postgres-connection-string'
+          identity: apiIdentity.id
+        }
+        {
+          name: 'foundry-api-key'
+          keyVaultUrl: '${keyVault!.properties.vaultUri}secrets/foundry-api-key'
+          identity: apiIdentity.id
+        }
+      ] : []
     }
     template: {
       containers: [
@@ -586,7 +624,20 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             // The SPA still requests the exposed api://<client-id>/Match.Read scope.
             { name: 'Identity__Audience', value: entraClientId }
             { name: 'Azure__ManagedIdentityClientId', value: apiIdentity!.properties.clientId }
-            { name: 'ConnectionStrings__PitchMind', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15' }
+            (!empty(keyVaultName) ? {
+              name: 'ConnectionStrings__PitchMind'
+              secretRef: 'postgres-connection-string'
+            } : {
+              name: 'ConnectionStrings__PitchMind'
+              value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_api;SSL Mode=VerifyFull;Timeout=15'
+            })
+            (!empty(keyVaultName) ? {
+              name: 'Foundry__ApiKey'
+              secretRef: 'foundry-api-key'
+            } : {
+              name: 'Foundry__ApiKey'
+              value: ''
+            })
             { name: 'EventHubs__Namespace', value: enableCandidateFeed ? '${eventHubsNamespace.name}.servicebus.windows.net' : '' }
             { name: 'EventHubs__CandidateHubName', value: enableCandidateFeed ? candidateEventHubName : '' }
             { name: 'Storage__BlobServiceUri', value: enableCandidateFeed ? 'https://${storageAccountName}.blob.core.windows.net' : '' }
@@ -614,7 +665,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
     story: 'EP02-S04'
     imageDigestDeployment: 'true'
   }
-  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase, candidateEventHubSender, signalRAppServer, redisCandidateAccess, provisionedRedisCandidateAccess]
+  dependsOn: [registryPull, existingPostgresAdministrator, postgresMigrationAdministrator, pitchMindDatabase, existingPitchMindDatabase, candidateEventHubSender, signalRAppServer, redisCandidateAccess, provisionedRedisCandidateAccess, apiKeyVaultSecretsUser]
 }
 
 resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopology && enableCandidateFeed) {
@@ -634,6 +685,13 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
       registries: [
         { server: registry.properties.loginServer, identity: pullIdentity.id }
       ]
+      secrets: !empty(keyVaultName) ? [
+        {
+          name: 'postgres-worker-connection-string'
+          keyVaultUrl: '${keyVault!.properties.vaultUri}secrets/postgres-worker-connection-string'
+          identity: workerIdentity.id
+        }
+      ] : []
     }
     template: {
       containers: [
@@ -651,7 +709,13 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
             { name: 'Storage__BlobServiceUri', value: 'https://${storageAccountName}.blob.core.windows.net' }
             { name: 'Storage__CheckpointContainer', value: candidateCheckpointContainer }
             { name: 'Azure__ManagedIdentityClientId', value: workerIdentity!.properties.clientId }
-            { name: 'ConnectionStrings__PitchMind', value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_worker;SSL Mode=VerifyFull;Timeout=15' }
+            (!empty(keyVaultName) ? {
+              name: 'ConnectionStrings__PitchMind'
+              secretRef: 'postgres-worker-connection-string'
+            } : {
+              name: 'ConnectionStrings__PitchMind'
+              value: 'Host=${postgresServerName}.postgres.database.azure.com;Database=pitchmind;Username=pitchmind_worker;SSL Mode=VerifyFull;Timeout=15'
+            })
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
@@ -660,7 +724,7 @@ resource eventWorker 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivat
     }
   }
   tags: { application: 'PitchMind', environment: 'dev', story: 'EP03-S03' }
-  dependsOn: [registryPull, candidateEventHubReceiver, workerBlobDataContributor, checkpointContainer, blobPrivateDnsZoneGroup, postgresMigrationAdministrator, existingPostgresAdministrator, pitchMindDatabase, existingPitchMindDatabase]
+  dependsOn: [registryPull, candidateEventHubReceiver, workerBlobDataContributor, checkpointContainer, blobPrivateDnsZoneGroup, postgresMigrationAdministrator, existingPostgresAdministrator, pitchMindDatabase, existingPitchMindDatabase, workerKeyVaultSecretsUser]
 }
 
 resource databaseMigrationJob 'Microsoft.App/jobs@2024-03-01' = if (deployPrivateDevTopology) {

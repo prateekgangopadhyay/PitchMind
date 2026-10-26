@@ -4,6 +4,7 @@ import { clock, provenanceLabel } from './api';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { contextHref, resolveRoute, selectedTimeFromSearch } from './routes';
+import { useCanonicalFixtures } from './ShellPages';
 describe('Match experience', () => {
   it('renders the route shell and honest loading state without inventing match facts', () => {
     const markup = renderToStaticMarkup(createElement(App));
@@ -58,7 +59,7 @@ describe('canonical provenance labels', () => {
     expect(provenanceLabel('official-source')).toBe('official-source');
   });
 
-  it('shows the simulated label on canonical Home match cards', async () => {
+  it('does not render legacy match cards or disclaimer on Home page', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     window.history.replaceState(null, '', '/home');
     vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -73,7 +74,9 @@ describe('canonical provenance labels', () => {
     const root = createRoot(container);
     try {
       await act(async () => { root.render(createElement(App)); });
-      expect(container.textContent).toContain('Synthetic match');
+      expect(container.querySelector('.match-card.match-row')).toBeNull();
+      expect(container.querySelector('.home-contract-limit')).toBeNull();
+      expect(container.querySelector('.match-count')).toBeNull();
     } finally {
       await act(async () => root.unmount());
       vi.unstubAllGlobals();
@@ -452,7 +455,7 @@ it.each(['frame-page-projection-revision', 'frame-item-projection-revision', 'ne
   }
 );
 
-it('renders persisted home cards from canonical fields and keeps the match id in navigation', async () => {
+it('keeps the match id in navigation and filters by phase on Home without legacy match cards', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';
   const card = (matchId: string, phase: string, homeScore: number, awayScore: number) => ({
@@ -466,21 +469,14 @@ it('renders persisted home cards from canonical fields and keeps the match id in
   const root = createRoot(container);
   try {
     await act(async () => { root.render(createElement(App)); });
-    expect(container.textContent).toContain('Synthetic match');
-    expect(container.textContent).toContain('Home1–0Away');
-    expect(container.textContent).toContain(firstId);
-    expect(container.textContent).toContain('Second half');
-    const firstLink = [...container.querySelectorAll<HTMLAnchorElement>('.match-card a.primary-link')].find(link => link.href.includes(firstId));
-    expect(firstLink?.getAttribute('href')).toBe(`/matches/${firstId}?matchId=${firstId}&atSeconds=1200&revision=5`);
-    const secondLink = [...container.querySelectorAll<HTMLAnchorElement>('.match-card a.primary-link')].find(link => link.href.includes(secondId));
-    expect(secondLink?.getAttribute('href')).toBe(`/matches/${secondId}?matchId=${secondId}&atSeconds=2700&revision=5`);
+    expect(container.querySelector('.match-card.match-row')).toBeNull();
+    expect(container.querySelector('.home-contract-limit')).toBeNull();
+    expect(container.querySelector('.match-count')).toBeNull();
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(phaseFilter, 'secondhalf');
       phaseFilter.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    expect(container.textContent).toContain(firstId);
-    expect(container.textContent).not.toContain(secondId);
     expect(window.location.search).toBe(`?matchId=${firstId}&atSeconds=1200&revision=5&phase=secondhalf`);
     expect(container.textContent).not.toContain('Arsenal');
   } finally {
@@ -568,6 +564,30 @@ it('offers the API-backed candidate live feed when canonical fixtures are empty'
   }
 });
 
+function FixturesTestHarness({ phase }: { phase?: string } = {}) {
+  const { page, error, loading, loadingMore, moreError, retry, loadMore } = useCanonicalFixtures();
+  const items = page?.items ?? [];
+  const visible = phase ? items.filter(m => m.phase === phase) : items;
+  return (
+    <div className="fixtures-test-harness">
+      {loading && <p>Loading canonical match data…</p>}
+      {error && <p className="error">{error}</p>}
+      {visible.length === 0 && !loading && <p>No matches are available in this phase.</p>}
+      <select aria-label="Filter matches by phase" value={phase ?? 'all'} onChange={() => {}}>
+        <option value={phase ?? 'all'}>{phase ?? 'all'}</option>
+      </select>
+      <ul>{visible.map(m => <li key={m.matchId}>{m.matchId}</li>)}</ul>
+      {page?.hasMore && (
+        <button className="load-more" type="button" onClick={loadMore} disabled={loadingMore}>
+          More matches
+        </button>
+      )}
+      <button className="refresh-matches" type="button" onClick={retry}>Refresh</button>
+      {moreError && <p>{moreError}</p>}
+    </div>
+  );
+}
+
 it('follows the canonical fixtures cursor when more persisted matches exist', async () => {
   const firstId = '11111111-1111-1111-1111-111111111111';
   const secondId = '22222222-2222-2222-2222-222222222222';
@@ -587,9 +607,9 @@ it('follows the canonical fixtures cursor when more persisted matches exist', as
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
-    await act(async () => { root.render(createElement(App)); });
+    await act(async () => { root.render(createElement(FixturesTestHarness)); });
     expect(container.textContent).toContain(firstId);
-    await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.load-more')!.click(); });
     expect(container.textContent).toContain(secondId);
     const homeRequests = fetchMock.mock.calls.map(([url]) => url).filter(url => !new URL(url, 'http://localhost').pathname.endsWith('/simulation/candidate/status'));
     expect(homeRequests).toHaveLength(2);
@@ -623,12 +643,11 @@ it('keeps a phase filter across cursor pages and does not claim the later phase 
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
-    await act(async () => { root.render(createElement(App)); });
+    await act(async () => { root.render(<FixturesTestHarness phase="secondhalf" />); });
     const phaseFilter = container.querySelector<HTMLSelectElement>('[aria-label="Filter matches by phase"]')!;
     expect(phaseFilter.value).toBe('secondhalf');
     expect(container.textContent).toContain('No matches are available in this phase.');
     expect(container.querySelector('.load-more')).not.toBeNull();
-    expect(container.textContent).toContain('No matches are available in this phase.');
     await act(async () => { container.querySelector<HTMLButtonElement>('.load-more')!.click(); });
     expect(container.textContent).toContain(secondId);
     expect(container.textContent).not.toContain(firstId);
@@ -668,11 +687,11 @@ it('aborts and ignores a pending cursor page when Home is refreshed', async () =
   const container = document.createElement('div');
   const root = createRoot(container);
   try {
-    await act(async () => { root.render(createElement(App)); });
-    await act(async () => { container.querySelector('.load-more')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { root.render(createElement(FixturesTestHarness)); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.load-more')!.click(); });
     expect(cursorSignal?.aborted).toBe(false);
 
-    await act(async () => { container.querySelector('.refresh-matches')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await act(async () => { container.querySelector<HTMLButtonElement>('.refresh-matches')!.click(); });
     expect(cursorSignal?.aborted).toBe(true);
     expect(container.textContent).toContain(refreshedId);
 

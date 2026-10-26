@@ -332,3 +332,58 @@ public sealed record CanonicalTimelineBackfillResponse(
     bool RevisionChanged,
     bool ReplayRequired,
     long RequestedAfterSequence);
+
+public sealed record PlayerIntelligenceTouchPoint(double X, double Y, string Type, int Minute, string Outcome);
+public sealed record PlayerIntelligenceCarryVector(double StartX, double StartY, double EndX, double EndY, string Distance);
+public sealed record PlayerIntelligenceChanceVector(double FromX, double FromY, double ToX, double ToY, string Recipient, string Outcome, double XA, int Minute);
+public sealed record PlayerIntelligenceReceivingZone(string Zone, double Pct);
+public sealed record PlayerIntelligenceDefensiveAction(double X, double Y, string Action, int Minute, string Outcome);
+public sealed record PlayerIntelligenceCumulativeXA(int Minute, double Value);
+public sealed record PlayerIntelligenceMetricComparison(string Label, double Player, double Opponent);
+public sealed record PlayerIntelligenceRecentImpact(string Clock, string Title, string Summary, IReadOnlyList<string>? Tags = null, bool Active = false, int Seconds = 0);
+public sealed record PlayerIntelligenceMatchStats(
+    int ChancesCreated,
+    int ProgressiveCarries,
+    double XA,
+    int DuelsWon,
+    int PassAccuracy,
+    int Touches,
+    int Shots,
+    int DribblesCompleted);
+
+public sealed record PlayerIntelligenceComparisonData(
+    string OpponentPlayer,
+    IReadOnlyList<PlayerIntelligenceMetricComparison> Metrics,
+    string? LeagueCategory = null,
+    object? Player1 = null,
+    object? Player2 = null);
+
+public sealed record PlayerIntelligenceResponse(
+    string Id,
+    string Name,
+    int Number,
+    string Role,
+    string Club,
+    string Nationality,
+    int Age,
+    int MinutesPlayed,
+    string? TeamLogo,
+    string? PreferredFoot,
+    string? KeyQuote,
+    IReadOnlyList<string> Tags,
+    PlayerIntelligenceMatchStats MatchStats,
+    IReadOnlyList<string> WhyItMatters,
+    IReadOnlyList<PlayerIntelligenceTouchPoint> Touches,
+    IReadOnlyList<PlayerIntelligenceCarryVector> ProgressiveCarries,
+    IReadOnlyList<PlayerIntelligenceChanceVector> ChanceCreation,
+    IReadOnlyList<PlayerIntelligenceReceivingZone> ReceivingZones,
+    IReadOnlyList<PlayerIntelligenceDefensiveAction> DefensiveWork,
+    IReadOnlyList<PlayerIntelligenceCumulativeXA> CumulativeXA,
+    PlayerIntelligenceComparisonData Comparison,
+    IReadOnlyList<PlayerIntelligenceRecentImpact> RecentImpact,
+    string AnalystAssessment,
+    object? MatchContext = null,
+    object? ProgressiveCarriesStat = null,
+    object? ChanceCreationStat = null,
+    object? DefensiveWorkStats = null);
+
