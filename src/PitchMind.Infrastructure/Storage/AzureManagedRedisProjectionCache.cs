@@ -166,6 +166,35 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
         }
     }
 
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(_timeoutMs);
+
+            using var client = await ConnectAsync(cts.Token).ConfigureAwait(false);
+            if (client is null) return;
+
+            using var stream = await OpenStreamAsync(client, cts.Token).ConfigureAwait(false);
+
+            var cmd = "*1\r\n$7\r\nFLUSHDB\r\n";
+            var cmdBytes = Encoding.UTF8.GetBytes(cmd);
+            await stream.WriteAsync(cmdBytes, cts.Token).ConfigureAwait(false);
+            await stream.FlushAsync(cts.Token).ConfigureAwait(false);
+
+            await ReadSimpleStringAsync(stream, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Azure Managed Redis FLUSHDB failed; continuing safely");
+        }
+    }
+
     public async Task<bool> PingAsync(CancellationToken cancellationToken)
     {
         try

@@ -14,6 +14,8 @@ describe('Match experience', () => {
     expect(markup).toContain('aria-label="Main navigation"');
     expect(markup).toContain('Choose a match');
     expect(markup).toContain('Loading canonical match data');
+    expect(markup).toContain('Clear Data');
+    expect(markup).toContain('clear-data-pill');
     expect(markup).not.toContain('Arsenal');
   });
   it('formats selected time without losing seconds at period boundaries', () => {

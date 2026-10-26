@@ -33,6 +33,12 @@ public sealed class MemoryMatchProjectionCache : IMatchProjectionCache
         return Task.CompletedTask;
     }
 
+    public Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        entries.Clear();
+        return Task.CompletedTask;
+    }
+
     public void Clear() => entries.Clear();
 
     private sealed record CacheEntry(byte[] Data, DateTimeOffset ExpiresAtUtc);

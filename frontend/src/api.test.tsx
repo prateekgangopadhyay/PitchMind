@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askCandidateAnalyst, getCandidateAnalystAgents, getHostAccessToken, request } from './api';
+import { askCandidateAnalyst, clearAllDevData, getCandidateAnalystAgents, getHostAccessToken, request } from './api';
 
 describe('host access-token boundary', () => {
   afterEach(() => {
@@ -46,5 +46,19 @@ describe('host access-token boundary', () => {
 
     expect(result.agentName).toBe('GoalkeeperAnalyst');
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).agentName).toBe('GoalkeeperAnalyst');
+  });
+
+  it('posts to simulation/clear-data when clearing dev database and cache records', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ cleared: true, clearedTables: 12, message: 'Cleaned database tables and flushed projection cache.' })
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await clearAllDevData();
+
+    expect(result.cleared).toBe(true);
+    expect(result.clearedTables).toBe(12);
+    expect(fetcher.mock.calls[0][0]).toBe('/api/v1/simulation/clear-data');
+    expect(fetcher.mock.calls[0][1]?.method).toBe('POST');
   });
 });

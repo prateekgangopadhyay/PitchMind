@@ -1,5 +1,8 @@
 using System.Text.Json;
+using Npgsql;
+using PitchMind.Application.Abstractions;
 using PitchMind.Contracts.V1;
+using PitchMind.Infrastructure.Storage;
 
 namespace PitchMind.Api;
 
@@ -221,6 +224,32 @@ internal static class SimulationEndpoints
                 "CANONICAL_MATCH_DATA_UNAVAILABLE",
                 "Tactical analysis is unavailable until canonical match evidence is configured.",
                 "The simulation preview is not an authoritative evidence packet and cannot be used to publish match-specific analysis."));
+
+        group.MapPost("/clear-data", async (HttpContext context, IServiceProvider services) =>
+        {
+            var dataSource = services.GetService<NpgsqlDataSource>();
+            var cache = services.GetService<IMatchProjectionCache>();
+            var count = await DataClearingService.ClearAllAsync(dataSource, cache, context.RequestAborted).ConfigureAwait(false);
+
+            var candidateSimulation = services.GetService<LocalCandidateSimulationService>();
+            if (candidateSimulation is not null)
+            {
+                await candidateSimulation.ResetAsync(context.RequestAborted).ConfigureAwait(false);
+            }
+
+            var simulationStreamer = services.GetService<ISimulationStreamer>();
+            if (simulationStreamer is not null)
+            {
+                await simulationStreamer.PauseAsync(context.RequestAborted).ConfigureAwait(false);
+            }
+
+            return Results.Ok(new
+            {
+                cleared = true,
+                clearedTables = count,
+                message = "All records from the database and cache have been successfully cleared."
+            });
+        });
 
         return app;
     }

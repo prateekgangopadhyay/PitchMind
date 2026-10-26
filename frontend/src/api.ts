@@ -739,6 +739,16 @@ export function stepSimulationStream(signal?: AbortSignal): Promise<SimulationSt
   return request<SimulationStreamStatus>('simulation/stream/step', signal, {});
 }
 
+export interface ClearDataResult {
+  cleared: boolean;
+  clearedTables: number;
+  message: string;
+}
+
+export function clearAllDevData(signal?: AbortSignal): Promise<ClearDataResult> {
+  return request<ClearDataResult>('simulation/clear-data', signal, {});
+}
+
 export interface SimulationAnalystRequest {
   insightId: string;
   atSeconds: number;

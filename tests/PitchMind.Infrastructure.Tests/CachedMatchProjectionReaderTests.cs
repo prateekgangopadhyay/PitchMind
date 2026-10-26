@@ -216,6 +216,12 @@ public sealed class CachedMatchProjectionReaderTests
             Values.Remove(key);
             return Task.CompletedTask;
         }
+
+        public Task ClearAsync(CancellationToken cancellationToken = default)
+        {
+            Values.Clear();
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class TestProjectionReader(SelectedMatchProjection projection) : IMatchProjectionReader

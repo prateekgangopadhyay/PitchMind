@@ -4930,6 +4930,48 @@ a[href*='#open-player'] {
   color: #4aefac !important;
 }
 
+.clear-data-pill {
+  background: rgba(244, 63, 94, 0.12) !important;
+  border: 1px solid rgba(244, 63, 94, 0.35) !important;
+  border-radius: 20px !important;
+  padding: 3px 10px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  color: #fb7185 !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  line-height: 1.2 !important;
+}
+
+.clear-data-pill:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.22) !important;
+  border-color: rgba(244, 63, 94, 0.65) !important;
+  color: #ffe4e6 !important;
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.28) !important;
+  transform: translateY(-1px) !important;
+}
+
+.clear-data-pill:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.clear-data-pill:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.clear-data-pill .clear-icon {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.clear-data-pill:hover:not(:disabled) .clear-icon {
+  transform: rotate(-10deg);
+}
+
 .pulse-dot {
   width: 7px !important;
   height: 7px !important;
@@ -11967,7 +12009,8 @@ button:active,
   .main-navigation a { min-height: 40px; font-size: 11px; }
   .brand-name { font-size: 19px; }
   .header-right-controls { position: absolute; top: 9px; right: 16px; }
-  .header-right-controls .live-status-pill { min-height: 32px; padding: 6px 10px; font-size: 10px; }
+  .header-right-controls .live-status-pill,
+  .header-right-controls .clear-data-pill { min-height: 32px; padding: 6px 10px; font-size: 10px; }
   .home-heading-row { align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px; }
   .home-heading-row .page-heading { flex-basis: 100%; }
   .match-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 17px 8px; }

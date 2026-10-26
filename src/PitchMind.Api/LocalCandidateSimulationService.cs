@@ -118,6 +118,21 @@ public sealed class LocalCandidateSimulationService(CandidateFeedSourceCatalog c
             finally { _gate.Release(); }
         }
     }
+    public async Task ResetAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (_session is not null)
+            {
+                await _session.DisposeAsync().ConfigureAwait(false);
+                _session = null;
+            }
+            _streaming = false;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_session is not null) await _session.DisposeAsync().ConfigureAwait(false);

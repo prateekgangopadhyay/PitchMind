@@ -48,6 +48,17 @@ public sealed class AzureEntraRedisProjectionCache : IMatchProjectionCache, IAsy
         catch (Exception ex) { _logger?.LogWarning(ex, "Redis cursor removal failed."); }
     }
 
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var db = await GetDatabaseAsync(cancellationToken).ConfigureAwait(false);
+            await db.ExecuteAsync("FLUSHDB").ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Redis flush failed."); }
+    }
+
     private async Task<IDatabase> GetDatabaseAsync(CancellationToken cancellationToken)
     {
         if (_connection is { IsConnected: true } current) return current.GetDatabase();

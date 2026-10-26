@@ -9,4 +9,5 @@ public interface IMatchProjectionCache
     Task<byte[]?> GetAsync(string key, CancellationToken cancellationToken);
     Task SetAsync(string key, byte[] value, TimeSpan timeToLive, CancellationToken cancellationToken);
     Task RemoveAsync(string key, CancellationToken cancellationToken);
+    Task ClearAsync(CancellationToken cancellationToken = default);
 }

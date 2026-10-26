@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { DEFAULT_ANALYST_AVATAR, getHostAccessToken, getStoredAuthSession, logoutSimulated, subscribeAuth } from './api';
+import { DEFAULT_ANALYST_AVATAR, clearAllDevData, getHostAccessToken, getStoredAuthSession, logoutSimulated, subscribeAuth } from './api';
 import { RoutePage } from './ShellPages';
 import { CanonicalMatchPage } from './CanonicalMatchPage';
 import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
@@ -14,6 +14,27 @@ export function App() {
   const location = useSyncExternalStore(subscribeLocation, currentLocation, () => '/home');
   const authSession = useSyncExternalStore(subscribeAuth, getStoredAuthSession, () => null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [clearingData, setClearingData] = useState(false);
+
+  const handleClearData = async () => {
+    if (typeof window !== 'undefined' && !window.confirm('Are you sure you want to clear all records from the database and cache?')) {
+      return;
+    }
+    setClearingData(true);
+    try {
+      const res = await clearAllDevData();
+      if (typeof window !== 'undefined') {
+        window.alert(`Data cleared: ${res.message || 'All database records and cache flushed successfully.'}`);
+        window.location.reload();
+      }
+    } catch (err) {
+      if (typeof window !== 'undefined') {
+        window.alert(`Failed to clear data: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } finally {
+      setClearingData(false);
+    }
+  };
 
   const separator = location.indexOf('?');
   const pathname = separator === -1 ? location : location.slice(0, separator);
@@ -59,10 +80,42 @@ export function App() {
       </div>
       {route.kind === 'welcome' ? (
         <div className="welcome-header-auth-cta">
+          <button
+            type="button"
+            className="clear-data-pill"
+            id="welcome-clear-data-button"
+            aria-label="Clear database and cache records"
+            title="Clear all match records from Database and Cache in dev"
+            disabled={clearingData}
+            onClick={() => { void handleClearData(); }}
+          >
+            <svg className="clear-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
+          </button>
           <span className="new-to-pitchmind">New to PitchMind?</span>
         </div>
       ) : (
         <div className="header-right-controls">
+          <button
+            type="button"
+            className="clear-data-pill"
+            id="header-clear-data-button"
+            aria-label="Clear database and cache records"
+            title="Clear all match records from Database and Cache in dev"
+            disabled={clearingData}
+            onClick={() => { void handleClearData(); }}
+          >
+            <svg className="clear-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
+          </button>
           {candidateStreamMatchesContext && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
             aria-pressed={candidateStream.status?.isStreaming ?? false}
             aria-label={candidateStream.status?.isStreaming ? 'Pause candidate live simulation' : 'Resume candidate live simulation'}
