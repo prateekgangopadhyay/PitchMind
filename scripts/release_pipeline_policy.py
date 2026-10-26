@@ -81,8 +81,8 @@ _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "c3d37212570bba7ee89c2e5752d3257c8ff35ddceaa48d3820e288495fff3b1b"
 _PRIVATE_DEV_SOURCE_HASHES: dict[str, str] = {
-    "scripts/private-dev-plan.sh": "2ce9dcd9140370efffa673e1f0f0e3c3bdddaf33b3482d2386f2a93b6e650d89",
-    "scripts/private-dev-deploy.sh": "28ec15895d21d75f8b873565e4bab4046911fc86fad8de42850ffe725b19daaf",
+    "scripts/private-dev-plan.sh": "1023285f4dbda3a7054ad78517132db2a092b8605e43b25d61e91027cdcc5b5f",
+    "scripts/private-dev-deploy.sh": "c2efe76b3466c1e4e147c1c65ee7ec85c28d125319584c3fa47242a90db3394c",
     "scripts/validate_private_dev_network.py": "adec0a92b270b140cff4a1ab1aa0bedabb9288e086dca55ba42265c3a60d1121",
     "scripts/validate_private_dev_whatif.py": "3685cd93dcd68b102b6a935ded1e117b063d12a40839307e7142175f65ec72b1",
     "pipelines/templates/preview-private-dev.yml": "c4cd3b3355194aedafa4b529b58b3132d5b92263e78fa7cafa49da56b3fce971",
