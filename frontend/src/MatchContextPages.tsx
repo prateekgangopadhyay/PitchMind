@@ -67,6 +67,7 @@ export type ContextEvent = {
   type: string;
   sequence: number;
   clockSeconds: number;
+  period?: number;
   teamId?: string;
   teamName?: string;
   playerId?: string;
@@ -184,7 +185,8 @@ function adaptCanonical(
       id: event.eventId,
       type: event.type,
       sequence: event.sequence,
-      clockSeconds: event.clockSeconds
+      clockSeconds: event.clockSeconds,
+      period: event.period
     })),
     insights: insights.items.map(insight => ({
       id: insight.insightId,
@@ -321,6 +323,7 @@ async function loadCandidateContext(matchId: string, seconds: number, signal: Ab
       type: event.eventType,
       sequence: event.sequence,
       clockSeconds: event.clockSeconds,
+      period: event.period,
       teamId: asText(raw.teamId) ?? asText(raw.teamName),
       teamName: asText(raw.teamName),
       playerId: asText(raw.playerId) ?? asText(raw.playerName),

@@ -10,6 +10,7 @@ export interface CommentaryEventInput {
   type: string;
   sequence: number;
   clockSeconds: number;
+  period?: number;
   teamId?: string;
   teamName?: string;
   playerId?: string;
@@ -36,16 +37,18 @@ export interface AiCommentaryItem {
   category: CommentaryCategory;
   headline: string;
   commentaryText: string;
-  tacticalInsight?: string;
   aiAgent: FoundryAgentMetadata;
   teamName?: string;
   playerName?: string;
-  pitchZone?: string;
   impactScore?: number;
   isKeyMoment: boolean;
   citedEventId?: string;
-  liveAiHypothesis?: string;
 }
+
+type AgentReportState =
+  | { status: 'generating' }
+  | { status: 'ready'; answer: string; evidenceIds: string[] }
+  | { status: 'unavailable' };
 
 export interface AiCommentaryTimelineProps {
   events: CommentaryEventInput[];
@@ -60,37 +63,15 @@ export interface AiCommentaryTimelineProps {
 }
 
 /**
- * Resolves pitch zone description from coordinates (0-100 x, 0-100 y)
- */
-function resolvePitchZone(x?: number, y?: number, attackingTowardsRight = true): string {
-  if (x === undefined && y === undefined) return 'in midfield';
-  const normX = x ?? 50;
-  const normY = y ?? 50;
-
-  const attackingX = attackingTowardsRight ? normX : 100 - normX;
-
-  let lateral = 'through the center';
-  if (normY < 32) lateral = 'down the left flank';
-  else if (normY > 68) lateral = 'out on the right flank';
-  else if (normY < 45) lateral = 'in the left half-space';
-  else if (normY > 55) lateral = 'in the right half-space';
-
-  if (attackingX > 82) return `inside the 18-yard box (${lateral})`;
-  if (attackingX > 65) return `in Zone 14 / attacking third (${lateral})`;
-  if (attackingX > 40) return `in the midfield battleground (${lateral})`;
-  return `deep in defensive territory (${lateral})`;
-}
-
-/**
  * Maps event types to tactical commentary categories & primary agents
  */
 function categorizeEvent(type: string): { category: CommentaryCategory; agentName: string } {
   const norm = type.toLowerCase();
   if (norm.includes('goal')) return { category: 'goal', agentName: 'ChanceCreationAnalyst' };
-  if (norm.includes('shot')) return { category: 'shot', agentName: 'ChanceCreationAnalyst' };
-  if (norm.includes('recovery') || norm.includes('interception')) return { category: 'recovery', agentName: 'HighPressAnalyst' };
+  if (norm.includes('shot') || norm.includes('penalty')) return { category: 'shot', agentName: 'ChanceCreationAnalyst' };
+  if (norm.includes('recovery') || norm.includes('interception') || norm.includes('possessionlost')) return { category: 'recovery', agentName: 'HighPressAnalyst' };
   if (norm.includes('tackle') || norm.includes('block')) return { category: 'recovery', agentName: 'DefensiveStructureAnalyst' };
-  if (norm.includes('card')) return { category: 'card', agentName: 'MatchStateStrategist' };
+  if (norm.includes('card') || norm.includes('substitution')) return { category: 'card', agentName: 'MatchStateStrategist' };
   if (norm.includes('foul')) return { category: 'foul', agentName: 'MatchStateStrategist' };
   if (norm.includes('pass')) return { category: 'pass', agentName: 'PositionalPlayArchitect' };
   if (norm.includes('kickoff') || norm.includes('whistle') || norm.includes('period')) return { category: 'whistle', agentName: 'CoachFrameworkAnalyst' };
@@ -98,12 +79,13 @@ function categorizeEvent(type: string): { category: CommentaryCategory; agentNam
 }
 
 /**
- * Synthesizes rich AI Commentary items based on match events and multi-agent personas
+ * Creates event cards from observed match data. Narrative text is intentionally
+ * left empty until the configured Foundry agent returns a validated answer.
  */
 export function generateAiCommentaryFromEvents(
   events: CommentaryEventInput[],
-  homeTeam = 'Home FC',
-  awayTeam = 'Away FC'
+  _homeTeam = 'Home FC',
+  _awayTeam = 'Away FC'
 ): AiCommentaryItem[] {
   if (!events || events.length === 0) {
     return [];
@@ -127,7 +109,9 @@ export function generateAiCommentaryFromEvents(
 
     // Keep all key moments; sample regular passes/tackles every ~40-60 seconds to prevent spam
     const timeDelta = event.clockSeconds - lastCommentarySecond;
-    const isKeyMoment = isGoal || isShot || isCard || isWhistle;
+    const normalizedType = event.type.toLowerCase().replace(/[^a-z]/g, '');
+    const isKeyMoment = isGoal || isShot || isCard || isWhistle || category === 'foul' ||
+      ['penalty', 'substitution', 'ballrecovery', 'possessionlost'].includes(normalizedType);
     const shouldInclude = isKeyMoment || isHighRecovery || isSignificantPass || timeDelta >= 45;
 
     if (!shouldInclude && idx !== 0 && idx !== sorted.length - 1) {
@@ -137,119 +121,28 @@ export function generateAiCommentaryFromEvents(
     lastCommentarySecond = event.clockSeconds;
 
     const agent = FOUNDRY_AGENTS.find(a => a.name === agentName) || FOUNDRY_AGENTS[0];
-    const team = event.teamName || homeTeam;
-    const player = event.playerName || (team === homeTeam ? `${homeTeam} Player` : `${awayTeam} Player`);
-    const zone = resolvePitchZone(event.pitchX, event.pitchY, team === homeTeam);
+    const team = event.teamName;
+    const player = event.playerName;
     const clockFormatted = clock(event.clockSeconds);
-    const minute = Math.floor(event.clockSeconds / 60) + 1;
-    const period = event.clockSeconds >= 2700 ? 2 : 1;
-
-    let headline = '';
-    let commentaryText = '';
-    let tacticalInsight = '';
-
-    switch (category) {
-      case 'goal':
-        headline = `GOAL! ${player} scores for ${team}! (${minute}')`;
-        commentaryText = `UNBELIEVABLE FINISH! ${player} finds the target ${zone} with composure, capitalizing on a break in the defensive structure. ${team} take full advantage!`;
-        tacticalInsight = `Shot converted with high dislocation index. Rapid transitional circulation bypassed the opposing rest defence within 3.4 seconds.`;
-        break;
-
-      case 'shot':
-        headline = `DANGEROUS ATTEMPT: ${player} strikes on goal (${minute}')`;
-        commentaryText = `Goal threat! ${player} pulls the trigger ${zone}. A venomous effort testing the goalkeeper's positioning and reflexes.`;
-        tacticalInsight = `Chance created via third-man combination into Zone 14. Attackers successfully isolated the weak-side center back.`;
-        break;
-
-      case 'recovery':
-        headline = `BALL REGAIN: ${player} halts play (${minute}')`;
-        commentaryText = `Terrific defensive anticipation by ${player}! Steps in ${zone} to intercept possession and quickly initiate the counter-phase.`;
-        tacticalInsight = `High-press trigger executed. Defensive line squeezed forward 15 meters to eliminate receiver's turning space.`;
-        break;
-
-      case 'card':
-        headline = `BOOKING: Yellow card shown to ${player} (${minute}')`;
-        commentaryText = `The referee brandishes a card to ${player} following a cynical tactical challenge ${zone} to halt a direct counter-attack.`;
-        tacticalInsight = `Tactical foul deployed intentionally to prevent open-field transition into an unsettled back three.`;
-        break;
-
-      case 'foul':
-        headline = `FOUL CONCEDED: Whistle blown ${zone} (${minute}')`;
-        commentaryText = `Play momentarily paused. ${player} commits a challenge ${zone}, gifting ${team === homeTeam ? awayTeam : homeTeam} a set-piece opportunity.`;
-        tacticalInsight = `Defensive shape resets into a structured zonal marking wall against incoming aerial deliveries.`;
-        break;
-
-      case 'pass':
-        headline = `PROGRESSIVE ATTACK: ${player} breaks lines (${minute}')`;
-        commentaryText = `Exquisite vision! ${player} executes a crisp line-breaking pass ${zone}${event.receiverName ? ` seeking ${event.receiverName}` : ''}, accelerating the transition.`;
-        tacticalInsight = `Positional superiority achieved. The pass penetrated the second defensive line into the half-space corridor.`;
-        break;
-
-      case 'whistle':
-        headline = event.clockSeconds === 0 ? `KICK-OFF: Match Underway` : `PERIOD UPDATE: Clock at ${clockFormatted}`;
-        commentaryText = event.clockSeconds === 0
-          ? `The whistle echoes around the ground and match proceedings begin! ${team} retain initial possession.`
-          : `Match reaches ${clockFormatted}. Tactical intensity remains elevated across central duels and second-ball regains.`;
-        tacticalInsight = `Tactical framework baseline active. Mid-block compactness maintained at standard 26-meter line spacing.`;
-        break;
-
-      default:
-        headline = `${event.type}: ${player} in action (${minute}')`;
-        commentaryText = `${player} (${team}) coordinates play ${zone}, sustaining pressure during this sustained spell of possession.`;
-        tacticalInsight = `Sustained territorial dominance: ${team} maintaining high circulation velocity across midfield channels.`;
-        break;
-    }
+    const eventLabel = [event.type, player, team].filter(Boolean).join(' · ');
 
     items.push({
       id: `comm-${event.id}-${event.sequence}`,
       sequence: event.sequence,
       clockSeconds: event.clockSeconds,
       timeFormatted: clockFormatted,
-      period,
+      period: event.period ?? (event.clockSeconds >= 2700 ? 2 : 1),
       category,
-      headline: event.headline || headline,
-      commentaryText: event.action ? `${event.action}. ${commentaryText}` : commentaryText,
-      tacticalInsight,
+      headline: event.headline || eventLabel,
+      commentaryText: '',
       aiAgent: agent,
       teamName: team,
       playerName: player,
-      pitchZone: zone,
       impactScore: event.impactScore,
       isKeyMoment,
       citedEventId: event.id
     });
   });
-
-  // Inject 3-4 deep tactical checkpoints if events span more than 15 minutes
-  const maxSeconds = sorted[sorted.length - 1]?.clockSeconds ?? 0;
-  if (maxSeconds >= 900) {
-    const checkpoints = [
-      { sec: 900, min: 15, agentName: 'HighPressAnalyst', note: '15-Minute Tactical Check: High-regain press efficiency running at peak volume with front-three compressing build-up angles.' },
-      { sec: 1800, min: 30, agentName: 'PositionalPlayArchitect', note: '30-Minute Tactical Check: Spatial control shifts towards wide channel overloads, stretching opponent horizontal compactness.' },
-      { sec: 2700, min: 45, agentName: 'TacticalAnalyst', note: 'Half-Time Tactical Summary: Multi-agent consensus records high spatial dominance and transition threat along central channels.' },
-      { sec: 3600, min: 60, agentName: 'TransitionStrategist', note: '60-Minute Tactical Check: Rest-defence stability remains solid (3+2 structure) to deny transitional counter-attacks.' }
-    ];
-
-    checkpoints.forEach(cp => {
-      if (maxSeconds >= cp.sec && !items.some(i => Math.abs(i.clockSeconds - cp.sec) < 30)) {
-        const agent = FOUNDRY_AGENTS.find(a => a.name === cp.agentName) || FOUNDRY_AGENTS[0];
-        items.push({
-          id: `comm-tactical-checkpoint-${cp.sec}`,
-          sequence: Math.floor(cp.sec / 10),
-          clockSeconds: cp.sec,
-          timeFormatted: clock(cp.sec),
-          period: cp.sec >= 2700 ? 2 : 1,
-          category: 'tactical',
-          headline: `AI Tactical Review (${cp.min}')`,
-          commentaryText: cp.note,
-          tacticalInsight: `Orchestrated consensus from Azure AI Foundry specialists (${agent.name} v${agent.version}).`,
-          aiAgent: agent,
-          teamName: homeTeam,
-          isKeyMoment: true
-        });
-      }
-    });
-  }
 
   return items.sort((a, b) => a.clockSeconds - b.clockSeconds || a.sequence - b.sequence);
 }
@@ -263,9 +156,13 @@ export function AiCommentaryTimeline({
   loading = false,
   onTimeSelect
 }: AiCommentaryTimelineProps) {
-  const [liveAgentHypothesis, setLiveAgentHypothesis] = useState<Record<string, string>>({});
-  const [queryingAgent, setQueryingAgent] = useState(false);
+  const [agentReports, setAgentReports] = useState<Record<string, AgentReportState>>({});
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const requestedItemIdsRef = useRef(new Set<string>());
+  const queuedItemsRef = useRef<Array<{ matchId: string; item: AiCommentaryItem }>>([]);
+  const processingQueueRef = useRef(false);
+  const observedMatchRef = useRef<{ matchId?: string; initialized: boolean; lastSequence: number }>({ matchId, initialized: false, lastSequence: -1 });
+  const componentActiveRef = useRef(true);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardElementsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -301,30 +198,85 @@ export function AiCommentaryTimeline({
     }
   }, [matchId, onTimeSelect]);
 
-  // Query live backend AI service for the active selected moment
-  const queryLiveAiAnalyst = async (item: AiCommentaryItem) => {
-    if (!matchId) return;
-    setQueryingAgent(true);
+  const requestAgentCommentary = useCallback(async (requestMatchId: string, item: AiCommentaryItem) => {
+    setAgentReports(previous => ({ ...previous, [item.id]: { status: 'generating' } }));
     try {
       const answer: CandidateAnalystAnswer = await askCandidateAnalyst({
-        matchId,
+        matchId: requestMatchId,
         selectedSourceClockValue: item.clockSeconds,
         audience: 'analyst',
-        question: `Explain tactical significance of sequence #${item.sequence} (${item.headline})`,
+        question: `Write concise match commentary for source event ${item.citedEventId} at sequence ${item.sequence}, source clock ${item.clockSeconds}. Use only the supplied records. Clearly distinguish observed facts from cautious interpretation. Cite the supporting event IDs. Do not infer intent, causation, or unobserved facts.`,
         agentName: item.aiAgent.name
       });
-      if (answer && answer.answer) {
-        setLiveAgentHypothesis(prev => ({
-          ...prev,
-          [item.id]: answer.answer
+      if (componentActiveRef.current && observedMatchRef.current.matchId === requestMatchId) {
+        setAgentReports(previous => ({
+          ...previous,
+          [item.id]: answer.status === 'answered'
+            ? { status: 'ready', answer: answer.answer, evidenceIds: answer.claims.flatMap(claim => claim.evidenceIds) }
+            : { status: 'ready', answer: answer.answer, evidenceIds: [] }
         }));
       }
     } catch {
-      // Fallback already beautifully embedded inside item.tacticalInsight
-    } finally {
-      setQueryingAgent(false);
+      if (componentActiveRef.current && observedMatchRef.current.matchId === requestMatchId)
+        setAgentReports(previous => ({ ...previous, [item.id]: { status: 'unavailable' } }));
     }
+  }, []);
+
+  const enqueueAgentCommentary = useCallback((items: AiCommentaryItem[]) => {
+    for (const item of items) {
+      if (requestedItemIdsRef.current.has(item.id)) continue;
+      requestedItemIdsRef.current.add(item.id);
+      if (matchId) queuedItemsRef.current.push({ matchId, item });
+    }
+    if (processingQueueRef.current) return;
+    processingQueueRef.current = true;
+    void (async () => {
+      while (queuedItemsRef.current.length > 0 && componentActiveRef.current) {
+        const queued = queuedItemsRef.current.shift();
+        if (queued) await requestAgentCommentary(queued.matchId, queued.item);
+      }
+      processingQueueRef.current = false;
+    })();
+  }, [matchId, requestAgentCommentary]);
+
+  useEffect(() => {
+    componentActiveRef.current = true;
+    return () => { componentActiveRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (observedMatchRef.current.matchId === matchId) return;
+    observedMatchRef.current = { matchId, initialized: false, lastSequence: -1 };
+    requestedItemIdsRef.current.clear();
+    queuedItemsRef.current = [];
+    setAgentReports({});
+  }, [matchId]);
+
+  // On first load analyze only the latest few visible moments; then analyze new
+  // timeline moments as the live event stream advances. Calls are serialized to
+  // stay within the analyst API's rate limit.
+  useEffect(() => {
+    if (!matchId || visibleItems.length === 0) return;
+    const observed = observedMatchRef.current;
+    const highestSequence = Math.max(...visibleItems.map(item => item.sequence));
+    if (!observed.initialized) {
+      observed.initialized = true;
+      observed.lastSequence = highestSequence;
+      enqueueAgentCommentary(visibleItems.filter(item => item.isKeyMoment).slice(-3));
+      return;
+    }
+    if (highestSequence <= observed.lastSequence) return;
+    const newItems = visibleItems.filter(item => item.sequence > observed.lastSequence && item.isKeyMoment);
+    observed.lastSequence = highestSequence;
+    enqueueAgentCommentary(newItems);
+  }, [matchId, visibleItems, enqueueAgentCommentary]);
+
+  const retryAgentCommentary = (item: AiCommentaryItem) => {
+    requestedItemIdsRef.current.delete(item.id);
+    enqueueAgentCommentary([item]);
   };
+
+  const generateAgentCommentary = (item: AiCommentaryItem) => enqueueAgentCommentary([item]);
 
   // Auto-scroll to active commentary card when selectedSeconds changes
   useEffect(() => {
@@ -350,7 +302,7 @@ export function AiCommentaryTimeline({
           <div className="commentary-eyebrow-row">
             <span className="synced-badge">
               <span className="synced-pulse-dot" aria-hidden="true"></span>
-              Live match commentary
+              AI agent commentary
             </span>
           </div>
           <h2 className="commentary-title">
@@ -387,7 +339,7 @@ export function AiCommentaryTimeline({
             {visibleItems.map(item => {
               const isCurrent = currentCommentaryItem?.id === item.id;
               const isPast = item.clockSeconds <= selectedSeconds;
-              const hasLiveAgent = Boolean(liveAgentHypothesis[item.id]);
+              const report = agentReports[item.id];
 
               return (
                 <article
@@ -454,46 +406,37 @@ export function AiCommentaryTimeline({
                     </h3>
 
                     {/* Editorial play-by-play narrative */}
-                    <p className="commentary-narrative-text">
-                      {item.commentaryText}
+                    <p className="commentary-narrative-text" aria-live="polite">
+                      {report?.status === 'ready' ? report.answer
+                        : report?.status === 'generating' ? 'The selected specialist is analyzing the match evidence…'
+                            : report?.status === 'unavailable' ? 'AI commentary is unavailable for this event right now.'
+                            : 'Generate a source-grounded report with the selected specialist.'}
                     </p>
 
-                    {/* AI Specialist Tactical Insight micro-panel */}
-                    {item.tacticalInsight && (
-                      <div className="tactical-insight-callout">
-                        <div className="callout-lead-row">
-                          <span className="callout-icon" aria-hidden="true">🧠</span>
-                          <strong>Tactical Observation:</strong>
-                        </div>
-                        <p className="callout-body-text">{item.tacticalInsight}</p>
-                      </div>
-                    )}
-
-                    {/* If live backend AI hypothesis is received */}
-                    {hasLiveAgent && (
+                    {report?.status === 'ready' && report.evidenceIds.length > 0 && (
                       <div className="live-ai-answer-callout" role="region" aria-label="AI Foundry response">
                         <div className="live-ai-header">
                           <span className="live-sparkle" aria-hidden="true">⚡</span>
-                          <strong>Azure AI Foundry Hypothesis:</strong>
+                          <strong>Agent report · evidence references</strong>
                         </div>
-                        <p className="live-ai-text">{liveAgentHypothesis[item.id]}</p>
+                        <p className="live-ai-text">{[...new Set(report.evidenceIds)].join(' · ')}</p>
                       </div>
                     )}
 
                     {/* Selecting a moment seeks the shared match timeline. */}
                     <div className="commentary-card-footer">
-                      {matchId && !hasLiveAgent && (
+                      {matchId && (!report || report.status === 'unavailable') && (
                         <button
                           type="button"
                           className="query-ai-analyst-btn"
-                          disabled={queryingAgent}
                           onClick={e => {
                             e.stopPropagation();
-                            void queryLiveAiAnalyst(item);
+                            if (report?.status === 'unavailable') retryAgentCommentary(item);
+                            else generateAgentCommentary(item);
                           }}
-                          title="Ask Azure AI Foundry agents to deduce in-depth tactical claims for this sequence"
+                          title="Generate a match evidence report with this specialist agent"
                         >
-                          <span>{queryingAgent ? 'Consulting AI…' : '✦ Ask AI Agent'}</span>
+                          <span>{report?.status === 'unavailable' ? 'Retry agent commentary' : 'Generate agent commentary'}</span>
                         </button>
                       )}
 
