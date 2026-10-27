@@ -122,7 +122,7 @@ pr:
       - codex/*
 
 pool:
-  vmImage: ubuntu-latest
+  name: Default
 
 stages:
 - stage: Validate
@@ -228,8 +228,6 @@ stages:
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
     jobs:
     - job: ValidateReleaseIdentityInputs
-      pool:
-        vmImage: ubuntu-latest
       steps:
       - checkout: self
       - task: Bash@3

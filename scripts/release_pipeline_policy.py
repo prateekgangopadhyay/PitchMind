@@ -103,6 +103,11 @@ def validate_pipeline_policy(
     build_doc = _load_yaml(build_template, "image build template")
     deploy_doc = _load_yaml(deploy_template, "deployment template")
 
+    pipeline_pool = pipeline_doc.get("pool")
+    if not isinstance(pipeline_pool, dict) or pipeline_pool != {"name": "Default"}:
+        raise PipelinePolicyError("Pipeline jobs must use the self-hosted Default agent pool")
+    _validate_job_pools(pipeline_doc)
+
     parameters = _sequence(pipeline_doc.get("parameters"), "pipeline parameters")
     probe_parameter = next(
         (item for item in parameters if isinstance(item, dict) and item.get("name") == "runGateFailureProbe"),
@@ -525,12 +530,9 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
     jobs = _sequence(stage.get("jobs"), "pre-mutation approval jobs")
     matching_jobs = [job for job in jobs if isinstance(job, dict) and job.get("job") == "ValidateReleaseIdentityInputs"]
     if len(matching_jobs) != 1:
-        raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
-    if set(matching_jobs[0]) != {"job", "pool", "steps"}:
+        raise PipelinePolicyError("Pre-mutation stage must include the release identity-input preflight")
+    if set(matching_jobs[0]) != {"job", "steps"}:
         raise PipelinePolicyError("Identity preflight job may contain only its reviewed fields")
-    pool = matching_jobs[0].get("pool")
-    if not isinstance(pool, dict) or pool.get("vmImage") != "ubuntu-latest":
-        raise PipelinePolicyError("Pre-mutation approval must include the Ubuntu identity-input preflight")
     steps = _sequence(matching_jobs[0].get("steps"), "identity preflight steps")
     if len(steps) != 2 or steps[0] != {"checkout": "self"}:
         raise PipelinePolicyError("Identity preflight may contain only checkout and its identity validation task")
@@ -566,6 +568,20 @@ def _require_identity_preflight(stage: dict[str, Any]) -> None:
         raise PipelinePolicyError("The identity preflight must receive the distinct connection parameters")
     if set(environment) != set(expected):
         raise PipelinePolicyError("The identity preflight environment may contain only the reviewed release inputs")
+
+
+def _validate_job_pools(node: Any) -> None:
+    """Reject job-level pools that bypass the configured self-hosted pool."""
+    if isinstance(node, dict):
+        if "job" in node or "deployment" in node:
+            pool = node.get("pool")
+            if pool is not None and pool != "server" and pool != {"name": "Default"}:
+                raise PipelinePolicyError("Agent jobs must inherit the self-hosted Default pool")
+        for value in node.values():
+            _validate_job_pools(value)
+    elif isinstance(node, list):
+        for value in node:
+            _validate_job_pools(value)
 
 
 def _require_release_stage_shape(stage: dict[str, Any], *, expected_jobs: tuple[str, ...]) -> None:
