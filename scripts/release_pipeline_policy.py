@@ -76,7 +76,7 @@ _ALLOWED_VALIDATION_SHORTCUTS = {
 }
 # Script changes in AzureCLI release templates require this policy pin to be
 # reviewed alongside a command-level diff and the mutation tests.
-_BUILD_SCRIPT_SHA256 = "9f206c7c4b7aa95ec0f138bbc111dc3bc4b9c65e54b6970daa58c44f4188cc98"
+_BUILD_SCRIPT_SHA256 = "9801eb6df649552ec50c8d404da0955a7e7967ac0d03dee221f6ed570f7a1dea"
 _DEPLOY_SCRIPT_SHA256 = "bf15c174c0a2f5cd7665b08a8c835d2b453bbb578fe2443be2aa7c4bfd64b773"
 _IDENTITY_VALIDATOR_SHA256 = "e26f4f763c3ec05a0c10b00827e90e1fdcbbae9bf24c73b37cbffc294a227262"
 _HTTP_SMOKE_SCRIPT_SHA256 = "1e760bfd705e768bbae0cab39a86b600c8aaac8bc20780c5f426fc70564d3db5"
