@@ -124,7 +124,20 @@ def main() -> int:
                 return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
             approved = load_changes(sys.argv[2])
             if signature(changes) != signature(approved):
-                raise ValueError("Current Azure what-if differs from the plan approved at the owner gate")
+                curr_by_id = {str(c.get("resourceId", "")).casefold(): c for c in changes}
+                app_by_id = {str(c.get("resourceId", "")).casefold(): c for c in approved}
+                diffs = []
+                for res_id in sorted(set(curr_by_id) | set(app_by_id)):
+                    if res_id not in app_by_id:
+                        diffs.append(f"added {res_id}")
+                    elif res_id not in curr_by_id:
+                        diffs.append(f"missing {res_id}")
+                    elif json.dumps(curr_by_id[res_id], sort_keys=True) != json.dumps(app_by_id[res_id], sort_keys=True):
+                        c_type = curr_by_id[res_id].get("changeType")
+                        a_type = app_by_id[res_id].get("changeType")
+                        diffs.append(f"{res_id} (changeType: current={c_type}, approved={a_type})")
+                details = f": {'; '.join(diffs[:3])}" if diffs else ""
+                raise ValueError(f"Current Azure what-if differs from the plan approved at the owner gate{details}")
         suffix = " and still exactly matches the approved plan" if len(sys.argv) == 3 else ""
         print(f"PASS: Azure what-if contains {len(changes)} changes, no deletes/out-of-scope types{suffix}")
         return 0

@@ -69,12 +69,14 @@ az deployment group what-if \
     redisPrivateEndpointName="$PITCHMIND_DEV_REDIS_PE_NAME" \
   --no-pretty-print --result-format FullResourcePayloads --output json > "$current_plan"
 python3 scripts/validate_private_dev_whatif.py "$current_plan" "$PITCHMIND_APPROVED_PLAN"
+rm -f "$current_plan"
+trap - EXIT
 
 deployment_name="pitchmind-private-dev-$PITCHMIND_BUILD_ID"
 migrator_object_id="${PITCHMIND_DEV_POSTGRES_MIGRATOR_OBJECT_ID:-dceb4835-bf2e-4794-88b8-cc9c23643c60}"
 cleanup_migration_admin() {
   local status=$?
-  trap - EXIT
+  trap - EXIT INT TERM
   if [[ -n "$migrator_object_id" ]]; then
     if ! az postgres flexible-server microsoft-entra-admin delete \
       --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
@@ -89,7 +91,7 @@ cleanup_migration_admin() {
 }
 # The ARM deployment may fail after adding the temporary administrator, so
 # schedule cleanup before starting any Azure mutation.
-trap cleanup_migration_admin EXIT
+trap cleanup_migration_admin EXIT INT TERM
 deployment=$(az deployment group create \
   --name "$deployment_name" \
   --resource-group "$PITCHMIND_DEV_RESOURCE_GROUP" \
@@ -164,7 +166,7 @@ az postgres flexible-server microsoft-entra-admin delete \
   --object-id "$migrator_object_id" \
   --yes --only-show-errors
 migrator_object_id=''
-trap - EXIT
+trap - EXIT INT TERM
 
 echo "##vso[task.setvariable variable=PITCHMIND_DEV_FQDN]$fqdn"
 echo "Provisioned Container App FQDN: $fqdn"
