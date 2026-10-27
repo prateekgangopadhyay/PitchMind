@@ -385,5 +385,6 @@ public sealed record PlayerIntelligenceResponse(
     object? MatchContext = null,
     object? ProgressiveCarriesStat = null,
     object? ChanceCreationStat = null,
-    object? DefensiveWorkStats = null);
+    object? DefensiveWorkStats = null,
+    string? PhotoUrl = null);
 

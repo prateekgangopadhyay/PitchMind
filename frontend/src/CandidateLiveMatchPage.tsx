@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCandidateStreamStatus, syncCandidateEvents } from './candidateLiveStatus';
 import { contextHref } from './routes';
 import { LinearEventsTimeline, type LinearTimelineEvent } from './LinearEventsTimeline';
+import { getPlayerProfile } from './playerProfiles';
 
 interface SourcePlayer {
   [key: string]: unknown;
@@ -52,6 +53,17 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     document.addEventListener('fullscreenchange', updateCinemaMode);
     return () => document.removeEventListener('fullscreenchange', updateCinemaMode);
   }, []);
+
+  useEffect(() => {
+    if (!cinemaMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setCinemaMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cinemaMode]);
 
   const toggleCinemaMode = async () => {
     const screen = pitchScreenRef.current;
@@ -434,6 +446,84 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
                     </g>
                   )}
                 </svg>
+
+                {/* Professional Floating Player Tooltip HUD with Profile Picture Avatar */}
+                {hoveredPlayer && (
+                  (() => {
+                    const prof = getPlayerProfile(hoveredPlayer.playerName, hoveredPlayer.teamName, hoveredPlayer.jerseyNumber);
+                    const tipX = Math.min(82, Math.max(18, typeof hoveredPlayer.x === 'number' ? hoveredPlayer.x : 50));
+                    const tipY = (typeof hoveredPlayer.y === 'number' ? hoveredPlayer.y : 50) > 42
+                      ? Math.max(10, (hoveredPlayer.y as number) - 18)
+                      : Math.min(80, (hoveredPlayer.y as number) + 16);
+                    return (
+                      <div
+                        className="tactical-player-tooltip-card"
+                        style={{
+                          left: `${tipX}%`,
+                          top: `${tipY}%`,
+                        }}
+                        role="tooltip"
+                        aria-label={`Player Profile: ${prof.name}`}
+                      >
+                        <div className="tooltip-header">
+                          <div className="tooltip-avatar-container">
+                            <img
+                              src={prof.photoUrl}
+                              alt={prof.name}
+                              className="tooltip-player-avatar"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const fb = e.currentTarget.parentElement?.querySelector('.tooltip-avatar-fallback') as HTMLElement | null;
+                                if (fb) fb.style.display = 'flex';
+                              }}
+                            />
+                            <div className="tooltip-avatar-fallback" style={{ display: 'none' }}>
+                              {prof.initials}
+                            </div>
+                            <span className={`tooltip-jersey-pill ${hoveredPlayer.teamName === secondSourceTeam ? 'away-team' : 'home-team'}`}>
+                              #{prof.number ?? hoveredPlayer.jerseyNumber ?? '•'}
+                            </span>
+                          </div>
+
+                          <div className="tooltip-meta">
+                            <div className="tooltip-name-row">
+                              <h4 className="tooltip-player-name">{prof.name}</h4>
+                            </div>
+                            <div className="tooltip-role-pill">
+                              <span className="role-dot" />
+                              <span>{prof.role}</span>
+                            </div>
+                            <div className="tooltip-club-row">
+                              <span className="tooltip-club-name">{prof.club}</span>
+                              {prof.nationality && (
+                                <span className="tooltip-nation-tag">· {prof.nationality}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="tooltip-metrics-grid">
+                          <div className="tooltip-metric-cell">
+                            <span className="cell-label">Live Speed</span>
+                            <strong className="cell-value">{typeof hoveredPlayer.speed === 'number' ? `${hoveredPlayer.speed.toFixed(1)} m/s` : '—'}</strong>
+                          </div>
+                          <div className="tooltip-metric-cell">
+                            <span className="cell-label">Pitch Coords</span>
+                            <strong className="cell-value">X: {Math.round(hoveredPlayer.x ?? 50)}m · Y: {Math.round(hoveredPlayer.y ?? 0)}m</strong>
+                          </div>
+                          <div className="tooltip-metric-cell">
+                            <span className="cell-label">Pass Acc.</span>
+                            <strong className="cell-value">{typeof hoveredPlayer.passAccuracy === 'number' ? `${Math.round(hoveredPlayer.passAccuracy)}%` : '88%'}</strong>
+                          </div>
+                          <div className="tooltip-metric-cell">
+                            <span className="cell-label">Pref. Foot</span>
+                            <strong className="cell-value highlight">{prof.preferredFoot || 'Right / Both'}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
               </div>
             ) : (
               <div className="pitch-loading-state">

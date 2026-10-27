@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { PlayerIntelligenceData } from './api';
 import { calculateAiPlayerKeyQuote } from './api';
 import { resolveClubLogo } from './clubLogos';
+import { resolvePlayerPhotoUrl } from './playerProfiles';
 
 export interface PlayerRosterViewProps {
   players: PlayerIntelligenceData[];
@@ -209,7 +210,7 @@ export function PlayerRosterView({
         <div className="pro-player-cards-grid">
           {filteredPlayers.map((player) => {
             const crest = player.teamLogo || resolveClubLogo(player.club) || '/crests/manchester-united.svg';
-            const playerPhoto = player.photoUrl || player.photo || `/players/${player.id}.jpg`;
+            const { primaryUrl, fallbackUrl, avatarSvg } = resolvePlayerPhotoUrl(player);
             const xA = (player.matchStats?.xA ?? player.matchStats?.xa ?? 0.25).toFixed(2);
             const chances = player.matchStats?.chancesCreated ?? 0;
             const carries = player.matchStats?.progressiveCarries ?? 0;
@@ -251,11 +252,17 @@ export function PlayerRosterView({
                   <div className="card-portrait-box">
                     <div className="portrait-glow-ring" />
                     <img
-                      src={playerPhoto}
+                      src={primaryUrl}
                       alt={player.name}
                       className="card-portrait-img"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = crest;
+                        const target = e.target as HTMLImageElement;
+                        if (target.src !== fallbackUrl && target.getAttribute('data-tried-fallback') !== 'true') {
+                          target.setAttribute('data-tried-fallback', 'true');
+                          target.src = fallbackUrl;
+                        } else if (target.src !== avatarSvg) {
+                          target.src = avatarSvg;
+                        }
                       }}
                     />
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PlayerIntelligenceData } from './api';
 import { getPlayerIntelligence, getPlayersIntelligenceList, calculateAiPlayerKeyQuote } from './api';
 import { resolveClubLogo } from './clubLogos';
+import { resolvePlayerPhotoUrl } from './playerProfiles';
 import { contextHref } from './routes';
 
 export interface PlayerTacticalDashboardProps {
@@ -125,15 +126,25 @@ export function PlayerTacticalDashboard({
         <div className="player-hero-identity">
           <div className="player-cutout-wrapper">
             <div className="cutout-aura" />
-            <img
-              src={intelligence.photoUrl || intelligence.photo || `/players/${intelligence.id}.jpg`}
-              alt={intelligence.name}
-              className="player-cutout-img"
-              onError={(e) => {
-                // Graceful fallback if player portrait is not found
-                (e.target as HTMLImageElement).src = intelligence.teamLogo || playerCrest || '/crests/manchester-united.svg';
-              }}
-            />
+            {(() => {
+              const { primaryUrl, fallbackUrl, avatarSvg } = resolvePlayerPhotoUrl(intelligence);
+              return (
+                <img
+                  src={primaryUrl}
+                  alt={intelligence.name}
+                  className="player-cutout-img"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== fallbackUrl && target.getAttribute('data-tried-fallback') !== 'true') {
+                      target.setAttribute('data-tried-fallback', 'true');
+                      target.src = fallbackUrl;
+                    } else if (target.src !== avatarSvg) {
+                      target.src = avatarSvg;
+                    }
+                  }}
+                />
+              );
+            })()}
           </div>
 
           <div className="player-info-meta">

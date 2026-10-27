@@ -14,6 +14,8 @@ import { PlayerRosterView } from './PlayerRosterView';
 import { getPlayersIntelligenceList, calculateAiPlayerKeyQuote, type PlayerIntelligenceData } from './api';
 import { TacticalInsightsDashboard } from './TacticalInsightsDashboard';
 import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus, subscribeCandidateStatus } from './candidateLiveStatus';
+import { TeamHeadToHeadAiSection } from './TeamHeadToHeadAiSection';
+import { getPlayerProfile } from './playerProfiles';
 
 
 export type CandidateStatus = {
@@ -633,6 +635,18 @@ export function MatchSelectionPage({ route, matchId, seconds = 0, revision }: {
   const data = useMatchContext(matchId, seconds, revision);
   const [cinemaView, setCinemaView] = useState(false);
 
+  // Close cinema mode on Escape key
+  useEffect(() => {
+    if (!cinemaView) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setCinemaView(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cinemaView]);
+
   const eventsTillNow = useMemo(() => {
     return (data.context?.events ?? []).filter(e => e.clockSeconds <= seconds);
   }, [data.context?.events, seconds]);
@@ -648,6 +662,8 @@ export function MatchSelectionPage({ route, matchId, seconds = 0, revision }: {
       description: e.action || e.headline
     }));
   }, [eventsTillNow]);
+
+  const recentEventItem = eventsTillNow.length > 0 ? eventsTillNow[eventsTillNow.length - 1] : undefined;
 
   return (
     <ContextLayout
@@ -667,11 +683,35 @@ export function MatchSelectionPage({ route, matchId, seconds = 0, revision }: {
       {!matchId && !data.selector && <ContextState loading={data.loading} error={data.error} empty="No matches are currently available from the APIs." />}
       {matchId && data.context && (
         <div className={`match-screen-fullwidth-layout ${cinemaView ? 'is-cinema-mode' : ''}`}>
-          {/* Match pitch taking the whole width (100%) */}
+          {/* Match pitch taking the whole width (100% or 100% viewport in cinema view) */}
           <section
             className={`match-screen-pitch-col is-full-width ${cinemaView ? 'is-cinema-fullscreen' : ''}`}
             style={{ width: '100%', maxWidth: '100%', flex: '0 0 100%' }}
           >
+            {/* Cinema Broadcast Header when in Fullscreen Cinema View */}
+            {cinemaView && (
+              <div className="cinema-fullscreen-header" role="region" aria-label="Cinema broadcast controls">
+                <div className="cinema-match-meta">
+                  <span className="cinema-live-beacon" />
+                  <span className="cinema-brand-title">PITCHMIND CINEMA BROADCAST · 100% FULL SCREEN</span>
+                  <span className="cinema-match-names">
+                    {data.context.homeTeam?.name ?? 'Home FC'} vs {data.context.awayTeam?.name ?? 'Away FC'}
+                  </span>
+                  <span className="cinema-clock-pill">Clock: {clock(seconds)}</span>
+                </div>
+                <div className="cinema-header-actions">
+                  <button
+                    type="button"
+                    className="cinema-exit-btn"
+                    onClick={() => setCinemaView(false)}
+                    title="Exit full screen cinema view (Esc)"
+                  >
+                    ✕ Exit Cinema (Esc)
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="pitch-cinema-toolbar-row">
               <span className="pitch-col-badge">
                 {cinemaView ? 'Cinema Fullscreen View (12/12)' : 'Observed Match Pitch (12/12 Full Width)'}
@@ -690,6 +730,24 @@ export function MatchSelectionPage({ route, matchId, seconds = 0, revision }: {
               homeTeam={data.context.homeTeam}
               awayTeam={data.context.awayTeam}
               seconds={seconds}
+              cinemaView={cinemaView}
+              onToggleCinema={() => setCinemaView(!cinemaView)}
+              recentEvent={recentEventItem ? {
+                type: recentEventItem.type,
+                sequence: recentEventItem.sequence,
+                clockSeconds: recentEventItem.clockSeconds,
+                teamName: recentEventItem.teamName,
+                playerName: recentEventItem.playerName,
+                receiverName: recentEventItem.receiverName,
+                pitchX: recentEventItem.pitchX,
+                pitchY: recentEventItem.pitchY,
+                endX: recentEventItem.endX,
+                endY: recentEventItem.endY,
+                action: recentEventItem.action,
+                outcome: recentEventItem.outcome,
+                impactScore: recentEventItem.impactScore,
+                headline: recentEventItem.headline
+              } : undefined}
               availableEvents={eventsTillNow.map(e => ({
                 type: e.type,
                 sequence: e.sequence,
@@ -748,29 +806,43 @@ export function MatchContextTeamsPage({ route, matchId, seconds, revision }: { r
       {data.selector}
       {!matchId ? <ContextState loading={data.loading} error={data.error} empty="Choose a match to view team data." />
         : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="No team data is available." />
-          : data.context.teams.length ? <><div className="entity-grid team-entity-grid">{data.context.teams.map(team => {
-            const events = data.context!.events.filter(event => event.teamId === team.id || event.teamId === team.name || event.teamName === team.name);
-            return <article className="entity-card team-card" key={team.id}>
-              <div className="entity-card-topline">
-                <span className="badge">Team in selected match</span>
-                {team.score !== undefined && (
-                  <span className="badge team-score-pill">{team.score} {team.score === 1 ? 'goal' : 'goals'} at {clock(seconds)}</span>
-                )}
+          : data.context.teams.length ? (
+            <>
+              <TeamHeadToHeadAiSection
+                homeTeam={data.context.homeTeam ?? data.context.teams[0]}
+                awayTeam={data.context.awayTeam ?? data.context.teams[1]}
+                events={data.context.events}
+                seconds={seconds}
+                matchId={matchId}
+              />
+              <div className="entity-grid team-entity-grid">
+                {data.context.teams.map(team => {
+                  const events = data.context!.events.filter(event => event.teamId === team.id || event.teamId === team.name || event.teamName === team.name);
+                  return <article className="entity-card team-card" key={team.id}>
+                    <div className="entity-card-topline">
+                      <span className="badge">Team in selected match</span>
+                      {team.score !== undefined && (
+                        <span className="badge team-score-pill">{team.score} {team.score === 1 ? 'goal' : 'goals'} at {clock(seconds)}</span>
+                      )}
+                    </div>
+                    <div className="team-card-identity">
+                      {team.logoUrl ? (
+                        <img src={team.logoUrl} alt="" className="team-card-crest" />
+                      ) : (
+                        <span className="score-team-monogram">{clubInitials(team.name)}</span>
+                      )}
+                      <h2>{team.name ?? team.id}</h2>
+                    </div>
+                    <dl>
+                      {team.activePlayers > 0 && <div><dt>Active players in match state</dt><dd>{team.activePlayers}</dd></div>}
+                      {events.length > 0 && <div><dt>Events attributed by feed</dt><dd>{events.length}</dd></div>}
+                    </dl>
+                  </article>;
+                })}
               </div>
-              <div className="team-card-identity">
-                {team.logoUrl ? (
-                  <img src={team.logoUrl} alt="" className="team-card-crest" />
-                ) : (
-                  <span className="score-team-monogram">{clubInitials(team.name)}</span>
-                )}
-                <h2>{team.name ?? team.id}</h2>
-              </div>
-              <dl>
-                {team.activePlayers > 0 && <div><dt>Active players in match state</dt><dd>{team.activePlayers}</dd></div>}
-                {events.length > 0 && <div><dt>Events attributed by feed</dt><dd>{events.length}</dd></div>}
-              </dl>
-            </article>;
-          })}</div>{matchSource(data.context)}</> : <ContextState loading={false} empty="Team identity is not included in the selected match data." />}
+              {matchSource(data.context)}
+            </>
+          ) : <ContextState loading={false} empty="Team identity is not included in the selected match data." />}
     </ContextLayout>
   );
 }
@@ -813,6 +885,7 @@ export function MatchContextPlayersPage({ route, matchId, seconds, revision, pla
         const normName = (p.name ?? '').toLowerCase();
         if (!existingIds.has(normId) && (!normName || !existingNames.has(normName))) {
           const teamName = data.context.teams.find(t => t.id === p.teamId || t.name === p.teamId)?.name ?? p.teamId;
+          const profile = getPlayerProfile(p.name ?? p.id, teamName, p.jerseyNumber);
           const dynamicMatchStats = {
             chancesCreated: (p.yellowCards ?? 0) === 0 ? 1 : 0,
             progressiveCarries: 1,
@@ -827,14 +900,16 @@ export function MatchContextPlayersPage({ route, matchId, seconds, revision, pla
           list.push({
             id: p.id,
             name: p.name ?? p.id,
-            number: p.jerseyNumber ?? 10,
-            role: 'Midfielder',
+            number: p.jerseyNumber ?? profile.number ?? 10,
+            role: profile.role || 'Midfielder',
             club: teamName,
-            nationality: 'International',
-            age: 26,
+            photoUrl: profile.photoUrl,
+            photo: profile.fallbackPhotoUrl,
+            nationality: profile.nationality ?? 'International',
+            age: profile.age ?? 26,
             minutesPlayed: Math.max(1, Math.round(seconds / 60)),
-            preferredFoot: 'Right foot',
-            keyQuote: calculateAiPlayerKeyQuote({ role: 'Midfielder', club: teamName, number: p.jerseyNumber, matchStats: dynamicMatchStats }, { seconds }),
+            preferredFoot: profile.preferredFoot ?? 'Right foot',
+            keyQuote: calculateAiPlayerKeyQuote({ role: profile.role || 'Midfielder', club: teamName, number: p.jerseyNumber, matchStats: dynamicMatchStats }, { seconds }),
             tags: [`#${p.jerseyNumber ?? 10}`, 'Active'],
             matchStats: dynamicMatchStats,
             whyItMatters: [
@@ -1172,18 +1247,9 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     }
   }, [situation.homeTeamName, selectedPrompt]);
 
-  const [contextTab, setContextTab] = useState<'match' | 'home' | 'away' | 'players'>('match');
-  const [evidenceFilter, setEvidenceFilter] = useState<string>('All');
-  const [carouselIndex, setCarouselIndex] = useState<number>(0);
-
   const deducedMetrics = useMemo(() => deduceMatchMetrics(situation), [situation]);
   const deducedKeyMoments = useMemo(() => deduceKeyMoments(situation), [situation]);
   const allEvidence = useMemo(() => deduceEvidenceFromAnalysis(situation), [situation]);
-
-  const filteredEvidence = useMemo(() => {
-    if (evidenceFilter === 'All') return allEvidence;
-    return allEvidence.filter(e => e.category === evidenceFilter);
-  }, [allEvidence, evidenceFilter]);
 
   const homeFormation = useMemo(() => {
     return deduceTeamFormation(data.context?.players, data.context?.homeTeam?.id || 'home');
@@ -1517,50 +1583,40 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
         : data.loading || data.error || !data.context ? <ContextState loading={data.loading} error={data.error} empty="Match context is unavailable." />
           : <>
             <div className="analyst-screen-root" aria-label="PitchMind AI Analyst">
-              {/* Top Match Scoreboard Banner */}
-              <section className="analyst-match-banner" aria-label="Match Overview">
-                <div className="banner-team-section banner-home">
-                  <div className="banner-crest-wrap">
-                    {resolveClubLogo(situation.homeTeamName) ? (
-                      <img src={resolveClubLogo(situation.homeTeamName)} alt={`${situation.homeTeamName} crest`} className="banner-team-crest" />
-                    ) : (
-                      <span className="banner-team-monogram">{clubInitials(situation.homeTeamName)}</span>
-                    )}
-                  </div>
-                  <div className="banner-team-meta">
-                    <h2 className="banner-team-name">{situation.homeTeamName}</h2>
-                    <span className="banner-formation">{homeFormation}</span>
-                  </div>
-                  <span className="banner-score banner-home">{situation.homeScore}</span>
-                </div>
-
-                <div className="banner-center-clock">
-                  <span className="banner-clock-time">{clock(seconds)}</span>
-                  <span className="banner-clock-phase">{situation.phase ? phaseLabel(situation.phase) : (seconds >= 2700 ? 'Second Half' : 'First Half')}</span>
-                </div>
-
-                <div className="banner-team-section banner-away">
-                  <span className="banner-score banner-away">{situation.awayScore}</span>
-                  <div className="banner-team-meta right">
-                    <h2 className="banner-team-name">{situation.awayTeamName}</h2>
-                    <span className="banner-formation">{awayFormation}</span>
-                  </div>
-                  <div className="banner-crest-wrap">
-                    {resolveClubLogo(situation.awayTeamName) ? (
-                      <img src={resolveClubLogo(situation.awayTeamName)} alt={`${situation.awayTeamName} crest`} className="banner-team-crest" />
-                    ) : (
-                      <span className="banner-team-monogram">{clubInitials(situation.awayTeamName)}</span>
-                    )}
+              {/* Sleek Action Bar with Header, Azure AI Foundry Status, and Quick Moment Jump */}
+              <div className="analyst-header-action-bar">
+                <div className="analyst-header-brand-group">
+                  <span className="copilot-spark-icon" aria-hidden="true">✦</span>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h1 className="analyst-header-title">Tactical Pitch View & AI Multi-Agent Analysis</h1>
+                      <span className="analyst-header-status-badge">Azure AI Foundry</span>
+                    </div>
+                    <p className="analyst-header-subtitle">
+                      {situation.homeTeamName} vs {situation.awayTeamName} · {clock(seconds)} ({situation.homeScore}-{situation.awayScore}) · {dynamicVenue}
+                    </p>
                   </div>
                 </div>
 
-                <div className="banner-stadium-graphic" aria-hidden="true">
-                  <img src="/match/stadium-inset.webp" alt="" className="banner-stadium-img" />
-                  <div className="banner-stadium-overlay">
-                    <span>{`${situation.homeTeamName.toUpperCase()} VS ${situation.awayTeamName.toUpperCase()} · ${clock(seconds)} TACTICAL INTELLIGENCE`}</span>
+                <div className="analyst-quick-moments-row" aria-label="Quick Tactical Timeline Jump">
+                  <span className="quick-moments-label">Quick Jump:</span>
+                  <div className="quick-moments-chips">
+                    {deducedKeyMoments.slice(0, 4).map((item, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="quick-moment-chip"
+                        onClick={() => data.selectTime(item.minute * 60)}
+                        title={`Jump to minute ${item.minute}: ${item.headline}`}
+                      >
+                        <span>{item.icon}</span>
+                        <strong>{item.minute}'</strong>
+                        <span>{item.headline}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </section>
+              </div>
 
               {/* Subnav Tabs Bar */}
               <div className="analyst-subnav-bar">
@@ -1593,92 +1649,48 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
                 })()}
               </div>
 
-              {/* Two-Column Grid */}
+              {/* Redesigned Two-Column Split Screen: Left = Tactical Pitch & Causal Sequence, Right = AI Deliberation & Copilot */}
               <div className="analyst-screen-grid tactical-split-screen">
-                {/* Left Side: Copilot, Prompt Chips, Conversation, 4-Metric Grid, Tactical Story, Chat Bar */}
-                <div className="analyst-main-column">
-                  {/* 1. Copilot Card */}
-                  <div className="analyst-copilot-card">
-                    <div className="copilot-brand-title">
-                      <span className="copilot-spark-icon" aria-hidden="true">✦</span>
-                      <div>
-                        <h2 className="copilot-title">PitchMind AI Analyst</h2>
-                        <p className="copilot-subtitle">Your tactical copilot for deeper football understanding</p>
-                      </div>
-                    </div>
-                    <div className="copilot-badges-row">
-                      <span className="copilot-badge"><span className="badge-check">✓</span> Evidence-backed</span>
-                      <span className="copilot-badge"><span className="badge-shield">🛡️</span> No unsupported claims</span>
-                      <span className="copilot-badge"><span className="badge-info">ℹ</span> Uses match data only</span>
-                    </div>
-                  </div>
+                {/* LEFT COLUMN: The Tactical Pitch View & Causal Sequence Expanded by Default */}
+                <div className="tactical-pitch-column">
+                  {/* 1. Tactical Pitch View */}
+                  <TacticalPitchView
+                    players={data.context.players}
+                    homeTeam={data.context.homeTeam}
+                    awayTeam={data.context.awayTeam}
+                    seconds={seconds}
+                    recentEvent={activeEvent}
+                    availableEvents={notableEvents}
+                    onSelectEvent={seq => setFocusedSequence(seq)}
+                  />
 
-                  {/* 2. Try Asking Prompt Chips */}
-                  <div className="analyst-try-asking-row" aria-label="Suggested Tactical Inquiries">
-                    <span className="try-asking-label">↗ Try asking</span>
-                    <div className="try-asking-chips">
-                      {[
-                        `Why is ${dominantTeam} controlling the match?`,
-                        `Show me the tactical evidence behind the ${deducedMetrics.highRegainsHome} high regains`,
-                        `What tactical shift occurred around minute ${currentMinute}?`
-                      ].map(prompt => (
-                        <button
-                          key={prompt}
-                          type="button"
-                          className={`try-asking-chip ${selectedPrompt === prompt ? 'is-active' : ''}`}
-                          onClick={() => handleAskQuestion(prompt)}
-                          disabled={deliberating}
-                        >
-                          <span>{prompt}</span>
-                          <span className="chip-chevron" aria-hidden="true">❯</span>
-                        </button>
+                  {/* 2. Causal Sequence (Expanded by Default) */}
+                  <div className="tactical-causal-chain-card" aria-label="Derived Tactical Causal Chain">
+                    <div className="causal-chain-header">
+                      <div className="causal-chain-title-wrap">
+                        <h3 className="causal-chain-title">Causal Sequence</h3>
+                        <span className="causal-chain-derived-tag">EXPANDED</span>
+                      </div>
+                      <span className="causal-chain-meta">
+                        {activeEvent ? `${activeEvent.type} · Seq #${activeEvent.sequence} (${clock(activeEvent.clockSeconds)})` : 'Match Sequence'}
+                      </span>
+                    </div>
+                    <div className="causal-chain-track">
+                      {causalChain.map(step => (
+                        <div key={step.step} className={`causal-step-card ${step.status}`}>
+                          <div className="step-card-top">
+                            <span className="step-number-tag">STEP {step.step}</span>
+                            <span className="step-time-badge">{step.time}</span>
+                          </div>
+                          <div className="step-phase-pill">{step.phase}</div>
+                          <div className="step-action-text">{step.action}</div>
+                          <div className="step-detail-text">{step.detail}</div>
+                        </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* 3. Conversation Card (User Bubble + Copilot Response Bubble) */}
-                  <div className="analyst-conversation-card" aria-label="Tactical Conversation">
-                    {displayExchanges.map((exchange) => (
-                      <div key={exchange.id} className="conversation-exchange-block">
-                        <div className="conversation-user-bubble-row">
-                          <div className="user-bubble">
-                            <span className="user-text">{exchange.question}</span>
-                            <span className="user-time">{exchange.time}</span>
-                          </div>
-                          <div className="user-avatar-tag">AN</div>
-                        </div>
-
-                        <div className="conversation-agent-bubble-row">
-                          <div className="agent-avatar-icon" aria-hidden="true">✦</div>
-                          <div className="agent-bubble">
-                            {exchange.isLoading ? (
-                              <p className="agent-speech agent-loading">
-                                <span className="agent-loading-pulse">✦</span>
-                                <span>Analyzing tactical evidence and consulting specialists…</span>
-                              </p>
-                            ) : (
-                              <>
-                                <p className="agent-speech">
-                                  {exchange.answer || activeTurns[0]?.text || initialAnswer}
-                                </p>
-                                {exchange.evidenceIds && exchange.evidenceIds.length > 0 && (
-                                  <div className="agent-evidence-citations">
-                                    <span className="citations-label">Cited Evidence:</span>
-                                    {exchange.evidenceIds.map(eid => (
-                                      <span key={eid} className="agent-evidence-chip">#{eid}</span>
-                                    ))}
-                                  </div>
-                                )}
-                                <span className="agent-time">{exchange.time}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 4. 4-Card Metric Grid */}
+                  {/* 3. Observed Tactical Metrics */}
                   <div className="analyst-4metric-grid" aria-label="Observed Tactical Metrics">
                     <div className="metric-box">
                       <div className="metric-header">
@@ -1756,7 +1768,7 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
                     </div>
                   </div>
 
-                  {/* 5. Tactical Story Card */}
+                  {/* 4. Tactical Story & Evidence Cards */}
                   <div className="tactical-story-card" aria-label="Tactical Story and Evidence">
                     <div className="story-card-heading">
                       <span className="story-compass-icon" aria-hidden="true">🧭</span>
@@ -1798,8 +1810,221 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
                       ))}
                     </div>
                   </div>
+                </div>
 
-                  {/* 6. Chat input bar */}
+                {/* RIGHT COLUMN: Azure AI Foundry Deliberation, Synthesis Consensus, and Copilot Chat */}
+                <aside className="tactical-explanation-column" aria-label="AI Multi-Agent Deliberation and Explanation">
+                  {/* 1. Azure AI Foundry Specialists Roster */}
+                  <div className="foundry-agent-roster" aria-label="Azure AI Foundry Tactical Agents">
+                    <div className="roster-topline">
+                      <span className="roster-dot" aria-hidden="true"></span>
+                      <span className="roster-eyebrow">Azure AI Foundry Multi-Agent Deliberation</span>
+                      <span className="roster-count-badge">10 Agents Deployed</span>
+                      {foundryStatus && <span className="roster-status-pill">{foundryStatus}</span>}
+                    </div>
+                    <div className="agent-pills-wrap">
+                      {FOUNDRY_AGENTS.map(agent => (
+                        <button
+                          key={agent.name}
+                          type="button"
+                          className={`agent-roster-pill ${agentName === agent.name ? 'is-selected' : ''}`}
+                          onClick={() => {
+                            setAgentName(agent.name);
+                            if (data.context?.candidate) void runFoundryDeliberation(undefined, agent.name);
+                          }}
+                          title={`Click to deliberate with ${agent.name} v${agent.version} (${agent.role})`}
+                        >
+                          <span className="agent-pill-icon">{agent.icon}</span>
+                          <span className="agent-pill-name">{agent.name}</span>
+                          <span className="agent-pill-ver">v{agent.version}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="roster-action-bar">
+                      <button
+                        type="button"
+                        className="consult-specialist-btn"
+                        onClick={() => void runFoundryDeliberation(undefined, agentName)}
+                        disabled={deliberating || !data.context?.candidate}
+                      >
+                        <span>Consult {agentName} on Foundry</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="deliberate-all-btn"
+                        onClick={() => void runFoundryDeliberation()}
+                        disabled={deliberating || !data.context?.candidate}
+                      >
+                        <span>{deliberating ? 'Foundry Agents Discussing…' : 'Start Multi-Agent Panel Deliberation'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. Synthesized Consensus Card */}
+                  <article className="tactical-synthesized-card" aria-label="Computed Tactical Explanation">
+                    <div className="explanation-card-header">
+                      <div className="explanation-card-tagline">
+                        <span className="explanation-pill">Computed via Multi-Agent Consensus</span>
+                        <small className="explanation-clock">Elapsed Clock: {clock(seconds)}</small>
+                      </div>
+                      <h2 className="explanation-headline">{activeExplanation.headline}</h2>
+                    </div>
+
+                    <p className="explanation-summary-text">{activeExplanation.summary}</p>
+
+                    <div className="explanation-key-findings">
+                      <h4 className="findings-subhead">Key Findings from Agent Discussion</h4>
+                      <ul className="findings-list">
+                        {activeExplanation.keyFindings.map((finding: { agent: string; point: string }, idx: number) => (
+                          <li key={idx} className="finding-item">
+                            <span className="finding-agent-badge">{finding.agent}</span>
+                            <span className="finding-text">{finding.point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="explanation-recommendations">
+                      <h4 className="findings-subhead">Tactical Recommendations</h4>
+                      <ul className="recommendations-list">
+                        {activeExplanation.tacticalRecommendations.map((rec: string, idx: number) => (
+                          <li key={idx} className="recommendation-item">
+                            <span className="rec-arrow" aria-hidden="true">→</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="explanation-meta-footer">
+                      <div className="explanation-evidence-refs">
+                        <strong>Evidence:</strong>
+                        {activeExplanation.evidenceIds.map((id: string) => (
+                          <code key={id} className="evidence-code-pill">{id}</code>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="re-deliberate-btn"
+                        onClick={handleReDeliberate}
+                        disabled={deliberating}
+                      >
+                        {deliberating ? 'Agents Discussing…' : '🔄 Re-deliberate Situation'}
+                      </button>
+                    </div>
+                  </article>
+
+                  {/* 3. Discussion dialogue stream */}
+                  <div className="agent-discussion-stream" aria-label="Specialists Deliberation Dialogue">
+                    <div className="stream-header-info">
+                      <h3>Specialists Deliberation Dialogue</h3>
+                      <p>Agents discussing match situation at {clock(seconds)} and evaluating tactical structure.</p>
+                    </div>
+
+                    <div className="discussion-turns-stack">
+                      {activeTurns.map(turn => (
+                        <div key={turn.id} className="discussion-turn-bubble">
+                          <div className="turn-author-header">
+                            <span className="author-avatar">{turn.icon}</span>
+                            <strong className="author-name">{turn.agentName}</strong>
+                            <span className="author-version-tag">v{turn.agentVersion}</span>
+                            <span className="author-role-label">{turn.role}</span>
+                            {turn.replyingTo && (
+                              <span className="replying-to-tag">replying to {turn.replyingTo}</span>
+                            )}
+                          </div>
+                          <p className="turn-speech-text">{turn.text}</p>
+                          <div className="turn-citations">
+                            {turn.citedEvidence.map((cid: string) => (
+                              <small key={cid} className="turn-cite-pill">{cid}</small>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. Conversational Copilot & Interactive Inquiry */}
+                  <div className="analyst-copilot-card">
+                    <div className="copilot-brand-title">
+                      <span className="copilot-spark-icon" aria-hidden="true">✦</span>
+                      <div>
+                        <h2 className="copilot-title">PitchMind AI Tactical Copilot</h2>
+                        <p className="copilot-subtitle">Ask questions or test tactical scenarios</p>
+                      </div>
+                    </div>
+                    <div className="copilot-badges-row">
+                      <span className="copilot-badge"><span className="badge-check">✓</span> Evidence-backed</span>
+                      <span className="copilot-badge"><span className="badge-shield">🛡️</span> No unsupported claims</span>
+                    </div>
+                  </div>
+
+                  {/* Try asking prompt chips */}
+                  <div className="analyst-try-asking-row" aria-label="Suggested Tactical Inquiries">
+                    <span className="try-asking-label">↗ Try asking</span>
+                    <div className="try-asking-chips">
+                      {[
+                        `Why is ${dominantTeam} controlling the match?`,
+                        `Show me the tactical evidence behind the ${deducedMetrics.highRegainsHome} high regains`,
+                        `What tactical shift occurred around minute ${currentMinute}?`
+                      ].map(prompt => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          className={`try-asking-chip ${selectedPrompt === prompt ? 'is-active' : ''}`}
+                          onClick={() => handleAskQuestion(prompt)}
+                          disabled={deliberating}
+                        >
+                          <span>{prompt}</span>
+                          <span className="chip-chevron" aria-hidden="true">❯</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Conversation Card */}
+                  <div className="analyst-conversation-card" aria-label="Tactical Conversation">
+                    {displayExchanges.map((exchange) => (
+                      <div key={exchange.id} className="conversation-exchange-block">
+                        <div className="conversation-user-bubble-row">
+                          <div className="user-bubble">
+                            <span className="user-text">{exchange.question}</span>
+                            <span className="user-time">{exchange.time}</span>
+                          </div>
+                          <div className="user-avatar-tag">AN</div>
+                        </div>
+
+                        <div className="conversation-agent-bubble-row">
+                          <div className="agent-avatar-icon" aria-hidden="true">✦</div>
+                          <div className="agent-bubble">
+                            {exchange.isLoading ? (
+                              <p className="agent-speech agent-loading">
+                                <span className="agent-loading-pulse">✦</span>
+                                <span>Analyzing tactical evidence and consulting specialists…</span>
+                              </p>
+                            ) : (
+                              <>
+                                <p className="agent-speech">
+                                  {exchange.answer || activeTurns[0]?.text || initialAnswer}
+                                </p>
+                                {exchange.evidenceIds && exchange.evidenceIds.length > 0 && (
+                                  <div className="agent-evidence-citations">
+                                    <span className="citations-label">Cited Evidence:</span>
+                                    {exchange.evidenceIds.map(eid => (
+                                      <span key={eid} className="agent-evidence-chip">#{eid}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                <span className="agent-time">{exchange.time}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Chat input form */}
                   <div className="analyst-chat-input-bar">
                     <form
                       className="analyst-chat-form"
@@ -1816,7 +2041,7 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
                       <input
                         type="text"
                         className="chat-text-input"
-                        placeholder="Ask about tactics, players, moments or anything from this match..."
+                        placeholder="Ask about tactics, pressing structure, or scenario..."
                         value={scenarioInput}
                         onChange={e => setScenarioInput(e.target.value)}
                         disabled={deliberating}
@@ -1832,456 +2057,54 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
                     </form>
                     <div className="chat-bottom-info">
                       <p className="chat-disclaimer-note">
-                        Try a question above or type your own. All responses are evidence-backed using match data. If we can't find reliable evidence, we'll say so.
+                        All responses are evidence-backed using match data verified across 10 Foundry agents.
                       </p>
-                      <span className="chat-powered-by">Powered by PitchMind AI</span>
                     </div>
                   </div>
 
-                  {/* Collapsible Deep Dive Pitch & Causal Chain */}
-                  <details className="analyst-deep-dive-details pitch-drawer" aria-label="Deep Dive Pitch View">
-                    <summary className="deep-dive-toggle">
-                      <span className="deep-dive-icon">🔬</span>
-                      <span>Tactical Pitch View & Causal Sequence</span>
-                    </summary>
-                    <div className="tactical-pitch-column">
-                      <TacticalPitchView
-                        players={data.context.players}
-                        homeTeam={data.context.homeTeam}
-                        awayTeam={data.context.awayTeam}
-                        seconds={seconds}
-                        recentEvent={activeEvent}
-                        availableEvents={notableEvents}
-                        onSelectEvent={seq => setFocusedSequence(seq)}
-                      />
-                    </div>
-                    <div className="tactical-causal-chain-card" aria-label="Derived Tactical Causal Chain">
-                      <div className="causal-chain-header">
-                        <div className="causal-chain-title-wrap">
-                          <h3 className="causal-chain-title">Causal chain</h3>
-                          <span className="causal-chain-derived-tag">DERIVED</span>
-                        </div>
-                        <span className="causal-chain-meta">
-                          {activeEvent ? `${activeEvent.type} · Seq #${activeEvent.sequence} (${clock(activeEvent.clockSeconds)})` : 'Match Sequence'}
-                        </span>
+                  {/* 5. Notable Events Live Reports */}
+                  {data.context.candidate && (
+                    <section className="candidate-live-reports" aria-label="Live event analysis reports">
+                      <div className="candidate-live-reports-heading">
+                        <h3>Reports from notable events</h3>
+                        <span role="status">{liveReportStatus}</span>
                       </div>
-                      <div className="causal-chain-track">
-                        {causalChain.map(step => (
-                          <div key={step.step} className={`causal-step-card ${step.status}`}>
-                            <div className="step-card-top">
-                              <span className="step-number-tag">STEP {step.step}</span>
-                              <span className="step-time-badge">{step.time}</span>
-                            </div>
-                            <div className="step-phase-pill">{step.phase}</div>
-                            <div className="step-action-text">{step.action}</div>
-                            <div className="step-detail-text">{step.detail}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                </div>
-
-                {/* Right Side: Sidebar */}
-                <aside className="analyst-sidebar-column tactical-explanation-column">
-                  {/* 1. Match Context Card */}
-                  <div className="sidebar-match-context-card">
-                    <div className="sidebar-card-header">
-                      <span className="header-icon">🧭</span>
-                      <h3>Match context</h3>
-                    </div>
-
-                    <div className="context-segmented-tabs">
-                      <button type="button" className={`seg-tab ${contextTab === 'match' ? 'is-active' : ''}`} onClick={() => setContextTab('match')}>Match</button>
-                      <button type="button" className={`seg-tab ${contextTab === 'home' ? 'is-active' : ''}`} onClick={() => setContextTab('home')}>{situation.homeTeamName}</button>
-                      <button type="button" className={`seg-tab ${contextTab === 'away' ? 'is-active' : ''}`} onClick={() => setContextTab('away')}>{situation.awayTeamName}</button>
-                      <button type="button" className={`seg-tab ${contextTab === 'players' ? 'is-active' : ''}`} onClick={() => setContextTab('players')}>Players</button>
-                    </div>
-
-                    <div className="match-meta-details-row">
-                      <span className="meta-icon-item"><span className="meta-glyph">🏆</span> {data.context?.league || 'Premier League'}</span>
-                      <span className="meta-icon-item"><span className="meta-glyph">🏟️</span> {dynamicVenue}</span>
-                      <span className="meta-icon-item"><span className="meta-glyph">📅</span> {dynamicMatchDate}</span>
-                    </div>
-
-                    <div className="sidebar-mini-scoreboard">
-                      <div className="mini-team mini-home">
-                        {resolveClubLogo(situation.homeTeamName) ? (
-                          <img src={resolveClubLogo(situation.homeTeamName)} alt="" className="mini-crest" />
-                        ) : (
-                          <span className="mini-monogram">{clubInitials(situation.homeTeamName)}</span>
-                        )}
-                        <div className="mini-team-info">
-                          <strong className="mini-team-name">{situation.homeTeamName}</strong>
-                          <span className="mini-formation">{homeFormation}</span>
-                        </div>
-                      </div>
-
-                      <div className="mini-score-cluster">
-                        <span className="mini-score mini-home">{situation.homeScore}</span>
-                        <div className="mini-clock-col">
-                          <span className="mini-clock-text">{clock(seconds)}</span>
-                          <span className="mini-phase-text">{situation.phase ? phaseLabel(situation.phase) : (seconds >= 2700 ? 'Second Half' : 'First Half')}</span>
-                        </div>
-                        <span className="mini-score mini-away">{situation.awayScore}</span>
-                      </div>
-
-                      <div className="mini-team mini-away">
-                        <div className="mini-team-info right">
-                          <strong className="mini-team-name">{situation.awayTeamName}</strong>
-                          <span className="mini-formation">{awayFormation}</span>
-                        </div>
-                        {resolveClubLogo(situation.awayTeamName) ? (
-                          <img src={resolveClubLogo(situation.awayTeamName)} alt="" className="mini-crest" />
-                        ) : (
-                          <span className="mini-monogram">{clubInitials(situation.awayTeamName)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 2. Key Moments Timeline Card */}
-                  <div className="sidebar-key-moments-card">
-                    <div className="sidebar-card-header with-link">
-                      <div className="header-left">
-                        <span className="header-icon">⏱️</span>
-                        <h3>Key moments timeline</h3>
-                      </div>
-                      <a href={contextHref('/candidate-live', matchId, seconds)} className="header-link">View all ➔</a>
-                    </div>
-
-                    <div className="horizontal-timeline-track" aria-label="Key Moments Timeline Track">
-                      <div className="timeline-rail-axis">
-                        <div className="rail-line" />
-                        {[0, 15, 30, 45, 60, 75, 90].map(m => (
-                          <div key={m} className="rail-tick-node" style={{ left: `${(m / 90) * 100}%` }}>
-                            <span className="tick-pip" />
-                            <span className="tick-label">{m}'</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="timeline-events-overlay">
-                        {deducedKeyMoments.slice(0, 4).map((item, idx) => {
-                          const pct = Math.min(88, Math.max(12, (item.minute / 90) * 100));
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              className="timeline-event-marker"
-                              style={{ left: `${pct}%` }}
-                              onClick={() => data.selectTime(item.minute * 60)}
-                              title={`Jump to minute ${item.minute}: ${item.headline}`}
-                            >
-                              <div className={`marker-circle-icon ${item.badgeClass || ''}`}>
-                                {item.icon}
+                      {liveReportError && <p role="alert" className="candidate-analyst-error">{liveReportError}</p>}
+                      {visibleReports.length ? (
+                        <div className="candidate-live-report-list">
+                          {visibleReports.map(report => (
+                            <article className="candidate-live-report" key={report.event.eventId}>
+                              <div className="candidate-analyst-answer-heading">
+                                <span className="badge">{report.event.eventType} · {report.answer.agentName} · hypothesis</span>
+                                <small>Source clock {clock(report.event.clockSeconds)} · sequence {report.event.sequence}</small>
                               </div>
-                              <div className="marker-callout-card">
-                                <div className="marker-head-line">
-                                  <strong>{item.minute}'</strong>
-                                  <span className="head-text">{item.headline}</span>
-                                </div>
-                                <span className="marker-sub-desc">{item.subtext}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. Evidence From This Analysis Card */}
-                  <div className="sidebar-evidence-card">
-                    <div className="sidebar-card-header with-link">
-                      <div className="header-left">
-                        <span className="header-icon">📑</span>
-                        <h3>Evidence from this analysis</h3>
-                      </div>
-                      <span className="header-link">View all evidence ➔</span>
-                    </div>
-
-                    <div className="evidence-filter-pills-row">
-                      {(['All', 'Key moment', 'Tactical view', 'Metric evidence', 'Player impact'] as const).map(cat => {
-                        const count = cat === 'All' ? allEvidence.length : allEvidence.filter(e => e.category === cat).length;
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            className={`filter-pill ${evidenceFilter === cat ? 'is-active' : ''}`}
-                            onClick={() => {
-                              setEvidenceFilter(cat);
-                              setCarouselIndex(0);
-                            }}
-                          >
-                            {cat} ({count})
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="evidence-carousel-wrapper">
-                      <button
-                        type="button"
-                        className="carousel-arrow left"
-                        onClick={() => setCarouselIndex(i => Math.max(0, i - 1))}
-                        disabled={carouselIndex === 0}
-                        aria-label="Previous evidence card"
-                      >
-                        ‹
-                      </button>
-
-                      <div className="evidence-cards-carousel-viewport">
-                        {filteredEvidence.slice(carouselIndex, carouselIndex + 4).map(ev => (
-                          <div key={ev.id} className="carousel-evidence-card">
-                            <div className="carousel-thumb-wrap">
-                              {renderEvidenceVisual(ev)}
-                            </div>
-                            <strong className="carousel-card-title">{ev.title}</strong>
-                            <span className="carousel-card-category">{ev.tag}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        className="carousel-arrow right"
-                        onClick={() => setCarouselIndex(i => Math.min(Math.max(0, filteredEvidence.length - 2), i + 1))}
-                        disabled={carouselIndex >= Math.max(0, filteredEvidence.length - 2)}
-                        aria-label="Next evidence card"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 4. Related Views Card */}
-                  <div className="sidebar-related-views-card">
-                    <div className="sidebar-card-header">
-                      <span className="header-icon">🧭</span>
-                      <h3>Related views</h3>
-                    </div>
-
-                    <div className="related-links-grid">
-                      <a href={contextHref('/candidate-live', matchId, seconds)} className="related-link-tile">
-                        <span className="tile-icon">📺</span>
-                        <div className="tile-copy">
-                          <strong>Open Match View</strong>
-                          <small>Explore the full match with interactive timeline.</small>
-                        </div>
-                        <span className="tile-chevron">❯</span>
-                      </a>
-
-                      <a href={contextHref('/teams', matchId, seconds)} className="related-link-tile">
-                        <span className="tile-icon">🛡️</span>
-                        <div className="tile-copy">
-                          <strong>{situation.homeTeamName} Team View</strong>
-                          <small>See tactical trends, shapes and player roles.</small>
-                        </div>
-                        <span className="tile-chevron">❯</span>
-                      </a>
-
-                      <a href={contextHref('/teams', matchId, seconds)} className="related-link-tile">
-                        <span className="tile-icon">🛡️</span>
-                        <div className="tile-copy">
-                          <strong>{situation.awayTeamName} Team View</strong>
-                          <small>Analyse their build-up, pressing and structure.</small>
-                        </div>
-                        <span className="tile-chevron">❯</span>
-                      </a>
-
-                      <a href={contextHref('/players', matchId, seconds)} className="related-link-tile">
-                        <span className="tile-icon">👤</span>
-                        <div className="tile-copy">
-                          <strong>Player View</strong>
-                          <small>Dive into individual performances.</small>
-                        </div>
-                        <span className="tile-chevron">❯</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Collapsible Deep Dive Multi-Agent Deliberation & Notable Event Reports */}
-                  <details className="analyst-deep-dive-details explanation-drawer" aria-label="Foundry Multi-Agent Deliberation">
-                    <summary className="deep-dive-toggle">
-                      <span className="deep-dive-icon">🤖</span>
-                      <span>Azure AI Foundry Specialists Roster & Deliberation</span>
-                      <span className="deep-dive-badge">10 Agents</span>
-                    </summary>
-
-                    {/* Foundry Agent Pack Roster */}
-                    <div className="foundry-agent-roster" aria-label="Azure AI Foundry Tactical Agents">
-                      <div className="roster-topline">
-                        <span className="roster-dot" aria-hidden="true"></span>
-                        <span className="roster-eyebrow">Azure AI Foundry Multi-Agent Deliberation</span>
-                        <span className="roster-count-badge">10 Agents Deployed</span>
-                        {foundryStatus && <span className="roster-status-pill">{foundryStatus}</span>}
-                      </div>
-                      <div className="agent-pills-wrap">
-                        {FOUNDRY_AGENTS.map(agent => (
-                          <button
-                            key={agent.name}
-                            type="button"
-                            className={`agent-roster-pill ${agentName === agent.name ? 'is-selected' : ''}`}
-                            onClick={() => {
-                              setAgentName(agent.name);
-                              if (data.context?.candidate) void runFoundryDeliberation(undefined, agent.name);
-                            }}
-                            title={`Click to deliberate with ${agent.name} v${agent.version} (${agent.role})`}
-                          >
-                            <span className="agent-pill-icon">{agent.icon}</span>
-                            <span className="agent-pill-name">{agent.name}</span>
-                            <span className="agent-pill-ver">v{agent.version}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="roster-action-bar">
-                        <button
-                          type="button"
-                          className="consult-specialist-btn"
-                          onClick={() => void runFoundryDeliberation(undefined, agentName)}
-                          disabled={deliberating || !data.context?.candidate}
-                        >
-                          <span>Consult {agentName} on Foundry</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="deliberate-all-btn"
-                          onClick={() => void runFoundryDeliberation()}
-                          disabled={deliberating || !data.context?.candidate}
-                        >
-                          <span>{deliberating ? 'Foundry Agents Discussing…' : 'Start Multi-Agent Panel Deliberation'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Synthesized Consensus Card */}
-                    <article className="tactical-synthesized-card" aria-label="Computed Tactical Explanation">
-                      <div className="explanation-card-header">
-                        <div className="explanation-card-tagline">
-                          <span className="explanation-pill">Computed via Multi-Agent Consensus</span>
-                          <small className="explanation-clock">Elapsed Clock: {clock(seconds)}</small>
-                        </div>
-                        <h2 className="explanation-headline">{activeExplanation.headline}</h2>
-                      </div>
-
-                      <p className="explanation-summary-text">{activeExplanation.summary}</p>
-
-                      <div className="explanation-key-findings">
-                        <h4 className="findings-subhead">Key Findings from Agent Discussion</h4>
-                        <ul className="findings-list">
-                          {activeExplanation.keyFindings.map((finding: { agent: string; point: string }, idx: number) => (
-                            <li key={idx} className="finding-item">
-                              <span className="finding-agent-badge">{finding.agent}</span>
-                              <span className="finding-text">{finding.point}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="explanation-recommendations">
-                        <h4 className="findings-subhead">Tactical Recommendations</h4>
-                        <ul className="recommendations-list">
-                          {activeExplanation.tacticalRecommendations.map((rec: string, idx: number) => (
-                            <li key={idx} className="recommendation-item">
-                              <span className="rec-arrow" aria-hidden="true">→</span>
-                              <span>{rec}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="explanation-meta-footer">
-                        <div className="explanation-evidence-refs">
-                          <strong>Evidence:</strong>
-                          {activeExplanation.evidenceIds.map((id: string) => (
-                            <code key={id} className="evidence-code-pill">{id}</code>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          className="re-deliberate-btn"
-                          onClick={handleReDeliberate}
-                          disabled={deliberating}
-                        >
-                          {deliberating ? 'Agents Discussing…' : '🔄 Re-deliberate Situation'}
-                        </button>
-                      </div>
-                    </article>
-
-                    {/* Discussion dialogue stream */}
-                    <div className="agent-discussion-stream" aria-label="Specialists Deliberation Dialogue">
-                      <div className="stream-header-info">
-                        <h3>Specialists Deliberation Dialogue</h3>
-                        <p>Agents discussing match situation at {clock(seconds)} and evaluating tactical structure.</p>
-                      </div>
-
-                      <div className="discussion-turns-stack">
-                        {activeTurns.map(turn => (
-                          <div key={turn.id} className="discussion-turn-bubble">
-                            <div className="turn-author-header">
-                              <span className="author-avatar">{turn.icon}</span>
-                              <strong className="author-name">{turn.agentName}</strong>
-                              <span className="author-version-tag">v{turn.agentVersion}</span>
-                              <span className="author-role-label">{turn.role}</span>
-                              {turn.replyingTo && (
-                                <span className="replying-to-tag">replying to {turn.replyingTo}</span>
-                              )}
-                            </div>
-                            <p className="turn-speech-text">{turn.text}</p>
-                            <div className="turn-citations">
-                              {turn.citedEvidence.map((cid: string) => (
-                                <small key={cid} className="turn-cite-pill">{cid}</small>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Notable Events Live Reports (Preserves contract assertions) */}
-                    {data.context.candidate && (
-                      <section className="candidate-live-reports" aria-label="Live event analysis reports">
-                        <div className="candidate-live-reports-heading">
-                          <h3>Reports from notable events</h3>
-                          <span role="status">{liveReportStatus}</span>
-                        </div>
-                        {liveReportError && <p role="alert" className="candidate-analyst-error">{liveReportError}</p>}
-                        {visibleReports.length ? (
-                          <div className="candidate-live-report-list">
-                            {visibleReports.map(report => (
-                              <article className="candidate-live-report" key={report.event.eventId}>
-                                <div className="candidate-analyst-answer-heading">
-                                  <span className="badge">{report.event.eventType} · {report.answer.agentName} · hypothesis</span>
-                                  <small>Source clock {clock(report.event.clockSeconds)} · sequence {report.event.sequence}</small>
-                                </div>
-                                <p>{report.answer.answer}</p>
-                                {report.answer.claims.length > 0 && (
-                                  <details>
-                                    <summary>Evidence references</summary>
-                                    <ul>
-                                      {report.answer.claims.flatMap((claim, index) =>
-                                        claim.evidenceIds.map(id => <li key={`${index}:${id}`}>{id}</li>)
-                                      )}
-                                    </ul>
-                                  </details>
-                                )}
+                              <p>{report.answer.answer}</p>
+                              {report.answer.claims.length > 0 && (
                                 <details>
-                                  <summary>Limitations</summary>
+                                  <summary>Evidence references</summary>
                                   <ul>
-                                    {report.answer.limitations.map(item => <li key={item}>{item}</li>)}
+                                    {report.answer.claims.flatMap((claim, index) =>
+                                      claim.evidenceIds.map(id => <li key={`${index}:${id}`}>{id}</li>)
+                                    )}
                                   </ul>
                                 </details>
-                              </article>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="candidate-live-reports-empty">
-                            Reports appear when a notable source event is persisted. No demo analysis is substituted.
-                          </p>
-                        )}
-                      </section>
-                    )}
-                  </details>
+                              )}
+                              <details>
+                                <summary>Limitations</summary>
+                                <ul>
+                                  {report.answer.limitations.map(item => <li key={item}>{item}</li>)}
+                                </ul>
+                              </details>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="candidate-live-reports-empty">
+                          Reports appear when a notable source event is persisted. No demo analysis is substituted.
+                        </p>
+                      )}
+                    </section>
+                  )}
                 </aside>
               </div>
             </div>

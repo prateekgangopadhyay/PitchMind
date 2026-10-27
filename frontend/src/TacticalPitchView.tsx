@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { ContextPlayer, ContextTeam } from './MatchContextPages';
 import { clock } from './api';
+import { getPlayerProfile } from './playerProfiles';
 
 export interface TacticalPitchEvent {
   type: string;
@@ -40,6 +41,8 @@ export interface TacticalPitchViewProps {
   recentEvent?: TacticalPitchEvent;
   availableEvents?: TacticalPitchEvent[];
   onSelectEvent?: (sequence: number) => void;
+  cinemaView?: boolean;
+  onToggleCinema?: () => void;
 }
 
 // 18 Standard Tactical Pitch Zones
@@ -71,14 +74,18 @@ export function TacticalPitchView({
   players,
   homeTeam,
   awayTeam,
+  seconds,
   ballPosition,
   recentEvent,
   availableEvents = [],
-  onSelectEvent
+  onSelectEvent,
+  cinemaView = false,
+  onToggleCinema
 }: TacticalPitchViewProps) {
   const [showZones, setShowZones] = useState(false);
   const [showLines, setShowLines] = useState(true);
   const [showVectors, setShowVectors] = useState(true);
+  const [showPasses, setShowPasses] = useState(true);
   const [showPressure, setShowPressure] = useState(true);
   const [hoveredPlayer, setHoveredPlayer] = useState<ContextPlayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -103,20 +110,89 @@ export function TacticalPitchView({
   const effectiveHomePlayers = homePlayers.length > 0 ? homePlayers : players.slice(0, Math.ceil(players.length / 2));
   const effectiveAwayPlayers = awayPlayers.length > 0 ? awayPlayers : players.slice(Math.ceil(players.length / 2));
 
-  // Determine active event coordinates
-  const eventX = recentEvent?.pitchX;
-  const eventY = recentEvent?.pitchY;
-  const endX = recentEvent?.endX;
-  const endY = recentEvent?.endY;
+  // Determine active event (fallback to latest available event if not passed)
+  const activeRecentEvent = recentEvent ?? (availableEvents.length > 0 ? availableEvents[availableEvents.length - 1] : undefined);
+  const eventX = activeRecentEvent?.pitchX;
+  const eventY = activeRecentEvent?.pitchY;
+  const endX = activeRecentEvent?.endX;
+  const endY = activeRecentEvent?.endY;
 
   // Lead-up pass/action coordinates
-  const leadup = recentEvent?.leadupEvent;
-  const leadupX = leadup?.pitchX ?? (recentEvent ? (eventX !== undefined ? eventX - 13 : undefined) : undefined);
-  const leadupY = leadup?.pitchY ?? (recentEvent ? (eventY !== undefined ? eventY - 7 : undefined) : undefined);
+  const leadup = activeRecentEvent?.leadupEvent;
+  const leadupX = leadup?.pitchX ?? (activeRecentEvent ? (eventX !== undefined ? eventX - 13 : undefined) : undefined);
+  const leadupY = leadup?.pitchY ?? (activeRecentEvent ? (eventY !== undefined ? eventY - 7 : undefined) : undefined);
 
   // Ball coordinate fallback
   const effBallX = mapX(ballPosition?.x ?? (eventX ?? 50));
   const effBallY = mapY(ballPosition?.y ?? (eventY ?? 34));
+
+  // Extract all tracked passes with start & end coordinates
+  const passEvents = useMemo(() => {
+    return availableEvents.filter(ev => {
+      const hasCoords =
+        ev.pitchX !== undefined &&
+        ev.pitchY !== undefined &&
+        ev.endX !== undefined &&
+        ev.endY !== undefined &&
+        (Math.abs(ev.pitchX - ev.endX) > 0.5 || Math.abs(ev.pitchY - ev.endY) > 0.5);
+      if (!hasCoords) return false;
+      const isPass =
+        ev.type === 'Pass' ||
+        ev.type === 'ProgressivePass' ||
+        ev.type?.toLowerCase().includes('pass') ||
+        ev.action?.toLowerCase().includes('pass') ||
+        Boolean(ev.receiverName);
+      return isPass;
+    });
+  }, [availableEvents]);
+
+  // Derive recent passes leading up to the current clock time
+  const recentPasses = useMemo(() => {
+    if (passEvents.length === 0) return [];
+    // Prioritize passes within current clock horizon, or take latest 6 passes
+    const filtered = passEvents.filter(p => p.clockSeconds <= seconds + 10);
+    const pool = filtered.length > 0 ? filtered : passEvents;
+    const sorted = [...pool].sort((a, b) => b.clockSeconds - a.clockSeconds);
+    return sorted.slice(0, 6);
+  }, [passEvents, seconds]);
+
+  // Profile and metrics for hovered player
+  const hoveredProfile = useMemo(() => {
+    if (!hoveredPlayer) return null;
+    return getPlayerProfile(hoveredPlayer.name, hoveredPlayer.teamId, hoveredPlayer.jerseyNumber);
+  }, [hoveredPlayer]);
+
+  // Tactical Zone for hovered player
+  const hoveredPlayerZone = useMemo(() => {
+    if (!hoveredPlayer || hoveredPlayer.x === undefined || hoveredPlayer.y === undefined) return null;
+    return (
+      TACTICAL_ZONES.find(
+        z =>
+          (hoveredPlayer.x ?? 0) >= z.x &&
+          (hoveredPlayer.x ?? 0) <= z.x + z.width &&
+          (hoveredPlayer.y ?? 0) >= z.y &&
+          (hoveredPlayer.y ?? 0) <= z.y + z.height
+      ) || null
+    );
+  }, [hoveredPlayer]);
+
+  // Passes involving the hovered player
+  const hoveredPlayerPasses = useMemo(() => {
+    if (!hoveredPlayer || !hoveredPlayer.name) return [];
+    const name = hoveredPlayer.name.toLowerCase();
+    return passEvents.filter(
+      p =>
+        (p.playerName && p.playerName.toLowerCase() === name) ||
+        (p.receiverName && p.receiverName.toLowerCase() === name)
+    );
+  }, [hoveredPlayer, passEvents]);
+
+  // Tooltip coordinates clamped safely inside pitch viewport bounds
+  const tooltipXPercent = Math.min(82, Math.max(18, hoveredPlayer?.x ?? 50));
+  const isHighY = (hoveredPlayer?.y ?? 50) > 42;
+  const tooltipYPercent = isHighY
+    ? Math.max(10, (hoveredPlayer?.y ?? 50) - 18)
+    : Math.min(80, (hoveredPlayer?.y ?? 50) + 16);
 
   // Active Zone Discovery based on coordinates
   const activeZone = eventX !== undefined && eventY !== undefined
@@ -127,7 +203,7 @@ export function TacticalPitchView({
     : null;
 
   // Find 2 opponent defenders closest to event to draw pressure collapse arrows
-  const eventTeamIsHome = recentEvent?.teamName === homeName || !recentEvent?.teamName;
+  const eventTeamIsHome = activeRecentEvent?.teamName === homeName || !activeRecentEvent?.teamName;
   const defendingPlayers = eventTeamIsHome ? effectiveAwayPlayers : effectiveHomePlayers;
   const sortedDefenders = [...defendingPlayers]
     .filter(p => p.x !== undefined && p.y !== undefined)
@@ -140,12 +216,12 @@ export function TacticalPitchView({
   const pressurePlayers = sortedDefenders.slice(0, 2);
 
   // Dynamic Tactical diagram title and badges
-  const isGoal = recentEvent?.type === 'Goal' || recentEvent?.outcome === 'Goal';
+  const isGoal = activeRecentEvent?.type === 'Goal' || activeRecentEvent?.outcome === 'Goal';
   const diagramTitle = isGoal
     ? 'CENTRAL PROGRESSION UNDER PRESSURE · GOAL CONVERSION'
-    : recentEvent?.type === 'Shot'
+    : activeRecentEvent?.type === 'Shot'
     ? 'FINAL THIRD PENETRATION · SHOT ON TARGET'
-    : recentEvent?.type === 'Tackle' || recentEvent?.type === 'BallRecovery'
+    : activeRecentEvent?.type === 'Tackle' || activeRecentEvent?.type === 'BallRecovery'
     ? 'HIGH PRESS REGAIN & TRANSITION TRIGGER'
     : 'CENTRAL PROGRESSION UNDER PRESSURE';
 
@@ -164,7 +240,7 @@ export function TacticalPitchView({
   const awayDefenders = sortedAway.slice(0, 4);
 
   return (
-    <div className="tactical-pitch-card" ref={containerRef}>
+    <div className={`tactical-pitch-card ${cinemaView ? 'is-cinema-mode' : ''}`} ref={containerRef}>
       {/* Tactical Diagram Banner Header matching screenshot */}
       <div className="tactical-diagram-banner">
         <div className="banner-topline">
@@ -240,6 +316,14 @@ export function TacticalPitchView({
         <div className="pitch-toolbar" role="toolbar" aria-label="Pitch overlay options">
           <button
             type="button"
+            className={`pitch-tool-btn ${showPasses ? 'active' : ''}`}
+            onClick={() => setShowPasses(!showPasses)}
+            title="Toggle observed pass vectors on the pitch"
+          >
+            <span>{showPasses ? 'Hide Passes ↗️' : 'Show Passes ↗️'}</span>
+          </button>
+          <button
+            type="button"
             className={`pitch-tool-btn ${showVectors ? 'active' : ''}`}
             onClick={() => setShowVectors(!showVectors)}
             title="Toggle action and pass vectors"
@@ -270,6 +354,16 @@ export function TacticalPitchView({
           >
             <span>{showLines ? 'Hide Shape Lines' : 'Show Shape Lines'}</span>
           </button>
+          {onToggleCinema && (
+            <button
+              type="button"
+              className={`pitch-tool-btn cinema-toggle-btn ${cinemaView ? 'active' : ''}`}
+              onClick={onToggleCinema}
+              title={cinemaView ? 'Exit cinema full screen' : 'Expand to full screen cinema view'}
+            >
+              <span>{cinemaView ? '✕ Exit Cinema' : '⛶ 100% Cinema'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -315,6 +409,33 @@ export function TacticalPitchView({
               <stop offset="100%" stopColor="#94a3b8" />
             </radialGradient>
 
+            {/* 3D Spherical Gradients for Kit Jerseys */}
+            <radialGradient id="home-kit-gradient" cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stopColor="#ff5a5a" />
+              <stop offset="40%" stopColor="#dc2626" />
+              <stop offset="85%" stopColor="#991b1b" />
+              <stop offset="100%" stopColor="#7f1d1d" />
+            </radialGradient>
+
+            <radialGradient id="away-kit-gradient" cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stopColor="#38bdf8" />
+              <stop offset="45%" stopColor="#0284c7" />
+              <stop offset="85%" stopColor="#0369a1" />
+              <stop offset="100%" stopColor="#075985" />
+            </radialGradient>
+
+            <radialGradient id="gk-kit-gradient" cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stopColor="#fef08a" />
+              <stop offset="45%" stopColor="#eab308" />
+              <stop offset="85%" stopColor="#ca8a04" />
+              <stop offset="100%" stopColor="#854d0e" />
+            </radialGradient>
+
+            {/* Ground Soft Shadows for Players */}
+            <filter id="tactical-player-shadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="0.32" result="blur" />
+            </filter>
+
             {/* Goal Net Hexagonal / Diamond Weave Pattern */}
             <pattern id="tactical-net-pattern" width="0.7" height="0.7" patternUnits="userSpaceOnUse">
               <rect width="0.7" height="0.7" fill="rgba(255,255,255,0.02)" />
@@ -333,6 +454,10 @@ export function TacticalPitchView({
 
             <marker id="pass-arrowhead" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
               <polygon points="0 1, 4.5 3, 0 5" fill="#38bdf8" />
+            </marker>
+
+            <marker id="away-pass-arrowhead" markerWidth="6" markerHeight="6" refX="4" refY="3" orient="auto">
+              <polygon points="0 1, 4.5 3, 0 5" fill="#34d399" />
             </marker>
 
             <marker id="pressure-arrowhead" markerWidth="5" markerHeight="5" refX="3.5" refY="2.5" orient="auto">
@@ -497,6 +622,77 @@ export function TacticalPitchView({
             </g>
           )}
 
+          {/* Tracked Tactical Passes on the Pitch */}
+          {showPasses && recentPasses.length > 0 && (
+            <g className="tactical-passes-layer" aria-label="Observed tactical passes on the pitch">
+              {recentPasses.map((p, idx) => {
+                const isLead = activeRecentEvent?.sequence === p.sequence;
+                const isRelated = hoveredPlayer?.name ? (
+                  (p.playerName && p.playerName.toLowerCase() === hoveredPlayer.name.toLowerCase()) ||
+                  (p.receiverName && p.receiverName.toLowerCase() === hoveredPlayer.name.toLowerCase())
+                ) : false;
+                const isHomePass = p.teamName === homeName || (!p.teamName && !p.receiverName);
+                const strokeColor = isRelated ? '#f59e0b' : isHomePass ? '#38bdf8' : '#34d399';
+                const x1 = mapX(p.pitchX);
+                const y1 = mapY(p.pitchY);
+                const x2 = mapX(p.endX);
+                const y2 = mapY(p.endY);
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                const passerLast = p.playerName ? p.playerName.split(' ').pop() : 'Passer';
+                const receiverLast = p.receiverName ? p.receiverName.split(' ').pop() : 'Target';
+
+                return (
+                  <g
+                    key={`pass-vec-${p.sequence}-${idx}`}
+                    className={`tactical-pass-vector ${isLead ? 'is-active-pass' : ''} ${isRelated ? 'is-highlighted-pass' : ''}`}
+                  >
+                    {/* Glowing trajectory line */}
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={strokeColor}
+                      strokeWidth={isLead || isRelated ? '0.65' : '0.42'}
+                      strokeOpacity={isRelated ? 1 : 0.75}
+                      strokeDasharray={isLead ? '1.4 0.7' : '1.2 0.6'}
+                      markerEnd={isHomePass ? 'url(#pass-arrowhead)' : 'url(#away-pass-arrowhead)'}
+                    />
+                    {/* Origin and Target nodes */}
+                    <circle cx={x1} cy={y1} r={isLead ? '0.7' : '0.5'} fill={strokeColor} />
+                    <circle cx={x2} cy={y2} r="0.6" fill="none" stroke={strokeColor} strokeWidth="0.25" opacity="0.8" />
+                    {/* Directional mini pill badge */}
+                    {(isLead || isRelated || idx === 0) && (
+                      <g transform={`translate(${midX} ${midY - 1.2})`} pointerEvents="none">
+                        <rect
+                          x="-8"
+                          y="-1.3"
+                          width="16"
+                          height="2.6"
+                          rx="0.5"
+                          fill="rgba(10, 25, 20, 0.92)"
+                          stroke={strokeColor}
+                          strokeWidth="0.2"
+                        />
+                        <text
+                          x="0"
+                          y="0.5"
+                          textAnchor="middle"
+                          fill="#f8fafc"
+                          fontSize="1.4"
+                          fontWeight="700"
+                        >
+                          ↗️ {passerLast} → {receiverLast}
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          )}
+
           {/* Build-up / Assist Delivery Vector (Pass into Event) */}
           {showVectors && leadupX !== undefined && leadupY !== undefined && eventX !== undefined && eventY !== undefined && (
             <g className="tactical-leadup-vector-group">
@@ -557,7 +753,7 @@ export function TacticalPitchView({
                 fontSize="1.6"
                 fontWeight="800"
               >
-                {recentEvent?.action ? `${recentEvent.action} ⚡` : isGoal ? 'Goal Finish ⚽' : 'Shot on Target 🎯'}
+                {activeRecentEvent?.action ? `${activeRecentEvent.action} ⚡` : isGoal ? 'Goal Finish ⚽' : 'Shot on Target 🎯'}
               </text>
             </g>
           )}
@@ -598,12 +794,14 @@ export function TacticalPitchView({
             );
           })}
 
-          {/* Away Team Players (Sky Blue) */}
+          {/* Away Team Players (Sky Blue / 3D Sapphire Gradient) */}
           {effectiveAwayPlayers.map((player, idx) => {
             const px = mapX(player.x ?? (70 + (idx % 4) * 8));
             const py = mapY(player.y ?? (15 + (idx % 5) * 11));
             const isHovered = hoveredPlayer?.id === player.id;
-            const isActor = recentEvent?.playerName === player.name;
+            const isActor = activeRecentEvent?.playerName === player.name;
+            const pName = (player.name ?? '').toLowerCase();
+            const isGk = player.jerseyNumber === 1 || pName.includes('onana') || pName.includes('alisson');
 
             return (
               <g
@@ -611,34 +809,86 @@ export function TacticalPitchView({
                 className={`tactical-player away-team ${isActor ? 'is-key-actor' : ''}`}
                 transform={`translate(${px} ${py})`}
                 onMouseEnter={() => setHoveredPlayer(player)}
+                onMouseOver={() => setHoveredPlayer(player)}
                 onMouseLeave={() => setHoveredPlayer(null)}
+                onMouseOut={() => setHoveredPlayer(null)}
+                onFocus={() => setHoveredPlayer(player)}
+                onBlur={() => setHoveredPlayer(null)}
                 style={{ cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                aria-label={`${player.name} #${player.jerseyNumber ?? idx + 1}, ${awayName}`}
               >
+                {/* Turf Ground Contact Shadow */}
+                <ellipse cx="0" cy="1.6" rx={isHovered || isActor ? 2.6 : 2.1} ry={isHovered || isActor ? 0.9 : 0.7} fill="rgba(0, 0, 0, 0.45)" filter="url(#tactical-player-shadow)" pointerEvents="none" />
+
+                {/* Key Actor Dual Beacon / Pulsing Ring */}
                 {isActor && (
                   <>
-                    <circle cx="0" cy="0" r="4.5" fill="none" stroke="#38bdf8" strokeWidth="0.3" opacity="0.8" />
-                    <circle cx="0" cy="0" r="6" fill="none" stroke="#38bdf8" strokeWidth="0.2" opacity="0.4" />
+                    <circle cx="0" cy="0" r="4.6" fill="none" stroke="#38bdf8" strokeWidth="0.4" opacity="0.9" strokeDasharray="1.2 0.8" />
+                    <circle cx="0" cy="0" r="6.5" fill="none" stroke="#38bdf8" strokeWidth="0.25" opacity="0.5" />
                   </>
                 )}
-                <circle cx="0" cy="0" r={isHovered || isActor ? 2.5 : 2} fill="#0284c7" stroke="#ffffff" strokeWidth="0.35" />
-                <text x="0" y="0.8" textAnchor="middle" fill="#ffffff" fontSize="1.8" fontWeight="700">
+                {/* Hover Focus Ring */}
+                {isHovered && !isActor && (
+                  <circle cx="0" cy="0" r="3.2" fill="none" stroke="#ffffff" strokeWidth="0.35" opacity="0.85" strokeDasharray="1 0.6" />
+                )}
+
+                {/* 3D Kit Bubble Disc */}
+                <circle
+                  cx="0"
+                  cy="0"
+                  r={isHovered || isActor ? 2.5 : 2}
+                  fill={isGk ? 'url(#gk-kit-gradient)' : 'url(#away-kit-gradient)'}
+                  stroke="#ffffff"
+                  strokeWidth="0.35"
+                />
+
+                {/* Specular 3D Gloss Highlight Arc */}
+                <ellipse cx="-0.4" cy="-0.5" rx={isHovered || isActor ? 1.4 : 1.1} ry={isHovered || isActor ? 0.7 : 0.55} fill="rgba(255, 255, 255, 0.45)" transform="rotate(-30 -0.4 -0.5)" pointerEvents="none" />
+
+                {/* Bold Tabular Figures Jersey Number */}
+                <text x="0" y="0.8" textAnchor="middle" fill="#ffffff" fontSize="1.8" fontWeight="800" pointerEvents="none">
                   {player.jerseyNumber ?? idx + 1}
                 </text>
+
+                {/* Nameplate Pill on Hover or Key Actor */}
                 {(isHovered || isActor) && (
-                  <text x="0" y="-3.2" textAnchor="middle" fill="#ffffff" fontSize="2.2" fontWeight="700" stroke="#000000" strokeWidth="0.2" paintOrder="stroke">
-                    {player.name}
-                  </text>
+                  <g className="player-nameplate-group" pointerEvents="none">
+                    <rect
+                      x="-8.5"
+                      y="-5.4"
+                      width="17"
+                      height="2.8"
+                      rx="1.4"
+                      fill="rgba(10, 25, 20, 0.92)"
+                      stroke="rgba(255, 255, 255, 0.35)"
+                      strokeWidth="0.2"
+                    />
+                    <text
+                      x="0"
+                      y="-3.4"
+                      textAnchor="middle"
+                      fill="#ffffff"
+                      fontSize="1.7"
+                      fontWeight="700"
+                    >
+                      {player.name}
+                    </text>
+                  </g>
                 )}
               </g>
             );
           })}
 
-          {/* Home Team Players (Crimson Red) */}
+          {/* Home Team Players (Crimson Red / 3D Gradient) */}
           {effectiveHomePlayers.map((player, idx) => {
             const px = mapX(player.x ?? (20 + (idx % 4) * 8));
             const py = mapY(player.y ?? (15 + (idx % 5) * 11));
             const isHovered = hoveredPlayer?.id === player.id;
-            const isActor = recentEvent?.playerName === player.name;
+            const isActor = activeRecentEvent?.playerName === player.name;
+            const pName = (player.name ?? '').toLowerCase();
+            const isGk = player.jerseyNumber === 1 || pName.includes('onana') || pName.includes('alisson');
 
             return (
               <g
@@ -646,23 +896,73 @@ export function TacticalPitchView({
                 className={`tactical-player home-team ${isActor ? 'is-key-actor' : ''}`}
                 transform={`translate(${px} ${py})`}
                 onMouseEnter={() => setHoveredPlayer(player)}
+                onMouseOver={() => setHoveredPlayer(player)}
                 onMouseLeave={() => setHoveredPlayer(null)}
+                onMouseOut={() => setHoveredPlayer(null)}
+                onFocus={() => setHoveredPlayer(player)}
+                onBlur={() => setHoveredPlayer(null)}
                 style={{ cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                aria-label={`${player.name} #${player.jerseyNumber ?? idx + 1}, ${homeName}`}
               >
+                {/* Turf Ground Contact Shadow */}
+                <ellipse cx="0" cy="1.6" rx={isHovered || isActor ? 2.6 : 2.1} ry={isHovered || isActor ? 0.9 : 0.7} fill="rgba(0, 0, 0, 0.45)" filter="url(#tactical-player-shadow)" pointerEvents="none" />
+
+                {/* Key Actor Dual Beacon / Pulsing Ring */}
                 {isActor && (
                   <>
-                    <circle cx="0" cy="0" r="4.5" fill="none" stroke="#f59e0b" strokeWidth="0.4" opacity="0.9" />
+                    <circle cx="0" cy="0" r="4.6" fill="none" stroke="#f59e0b" strokeWidth="0.4" opacity="0.9" strokeDasharray="1.2 0.8" />
                     <circle cx="0" cy="0" r="6.5" fill="none" stroke="#f59e0b" strokeWidth="0.25" opacity="0.5" />
                   </>
                 )}
-                <circle cx="0" cy="0" r={isHovered || isActor ? 2.5 : 2} fill="#dc2626" stroke="#ffffff" strokeWidth="0.35" />
-                <text x="0" y="0.8" textAnchor="middle" fill="#ffffff" fontSize="1.8" fontWeight="700">
+                {/* Hover Focus Ring */}
+                {isHovered && !isActor && (
+                  <circle cx="0" cy="0" r="3.2" fill="none" stroke="#ffffff" strokeWidth="0.35" opacity="0.85" strokeDasharray="1 0.6" />
+                )}
+
+                {/* 3D Kit Bubble Disc */}
+                <circle
+                  cx="0"
+                  cy="0"
+                  r={isHovered || isActor ? 2.5 : 2}
+                  fill={isGk ? 'url(#gk-kit-gradient)' : 'url(#home-kit-gradient)'}
+                  stroke="#ffffff"
+                  strokeWidth="0.35"
+                />
+
+                {/* Specular 3D Gloss Highlight Arc */}
+                <ellipse cx="-0.4" cy="-0.5" rx={isHovered || isActor ? 1.4 : 1.1} ry={isHovered || isActor ? 0.7 : 0.55} fill="rgba(255, 255, 255, 0.45)" transform="rotate(-30 -0.4 -0.5)" pointerEvents="none" />
+
+                {/* Bold Tabular Figures Jersey Number */}
+                <text x="0" y="0.8" textAnchor="middle" fill="#ffffff" fontSize="1.8" fontWeight="800" pointerEvents="none">
                   {player.jerseyNumber ?? idx + 1}
                 </text>
+
+                {/* Nameplate Pill on Hover or Key Actor */}
                 {(isHovered || isActor) && (
-                  <text x="0" y="-3.2" textAnchor="middle" fill="#ffffff" fontSize="2.2" fontWeight="700" stroke="#000000" strokeWidth="0.2" paintOrder="stroke">
-                    {player.name}
-                  </text>
+                  <g className="player-nameplate-group" pointerEvents="none">
+                    <rect
+                      x="-8.5"
+                      y="-5.4"
+                      width="17"
+                      height="2.8"
+                      rx="1.4"
+                      fill="rgba(10, 25, 20, 0.92)"
+                      stroke="rgba(255, 255, 255, 0.35)"
+                      strokeWidth="0.2"
+                    />
+                    <text
+                      x="0"
+                      y="-3.4"
+                      textAnchor="middle"
+                      fill="#ffffff"
+                      fontSize="1.7"
+                      fontWeight="700"
+                    >
+                      {player.name}
+                    </text>
+                  </g>
                 )}
               </g>
             );
@@ -680,6 +980,75 @@ export function TacticalPitchView({
             <polygon points="0,-0.38 0.36,-0.12 0.22,0.3 -0.22,0.3 -0.36,-0.12" fill="#0f172a" />
           </g>
         </svg>
+
+        {/* Professional Floating Player Tooltip HUD with Profile Picture Avatar */}
+        {hoveredPlayer && hoveredProfile && (
+          <div
+            className="tactical-player-tooltip-card"
+            style={{
+              left: `${tooltipXPercent}%`,
+              top: `${tooltipYPercent}%`,
+            }}
+            role="tooltip"
+            aria-label={`Player Profile: ${hoveredProfile.name}`}
+          >
+            <div className="tooltip-header">
+              <div className="tooltip-avatar-container">
+                <img
+                  src={hoveredProfile.photoUrl}
+                  alt={hoveredProfile.name}
+                  className="tooltip-player-avatar"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                    const fb = e.currentTarget.parentElement?.querySelector('.tooltip-avatar-fallback') as HTMLElement | null;
+                    if (fb) fb.style.display = 'flex';
+                  }}
+                />
+                <div className="tooltip-avatar-fallback" style={{ display: 'none' }}>
+                  {hoveredProfile.initials}
+                </div>
+                <span className={`tooltip-jersey-pill ${hoveredPlayer.teamId === homeName ? 'home-team' : 'away-team'}`}>
+                  #{hoveredProfile.number ?? hoveredPlayer.jerseyNumber ?? '•'}
+                </span>
+              </div>
+
+              <div className="tooltip-meta">
+                <div className="tooltip-name-row">
+                  <h4 className="tooltip-player-name">{hoveredProfile.name}</h4>
+                </div>
+                <div className="tooltip-role-pill">
+                  <span className="role-dot" />
+                  <span>{hoveredProfile.role}</span>
+                </div>
+                <div className="tooltip-club-row">
+                  <span className="tooltip-club-name">{hoveredProfile.club}</span>
+                  {hoveredProfile.nationality && (
+                    <span className="tooltip-nation-tag">· {hoveredProfile.nationality}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="tooltip-metrics-grid">
+              <div className="tooltip-metric-cell">
+                <span className="cell-label">Zone</span>
+                <strong className="cell-value">{hoveredPlayerZone ? hoveredPlayerZone.name.split(':')[0] : 'Midfield'}</strong>
+              </div>
+              <div className="tooltip-metric-cell">
+                <span className="cell-label">Pitch Coords</span>
+                <strong className="cell-value">X: {Math.round(hoveredPlayer.x ?? 50)}m · Y: {Math.round(hoveredPlayer.y ?? 34)}m</strong>
+              </div>
+              <div className="tooltip-metric-cell">
+                <span className="cell-label">Pref. Foot</span>
+                <strong className="cell-value">{hoveredProfile.preferredFoot || 'Right / Both'}</strong>
+              </div>
+              <div className="tooltip-metric-cell">
+                <span className="cell-label">Pass Involvement</span>
+                <strong className="cell-value highlight">{hoveredPlayerPasses.length} tracked</strong>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pitch Footer with Hovered details / status */}

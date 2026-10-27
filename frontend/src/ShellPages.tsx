@@ -18,6 +18,8 @@ import { MatchContextAnalystPage, MatchContextInsightsPage, MatchContextPlayersP
 import { LinearEventsTimeline } from './LinearEventsTimeline';
 import { refreshCandidateStatus, useCandidateStreamStatus } from './candidateLiveStatus';
 
+import { AiCommentaryTimeline } from './AiCommentaryTimeline';
+
 const CANONICAL_PHASES = ['notstarted', 'firsthalf', 'halftime', 'secondhalf', 'fulltime'];
 
 function phaseLabel(phase: string) {
@@ -321,16 +323,24 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
     if (selectedMatchId) setActiveTimelineMatchId(selectedMatchId);
   }, [selectedMatchId]);
 
+  // Match is considered loaded once we have an active match ID and either timeline data or streaming status
+  const isMatchLoaded = Boolean(activeMatchId && (timelineData.context || candidateStream.status?.matchId || matches.some(m => m.matchId === activeMatchId)));
+
   return <section className="content-page screen-page home-page">
-    <div className="home-heading-row">
-      <PageHeading eyebrow="Home · match library" title="Choose a match" question="Scores and match phases come from canonical match records." />
-      {!loading && !error && matches.length > 0 && <label className="phase-filter">Filter by phase
-        <select aria-label="Filter matches by phase" value={phaseFilter} onChange={event => replacePhaseFilterContext(event.target.value)}>
-          <option value="all">All phases</option>{phases.map(phase => <option key={phase} value={phase}>{phaseLabel(phase)}</option>)}
-        </select>
-      </label>}
-      {!loading && !error && page && <button className="refresh-matches" type="button" onClick={retry}>Refresh matches</button>}
-    </div>
+    {/* Once the match is loaded, hide the "Choose Match" PageHeading and Refresh Match button */}
+    {(!isMatchLoaded || (!loading && !error && matches.length > 0)) && (
+      <div className="home-heading-row">
+        {!isMatchLoaded && (
+          <PageHeading eyebrow="Home · match library" title="Choose a match" question="Scores and match phases come from canonical match records." />
+        )}
+        {!loading && !error && matches.length > 0 && <label className="phase-filter">Filter by phase
+          <select aria-label="Filter matches by phase" value={phaseFilter} onChange={event => replacePhaseFilterContext(event.target.value)}>
+            <option value="all">All phases</option>{phases.map(phase => <option key={phase} value={phase}>{phaseLabel(phase)}</option>)}
+          </select>
+        </label>}
+        {!isMatchLoaded && !loading && !error && page && <button className="refresh-matches" type="button" onClick={retry}>Refresh matches</button>}
+      </div>
+    )}
 
     {/* Linear Match Events Timeline with differentiated icons */}
     <div className="home-timeline-section">
@@ -365,58 +375,79 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
       ) : null}
     </div>
 
+    {/* AI Service Match Commentary Timeline synced with UX timeline */}
+    {activeMatchId && (
+      <div className="home-commentary-section" style={{ marginTop: '24px' }}>
+        <AiCommentaryTimeline
+          events={timelineData.context?.events ?? []}
+          matchId={activeMatchId}
+          selectedSeconds={selectedSeconds ?? candidateStream.status?.currentClockValue ?? 0}
+          homeTeam={timelineData.context?.homeTeam?.name ?? 'Home'}
+          awayTeam={timelineData.context?.awayTeam?.name ?? 'Away'}
+          homeScore={timelineData.context?.homeTeam?.score ?? 0}
+          awayScore={timelineData.context?.awayTeam?.score ?? 0}
+          loading={timelineData.loading}
+        />
+      </div>
+    )}
+
     {loading ? <PageState loading empty="" />
       : error ? <div className="page-state error-copy" role="alert"><p>{error}</p><button type="button" onClick={retry}>Try loading matches again</button></div>
-        : matches.length === 0 && candidateStream.status?.matchId ? <article className="match-card candidate-home-card">
-          <div className="match-card-copy">
-            <div className="match-card-topline"><span className="badge">Candidate simulation</span><span className="phase-tag">Not canonical</span></div>
-            <h2>Live match feed</h2>
-            <p>Match ID <code translate="no">{candidateStream.status.matchId}</code></p>
-            {timelineData.context?.homeTeam && (
-              <p className="candidate-match-score-row" style={{ fontWeight: 600, fontSize: '1rem', margin: '6px 0', color: 'var(--text-primary, #fff)' }}>
-                {timelineData.context.homeTeam.name} {timelineData.context.homeTeam.score ?? 0} – {timelineData.context.awayTeam?.score ?? 0} {timelineData.context.awayTeam?.name ?? 'Away'}
-                <span style={{ marginLeft: '10px', fontSize: '0.85rem', color: '#00d26a', fontWeight: 500 }}>
-                  ● Live · {clock(selectedSeconds ?? candidateStream.status?.currentClockValue ?? 0)}
-                </span>
-              </p>
-            )}
-            <p>Source events and player positions are shown with their provenance and validation limits.</p>
-            {candidateStream.error && <p role="status">{candidateStream.error}</p>}
+      : matches.length === 0 && candidateStream.error ? <div className="page-state error-copy" role="status">
+        <p>Canonical matches are not available, and the candidate live feed could not be loaded.</p>
+        <button type="button" onClick={() => { void refreshCandidateStatus(); }}>Retry live feed</button>
+      </div>
+      : matches.length === 0 && !candidateStream.status?.matchId ? <PageState loading={false} empty="No canonical matches are available yet." />
+      : null}
+
+    {/* Candidate simulation portion moved to footer */}
+    {candidateStream.status?.matchId && (
+      <footer className="screen-footer candidate-simulation-footer" aria-label="Candidate simulation live feed status">
+        <div className="footer-candidate-feed-meta">
+          <div className="footer-badges-row">
+            <span className="badge">Candidate simulation</span>
+            <span className="phase-tag">Not canonical</span>
           </div>
-          <div className="match-card-actions">
-            {candidateStream.status?.matchId && (
-              <button
-                type="button"
-                className={`inspect-timeline-btn ${activeMatchId === candidateStream.status.matchId ? 'is-active' : ''}`}
-                onClick={() => {
-                  const mId = candidateStream.status?.matchId;
-                  setActiveTimelineMatchId(current => current === mId ? undefined : (mId ?? undefined));
-                }}
+          <div className="footer-feed-id-group">
+            <h2 className="footer-feed-title" style={{ fontSize: '1rem', margin: 0, fontWeight: 600 }}>Live match feed</h2>
+            <span className="footer-match-id">Match ID <code translate="no">{candidateStream.status.matchId}</code></span>
+          </div>
+        </div>
+
+        {timelineData.context?.homeTeam && (
+          <div className="footer-score-pill">
+            <span className="footer-teams-score">
+              {timelineData.context.homeTeam.name} {timelineData.context.homeTeam.score ?? 0} – {timelineData.context.awayTeam?.score ?? 0} {timelineData.context.awayTeam?.name ?? 'Away'}
+            </span>
+            <span className="footer-live-pill">
+              <span className="live-dot" aria-hidden="true">●</span>
+              Live · {clock(selectedSeconds ?? candidateStream.status?.currentClockValue ?? 0)}
+            </span>
+          </div>
+        )}
+
+        <div className="footer-provenance-note">
+          <p>Source events and player positions are shown with their provenance and validation limits.</p>
+          {candidateStream.error && <p role="status" className="error-copy">{candidateStream.error}</p>}
+        </div>
+
+        <div className="footer-actions">
+          {(() => {
+            const liveHref = contextHref('/candidate-live', candidateStream.status.matchId,
+              selectedSeconds ?? candidateStream.status.currentClockValue ?? 0, undefined, 'live');
+            return (
+              <a
+                className="primary-link footer-open-live-btn"
+                href={liveHref}
+                onClick={e => handleLinkClick(e, liveHref)}
               >
-                {activeMatchId === candidateStream.status.matchId ? 'Hide Linear Timeline' : 'View Linear Events Timeline'}
-              </button>
-            )}
-            {(() => {
-              const liveHref = contextHref('/candidate-live', candidateStream.status.matchId,
-                selectedSeconds ?? candidateStream.status.currentClockValue ?? 0, undefined, 'live');
-              return (
-                <a
-                  className="primary-link"
-                  href={liveHref}
-                  onClick={e => handleLinkClick(e, liveHref)}
-                >
-                  Open live match
-                </a>
-              );
-            })()}
-          </div>
-        </article>
-          : matches.length === 0 && candidateStream.error ? <div className="page-state error-copy" role="status">
-            <p>Canonical matches are not available, and the candidate live feed could not be loaded.</p>
-            <button type="button" onClick={() => { void refreshCandidateStatus(); }}>Retry live feed</button>
-          </div>
-            : matches.length === 0 ? <PageState loading={false} empty="No canonical matches are available yet." />
-              : null}
+                Open live match →
+              </a>
+            );
+          })()}
+        </div>
+      </footer>
+    )}
   </section>;
 }
 

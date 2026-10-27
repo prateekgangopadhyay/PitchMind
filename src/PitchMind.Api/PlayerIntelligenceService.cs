@@ -519,7 +519,8 @@ public sealed class PlayerIntelligenceService : IPlayerIntelligenceService
             MatchContext: matchContext,
             ProgressiveCarriesStat: progressiveCarriesStat,
             ChanceCreationStat: chanceCreationStat,
-            DefensiveWorkStats: defensiveWorkStats
+            DefensiveWorkStats: defensiveWorkStats,
+            PhotoUrl: p.PhotoUrl ?? p.Photo ?? $"/player-photos/{p.Id}.jpg"
         );
     }
 
@@ -1068,7 +1069,8 @@ public sealed class PlayerIntelligenceService : IPlayerIntelligenceService
             MatchContext: matchContext,
             ProgressiveCarriesStat: progressiveCarriesStat,
             ChanceCreationStat: chanceCreationStat,
-            DefensiveWorkStats: defensiveWorkStats
+            DefensiveWorkStats: defensiveWorkStats,
+            PhotoUrl: $"/player-photos/{p.Id}.jpg"
         );
     }
 
