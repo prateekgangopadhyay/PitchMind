@@ -90,7 +90,7 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
   ];
 
   it('projects observed events into cards and selects a specialist agent without inventing commentary', () => {
-    const items = generateAiCommentaryFromEvents(sampleEvents, 'Manchester United', 'Liverpool');
+    const items = generateAiCommentaryFromEvents(sampleEvents);
 
     expect(items.length).toBeGreaterThanOrEqual(7);
 

@@ -82,11 +82,7 @@ function categorizeEvent(type: string): { category: CommentaryCategory; agentNam
  * Creates event cards from observed match data. Narrative text is intentionally
  * left empty until the configured Foundry agent returns a validated answer.
  */
-export function generateAiCommentaryFromEvents(
-  events: CommentaryEventInput[],
-  _homeTeam = 'Home FC',
-  _awayTeam = 'Away FC'
-): AiCommentaryItem[] {
+export function generateAiCommentaryFromEvents(events: CommentaryEventInput[]): AiCommentaryItem[] {
   if (!events || events.length === 0) {
     return [];
   }
@@ -169,8 +165,8 @@ export function AiCommentaryTimeline({
 
   // Generate full commentary items from match events
   const allCommentaryItems = useMemo(() => {
-    return generateAiCommentaryFromEvents(events, homeTeam, awayTeam);
-  }, [events, homeTeam, awayTeam]);
+    return generateAiCommentaryFromEvents(events);
+  }, [events]);
 
   // Find the commentary item closest to current selectedSeconds
   const currentCommentaryItem = useMemo(() => {
