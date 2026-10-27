@@ -246,8 +246,16 @@ describe('TeamHeadToHeadAiSection', () => {
 
   it('regenerates AI breakdown via AI service when regenerate button is clicked', async () => {
     const askSpy = vi.spyOn(api, 'askCandidateAnalyst').mockResolvedValueOnce({
-      answer: 'AI generated tactical synthesis: Manchester United are utilizing direct transition vectors through Liverpool defensive half spaces.'
-    } as any);
+      status: 'answered',
+      answer: 'AI generated tactical synthesis: Manchester United are utilizing direct transition vectors through Liverpool defensive half spaces.',
+      claims: [],
+      matchId: 'match-1',
+      selectedSourceClockValue: 1200,
+      sourceSha256: 'mock-sha',
+      agentName: 'TacticalAnalyst',
+      truthClass: 'hypothesis',
+      limitations: []
+    });
 
     const container = document.createElement('div');
     document.body.append(container);

@@ -260,8 +260,6 @@ export function AiCommentaryTimeline({
   selectedSeconds = 0,
   homeTeam = 'Home Team',
   awayTeam = 'Away Team',
-  homeScore = 0,
-  awayScore = 0,
   loading = false,
   onTimeSelect
 }: AiCommentaryTimelineProps) {
@@ -360,7 +358,7 @@ export function AiCommentaryTimeline({
         container.scrollTop = targetScroll;
       }
     }
-  }, [currentCommentaryItem?.id, autoScroll, selectedSeconds]);
+  }, [currentCommentaryItem, autoScroll, selectedSeconds]);
 
   const goalsCount = allCommentaryItems.filter(i => i.category === 'goal').length;
   const shotsCount = allCommentaryItems.filter(i => i.category === 'shot').length;
@@ -532,7 +530,7 @@ export function AiCommentaryTimeline({
                     if (el) cardElementsRef.current.set(item.id, el);
                     else cardElementsRef.current.delete(item.id);
                   }}
-                  className={`commentary-node-card ${item.category} ${isCurrent ? 'is-synced-current' : ''} ${isPast ? 'is-past-moment' : 'is-future-moment'}`}
+                  className={`commentary-node-card ${item.category} ${isCurrent || activeCardId === item.id ? 'is-synced-current' : ''} ${isPast ? 'is-past-moment' : 'is-future-moment'}`}
                   onClick={() => handleSelectTime(item.clockSeconds, item.id)}
                   tabIndex={0}
                   role="button"

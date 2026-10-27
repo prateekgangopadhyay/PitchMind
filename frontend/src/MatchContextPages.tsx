@@ -1262,10 +1262,6 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     return deduceTeamFormation(data.context?.players, data.context?.homeTeam?.id || 'home');
   }, [data.context?.players, data.context?.homeTeam?.id]);
 
-  const awayFormation = useMemo(() => {
-    return deduceTeamFormation(data.context?.players, data.context?.awayTeam?.id || 'away');
-  }, [data.context?.players, data.context?.awayTeam?.id]);
-
   const dominantTeam = useMemo(() => {
     if (situation.homeScore > situation.awayScore) return situation.homeTeamName;
     if (situation.awayScore > situation.homeScore) return situation.awayTeamName;
@@ -1333,10 +1329,6 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
     return `${situation.homeTeamName} press high in a ${homeFormation} shape, with the front line blocking ${situation.awayTeamName}'s central passing lanes and forcing progression wide. When ${situation.awayTeamName} attempt to build out from defense, ${situation.homeTeamName}'s midfield and defensive lines shift aggressively to force turnovers. These high regains have generated decisive attacking transitions, notably around minute ${currentMinute}'. With ${deducedMetrics.opponentBuildUpDisruptedPct}% of build-up sequences disrupted, ${situation.awayTeamName} remain restricted to contested long distributions and low-probability entries into ${situation.homeTeamName}'s half.`;
   }, [situation.homeTeamName, situation.awayTeamName, homeFormation, currentMinute, deducedMetrics.opponentBuildUpDisruptedPct]);
 
-  const dynamicMatchDate = useMemo(() => {
-    const d = new Date();
-    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-  }, []);
 
   const dynamicVenue = useMemo(() => {
     const name = situation.homeTeamName.toLowerCase();

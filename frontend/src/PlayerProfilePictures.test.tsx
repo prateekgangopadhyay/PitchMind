@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlayerRosterView } from './PlayerRosterView';
 import { PlayerTacticalDashboard } from './PlayerTacticalDashboard';
-import { resolvePlayerPhotoUrl, getPlayerProfile, generatePlayerAvatarSvg } from './playerProfiles';
+import { resolvePlayerPhotoUrl } from './playerProfiles';
 import type { PlayerIntelligenceData } from './api';
 
 afterEach(() => {

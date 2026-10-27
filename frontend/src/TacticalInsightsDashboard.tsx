@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { MatchContext, ContextEvent } from './MatchContextPages';
 import { clock, askCandidateAnalyst, type CandidateAnalystAnswer } from './api';
-import { deduceTeamFormation } from './DynamicTacticalVisuals';
 
 export interface TacticalInsightsDashboardProps {
   context: MatchContext;
@@ -33,7 +32,6 @@ export function TacticalInsightsDashboard({
   // Screen-level AI Service insight state synced with elapsed time
   const [aiInsight, setAiInsight] = useState<CandidateAnalystAnswer | null>(null);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
-  const [aiLastSyncedSeconds, setAiLastSyncedSeconds] = useState<number | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const homeTeamName = context.homeTeam?.name || 'Home Team';
@@ -49,15 +47,6 @@ export function TacticalInsightsDashboard({
   const periodText = context.phase
     ? (context.phase === 'secondhalf' ? 'Second Half' : context.phase === 'firsthalf' ? 'First Half' : context.phase)
     : (seconds >= 2700 ? 'Second Half' : 'First Half');
-
-  // Dynamic formations deduced from actual tracking player coordinates
-  const homeFormation = useMemo(() => {
-    return deduceTeamFormation(context.players, context.homeTeam?.id || 'home');
-  }, [context.players, context.homeTeam?.id]);
-
-  const awayFormation = useMemo(() => {
-    return deduceTeamFormation(context.players, context.awayTeam?.id || 'away');
-  }, [context.players, context.awayTeam?.id]);
 
   // Dynamic scores deduced from actual goal events up to elapsed time
   const { homeScore, awayScore } = useMemo(() => {
@@ -283,7 +272,6 @@ export function TacticalInsightsDashboard({
       });
       if (response && response.status === 'answered') {
         setAiInsight(response);
-        setAiLastSyncedSeconds(targetSeconds);
       }
     } catch {
       // Smooth dynamic fallback to local multi-agent tactical deduction
@@ -457,7 +445,7 @@ export function TacticalInsightsDashboard({
       if (selectedTeamFilter !== 'all' && card.team !== selectedTeamFilter) return false;
       return true;
     });
-  }, [awayTeamName, homeTeamName, homeMidfielders, awayWinger, filterCategory, selectedTeamFilter, widePassPct, clockText, currentMinute, regainsData.current]);
+  }, [awayTeamName, homeTeamName, homeMidfielders, awayWinger, filterCategory, selectedTeamFilter, widePassPct, clockText, currentMinute, regainsData]);
 
   // Elapsed scrubber cursor x-coordinate on the 300px development chart
   const elapsedCursorX = Math.max(12, Math.min(290, Math.round((Math.min(seconds, 5400) / 5400) * 300)));
