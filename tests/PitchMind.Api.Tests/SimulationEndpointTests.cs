@@ -30,11 +30,19 @@ public sealed class SimulationEndpointTests : IDisposable
     private static WebApplicationFactory<Program> CreateFactory() =>
         new WebApplicationFactory<Program>();
 
+    private static HttpClient CreateAuthenticatedClient(WebApplicationFactory<Program> factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Dev-Subject", "simulation-endpoint-test");
+        client.DefaultRequestHeaders.Add("X-Dev-Roles", "analyst");
+        return client;
+    }
+
     [Fact]
     public async Task AuthPreviewEndpointReturnsExpectedStructure()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/auth-preview");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -53,7 +61,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task HubEndpointReturnsHeroAndLiveMatches()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/hub");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -72,7 +80,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task TeamsEndpointReturnsTacticalProfile()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/teams/arsenal");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -89,7 +97,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task PlayersEndpointReturnsPlayerIntelligence()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/players/saka");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -106,7 +114,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task InsightsEndpointReturnsTacticalInsight()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/insights/arsenal-press-city");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -122,7 +130,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task AnalystOverviewEndpointReturnsDiscussionAndSidebar()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/simulation/analyst/overview");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -139,7 +147,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task SimulatedLoginSucceedsWithValidCredentials()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var content = new StringContent(
             JsonSerializer.Serialize(new { email = "analyst@pitchmind.io", password = "SecurePassword123!" }),
@@ -159,7 +167,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task NewPlayerIntelligenceEndpointReturnsDynamicIntelligence()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/players/saka/intelligence?seconds=4044");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -199,7 +207,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task NewPlayerIntelligenceEndpointCalculatesBrunoFernandesFromStream()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/players/bruno-fernandes/intelligence?seconds=5400");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -278,7 +286,7 @@ public sealed class SimulationEndpointTests : IDisposable
     public async Task PlayersListEndpointReturnsAllTwentyTwoStreamPlayers()
     {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = CreateAuthenticatedClient(factory);
 
         using var response = await client.GetAsync("/api/v1/players");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
