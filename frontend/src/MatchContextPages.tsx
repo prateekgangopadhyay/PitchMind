@@ -13,7 +13,7 @@ import { PlayerTacticalDashboard } from './PlayerTacticalDashboard';
 import { PlayerRosterView } from './PlayerRosterView';
 import { getPlayersIntelligenceList, calculateAiPlayerKeyQuote, type PlayerIntelligenceData } from './api';
 import { TacticalInsightsDashboard } from './TacticalInsightsDashboard';
-import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus } from './candidateLiveStatus';
+import { getCachedCandidateEvents, syncCandidateEvents, readCandidateStatus, subscribeCandidateStatus } from './candidateLiveStatus';
 
 
 export type CandidateStatus = {
@@ -210,10 +210,7 @@ async function loadCandidateContext(matchId: string, seconds: number, signal: Ab
   if (!status || status.matchId !== matchId) return null;
 
   let fetched = getCachedCandidateEvents(matchId);
-  if (
-    !fetched.length ||
-    (status.currentSequence && (!fetched.length || fetched.at(-1)!.sequence < status.currentSequence))
-  ) {
+  if (!fetched.length) {
     fetched = await syncCandidateEvents(matchId, signal).catch(() => fetched);
   }
 
@@ -226,26 +223,7 @@ async function loadCandidateContext(matchId: string, seconds: number, signal: Ab
     fetched = candidateEventsCache.events;
   }
 
-  if (!fetched.length) {
-    fetched = [];
-    let afterSequence = -1;
-    let hasMore = true;
-    for (let pageNumber = 0; hasMore && pageNumber < 12; pageNumber++) {
-      const query = new URLSearchParams({ afterSequence: String(afterSequence), limit: '499' });
-      const page = await request<{ matchId: string; sourceSha256: string; items: CandidateEvent[]; hasMore: boolean }>(
-        `simulation/candidate/matches/${encodeURIComponent(matchId)}/events?${query}`, signal);
-      if (page.matchId !== matchId || page.sourceSha256 !== status.sourceSha256 || !Array.isArray(page.items))
-        throw new Error('Candidate match feed does not match the selected match context.');
-      for (const event of page.items) {
-        if (event.matchId !== matchId || !Number.isSafeInteger(event.sequence) || event.sequence <= afterSequence || !isObject(event.rawPayload))
-          throw new Error('Candidate match event data failed validation.');
-        fetched.push(event);
-        afterSequence = event.sequence;
-      }
-      hasMore = page.hasMore;
-      if (hasMore && page.items.length === 0) throw new Error('Candidate match history did not advance.');
-    }
-  }
+  if (!fetched.length) return null;
 
   if (status.sourceSha256) {
     candidateEventsCache = { matchId, sourceSha256: status.sourceSha256, events: fetched };
@@ -444,6 +422,21 @@ export function useMatchContext(matchId: string | undefined, seconds: number, re
 
     return () => controller.abort();
   }, [matchId, seconds, revision]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    return subscribeCandidateStatus(() => {
+      const snap = readCandidateStatus();
+      if (snap.status?.matchId === matchId) {
+        const cached = getCachedCandidateEvents(matchId);
+        if (cached.length > 0) {
+          void loadCandidateContext(matchId, seconds, new AbortController().signal).then(candidate => {
+            if (candidate) setContext(candidate);
+          });
+        }
+      }
+    });
+  }, [matchId, seconds]);
 
   const selectMatch = (nextMatchId: string) => {
     const currentPath = typeof window === 'undefined' ? '/matches' : window.location.pathname;
@@ -997,102 +990,60 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
       setLiveReports([]);
       return;
     }
-    setLiveReports([]);
-    setLiveReportError('');
-    setLiveReportStatus('Checking recent match events…');
-    const controller = new AbortController();
     const hotEvents = new Set(['goal', 'shot', 'penalty', 'redcard', 'substitution', 'foul', 'ballrecovery', 'possessionlost']);
-    let afterSequence = -1;
-    let initialized = false;
-    let polling = false;
+    const notable = (data.context?.events ?? []).filter(item =>
+      item.clockSeconds <= seconds &&
+      hotEvents.has(item.type.replace(/[^a-z]/gi, '').toLowerCase())
+    );
+    const latest = notable.at(-1);
+    if (!latest) {
+      setLiveReportStatus(data.loading ? 'Checking recent match events…' : 'Waiting for notable live events…');
+      return;
+    }
+
+    if (liveReports.some(r => r.event.eventId === latest.id)) {
+      return;
+    }
+
+    const controller = new AbortController();
     let active = true;
-    let pendingEvent: CandidateEvent | null = null;
-    let retryAttempt = 0;
-    let retryAt = 0;
-    const poll = async () => {
-      if (!active || polling || document.visibilityState === 'hidden') return;
-      polling = true;
+
+    const runAnalysis = async () => {
+      setLiveReportStatus(`Analyzing ${latest.type} · sequence ${latest.sequence}…`);
+      setLiveReportError('');
       try {
-        const status = await request<CandidateStatus & { isStreaming?: boolean }>('simulation/candidate/status', controller.signal);
-        if (status.matchId !== matchId || status.currentSequence == null || !status.sourceSha256) return;
-        if (!initialized) {
-          afterSequence = Math.max(-1, status.currentSequence - 40);
-          initialized = true;
-        }
-        if (status.currentSequence > afterSequence) {
-          const query = new URLSearchParams({ afterSequence: String(afterSequence), limit: '100' });
-          const page = await request<{ matchId: string; sourceSha256: string; items: CandidateEvent[]; hasMore: boolean }>(
-            `simulation/candidate/matches/${encodeURIComponent(matchId)}/events?${query}`, controller.signal);
-          if (page.matchId !== matchId || page.sourceSha256 !== status.sourceSha256) throw new Error('Live event evidence changed source identity.');
-          // Only process notable events that occurred up to the elapsed time
-          const notable = page.items.filter(item =>
-            item.clockSeconds <= seconds &&
-            hotEvents.has(item.eventType.replace(/[^a-z]/gi, '').toLowerCase())
-          );
-          const latest = notable.at(-1);
-          if (latest) {
-            pendingEvent = latest;
-            retryAttempt = 0;
-            retryAt = 0;
-          }
-          // Advance the event cursor before calling Foundry. If generation fails,
-          // retry the bounded pending event below instead of replaying this page
-          // and submitting the same prompt every polling interval.
-          afterSequence = page.items.at(-1)?.sequence ?? afterSequence;
-        }
-
-        if (!pendingEvent) {
-          setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Stream paused; waiting for the next event.');
-          return;
-        }
-        if (Date.now() < retryAt) {
-          setLiveReportStatus(`Foundry is temporarily unavailable. Retrying ${pendingEvent.eventType} shortly…`);
-          return;
-        }
-
-        const latest = pendingEvent;
-        setLiveReportStatus(`Analyzing ${latest.eventType} · sequence ${latest.sequence}…`);
-        setLiveReportError('');
-        try {
-          const result = await askCandidateAnalyst({
-            matchId, selectedSourceClockValue: latest.clockSeconds, audience: 'analyst', agentName: agentNameRef.current,
-            question: `Create a concise live event report for source event ${latest.eventType} (event ID ${latest.eventId}, sequence ${latest.sequence}) at source clock ${latest.clockSeconds}, period ${latest.period}. Describe only what the supplied records support, explain cautious tactical implications as possibilities, cite the supplied event IDs, and state uncertainty. Do not infer intent, causation, or unobserved facts.`
-          }, controller.signal);
-          if (!active) return;
-          setLiveReports(current => [
-            { event: latest, answer: result },
-            ...current.filter(report => report.event.eventId !== latest.eventId)
-          ].slice(0, 6));
-          pendingEvent = null;
-          retryAttempt = 0;
-          retryAt = 0;
-          setLiveReportStatus(status.isStreaming ? 'Monitoring the live event stream…' : 'Latest available event analyzed.');
-        } catch (failure) {
-          if (!active || controller.signal.aborted) return;
-          retryAttempt += 1;
-          if (retryAttempt > 3) {
-            pendingEvent = null;
-            setLiveReportStatus('This event could not be analyzed after several attempts. New notable events will still be analyzed.');
-          } else {
-            const retryDelays = [10_000, 30_000, 60_000];
-            retryAt = Date.now() + retryDelays[retryAttempt - 1];
-            setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
-            setLiveReportStatus(`Could not analyze this event. Retrying in ${retryDelays[retryAttempt - 1] / 1000}s…`);
-          }
-        }
+        const candidateEventItem: CandidateEvent = {
+          eventId: latest.id,
+          matchId,
+          sequence: latest.sequence,
+          clockSeconds: latest.clockSeconds,
+          period: data.context?.period ?? 1,
+          eventType: latest.type,
+          rawPayload: { ...(latest.metadata ?? {}), teamName: latest.teamName, playerName: latest.playerName }
+        };
+        const result = await askCandidateAnalyst({
+          matchId,
+          selectedSourceClockValue: latest.clockSeconds,
+          audience: 'analyst',
+          agentName: agentNameRef.current,
+          question: `Create a concise live event report for source event ${latest.type} (event ID ${latest.id}, sequence ${latest.sequence}) at source clock ${latest.clockSeconds}, period ${data.context?.period ?? 1}. Describe only what the supplied records support, explain cautious tactical implications as possibilities, cite the supplied event IDs, and state uncertainty. Do not infer intent, causation, or unobserved facts.`
+        }, controller.signal);
+        if (!active) return;
+        setLiveReports(current => [
+          { event: candidateEventItem, answer: result },
+          ...current.filter(report => report.event.eventId !== latest.id)
+        ].slice(0, 6));
+        setLiveReportStatus('Latest available event analyzed.');
       } catch (failure) {
-        if (active && !controller.signal.aborted) {
-          setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
-          setLiveReportStatus('Could not load the latest event evidence. Retrying…');
-        }
-      } finally {
-        polling = false;
+        if (!active || controller.signal.aborted) return;
+        setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
+        setLiveReportStatus('Could not analyze this event.');
       }
     };
-    void poll();
-    const timer = setInterval(() => { void poll(); }, 5000);
-    return () => { active = false; controller.abort(); clearInterval(timer); };
-  }, [matchId, seconds, data.context?.candidate]);
+
+    void runAnalysis();
+    return () => { active = false; controller.abort(); };
+  }, [matchId, seconds, data.context?.candidate, data.context?.events]);
 
   const [customQuestion, setCustomQuestion] = useState('');
   const [scenarioInput, setScenarioInput] = useState('');

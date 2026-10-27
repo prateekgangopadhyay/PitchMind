@@ -147,7 +147,7 @@ public sealed class SimulationStreamerService : ISimulationStreamer, IDisposable
         SelectedMatchProjection projection;
         lock (_gate)
         {
-            _currentClockSeconds = Math.Min(5400, _currentClockSeconds + 15);
+            _currentClockSeconds = Math.Min(5400, _currentClockSeconds + 1);
             _currentSequence++;
             _canonicalRevision++;
             projection = CreateProjection(matchId, _currentClockSeconds, _canonicalRevision, _currentSequence);

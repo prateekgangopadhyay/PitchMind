@@ -1,26 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { request } from './api';
-import { useCandidateStreamStatus, getCachedCandidateEvents, setCachedCandidateEvents, subscribeCandidateStatus } from './candidateLiveStatus';
+import { useCandidateStreamStatus, syncCandidateEvents } from './candidateLiveStatus';
 import { contextHref } from './routes';
 import { LinearEventsTimeline, type LinearTimelineEvent } from './LinearEventsTimeline';
-
-interface CandidateEvent {
-  eventId: string;
-  matchId: string;
-  sequence: number;
-  clockSeconds: number;
-  period: number;
-  eventType: string;
-  rawPayload: Record<string, unknown>;
-}
-
-interface CandidatePage {
-  matchId: string;
-  sourceSha256: string;
-  items: CandidateEvent[];
-  hasMore: boolean;
-}
-
 
 interface SourcePlayer {
   [key: string]: unknown;
@@ -41,9 +22,6 @@ interface SourcePlayer {
   heartRate?: number;
 }
 
-const PAGE_SIZE = 250;
-const MAX_PAGES = 30;
-
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
@@ -51,10 +29,7 @@ const valueText = (value: unknown) =>
   value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: number } = {}) {
-  const { status, error: statusError } = useCandidateStreamStatus();
-  const [events, setEvents] = useState<CandidateEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { status, error: statusError, currentEvent, events } = useCandidateStreamStatus();
   const [selectedPlayer, setSelectedPlayer] = useState<SourcePlayer | null>(null);
   const [hoveredPlayer, setHoveredPlayer] = useState<SourcePlayer | null>(null);
   const [replaySeconds, setReplaySeconds] = useState<number | null>(selectedSeconds ?? null);
@@ -62,10 +37,15 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const [cinemaMode, setCinemaMode] = useState(false);
   const pitchScreenRef = useRef<HTMLDivElement | null>(null);
 
-  const bySequence = useRef<CandidateEvent[]>([]);
-  const busy = useRef(false);
-  const refreshPending = useRef(false);
   const matchId = status?.matchId ?? null;
+  const loading = events.length === 0 && Boolean(matchId);
+  const error = statusError;
+
+  useEffect(() => {
+    if (matchId && events.length === 0) {
+      void syncCandidateEvents(matchId);
+    }
+  }, [matchId, events.length]);
 
   useEffect(() => {
     const updateCinemaMode = () => setCinemaMode(document.fullscreenElement === pitchScreenRef.current);
@@ -85,106 +65,10 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     setCinemaMode(true);
   };
 
-  const backfill = useCallback(async (target: string, signal?: AbortSignal) => {
-    if (busy.current) {
-      refreshPending.current = true;
-      return;
-    }
-    busy.current = true;
-    try {
-      let after = bySequence.current.reduce((last, event) => Math.max(last, event.sequence), -1);
-      let hasMore = true;
-      let pages = 0;
-      const fetched: CandidateEvent[] = [];
-      while (hasMore && pages < MAX_PAGES) {
-        const query = new URLSearchParams({ afterSequence: String(after), limit: String(PAGE_SIZE) });
-        const page = await request<CandidatePage>(
-          `simulation/candidate/matches/${encodeURIComponent(target)}/events?${query}`,
-          signal
-        );
-        if (signal?.aborted) return;
-        if (page.matchId !== target || !Array.isArray(page.items) || typeof page.hasMore !== 'boolean')
-          throw new Error('Candidate event page is invalid.');
-        for (const item of page.items) {
-          if (
-            item.matchId !== target ||
-            item.sequence <= after ||
-            !Number.isSafeInteger(item.sequence) ||
-            !isObject(item.rawPayload)
-          )
-            throw new Error('Candidate event order or source payload is invalid.');
-          fetched.push(item);
-          after = item.sequence;
-        }
-        if (page.hasMore && page.items.length === 0) throw new Error('Candidate event cursor did not advance.');
-        hasMore = page.hasMore;
-        pages++;
-      }
-      const merged = new Map(bySequence.current.map(item => [item.sequence, item]));
-      fetched.forEach(item => merged.set(item.sequence, item));
-      bySequence.current = [...merged.values()].sort((a, b) => a.sequence - b.sequence);
-      setEvents(bySequence.current);
-      setCachedCandidateEvents(bySequence.current, target);
-      setError('');
-    } catch (cause) {
-      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Candidate event history unavailable.');
-    } finally {
-      busy.current = false;
-      if (!signal?.aborted) setLoading(false);
-      if (refreshPending.current && !signal?.aborted) {
-        refreshPending.current = false;
-        window.setTimeout(() => {
-          void backfill(target);
-        }, 0);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!matchId) {
-      bySequence.current = [];
-      setEvents([]);
-      setLoading(false);
-      return;
-    }
-    const cached = getCachedCandidateEvents(matchId);
-    if (cached.length > 0) {
-      bySequence.current = cached;
-      setEvents(cached);
-      setLoading(false);
-    } else {
-      bySequence.current = [];
-      setEvents([]);
-      setLoading(true);
-    }
-    const controller = new AbortController();
-    void backfill(matchId, controller.signal);
-    return () => controller.abort();
-  }, [matchId, backfill]);
-
-  useEffect(() => {
-    return subscribeCandidateStatus(() => {
-      if (matchId) {
-        const cached = getCachedCandidateEvents(matchId);
-        if (cached.length > 0 && cached.length !== bySequence.current.length) {
-          bySequence.current = cached;
-          setEvents(cached);
-          setLoading(false);
-        }
-      }
-    });
-  }, [matchId]);
-
-
   const liveLatest = useMemo(() => {
     if (!events.length) return null;
-    const sequence = status?.currentSequence;
-    return sequence == null
-      ? events.at(-1)!
-      : events.find(item => item.sequence === sequence) ??
-          events.filter(item => item.sequence <= sequence).at(-1) ??
-          events.at(-1)!;
-  }, [events, status?.currentSequence]);
+    return currentEvent ?? events.at(-1) ?? null;
+  }, [events, currentEvent]);
 
   useEffect(() => { if (selectedSeconds !== undefined) setReplaySeconds(selectedSeconds); }, [selectedSeconds]);
   const syncReplayLocation = useCallback((seconds?: number, mode?: 'live') => {

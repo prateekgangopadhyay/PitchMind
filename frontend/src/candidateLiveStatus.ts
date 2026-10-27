@@ -28,17 +28,45 @@ interface CandidatePage {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
-interface Snapshot { status: CandidateStreamStatus | null; error: string; pending: boolean }
-let status: CandidateStreamStatus | null = null; let error = ''; let pending = false;
-let autoStartRequested = false; let autoStartAttempted = false; let autoStartInFlight = false;
+export interface CandidateSnapshot {
+  status: CandidateStreamStatus | null;
+  error: string;
+  pending: boolean;
+  currentEvent: CandidateEvent | null;
+  events: CandidateEvent[];
+  processedEvents: CandidateEvent[];
+  queueLength: number;
+}
+export type Snapshot = CandidateSnapshot;
+
+let status: CandidateStreamStatus | null = null;
+let error = '';
+let pending = false;
+let autoStartRequested = false;
+let autoStartAttempted = false;
+let autoStartInFlight = false;
 let nextAutoStartAttemptAt = 0;
-let poller: ReturnType<typeof setInterval> | null = null; let requestInFlight: Promise<void> | null = null;
-let snapshot: Snapshot = { status, error, pending }; const listeners = new Set<() => void>();
+let poller: ReturnType<typeof setInterval> | null = null;
+let requestInFlight: Promise<void> | null = null;
 
 let cachedEvents: CandidateEvent[] = [];
+let processedEvents: CandidateEvent[] = [];
+let eventQueue: CandidateEvent[] = [];
+let currentLiveEvent: CandidateEvent | null = null;
 let cachedMatchId: string | null = null;
-let isSyncingEvents = false;
-let syncPending = false;
+let queueTicker: ReturnType<typeof setInterval> | null = null;
+let syncPromise: Promise<CandidateEvent[]> | null = null;
+
+let snapshot: CandidateSnapshot = {
+  status,
+  error,
+  pending,
+  currentEvent: currentLiveEvent,
+  events: cachedEvents,
+  processedEvents,
+  queueLength: 0
+};
+const listeners = new Set<() => void>();
 
 let globalHub: HubConnection | null = null;
 let activeHubMatchId: string | null = null;
@@ -49,41 +77,168 @@ let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let syncThrottleUntil = 0;
 let rateLimitBackoffUntil = 0;
 
-export function scheduleSyncEvents(targetMatchId: string) {
-  if (syncDebounceTimer) return;
-  const now = Date.now();
-  const waitMs = Math.max(400, syncThrottleUntil - now);
-  syncDebounceTimer = setTimeout(() => {
-    syncDebounceTimer = null;
-    syncThrottleUntil = Date.now() + 1500;
-    void syncCandidateEvents(targetMatchId);
-  }, waitMs);
+function publish() {
+  snapshot = {
+    status,
+    error,
+    pending,
+    currentEvent: currentLiveEvent,
+    events: cachedEvents,
+    processedEvents,
+    queueLength: eventQueue.length
+  };
+  listeners.forEach(fn => fn());
 }
 
-function publish() { snapshot = { status, error, pending }; listeners.forEach(fn => fn()); }
 function failureMessage(failure: unknown, fallback: string) {
   if (failure instanceof ApiRequestError && failure.status === 401) return 'Your sign-in expired. Sign in again to load the match feed.';
   if (failure instanceof ApiRequestError && failure.status === 403) return 'Your account needs the analyst or admin role to control the live simulation.';
   return fallback;
 }
 
-export function readCandidateStatus(): Snapshot { return snapshot; }
+export function readCandidateStatus(): CandidateSnapshot {
+  return snapshot;
+}
 
 export function getCachedCandidateEvents(targetMatchId?: string): CandidateEvent[] {
   if (targetMatchId && cachedMatchId !== targetMatchId) return [];
   return cachedEvents;
 }
 
-export function setCachedCandidateEvents(events: CandidateEvent[], targetMatchId: string) {
-  cachedEvents = [...events];
-  cachedMatchId = targetMatchId;
+export function getProcessedCandidateEvents(targetMatchId?: string): CandidateEvent[] {
+  if (targetMatchId && cachedMatchId !== targetMatchId) return [];
+  return processedEvents;
+}
+
+export function getCurrentLiveCandidateEvent(targetMatchId?: string): CandidateEvent | null {
+  if (targetMatchId && cachedMatchId !== targetMatchId) return null;
+  return currentLiveEvent;
+}
+
+export function enqueueCandidateEvents(items: CandidateEvent[], targetMatchId: string) {
+  if (cachedMatchId !== targetMatchId) {
+    cachedEvents = [];
+    processedEvents = [];
+    eventQueue = [];
+    currentLiveEvent = null;
+    cachedMatchId = targetMatchId;
+  }
+
+  const existingMap = new Map<number, CandidateEvent>();
+  cachedEvents.forEach(e => existingMap.set(e.sequence, e));
+
+  const newItems: CandidateEvent[] = [];
+  for (const item of items) {
+    if (!existingMap.has(item.sequence)) {
+      existingMap.set(item.sequence, item);
+      newItems.push(item);
+    }
+  }
+
+  if (newItems.length === 0) return;
+
+  cachedEvents = [...existingMap.values()].sort((a, b) => a.sequence - b.sequence);
+
+  if (!currentLiveEvent) {
+    currentLiveEvent = cachedEvents[0];
+    processedEvents = [cachedEvents[0]];
+    eventQueue = cachedEvents.slice(1);
+    status = {
+      ...(status ?? {
+        matchId: targetMatchId,
+        isStreaming: true,
+        sourceSha256: null,
+        sourceStatus: 'candidate_not_canonical',
+        coordinateStatus: 'unverified',
+        playerMetricsStatus: 'unvalidated'
+      }),
+      currentSequence: currentLiveEvent.sequence,
+      currentClockValue: currentLiveEvent.clockSeconds,
+      period: currentLiveEvent.period,
+      isStreaming: status ? status.isStreaming : true
+    };
+  } else {
+    const existingQueueSeqs = new Set(eventQueue.map(e => e.sequence));
+    const processedSeqs = new Set(processedEvents.map(e => e.sequence));
+    for (const item of newItems) {
+      if (
+        item.sequence > currentLiveEvent.sequence &&
+        !existingQueueSeqs.has(item.sequence) &&
+        !processedSeqs.has(item.sequence)
+      ) {
+        eventQueue.push(item);
+      }
+    }
+    eventQueue.sort((a, b) => a.sequence - b.sequence);
+  }
+
+  startQueueTicker();
   publish();
+}
+
+export function setCachedCandidateEvents(events: CandidateEvent[], targetMatchId: string) {
+  enqueueCandidateEvents(events, targetMatchId);
+}
+
+function processNextQueueEvent() {
+  if (!status?.isStreaming) return;
+
+  if (eventQueue.length === 0) {
+    if (status?.matchId) {
+      scheduleSyncEvents(status.matchId);
+    }
+    return;
+  }
+
+  const nextEvent = eventQueue.shift()!;
+  currentLiveEvent = nextEvent;
+  if (!processedEvents.some(e => e.sequence === nextEvent.sequence)) {
+    processedEvents.push(nextEvent);
+  }
+
+  status = {
+    ...(status ?? {
+      matchId: nextEvent.matchId,
+      isStreaming: true,
+      currentSequence: nextEvent.sequence,
+      currentClockValue: nextEvent.clockSeconds,
+      period: nextEvent.period,
+      sourceSha256: null,
+      sourceStatus: 'candidate_not_canonical',
+      coordinateStatus: 'unverified',
+      playerMetricsStatus: 'unvalidated'
+    }),
+    currentSequence: nextEvent.sequence,
+    currentClockValue: nextEvent.clockSeconds,
+    period: nextEvent.period,
+    isStreaming: true
+  };
+
+  publish();
+}
+
+function startQueueTicker() {
+  if (queueTicker || typeof window === 'undefined') return;
+  queueTicker = setInterval(() => {
+    processNextQueueEvent();
+  }, 1000);
+}
+
+function stopQueueTicker() {
+  if (queueTicker) {
+    clearInterval(queueTicker);
+    queueTicker = null;
+  }
 }
 
 export function clearCandidateLiveCache() {
   cachedEvents = [];
+  processedEvents = [];
+  eventQueue = [];
+  currentLiveEvent = null;
   cachedMatchId = null;
   stopGlobalSignalR();
+  stopQueueTicker();
   publish();
 }
 
@@ -95,6 +250,17 @@ export function stopGlobalSignalR() {
     activeHubSourceHash = null;
     void hub.stop().catch(() => undefined);
   }
+}
+
+export function scheduleSyncEvents(targetMatchId: string) {
+  if (syncDebounceTimer) return;
+  const now = Date.now();
+  const waitMs = Math.max(100, syncThrottleUntil - now);
+  syncDebounceTimer = setTimeout(() => {
+    syncDebounceTimer = null;
+    syncThrottleUntil = Date.now() + 600;
+    void syncCandidateEvents(targetMatchId);
+  }, waitMs);
 }
 
 async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
@@ -153,22 +319,6 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
       period?: number;
     }) => {
       if (cursor.matchId?.toLowerCase() === matchId.toLowerCase()) {
-        if (status && status.matchId?.toLowerCase() === cursor.matchId.toLowerCase()) {
-          const prevSeq = status.currentSequence ?? -1;
-          const newSeq = cursor.sequence ?? prevSeq;
-          const prevClock = status.currentClockValue;
-          const newClock = cursor.clockSeconds ?? prevClock;
-          status = {
-            ...status,
-            currentSequence: newSeq,
-            currentClockValue: newClock,
-            period: cursor.period ?? status.period,
-            isStreaming: true
-          };
-          if (newSeq !== prevSeq || newClock !== prevClock) {
-            publish();
-          }
-        }
         scheduleSyncEvents(matchId);
       }
     });
@@ -196,66 +346,53 @@ export async function syncCandidateEvents(targetMatchId: string, signal?: AbortS
   }
   if (cachedMatchId !== targetMatchId) {
     cachedEvents = [];
+    processedEvents = [];
+    eventQueue = [];
+    currentLiveEvent = null;
     cachedMatchId = targetMatchId;
+    publish();
   }
-  if (isSyncingEvents) {
-    syncPending = true;
-    return cachedEvents;
+
+  if (syncPromise) {
+    return syncPromise;
   }
-  isSyncingEvents = true;
-  try {
-    let after = cachedEvents.reduce((last, event) => Math.max(last, event.sequence), -1);
-    let hasMore = true;
-    let pages = 0;
-    let addedCount = 0;
-    while (hasMore && pages < 12) {
-      if (Date.now() < rateLimitBackoffUntil) break;
-      const query = new URLSearchParams({ afterSequence: String(after), limit: '499' });
+
+  syncPromise = (async () => {
+    try {
+      const highestSequence = cachedEvents.reduce((last, event) => Math.max(last, event.sequence), -1);
+      const query = new URLSearchParams({ afterSequence: String(highestSequence), limit: '100' });
       const res = await request<CandidatePage>(
         `simulation/candidate/matches/${encodeURIComponent(targetMatchId)}/events?${query}`,
         signal
       );
       if (signal?.aborted) return cachedEvents;
-      if (!Array.isArray(res?.items)) break;
-      for (const item of res.items) {
-        if (
+      if (Array.isArray(res?.items) && res.items.length > 0) {
+        const validItems = res.items.filter(item =>
           item.matchId === targetMatchId &&
           Number.isSafeInteger(item.sequence) &&
-          item.sequence > after &&
+          item.sequence > highestSequence &&
           isObject(item.rawPayload)
-        ) {
-          cachedEvents.push(item);
-          after = item.sequence;
-          addedCount++;
+        );
+        if (validItems.length > 0) {
+          enqueueCandidateEvents(validItems, targetMatchId);
         }
       }
-      hasMore = Boolean(res.hasMore);
-      if (hasMore && res.items.length === 0) break;
-      pages++;
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.status === 429) {
+        rateLimitBackoffUntil = Date.now() + 10_000;
+      }
+    } finally {
+      syncPromise = null;
     }
-    if (addedCount > 0) {
-      const map = new Map<number, CandidateEvent>();
-      cachedEvents.forEach(e => map.set(e.sequence, e));
-      cachedEvents = [...map.values()].sort((a, b) => a.sequence - b.sequence);
-      publish();
-    }
-  } catch (failure) {
-    if (failure instanceof ApiRequestError && failure.status === 429) {
-      rateLimitBackoffUntil = Date.now() + 10_000;
-    }
-    // Keep cached events on transient network failure
-  } finally {
-    isSyncingEvents = false;
-    if (syncPending && !signal?.aborted) {
-      syncPending = false;
-      scheduleSyncEvents(targetMatchId);
-    }
-  }
-  return cachedEvents;
+    return cachedEvents;
+  })();
+
+  return syncPromise;
 }
 
 export function subscribeCandidateStatus(fn: () => void) {
   listeners.add(fn);
+  startQueueTicker();
   if (!poller && typeof window !== 'undefined') {
     void refreshCandidateStatus();
     poller = setInterval(() => {
@@ -268,9 +405,12 @@ export function subscribeCandidateStatus(fn: () => void) {
   }
   return () => {
     listeners.delete(fn);
-    if (!listeners.size && poller) {
-      clearInterval(poller);
-      poller = null;
+    if (!listeners.size) {
+      if (poller) {
+        clearInterval(poller);
+        poller = null;
+      }
+      stopQueueTicker();
       stopGlobalSignalR();
     }
   };
@@ -294,11 +434,17 @@ async function startAfterStatusIfRequested() {
   if (!status?.matchId || autoStartAttempted) return;
   autoStartInFlight = true;
   try {
-    status = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {});
+    const started = await request<CandidateStreamStatus>('simulation/candidate/start', undefined, {});
     autoStartRequested = false;
     autoStartAttempted = true;
     nextAutoStartAttemptAt = 0;
     error = '';
+    status = {
+      ...started,
+      currentSequence: currentLiveEvent ? currentLiveEvent.sequence : started.currentSequence,
+      currentClockValue: currentLiveEvent ? currentLiveEvent.clockSeconds : started.currentClockValue,
+      period: currentLiveEvent ? currentLiveEvent.period : started.period
+    };
     if (status.isStreaming && status.matchId && status.sourceSha256) {
       void ensureGlobalSignalR(status.matchId, status.sourceSha256);
       void syncCandidateEvents(status.matchId);
@@ -336,21 +482,19 @@ export async function refreshCandidateStatus(autoStart = false): Promise<Candida
     if (!result || typeof result.isStreaming !== 'boolean') {
       return;
     }
-    const prevSeq = status?.currentSequence ?? -1;
-    const prevClock = status?.currentClockValue;
-    const prevStreaming = status?.isStreaming;
-    status = result;
-    const hadError = Boolean(error);
     error = '';
-    const hasChanged = hadError || prevSeq !== result.currentSequence || prevClock !== result.currentClockValue || prevStreaming !== result.isStreaming;
-    if (hasChanged) {
-      publish();
-    }
+    status = {
+      ...result,
+      currentSequence: currentLiveEvent ? currentLiveEvent.sequence : result.currentSequence,
+      currentClockValue: currentLiveEvent ? currentLiveEvent.clockSeconds : result.currentClockValue,
+      period: currentLiveEvent ? currentLiveEvent.period : result.period
+    };
+    publish();
     if (status?.matchId && status.isStreaming) {
       if (status.sourceSha256) {
         void ensureGlobalSignalR(status.matchId, status.sourceSha256);
       }
-      if ((status.currentSequence ?? -1) > prevSeq || cachedEvents.length === 0) {
+      if (cachedEvents.length === 0 || (result.currentSequence && result.currentSequence > (cachedEvents.at(-1)?.sequence ?? -1))) {
         scheduleSyncEvents(status.matchId);
       }
     }
@@ -376,8 +520,14 @@ export async function toggleCandidateStream() {
   try {
     const current = await refreshCandidateStatus();
     if (!current?.matchId) throw new Error('Candidate match is unavailable.');
-    status = await request<CandidateStreamStatus>(current.isStreaming ? 'simulation/candidate/pause' : 'simulation/candidate/start', undefined, {});
+    const updated = await request<CandidateStreamStatus>(current.isStreaming ? 'simulation/candidate/pause' : 'simulation/candidate/start', undefined, {});
     error = '';
+    status = {
+      ...updated,
+      currentSequence: currentLiveEvent ? currentLiveEvent.sequence : updated.currentSequence,
+      currentClockValue: currentLiveEvent ? currentLiveEvent.clockSeconds : updated.currentClockValue,
+      period: currentLiveEvent ? currentLiveEvent.period : updated.period
+    };
     if (!status.isStreaming) {
       stopGlobalSignalR();
     } else if (status.matchId && status.sourceSha256) {
