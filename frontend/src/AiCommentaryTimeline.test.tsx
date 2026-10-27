@@ -151,9 +151,9 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
       });
 
       // Renders main headers and badges
-      expect(container.textContent).toContain('AI Service Match Commentary');
-      expect(container.textContent).toContain('Synced with Match Timeline');
-      expect(container.textContent).toContain('Tactical Commentary · Manchester United vs Liverpool');
+      expect(container.textContent).toContain('Match commentary');
+      expect(container.textContent).toContain('Live match commentary');
+      expect(container.textContent).toContain('Manchester United vs Liverpool');
 
       // The vertical rail exists
       expect(container.querySelector('.commentary-vertical-axis-rail')).not.toBeNull();
@@ -171,7 +171,7 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
     }
   });
 
-  it('dispatches locationchange when clicking sync button on a commentary item', async () => {
+  it('seeks the shared match timeline when selecting a commentary item', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -192,12 +192,11 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
         );
       });
 
-      // Find a card sync button
-      const syncBtn = container.querySelector<HTMLButtonElement>('.sync-jump-btn');
-      expect(syncBtn).not.toBeNull();
+      const card = container.querySelector<HTMLElement>('.commentary-node-card');
+      expect(card).not.toBeNull();
 
       await act(async () => {
-        syncBtn?.click();
+        card?.click();
       });
 
       expect(onTimeSelect).toHaveBeenCalled();
@@ -207,7 +206,7 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
     }
   });
 
-  it('filters commentary by category when filter chips are clicked', async () => {
+  it('shows a simple commentary feed without category filters', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -225,22 +224,10 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
         );
       });
 
-      // Click "Goals & Chances" filter chip
-      const filterChips = container.querySelectorAll<HTMLButtonElement>('.comm-filter-chip');
-      const goalsChip = Array.from(filterChips).find(c => c.textContent?.includes('Goals & Chances'));
-      expect(goalsChip).toBeDefined();
-
-      await act(async () => {
-        goalsChip?.click();
-      });
-
-      // All rendered cards must be goals or shots
       const renderedCards = container.querySelectorAll('.commentary-node-card');
       expect(renderedCards.length).toBeGreaterThan(0);
-      renderedCards.forEach(card => {
-        const isGoalOrShot = card.classList.contains('goal') || card.classList.contains('shot');
-        expect(isGoalOrShot).toBe(true);
-      });
+      expect(container.querySelector('.commentary-filter-toolbar')).toBeNull();
+      expect(container.querySelector('.commentary-controls-group')).toBeNull();
     } finally {
       await act(async () => root.unmount());
       container.remove();
@@ -327,9 +314,10 @@ describe('HomePage Loaded State, Hidden Buttons, and Candidate Simulation Footer
       const refreshBtn = container.querySelector<HTMLButtonElement>('.refresh-matches');
       expect(refreshBtn).toBeNull();
 
-      // AI Commentary Timeline is present and synced
+      // Match events and commentary are visible by default.
+      expect(container.querySelector('.linear-events-track')).not.toBeNull();
       expect(container.querySelector('.ai-commentary-timeline-container')).not.toBeNull();
-      expect(container.textContent).toContain('AI Service Match Commentary');
+      expect(container.textContent).toContain('Match commentary');
 
       // Candidate simulation portion is placed in the footer
       const footer = container.querySelector<HTMLElement>('footer.candidate-simulation-footer');

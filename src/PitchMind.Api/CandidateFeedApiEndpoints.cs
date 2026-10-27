@@ -52,10 +52,16 @@ internal static class CandidateFeedApiEndpoints
             startRoute.AllowAnonymous();
         }
         else startRoute.RequireAuthorization("AnalystAction");
-        group.MapPost("/pause", async (LocalCandidateSimulationService simulation,
+        var pauseRoute = group.MapPost("/pause", async (LocalCandidateSimulationService simulation,
             CandidateFeedPersistence persistence, HttpContext context) =>
-            Results.Ok(await simulation.PauseAsync(persistence, context.RequestAborted).ConfigureAwait(false)))
-            .RequireAuthorization("AnalystAction");
+            Results.Ok(await simulation.PauseAsync(persistence, context.RequestAborted).ConfigureAwait(false)));
+        if (guestAccessEnabled)
+        {
+            // Guests may control the explicitly enabled DEV demo replay, just as
+            // they may start it. Other environments keep control role-protected.
+            pauseRoute.AllowAnonymous();
+        }
+        else pauseRoute.RequireAuthorization("AnalystAction");
         group.MapPost("/clear", async (IServiceProvider services, HttpContext context) =>
         {
             var count = await CandidateSimulationDataReset.ClearAndRestartAsync(

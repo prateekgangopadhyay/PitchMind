@@ -382,11 +382,13 @@ export function useMatchContext(matchId: string | undefined, seconds: number, re
   const [loading, setLoading] = useState(Boolean(matchId));
   const [error, setError] = useState('');
   const lastMatchIdRef = useRef<string | undefined>(undefined);
+  const lastCandidateContextVersionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     if (lastMatchIdRef.current !== matchId) {
       setContext(null);
+      lastCandidateContextVersionRef.current = null;
       lastMatchIdRef.current = matchId;
     }
     setError('');
@@ -428,15 +430,29 @@ export function useMatchContext(matchId: string | undefined, seconds: number, re
   useEffect(() => {
     if (!matchId) return;
     return subscribeCandidateStatus(() => {
-      const snap = readCandidateStatus();
-      if (snap.status?.matchId === matchId) {
-        const cached = getCachedCandidateEvents(matchId);
-        if (cached.length > 0) {
-          void loadCandidateContext(matchId, seconds, new AbortController().signal).then(candidate => {
-            if (candidate) setContext(candidate);
-          });
-        }
-      }
+      const snapshot = readCandidateStatus();
+      if (snapshot.status?.matchId !== matchId) return;
+
+      const cached = getCachedCandidateEvents(matchId);
+      if (cached.length === 0) return;
+
+      // Candidate status is published for transport and clock changes as well
+      // as event changes. Rebuilding the whole match context for repeated
+      // identical snapshots caused a render/fetch loop during live playback.
+      const version = [
+        seconds,
+        cached.length,
+        cached.at(-1)?.sequence ?? -1,
+        snapshot.status.currentSequence ?? -1,
+        snapshot.status.currentClockValue ?? -1,
+        snapshot.status.isStreaming
+      ].join(':');
+      if (lastCandidateContextVersionRef.current === version) return;
+      lastCandidateContextVersionRef.current = version;
+
+      void loadCandidateContext(matchId, seconds, new AbortController().signal).then(candidate => {
+        if (candidate) setContext(candidate);
+      });
     });
   }, [matchId, seconds]);
 

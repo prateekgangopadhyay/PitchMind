@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   request,
   clock,
@@ -331,7 +331,7 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
 }) {
   const { page, error, loading, retry } = useCanonicalFixtures();
   const candidateStream = useCandidateStreamStatus(false);
-  const matches = page?.items ?? [];
+  const matches = useMemo(() => page?.items ?? [], [page?.items]);
   const requestedPhase = new URLSearchParams(search).get('phase') ?? 'all';
   const phases = [...new Set([...CANONICAL_PHASES, ...matches.map(match => match.phase)])].sort();
   const phaseFilter = requestedPhase === 'all' || phases.includes(requestedPhase) ? requestedPhase : 'all';
@@ -341,7 +341,11 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
 
   useEffect(() => {
     if (selectedMatchId) setActiveTimelineMatchId(selectedMatchId);
-  }, [selectedMatchId]);
+    else if (!activeTimelineMatchId) {
+      const firstAvailableMatchId = matches[0]?.matchId ?? candidateStream.status?.matchId ?? undefined;
+      if (firstAvailableMatchId) setActiveTimelineMatchId(firstAvailableMatchId);
+    }
+  }, [selectedMatchId, activeTimelineMatchId, matches, candidateStream.status?.matchId]);
 
   // Match is considered loaded once we have an active match ID and either timeline data or streaming status
   const isMatchLoaded = Boolean(activeMatchId && (timelineData.context || candidateStream.status?.matchId || matches.some(m => m.matchId === activeMatchId)));
@@ -362,20 +366,8 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
       </div>
     )}
 
-    {/* Linear Match Events Timeline with differentiated icons */}
+    {/* Match events and commentary are the default Home view when a fixture is available. */}
     <div className="home-timeline-section">
-      {!loading && !error && (matches.length > 0 || candidateStream.status?.matchId) && (
-        <div className="home-timeline-controls-bar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-          <button
-            type="button"
-            className={`inspect-timeline-btn ${activeMatchId ? 'is-active' : ''}`}
-            onClick={() => setActiveTimelineMatchId(current => current ? undefined : (matches[0]?.matchId ?? candidateStream.status?.matchId))}
-          >
-            {activeMatchId ? 'Hide Linear Timeline' : 'View Linear Events Timeline'}
-          </button>
-        </div>
-      )}
-
       {activeMatchId ? (
         <LinearEventsTimeline
           events={timelineData.context?.events ?? []}
@@ -384,14 +376,6 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
           selectedSeconds={selectedSeconds}
           loading={timelineData.loading}
         />
-      ) : !loading && !error && matches.length > 0 ? (
-        <div className="timeline-intro-banner" aria-label="Linear Match Events Timeline preview guide">
-          <div className="intro-banner-icon" aria-hidden="true">⏱️</div>
-          <div className="intro-banner-text">
-            <strong>Linear Match Events Timeline</strong>
-            <p>Click “View Linear Events Timeline” to explore goals ⚽, shots 🎯, passes ↗️, tackles 🛑, recoveries 🔄, and cards along a connecting rail with differentiated icons.</p>
-          </div>
-        </div>
       ) : null}
     </div>
 

@@ -65,6 +65,7 @@ function candidateFeedDevPlugin(): Plugin {
 
   let backendAvailable: boolean | null = null;
   let lastCheckedBackend = 0;
+  let candidateIsStreaming = true;
 
   async function checkBackend(): Promise<boolean> {
     const now = Date.now();
@@ -100,7 +101,7 @@ function candidateFeedDevPlugin(): Plugin {
           res.end(JSON.stringify({
             matchId,
             sourceSha256: sha,
-            isStreaming: true,
+            isStreaming: candidateIsStreaming,
             currentClockValue: 854,
             lastSequence: 334,
             period: 1,
@@ -108,6 +109,26 @@ function candidateFeedDevPlugin(): Plugin {
             coordinateStatus: 'unverified',
             playerMetricsStatus: 'unvalidated'
           }));
+          return;
+        }
+
+        if (url.pathname === '/api/v1/simulation/candidate/pause' && request.method === 'POST') {
+          candidateIsStreaming = false;
+          const { events, manifest } = loadDataset();
+          const matchId = events?.[0]?.matchId ?? 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+          const sha = manifest?.source?.sha256 ?? 'e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c';
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ matchId, sourceSha256: sha, isStreaming: false, currentSequence: 334, currentClockValue: 854, period: 1 }));
+          return;
+        }
+
+        if (url.pathname === '/api/v1/simulation/candidate/start' && request.method === 'POST') {
+          candidateIsStreaming = true;
+          const { events, manifest } = loadDataset();
+          const matchId = events?.[0]?.matchId ?? 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+          const sha = manifest?.source?.sha256 ?? 'e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c';
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ matchId, sourceSha256: sha, isStreaming: true, currentSequence: 334, currentClockValue: 854, period: 1 }));
           return;
         }
 
@@ -277,6 +298,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     css: true,
-    include: ['src/**/*.test.{ts,tsx}']
+    include: ['src/**/*.test.{ts,tsx}'],
+    // The UI suite mounts several large analyst pages with JSDOM and SVG.
+    // Running multiple Vitest workers multiplies that retained DOM/module heap
+    // and exhausts the 4 GB Node heap on the self-hosted macOS agent.
+    maxWorkers: 1,
+    fileParallelism: false
   }
 });

@@ -431,7 +431,7 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
     }
   });
 
-  it('allows expanding the Linear Events Timeline on HomePage by clicking View Linear Events Timeline', async () => {
+  it('shows the Linear Events Timeline on HomePage by default', async () => {
     const matchId = 'home-timeline-match-123';
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
 
@@ -509,26 +509,12 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
         await new Promise(resolve => setTimeout(resolve, 50));
       });
 
-      // Guide banner is shown initially when no timeline is active
-      expect(container.querySelector('.timeline-intro-banner')).not.toBeNull();
-      expect(container.textContent).toContain('Linear Match Events Timeline');
-
-      // Click the "View Linear Events Timeline" button on the match card
-      const toggleBtn = container.querySelector<HTMLButtonElement>('.inspect-timeline-btn');
-      expect(toggleBtn).not.toBeNull();
-      expect(toggleBtn?.textContent).toContain('View Linear Events Timeline');
-
-      await act(async () => {
-        toggleBtn?.click();
-        await new Promise(resolve => setTimeout(resolve, 60));
-      });
-
-      // Linear Events Timeline is now mounted and rendered on the home page!
+      // The event timeline and commentary are mounted without an extra click.
       expect(container.querySelector('.linear-events-track')).not.toBeNull();
       expect(container.querySelector('.linear-timeline-rail')).not.toBeNull();
       expect(container.querySelector('.icon-goal')).not.toBeNull();
       expect(container.querySelector('.icon-yellow-card')).not.toBeNull();
-      expect(toggleBtn?.textContent).toContain('Hide Linear Timeline');
+      expect(container.querySelector('.ai-commentary-timeline-container')).not.toBeNull();
     } finally {
       await act(async () => root.unmount());
       container.remove();

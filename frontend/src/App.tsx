@@ -139,7 +139,7 @@ export function App() {
             </svg>
             <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
           </button>}
-          {candidateStreamMatchesContext && activeUser?.provider !== 'guest' && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
+          {candidateStreamMatchesContext && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
             aria-pressed={candidateStream.status?.isStreaming ?? false}
             aria-label={candidateStream.status?.isStreaming ? 'Pause candidate live simulation' : 'Resume candidate live simulation'}
             title={candidateStream.error || (candidateStream.status?.isStreaming ? 'Pause live simulation' : 'Resume live simulation')}
