@@ -176,38 +176,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
     });
   }, [matchId]);
 
-  useEffect(() => {
-    if (!matchId || !status?.isStreaming || !sourceHash) return;
-    let active = true;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const abort = new AbortController();
-    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingSignal = false;
-    const refresh = () => {
-      if (!active) return;
-      if (throttleTimer) {
-        pendingSignal = true;
-        return;
-      }
-      void backfill(matchId, abort.signal);
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        if (pendingSignal && active) {
-          pendingSignal = false;
-          refresh();
-        }
-      }, 1000);
-    };
-    timer = setInterval(() => {
-      if (document.visibilityState !== 'hidden') refresh();
-    }, 2000);
-    return () => {
-      active = false;
-      abort.abort();
-      if (throttleTimer) clearTimeout(throttleTimer);
-      if (timer) clearInterval(timer);
-    };
-  }, [matchId, status?.isStreaming, sourceHash, backfill]);
 
   const liveLatest = useMemo(() => {
     if (!events.length) return null;

@@ -45,6 +45,21 @@ let activeHubMatchId: string | null = null;
 let activeHubSourceHash: string | null = null;
 let isConnectingHub = false;
 
+let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let syncThrottleUntil = 0;
+let rateLimitBackoffUntil = 0;
+
+export function scheduleSyncEvents(targetMatchId: string) {
+  if (syncDebounceTimer) return;
+  const now = Date.now();
+  const waitMs = Math.max(400, syncThrottleUntil - now);
+  syncDebounceTimer = setTimeout(() => {
+    syncDebounceTimer = null;
+    syncThrottleUntil = Date.now() + 1500;
+    void syncCandidateEvents(targetMatchId);
+  }, waitMs);
+}
+
 function publish() { snapshot = { status, error, pending }; listeners.forEach(fn => fn()); }
 function failureMessage(failure: unknown, fallback: string) {
   if (failure instanceof ApiRequestError && failure.status === 401) return 'Your sign-in expired. Sign in again to load the match feed.';
@@ -130,17 +145,37 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
       .configureLogging(LogLevel.Error)
       .build();
 
-    hub.on('CandidateMatchUpdated', (cursor: { matchId: string; sourceSha256: string; sequence?: number }) => {
+    hub.on('CandidateMatchUpdated', (cursor: {
+      matchId: string;
+      sourceSha256: string;
+      sequence?: number;
+      clockSeconds?: number;
+      period?: number;
+    }) => {
       if (cursor.matchId?.toLowerCase() === matchId.toLowerCase()) {
-        void refreshCandidateStatus();
-        void syncCandidateEvents(matchId);
+        if (status && status.matchId?.toLowerCase() === cursor.matchId.toLowerCase()) {
+          const prevSeq = status.currentSequence ?? -1;
+          const newSeq = cursor.sequence ?? prevSeq;
+          const prevClock = status.currentClockValue;
+          const newClock = cursor.clockSeconds ?? prevClock;
+          status = {
+            ...status,
+            currentSequence: newSeq,
+            currentClockValue: newClock,
+            period: cursor.period ?? status.period,
+            isStreaming: true
+          };
+          if (newSeq !== prevSeq || newClock !== prevClock) {
+            publish();
+          }
+        }
+        scheduleSyncEvents(matchId);
       }
     });
 
     hub.onreconnected(() => {
       void hub.invoke('SubscribeToCandidateMatch', matchId, sourceHash).catch(() => undefined);
-      void refreshCandidateStatus();
-      void syncCandidateEvents(matchId);
+      scheduleSyncEvents(matchId);
     });
 
     await hub.start();
@@ -156,6 +191,9 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
 }
 
 export async function syncCandidateEvents(targetMatchId: string, signal?: AbortSignal): Promise<CandidateEvent[]> {
+  if (Date.now() < rateLimitBackoffUntil) {
+    return cachedEvents;
+  }
   if (cachedMatchId !== targetMatchId) {
     cachedEvents = [];
     cachedMatchId = targetMatchId;
@@ -171,6 +209,7 @@ export async function syncCandidateEvents(targetMatchId: string, signal?: AbortS
     let pages = 0;
     let addedCount = 0;
     while (hasMore && pages < 12) {
+      if (Date.now() < rateLimitBackoffUntil) break;
       const query = new URLSearchParams({ afterSequence: String(after), limit: '499' });
       const res = await request<CandidatePage>(
         `simulation/candidate/matches/${encodeURIComponent(targetMatchId)}/events?${query}`,
@@ -200,13 +239,16 @@ export async function syncCandidateEvents(targetMatchId: string, signal?: AbortS
       cachedEvents = [...map.values()].sort((a, b) => a.sequence - b.sequence);
       publish();
     }
-  } catch {
+  } catch (failure) {
+    if (failure instanceof ApiRequestError && failure.status === 429) {
+      rateLimitBackoffUntil = Date.now() + 10_000;
+    }
     // Keep cached events on transient network failure
   } finally {
     isSyncingEvents = false;
     if (syncPending && !signal?.aborted) {
       syncPending = false;
-      void syncCandidateEvents(targetMatchId);
+      scheduleSyncEvents(targetMatchId);
     }
   }
   return cachedEvents;
@@ -218,9 +260,11 @@ export function subscribeCandidateStatus(fn: () => void) {
     void refreshCandidateStatus();
     poller = setInterval(() => {
       if (document.visibilityState !== 'hidden') {
-        void refreshCandidateStatus();
+        if (!globalHub || globalHub.state !== 'Connected') {
+          void refreshCandidateStatus();
+        }
       }
-    }, 2000);
+    }, 4000);
   }
   return () => {
     listeners.delete(fn);
@@ -274,6 +318,9 @@ async function startAfterStatusIfRequested() {
 }
 
 export async function refreshCandidateStatus(autoStart = false): Promise<CandidateStreamStatus | null> {
+  if (Date.now() < rateLimitBackoffUntil) {
+    return status;
+  }
   if (autoStart) {
     if (!status?.isStreaming) {
       autoStartRequested = true;
@@ -304,10 +351,13 @@ export async function refreshCandidateStatus(autoStart = false): Promise<Candida
         void ensureGlobalSignalR(status.matchId, status.sourceSha256);
       }
       if ((status.currentSequence ?? -1) > prevSeq || cachedEvents.length === 0) {
-        void syncCandidateEvents(status.matchId);
+        scheduleSyncEvents(status.matchId);
       }
     }
-  }).catch(() => {
+  }).catch((failure) => {
+    if (failure instanceof ApiRequestError && failure.status === 429) {
+      rateLimitBackoffUntil = Date.now() + 10_000;
+    }
     if (error !== 'Candidate simulation status is unavailable.') {
       error = 'Candidate simulation status is unavailable.';
       publish();
