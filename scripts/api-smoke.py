@@ -2,13 +2,47 @@
 """Verify API health and protected fail-closed match routes."""
 import argparse
 import json
+import os
+import ssl
 import sys
 import time
 import urllib.error
 import urllib.request
 
 
-def main(argv: list[str] | None = None, open_url=urllib.request.urlopen, sleep=time.sleep) -> int:
+def _default_ssl_context() -> ssl.SSLContext | None:
+    ca_candidates = [
+        "/etc/ssl/cert.pem",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/certs/ca-certificates.crt",
+    ]
+    try:
+        import certifi
+        ca_candidates.insert(0, certifi.where())
+    except ImportError:
+        pass
+    for candidate in ca_candidates:
+        if os.path.exists(candidate):
+            try:
+                return ssl.create_default_context(cafile=candidate)
+            except Exception:
+                pass
+    return None
+
+
+def _default_open_url(request: urllib.request.Request, timeout: int = 10):
+    try:
+        return urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.URLError as error:
+        reason = getattr(error, "reason", None)
+        if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(error):
+            fallback_context = _default_ssl_context()
+            if fallback_context is not None:
+                return urllib.request.urlopen(request, timeout=timeout, context=fallback_context)
+        raise
+
+
+def main(argv: list[str] | None = None, open_url=_default_open_url, sleep=time.sleep) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base", nargs="?", default="http://127.0.0.1:5080")
     parser.add_argument(
