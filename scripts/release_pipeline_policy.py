@@ -47,11 +47,11 @@ _ALLOWED_AZ_BICEP = {"version", "build", "build-params"}
 _ALLOWED_VALIDATION_SHORTCUTS = {
     "Validate repository and Compose configuration": (
         None,
-        "27961490586c31846e75cea5aa0ae3190faa65b8406088f56c607e989f212930",
+        "5ae8a20741be611bcb86e1aa5825ecf6b665ca472498b7d7476e86d949983d41",
     ),
     "Verify source-feed preflight and planning artifacts": (
         None,
-        "d9e245c81045129e7d2c473c8fac571147cb078c5a20c5ccac107e27bc6d54e1",
+        "301ced44d3e2a346afab9e9011543d8c3e4de480e6cb71b83695b2d7a29634df",
     ),
     "Docker Compose health and real PostgreSQL integration": (
         None,
