@@ -89,40 +89,37 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
     }
   ];
 
-  it('generates rich, tactical commentary items directly from match events and multi-agent personas', () => {
+  it('projects observed events into cards and selects a specialist agent without inventing commentary', () => {
     const items = generateAiCommentaryFromEvents(sampleEvents, 'Manchester United', 'Liverpool');
 
     expect(items.length).toBeGreaterThanOrEqual(7);
 
-    // Goal commentary check
+    // Goal event metadata stays source-bounded; the agent supplies the narrative.
     const goalItem = items.find(i => i.category === 'goal');
     expect(goalItem).toBeDefined();
-    expect(goalItem?.headline).toContain('GOAL!');
+    expect(goalItem?.headline).toContain('Goal');
     expect(goalItem?.playerName).toBe('Mohamed Salah');
-    expect(goalItem?.commentaryText).toContain('UNBELIEVABLE FINISH');
-    expect(goalItem?.tacticalInsight).toContain('transitional circulation');
+    expect(goalItem?.commentaryText).toBe('');
     expect(goalItem?.aiAgent.name).toBe('ChanceCreationAnalyst');
 
     // Shot commentary check
     const shotItem = items.find(i => i.category === 'shot');
     expect(shotItem).toBeDefined();
-    expect(shotItem?.headline).toContain('DANGEROUS ATTEMPT');
+    expect(shotItem?.headline).toContain('Shot');
     expect(shotItem?.playerName).toBe('Casemiro');
     expect(shotItem?.aiAgent.name).toBe('ChanceCreationAnalyst');
 
     // Ball Recovery check
     const recoveryItem = items.find(i => i.category === 'recovery');
     expect(recoveryItem).toBeDefined();
-    expect(recoveryItem?.headline).toContain('BALL REGAIN');
+    expect(recoveryItem?.headline).toContain('BallRecovery');
     expect(recoveryItem?.playerName).toBe('Bruno Fernandes');
-    expect(recoveryItem?.tacticalInsight).toContain('High-press trigger executed');
     expect(recoveryItem?.aiAgent.name).toBe('HighPressAnalyst');
 
     // Progressive pass check
     const passItem = items.find(i => i.category === 'pass');
     expect(passItem).toBeDefined();
     expect(passItem?.playerName).toBe('Marcus Rashford');
-    expect(passItem?.tacticalInsight).toContain('Positional superiority achieved');
     expect(passItem?.aiAgent.name).toBe('PositionalPlayArchitect');
 
     // Card check
@@ -152,7 +149,7 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
 
       // Renders main headers and badges
       expect(container.textContent).toContain('Match commentary');
-      expect(container.textContent).toContain('Live match commentary');
+      expect(container.textContent).toContain('AI agent commentary');
       expect(container.textContent).toContain('Manchester United vs Liverpool');
 
       // The vertical rail exists
@@ -163,7 +160,7 @@ describe('AI Match Commentary Generation and Synced Timeline', () => {
       expect(activeCard).not.toBeNull();
       expect(activeCard?.textContent).toContain('ACTIVE MATCH TIME');
       expect(activeCard?.textContent).toContain('15:15');
-      expect(activeCard?.textContent).toContain('BALL REGAIN');
+      expect(activeCard?.textContent).toContain('BallRecovery');
       expect(activeCard?.textContent).toContain('Bruno Fernandes');
     } finally {
       await act(async () => root.unmount());
