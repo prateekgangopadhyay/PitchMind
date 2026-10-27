@@ -374,11 +374,13 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
         {
             new
             {
+                type = "message",
                 role = "developer",
                 content = new[] { new { type = "input_text", text = ResponseContract } }
             },
             new
             {
+                type = "message",
                 role = "user",
                 content = new[] { new { type = "input_text", text = $"MATCH EVIDENCE PACKET (JSON):\n{evidencePacket}" } }
             }

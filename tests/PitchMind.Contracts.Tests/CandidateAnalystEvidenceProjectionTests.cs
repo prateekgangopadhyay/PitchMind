@@ -78,9 +78,11 @@ public sealed class CandidateAnalystEvidenceProjectionTests
         Assert.Equal(512, requestRoot.GetProperty("max_output_tokens").GetInt32());
         var agentInput = requestRoot.GetProperty("input");
         Assert.Equal(2, agentInput.GetArrayLength());
+        Assert.Equal("message", agentInput[0].GetProperty("type").GetString());
         Assert.Equal("developer", agentInput[0].GetProperty("role").GetString());
         Assert.Contains("RESPONSE CONTRACT", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Equal("message", agentInput[1].GetProperty("type").GetString());
         Assert.Equal("user", agentInput[1].GetProperty("role").GetString());
         Assert.Contains("MATCH EVIDENCE PACKET (JSON)", agentInput[1].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
