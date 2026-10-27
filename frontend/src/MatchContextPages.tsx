@@ -814,10 +814,14 @@ export function MatchContextTeamsPage({ route, matchId, seconds, revision }: { r
                 events={data.context.events}
                 seconds={seconds}
                 matchId={matchId}
+                phase={data.context.phase}
               />
               <div className="entity-grid team-entity-grid">
                 {data.context.teams.map(team => {
-                  const events = data.context!.events.filter(event => event.teamId === team.id || event.teamId === team.name || event.teamName === team.name);
+                  const events = data.context!.events.filter(event => (event.clockSeconds === undefined || event.clockSeconds <= seconds) && (event.teamId === team.id || event.teamId === team.name || event.teamName === team.name));
+                  const shots = events.filter(e => e.type === 'Shot' || e.type === 'Goal').length;
+                  const passes = events.filter(e => e.type === 'Pass' || e.type === 'ProgressivePass' || e.type === 'LineBreakingPass').length;
+                  const regains = events.filter(e => e.type === 'BallRecovery' || e.type === 'Tackle' || e.type === 'Interception').length;
                   return <article className="entity-card team-card" key={team.id}>
                     <div className="entity-card-topline">
                       <span className="badge">Team in selected match</span>
@@ -836,6 +840,9 @@ export function MatchContextTeamsPage({ route, matchId, seconds, revision }: { r
                     <dl>
                       {team.activePlayers > 0 && <div><dt>Active players in match state</dt><dd>{team.activePlayers}</dd></div>}
                       {events.length > 0 && <div><dt>Events attributed by feed</dt><dd>{events.length}</dd></div>}
+                      {shots > 0 && <div><dt>Shots observed</dt><dd>{shots}</dd></div>}
+                      {passes > 0 && <div><dt>Passes observed</dt><dd>{passes}</dd></div>}
+                      {regains > 0 && <div><dt>Regains & interceptions</dt><dd>{regains}</dd></div>}
                     </dl>
                   </article>;
                 })}
