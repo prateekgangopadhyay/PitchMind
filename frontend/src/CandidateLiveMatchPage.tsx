@@ -66,7 +66,6 @@ export function CandidateLiveMatchPage({ selectedSeconds }: { selectedSeconds?: 
   const busy = useRef(false);
   const refreshPending = useRef(false);
   const matchId = status?.matchId ?? null;
-  const sourceHash = status?.sourceSha256 ?? null;
 
   useEffect(() => {
     const updateCinemaMode = () => setCinemaMode(document.fullscreenElement === pitchScreenRef.current);
