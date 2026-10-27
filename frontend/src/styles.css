@@ -17211,7 +17211,8 @@ button:active,
   pointer-events: none;
 }
 
-.clash-header-content {
+.clash-header-content,
+.h2h-teams-clash-row {
   position: relative;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -17220,83 +17221,148 @@ button:active,
   z-index: 1;
 }
 
-.clash-team-side {
+.clash-team-side,
+.h2h-team-pillar {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1.15rem;
 }
 
-.clash-team-side.home-side {
+.clash-team-side.home-side,
+.h2h-team-pillar.home-pillar {
   justify-content: flex-start;
 }
 
-.clash-team-side.away-side {
+.clash-team-side.away-side,
+.h2h-team-pillar.away-pillar {
   flex-direction: row-reverse;
   justify-content: flex-start;
   text-align: right;
 }
 
-.clash-crest-frame {
-  width: 72px;
-  height: 72px;
-  min-width: 72px;
-  border-radius: 16px;
+.clash-crest-frame,
+.h2h-crest-wrap {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  max-width: 58px;
+  min-height: 58px;
+  max-height: 58px;
+  border-radius: 14px;
   background: rgba(12, 34, 25, 0.75);
   border: 1.5px solid rgba(255, 255, 255, 0.14);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  padding: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  flex-shrink: 0;
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.clash-crest-frame:hover {
+.clash-crest-frame:hover,
+.h2h-crest-wrap:hover {
   transform: scale(1.05);
   border-color: rgba(74, 239, 172, 0.5);
 }
 
-.clash-crest-img {
-  width: 100%;
-  height: 100%;
+.clash-crest-img,
+.h2h-club-crest {
+  width: 42px;
+  height: 42px;
+  max-width: 42px;
+  max-height: 42px;
   object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
 }
 
-.clash-monogram-circle {
-  font-size: 1.35rem;
+.clash-monogram-circle,
+.h2h-crest-monogram {
+  font-size: 1.25rem;
   font-weight: 800;
   color: #4aefac;
   letter-spacing: -0.02em;
 }
 
-.clash-team-info {
+.clash-team-info,
+.h2h-team-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
-.team-role-tag {
-  font-size: 0.72rem;
+.team-role-tag,
+.h2h-side-label {
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #94a3b8;
 }
 
-.team-role-tag.home-tag {
-  color: #f87171;
-}
-
-.team-role-tag.away-tag {
-  color: #38bdf8;
-}
-
-.clash-team-name {
+.clash-team-name,
+.h2h-team-name {
   font-size: 1.35rem;
   font-weight: 800;
   color: #f8fafc;
   line-height: 1.15;
+  margin: 0;
   letter-spacing: -0.01em;
+}
+
+.h2h-score-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #55e6b2;
+  background: rgba(85, 230, 178, 0.14);
+  border: 1px solid rgba(85, 230, 178, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 0.25rem;
+}
+
+.h2h-team-pillar.away-pillar .h2h-score-badge {
+  align-self: flex-end;
+}
+
+.h2h-vs-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.h2h-vs-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(15, 36, 27, 0.9);
+  border: 1.5px solid rgba(74, 239, 172, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #4aefac;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.h2h-fixture-state {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.h2h-meetings-count {
+  font-size: 0.7rem;
+  color: #94a3b8;
 }
 
 .clash-form-guide {

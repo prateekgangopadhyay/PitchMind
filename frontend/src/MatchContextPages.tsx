@@ -826,8 +826,8 @@ export function MatchContextTeamsPage({ route, matchId, seconds, revision }: { r
                       )}
                     </div>
                     <div className="team-card-identity">
-                      {team.logoUrl ? (
-                        <img src={team.logoUrl} alt="" className="team-card-crest" />
+                      {resolveClubLogo(team.name) || team.logoUrl ? (
+                        <img src={resolveClubLogo(team.name) || team.logoUrl} alt="" className="team-card-crest" style={{ width: '38px', height: '38px', maxWidth: '38px', maxHeight: '38px', objectFit: 'contain', flexShrink: 0 }} />
                       ) : (
                         <span className="score-team-monogram">{clubInitials(team.name)}</span>
                       )}

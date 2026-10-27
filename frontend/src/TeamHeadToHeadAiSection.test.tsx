@@ -91,6 +91,16 @@ describe('TeamHeadToHeadAiSection', () => {
       expect(container.textContent).toContain('VS');
       expect(container.querySelector('.home-pillar .h2h-score-badge')?.textContent).toContain('1 Goal');
       expect(container.querySelector('.away-pillar .h2h-score-badge')?.textContent).toContain('0 Goals');
+
+      // Verify club crests are constrained and not enormous
+      const homeCrestImg = container.querySelector<HTMLImageElement>('.home-pillar .h2h-club-crest');
+      const awayCrestImg = container.querySelector<HTMLImageElement>('.away-pillar .h2h-club-crest');
+      expect(homeCrestImg).not.toBeNull();
+      expect(awayCrestImg).not.toBeNull();
+      expect(homeCrestImg?.style.maxWidth).toBe('42px');
+      expect(awayCrestImg?.style.maxWidth).toBe('42px');
+      expect(homeCrestImg?.style.maxHeight).toBe('42px');
+      expect(awayCrestImg?.style.maxHeight).toBe('42px');
     } finally {
       await act(async () => root.unmount());
       container.remove();

@@ -360,9 +360,9 @@ export function TeamHeadToHeadAiSection({
         <div className="h2h-teams-clash-row">
           {/* Home Team Pillar */}
           <div className="h2h-team-pillar home-pillar">
-            <div className="h2h-crest-wrap">
+            <div className="h2h-crest-wrap" style={{ width: '56px', height: '56px', minWidth: '56px', maxWidth: '56px', minHeight: '56px', maxHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
               {homeCrest ? (
-                <img src={homeCrest} alt={`${homeName} Crest`} className="h2h-club-crest" />
+                <img src={homeCrest} alt={`${homeName} Crest`} className="h2h-club-crest" style={{ width: '42px', height: '42px', maxWidth: '42px', maxHeight: '42px', objectFit: 'contain', display: 'block' }} />
               ) : (
                 <span className="h2h-crest-monogram">{clubInitials(homeName)}</span>
               )}
@@ -388,9 +388,9 @@ export function TeamHeadToHeadAiSection({
               <h3 className="h2h-team-name">{awayName}</h3>
               <span className="h2h-score-badge">{liveStats.awayGoals} {liveStats.awayGoals === 1 ? 'Goal' : 'Goals'}</span>
             </div>
-            <div className="h2h-crest-wrap">
+            <div className="h2h-crest-wrap" style={{ width: '56px', height: '56px', minWidth: '56px', maxWidth: '56px', minHeight: '56px', maxHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
               {awayCrest ? (
-                <img src={awayCrest} alt={`${awayName} Crest`} className="h2h-club-crest" />
+                <img src={awayCrest} alt={`${awayName} Crest`} className="h2h-club-crest" style={{ width: '42px', height: '42px', maxWidth: '42px', maxHeight: '42px', objectFit: 'contain', display: 'block' }} />
               ) : (
                 <span className="h2h-crest-monogram">{clubInitials(awayName)}</span>
               )}
