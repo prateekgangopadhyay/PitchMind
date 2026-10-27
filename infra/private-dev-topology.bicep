@@ -506,7 +506,9 @@ resource redisCache 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivate
         }
       ]
       scale: {
-        minReplicas: 0
+        // Candidate-feed clears and live projections require an always-available TCP cache.
+        // Without a TCP scaling rule, a zero-replica cache can stay unavailable to the API.
+        minReplicas: enableCandidateFeed ? 1 : 0
         maxReplicas: 1
       }
     }

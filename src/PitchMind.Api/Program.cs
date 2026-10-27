@@ -322,6 +322,12 @@ app.Use(async (context, next) =>
         await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
             "Canonical match data is not configured").ExecuteAsync(context);
     }
+    catch (ProjectionCacheUnavailableException exception)
+    {
+        app.Logger.LogWarning(exception, "Projection cache dependency failed for {Path}", context.Request.Path);
+        await ApiProblem(context, StatusCodes.Status503ServiceUnavailable, "DEPENDENCY_UNAVAILABLE",
+            "The match cache is temporarily unavailable").ExecuteAsync(context);
+    }
     catch (InvalidDataException exception)
     {
         app.Logger.LogError(exception, "Canonical persisted data failed validation for {Path}", context.Request.Path);

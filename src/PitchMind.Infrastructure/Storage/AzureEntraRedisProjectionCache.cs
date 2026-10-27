@@ -59,7 +59,7 @@ public sealed class AzureEntraRedisProjectionCache : IMatchProjectionCache, IAsy
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Redis flush failed; the data-clear operation cannot be reported as successful.");
-            throw new InvalidOperationException("Azure Managed Redis could not be cleared.", ex);
+            throw new ProjectionCacheUnavailableException("Azure Managed Redis could not be cleared.", ex);
         }
     }
 
