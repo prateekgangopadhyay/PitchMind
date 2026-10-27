@@ -95,6 +95,113 @@ describe('Home Page Linear Events Timeline and Differentiated Icons', () => {
       container.remove();
     }
   });
+
+  it('identifies and highlights the current relevant event card and scrolls it into view', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const testEvents = [
+      { id: 'ev-1', type: 'KickOff', sequence: 1, clockSeconds: 0, teamName: 'Arsenal' },
+      { id: 'ev-2', type: 'ProgressivePass', sequence: 2, clockSeconds: 140, playerName: 'Martin Ødegaard', teamName: 'Arsenal' },
+      { id: 'ev-3', type: 'Tackle', sequence: 3, clockSeconds: 210, playerName: 'Rodri', teamName: 'Manchester City' },
+      { id: 'ev-4', type: 'BallRecovery', sequence: 4, clockSeconds: 320, playerName: 'Declan Rice', teamName: 'Arsenal' },
+      { id: 'ev-5', type: 'Shot', sequence: 5, clockSeconds: 540, playerName: 'Bukayo Saka', teamName: 'Arsenal' },
+      { id: 'ev-6', type: 'Goal', sequence: 6, clockSeconds: 545, playerName: 'Bukayo Saka', teamName: 'Arsenal' }
+    ];
+
+    const scrollToMock = vi.fn();
+    const originalScrollTo = HTMLDivElement.prototype.scrollTo;
+    HTMLDivElement.prototype.scrollTo = scrollToMock;
+
+    try {
+      await act(async () => {
+        root.render(
+          <LinearEventsTimeline
+            events={testEvents}
+            selectedSeconds={350}
+          />
+        );
+      });
+
+      // At selectedSeconds = 350, latest event is ev-4 (at 320s)
+      const currentCard = container.querySelector('.linear-event-node.is-selected');
+      expect(currentCard).not.toBeNull();
+      expect(currentCard?.getAttribute('data-event-id')).toBe('ev-4');
+      expect(currentCard?.getAttribute('aria-current')).toBe('true');
+      expect(currentCard?.textContent).toContain('Current');
+
+      // Check that scrollTo was invoked to scroll to the current card
+      expect(scrollToMock).toHaveBeenCalled();
+      const lastCall = scrollToMock.mock.calls[scrollToMock.mock.calls.length - 1][0];
+      expect(lastCall).toHaveProperty('behavior');
+
+      // Advance clock to 542 seconds (Shot at 540s should become current)
+      await act(async () => {
+        root.render(
+          <LinearEventsTimeline
+            events={testEvents}
+            selectedSeconds={542}
+          />
+        );
+      });
+
+      const updatedCard = container.querySelector('.linear-event-node.is-selected');
+      expect(updatedCard?.getAttribute('data-event-id')).toBe('ev-5');
+      expect(updatedCard?.getAttribute('aria-current')).toBe('true');
+    } finally {
+      HTMLDivElement.prototype.scrollTo = originalScrollTo;
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('scrolls to and selects event card when clicked by user', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const testEvents = [
+      { id: 'ev-1', type: 'KickOff', sequence: 1, clockSeconds: 0 },
+      { id: 'ev-2', type: 'Shot', sequence: 2, clockSeconds: 120 },
+      { id: 'ev-3', type: 'Goal', sequence: 3, clockSeconds: 300 }
+    ];
+
+    const scrollToMock = vi.fn();
+    const originalScrollTo = HTMLDivElement.prototype.scrollTo;
+    HTMLDivElement.prototype.scrollTo = scrollToMock;
+    const selectMock = vi.fn();
+
+    try {
+      await act(async () => {
+        root.render(
+          <LinearEventsTimeline
+            events={testEvents}
+            selectedSeconds={0}
+            onSelectEvent={selectMock}
+          />
+        );
+      });
+
+      // Initially ev-1 is current
+      expect(container.querySelector('.linear-event-node.is-selected')?.getAttribute('data-event-id')).toBe('ev-1');
+
+      // Click on ev-3 (Goal)
+      const goalCard = container.querySelector('[data-event-id="ev-3"]') as HTMLElement;
+      expect(goalCard).not.toBeNull();
+
+      await act(async () => {
+        goalCard.click();
+      });
+
+      expect(selectMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-3', type: 'Goal' }));
+      expect(scrollToMock).toHaveBeenCalled();
+    } finally {
+      HTMLDivElement.prototype.scrollTo = originalScrollTo;
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
 });
 
 describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {

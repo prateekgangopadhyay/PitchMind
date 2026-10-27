@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { clock } from './api';
 import { contextHref } from './routes';
@@ -20,6 +20,7 @@ export interface LinearEventsTimelineProps {
   matchId?: string;
   matchTitle?: string;
   selectedSeconds?: number;
+  selectedEventId?: string;
   onSelectEvent?: (event: LinearTimelineEvent) => void;
   loading?: boolean;
   vertical?: boolean;
@@ -220,11 +221,15 @@ export function LinearEventsTimeline({
   matchId,
   matchTitle,
   selectedSeconds,
+  selectedEventId,
   onSelectEvent,
   loading = false,
   vertical = false
 }: LinearEventsTimelineProps) {
   const [filterType, setFilterType] = useState<string>('all');
+  const [clickedEventId, setClickedEventId] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // When vertical (e.g. on Match screen), show events that have happened till now
   const eventsTillNow = vertical && selectedSeconds !== undefined
@@ -248,6 +253,99 @@ export function LinearEventsTimeline({
   const goalsCount = sortedEvents.filter(e => e.type.toLowerCase().includes('goal')).length;
   const shotsCount = sortedEvents.filter(e => e.type.toLowerCase().includes('shot')).length;
   const recoveriesCount = sortedEvents.filter(e => e.type.toLowerCase().includes('recovery')).length;
+
+  // Compute the current relevant event:
+  // 1. If selectedEventId prop is provided, look for it.
+  // 2. If user clicked a card and its clockSeconds matches selectedSeconds, honor clicked card.
+  // 3. If selectedSeconds is provided, find latest event at or before selectedSeconds.
+  //    If selectedSeconds is earlier than all events, pick the first event.
+  // 4. Otherwise, pick the latest event in the timeline.
+  const currentRelevantEvent = useMemo(() => {
+    if (filteredEvents.length === 0) return undefined;
+
+    if (selectedEventId) {
+      const match = filteredEvents.find(e => e.id === selectedEventId);
+      if (match) return match;
+    }
+
+    if (clickedEventId) {
+      const clicked = filteredEvents.find(e => e.id === clickedEventId);
+      if (clicked && (selectedSeconds === undefined || clicked.clockSeconds === selectedSeconds)) {
+        return clicked;
+      }
+    }
+
+    if (selectedSeconds !== undefined) {
+      let candidate: LinearTimelineEvent | undefined;
+      for (const ev of filteredEvents) {
+        if (ev.clockSeconds <= selectedSeconds) {
+          candidate = ev;
+        } else {
+          break;
+        }
+      }
+      if (candidate) return candidate;
+      return filteredEvents[0];
+    }
+
+    return filteredEvents[filteredEvents.length - 1];
+  }, [filteredEvents, selectedEventId, clickedEventId, selectedSeconds]);
+
+  const scrollToEventCard = useCallback((eventId: string, customBehavior?: ScrollBehavior) => {
+    const container = scrollContainerRef.current;
+    const card = cardRefs.current.get(eventId);
+    if (!container || !card) return;
+
+    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const behavior: ScrollBehavior = customBehavior ?? (prefersReducedMotion ? 'auto' : 'smooth');
+
+    const containerRect = container.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+
+    if (vertical) {
+      const cardHeight = cardRect.height || card.offsetHeight || 120;
+      const cardTop = cardRect.height > 0
+        ? (container.scrollTop + (cardRect.top - containerRect.top))
+        : card.offsetTop;
+      const containerHeight = container.clientHeight || 400;
+      const targetScrollTop = cardTop - (containerHeight / 2) + (cardHeight / 2);
+
+      if (typeof container.scrollTo === 'function') {
+        container.scrollTo({ top: Math.max(0, targetScrollTop), behavior });
+      } else {
+        container.scrollTop = Math.max(0, targetScrollTop);
+      }
+    } else {
+      const cardWidth = cardRect.width || card.offsetWidth || 220;
+      const cardLeft = cardRect.width > 0
+        ? (container.scrollLeft + (cardRect.left - containerRect.left))
+        : card.offsetLeft;
+      const containerWidth = container.clientWidth || 800;
+      const targetScrollLeft = cardLeft - (containerWidth / 2) + (cardWidth / 2);
+
+      if (typeof container.scrollTo === 'function') {
+        container.scrollTo({ left: Math.max(0, targetScrollLeft), behavior });
+      } else {
+        container.scrollLeft = Math.max(0, targetScrollLeft);
+      }
+    }
+  }, [vertical]);
+
+  const activeEventId = currentRelevantEvent?.id;
+
+  // Always scroll to the current relevant event card when it changes,
+  // when filter changes, when loading completes, or when new events arrive.
+  useEffect(() => {
+    if (!activeEventId) return;
+
+    scrollToEventCard(activeEventId);
+  }, [activeEventId, filterType, loading, filteredEvents.length, scrollToEventCard]);
+
+  const handleSelectEvent = (event: LinearTimelineEvent) => {
+    setClickedEventId(event.id);
+    scrollToEventCard(event.id);
+    onSelectEvent?.(event);
+  };
 
   return (
     <section className={`home-events-timeline-section ${vertical ? 'is-vertical-timeline' : ''}`} aria-label="Linear match events timeline">
@@ -329,22 +427,46 @@ export function LinearEventsTimeline({
           <p className="empty-text">No match events match the active filter criteria.</p>
         </div>
       ) : (
-        <div className={`linear-timeline-scroll-wrap ${vertical ? 'vertical-scroll-wrap' : ''}`} tabIndex={0} aria-label="Chronological event scroll container">
+        <div
+          ref={scrollContainerRef}
+          className={`linear-timeline-scroll-wrap ${vertical ? 'vertical-scroll-wrap' : ''}`}
+          tabIndex={0}
+          aria-label="Chronological event scroll container"
+        >
           <div className={`linear-events-track ${vertical ? 'vertical-events-track' : ''}`}>
             {/* The continuous connecting rail across all linear events */}
             <div className={`linear-timeline-rail ${vertical ? 'vertical-timeline-rail' : ''}`} aria-hidden="true"></div>
 
             {filteredEvents.map((event, index) => {
               const iconData = getEventIcon(event.type);
-              const isSelected = selectedSeconds !== undefined && Math.abs(event.clockSeconds - selectedSeconds) < 15;
+              const isSelected = currentRelevantEvent ? event.id === currentRelevantEvent.id : false;
               const matchPath = matchId ? `/matches/${encodeURIComponent(matchId)}` : '/home';
               const targetHref = contextHref(matchPath, matchId, event.clockSeconds);
 
               return (
                 <article
                   key={`${event.id}-${event.sequence}-${index}`}
+                  ref={el => {
+                    if (el) {
+                      cardRefs.current.set(event.id, el);
+                    } else {
+                      cardRefs.current.delete(event.id);
+                    }
+                  }}
                   className={`linear-event-node ${iconData.themeClass} ${isSelected ? 'is-selected' : ''}`}
-                  onClick={() => onSelectEvent?.(event)}
+                  onClick={() => handleSelectEvent(event)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelectEvent(event);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  data-event-id={event.id}
+                  data-is-current={isSelected ? 'true' : undefined}
+                  aria-current={isSelected ? 'true' : undefined}
+                  aria-label={`${iconData.label} at ${clock(event.clockSeconds)}${event.playerName ? ` by ${event.playerName}` : ''}${isSelected ? ' (Current)' : ''}`}
                 >
                   {/* Timeline Node Point on the continuous rail */}
                   <div className="rail-node-point" aria-hidden="true">
@@ -358,7 +480,15 @@ export function LinearEventsTimeline({
                         {iconData.svg}
                       </div>
                       <div className="event-time-badge">
-                        <span className="event-clock">{clock(event.clockSeconds)}</span>
+                        <div className="event-clock-row">
+                          <span className="event-clock">{clock(event.clockSeconds)}</span>
+                          {isSelected && (
+                            <span className="event-current-badge">
+                              <span className="current-pulse-dot" aria-hidden="true"></span>
+                              Current
+                            </span>
+                          )}
+                        </div>
                         <span className="event-seq-tag">#{event.sequence}</span>
                         <span className="sr-only">Event ID {event.id}</span>
                       </div>
@@ -390,6 +520,10 @@ export function LinearEventsTimeline({
                         href={targetHref}
                         className="event-jump-link"
                         title={`View match state at ${clock(event.clockSeconds)}`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleSelectEvent(event);
+                        }}
                       >
                         Inspect at {clock(event.clockSeconds)} →
                       </a>
