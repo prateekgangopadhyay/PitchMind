@@ -64,7 +64,8 @@ internal static class CandidateFeedApiEndpoints
             CandidateFeedSourceCatalog catalog, HttpContext context) =>
         {
             var source = await catalog.GetAsync(context.RequestAborted).ConfigureAwait(false);
-            if (request.MatchId != source.Events[0].SourceMatchId || request.SourceSha256 != source.SourceSha256)
+            if (!string.Equals(request.MatchId, source.Events[0].SourceMatchId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(request.SourceSha256, source.SourceSha256, StringComparison.OrdinalIgnoreCase))
                 return Problem(context, 404, "CANDIDATE_MATCH_NOT_FOUND", "Candidate source is unavailable.");
             return Results.Ok(new { transport = "aspnetcore-signalr", url = "/hubs/matches", accessToken = (string?)null });
         });

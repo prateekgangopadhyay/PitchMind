@@ -26,7 +26,7 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
     public AzureManagedRedisProjectionCache(
         string connectionString,
         TimeSpan? defaultTtl = null,
-        int timeoutMs = 2000,
+        int timeoutMs = 5000,
         ILogger<AzureManagedRedisProjectionCache>? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
@@ -42,7 +42,7 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
         string? password = null,
         bool useSsl = true,
         TimeSpan? defaultTtl = null,
-        int timeoutMs = 2000,
+        int timeoutMs = 5000,
         ILogger<AzureManagedRedisProjectionCache>? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
@@ -233,6 +233,22 @@ public sealed class AzureManagedRedisProjectionCache : IMatchProjectionCache, ID
         catch (Exception exception)
         {
             client.Dispose();
+            if (_host.Contains('.'))
+            {
+                var shortHost = _host.Split('.')[0];
+                var fallbackClient = new TcpClient();
+                try
+                {
+                    await fallbackClient.ConnectAsync(shortHost, _port, cancellationToken).ConfigureAwait(false);
+                    return fallbackClient;
+                }
+                catch (Exception fallbackException)
+                {
+                    fallbackClient.Dispose();
+                    _logger?.LogWarning(fallbackException, "Azure Managed Redis TCP connection fallback failed for {Host}:{Port}", shortHost, _port);
+                }
+            }
+
             _logger?.LogWarning(exception, "Azure Managed Redis TCP connection failed for {Host}:{Port}", _host, _port);
             return null;
         }

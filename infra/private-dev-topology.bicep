@@ -516,7 +516,7 @@ resource redisCache 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivate
       scale: {
         // Candidate-feed clears and live projections require an always-available TCP cache.
         // Without a TCP scaling rule, a zero-replica cache can stay unavailable to the API.
-        minReplicas: enableCandidateFeed ? 1 : 0
+        minReplicas: 1
         maxReplicas: 1
       }
     }
@@ -684,7 +684,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'Storage__BlobServiceUri', value: enableCandidateFeed ? 'https://${storageAccountName}.blob.core.windows.net' : '' }
             { name: 'Storage__CheckpointContainer', value: enableCandidateFeed ? candidateCheckpointContainer : '' }
             { name: 'Redis__Endpoint', value: (enableCandidateFeed && provisionRedis) ? '${redis!.properties.hostName}:${redisDatabase!.properties.port}' : '' }
-            { name: 'Redis__ConnectionString', value: !provisionRedis ? '${redisContainerAppName}.internal.${containerEnvironment!.properties.defaultDomain}:6379,ssl=false' : '' }
+            { name: 'Redis__ConnectionString', value: !provisionRedis ? '${redisContainerAppName}:6379,ssl=false' : '' }
             { name: 'Realtime__AzureSignalR__Endpoint', value: enableCandidateFeed ? 'https://${signalR!.properties.hostName}' : '' }
             { name: 'Foundry__Endpoint', value: enableCandidateFeed ? 'https://${foundryAccountName}.services.ai.azure.com/api/projects/${foundryProjectName}' : '' }
             { name: 'Foundry__AgentName', value: enableCandidateFeed ? foundryAgentName : '' }
@@ -826,7 +826,7 @@ output postgresServerFqdn string = deployPrivateDevTopology && provisionPostgres
 output redisHostName string = deployPrivateDevTopology && provisionRedis ? redis!.properties.hostName : ''
 output redisPort int = deployPrivateDevTopology && provisionRedis ? redisDatabase!.properties.port : 0
 output redisEndpoint string = deployPrivateDevTopology && provisionRedis ? '${redis!.properties.hostName}:${redisDatabase!.properties.port}' : ''
-output redisConnectionString string = deployPrivateDevTopology && !provisionRedis ? '${redisContainerAppName}.internal.${containerEnvironment!.properties.defaultDomain}:6379,ssl=false' : ''
+output redisConnectionString string = deployPrivateDevTopology && !provisionRedis ? '${redisContainerAppName}:6379,ssl=false' : ''
 output azureSignalREndpoint string = deployPrivateDevTopology && enableCandidateFeed ? 'https://${signalR!.properties.hostName}' : ''
 output eventWorkerName string = deployPrivateDevTopology && enableCandidateFeed && enableEventHubs ? eventWorker!.name : ''
 output postgresMigrationJobName string = deployPrivateDevTopology ? databaseMigrationJob!.name : ''

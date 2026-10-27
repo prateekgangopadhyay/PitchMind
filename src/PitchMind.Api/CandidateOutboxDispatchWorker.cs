@@ -27,8 +27,15 @@ public sealed class CandidateOutboxDispatchWorker(CandidateFeedPersistence persi
                 var cacheWrite = cache.SetAsync(key, JsonSerializer.SerializeToUtf8Bytes(signal,
                     new JsonSerializerOptions(JsonSerializerDefaults.Web)), TimeSpan.FromMinutes(5), stoppingToken);
                 await Task.WhenAll(eventWrite, cacheWrite).ConfigureAwait(false);
-                await hub.Clients.Group(MatchUpdatesHub.CandidateGroupName(matchId, cursor.SourceSha256))
-                    .CandidateMatchUpdated(signal).ConfigureAwait(false);
+                try
+                {
+                    await hub.Clients.Group(MatchUpdatesHub.CandidateGroupName(matchId, cursor.SourceSha256))
+                        .CandidateMatchUpdated(signal).ConfigureAwait(false);
+                }
+                catch (Exception signalREx)
+                {
+                    logger.LogWarning(signalREx, "Failed to broadcast candidate match update over SignalR; continuing acknowledgment");
+                }
                 await persistence.AcknowledgeOutboxAsync(item, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

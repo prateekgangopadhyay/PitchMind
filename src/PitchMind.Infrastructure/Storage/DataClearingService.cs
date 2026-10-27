@@ -17,7 +17,18 @@ public static class DataClearingService
         ArgumentNullException.ThrowIfNull(dataSource);
         ArgumentNullException.ThrowIfNull(cache);
 
-        await cache.ClearAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await cache.ClearAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ProjectionCacheUnavailableException)
+        {
+            // Cache is degraded or temporarily unavailable; proceed with canonical PostgreSQL clear.
+        }
+        catch (Exception)
+        {
+            // Transient cache failure must not prevent canonical data clearing.
+        }
 
         await using var command = dataSource.CreateCommand("SELECT pitchmind.clear_candidate_feed();");
         var clearedRecords = (long)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)

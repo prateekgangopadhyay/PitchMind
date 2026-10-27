@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "14284623237192704466"
+      "templateHash": "18081492266076216771"
     }
   },
   "parameters": {
@@ -799,7 +799,7 @@
             }
           ],
           "scale": {
-            "minReplicas": "[if(parameters('enableCandidateFeed'), 1, 0)]",
+            "minReplicas": 1,
             "maxReplicas": 1
           }
         },
@@ -1021,7 +1021,7 @@
                 },
                 {
                   "name": "Redis__ConnectionString",
-                  "value": "[if(not(parameters('provisionRedis')), format('{0}.internal.{1}:6379,ssl=false', parameters('redisContainerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), '2025-07-01').defaultDomain), '')]"
+                  "value": "[if(not(parameters('provisionRedis')), format('{0}:6379,ssl=false', parameters('redisContainerAppName')), '')]"
                 },
                 {
                   "name": "Realtime__AzureSignalR__Endpoint",
@@ -1318,7 +1318,7 @@
     },
     "redisConnectionString": {
       "type": "string",
-      "value": "[if(and(parameters('deployPrivateDevTopology'), not(parameters('provisionRedis'))), format('{0}.internal.{1}:6379,ssl=false', parameters('redisContainerAppName'), reference(resourceId('Microsoft.App/managedEnvironments', parameters('environmentName')), '2025-07-01').defaultDomain), '')]"
+      "value": "[if(and(parameters('deployPrivateDevTopology'), not(parameters('provisionRedis'))), format('{0}:6379,ssl=false', parameters('redisContainerAppName')), '')]"
     },
     "azureSignalREndpoint": {
       "type": "string",

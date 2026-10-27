@@ -125,7 +125,7 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, Candidate
     private const string SubscriptionStateKey = "PitchMind.RealtimeSubscriptionState";
 
     public static string GroupName(Guid matchId) => $"match:{matchId:D}";
-    public static string CandidateGroupName(Guid matchId, string sourceSha256) => $"candidate:{matchId:D}:{sourceSha256}";
+    public static string CandidateGroupName(Guid matchId, string sourceSha256) => $"candidate:{matchId:D}:{sourceSha256.ToLowerInvariant()}";
 
     public async Task SubscribeToMatch(Guid matchId)
     {
@@ -165,13 +165,20 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, Candidate
 
     public async Task SubscribeToCandidateMatch(string matchId, string sourceSha256)
     {
-        if (Context.User?.Identity?.IsAuthenticated != true ||
-            !(Context.User.IsInRole("analyst") || Context.User.IsInRole("admin")) ||
+        var principal = Context.User;
+        var hasAnalystRole = principal?.Identity?.IsAuthenticated == true &&
+            (principal.IsInRole("analyst") || principal.IsInRole("admin") ||
+             principal.Claims.Any(c => (c.Type == "roles" || c.Type == ClaimTypes.Role) &&
+                 (string.Equals(c.Value, "analyst", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(c.Value, "admin", StringComparison.OrdinalIgnoreCase))));
+
+        if (!hasAnalystRole ||
             !Guid.TryParse(matchId, out var parsed) || parsed == Guid.Empty ||
             sourceSha256 is not { Length: 64 } || sourceSha256.Any(c => !Uri.IsHexDigit(c)) || candidateSource is null)
             throw new HubException("Candidate match subscription is not authorized.");
         var source = await candidateSource.GetAsync(Context.ConnectionAborted).ConfigureAwait(false);
-        if (source.SourceSha256 != sourceSha256 || source.Events[0].SourceMatchId != matchId)
+        if (!string.Equals(source.SourceSha256, sourceSha256, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(source.Events[0].SourceMatchId, matchId, StringComparison.OrdinalIgnoreCase))
             throw new HubException("Candidate match subscription is not authorized.");
         await Groups.AddToGroupAsync(Context.ConnectionId, CandidateGroupName(parsed, sourceSha256), Context.ConnectionAborted)
             .ConfigureAwait(false);

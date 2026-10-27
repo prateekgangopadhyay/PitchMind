@@ -131,13 +131,14 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
       .build();
 
     hub.on('CandidateMatchUpdated', (cursor: { matchId: string; sourceSha256: string; sequence?: number }) => {
-      if (cursor.matchId === matchId) {
+      if (cursor.matchId?.toLowerCase() === matchId.toLowerCase()) {
         void refreshCandidateStatus();
         void syncCandidateEvents(matchId);
       }
     });
 
     hub.onreconnected(() => {
+      void hub.invoke('SubscribeToCandidateMatch', matchId, sourceHash).catch(() => undefined);
       void refreshCandidateStatus();
       void syncCandidateEvents(matchId);
     });
@@ -217,11 +218,9 @@ export function subscribeCandidateStatus(fn: () => void) {
     void refreshCandidateStatus();
     poller = setInterval(() => {
       if (document.visibilityState !== 'hidden') {
-        if (!globalHub || globalHub.state !== 'Connected') {
-          void refreshCandidateStatus();
-        }
+        void refreshCandidateStatus();
       }
-    }, 3000);
+    }, 2000);
   }
   return () => {
     listeners.delete(fn);
