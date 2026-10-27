@@ -2,7 +2,7 @@
 
 **Evidence-first football intelligence for exploring a match as it unfolds.** PitchMind brings match events, player positions, replay and tactical questions into one workspace. Its demo uses an owner-approved synthetic Manchester United–Liverpool feed; candidate data is clearly distinguished from verified, canonical match facts.
 
-## Application Demo
+## Application Demo [Application v1](https://youtu.be/lDAyClR8QUM)
 [Application v1](https://youtu.be/lDAyClR8QUM)
 
 ## Hackathon demo
