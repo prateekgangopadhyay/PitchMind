@@ -76,10 +76,16 @@ public sealed class CandidateAnalystEvidenceProjectionTests
             $"Serialized Foundry request was {outerRequest.Length} bytes.");
         Assert.Equal(2, requestRoot.EnumerateObject().Count());
         Assert.Equal(512, requestRoot.GetProperty("max_output_tokens").GetInt32());
-        var agentInput = requestRoot.GetProperty("input").GetString();
-        Assert.Contains("RESPONSE CONTRACT", agentInput, StringComparison.Ordinal);
-        Assert.Contains("MATCH EVIDENCE PACKET (JSON)", agentInput, StringComparison.Ordinal);
-        Assert.Contains("source-event-818", agentInput, StringComparison.Ordinal);
+        var agentInput = requestRoot.GetProperty("input");
+        Assert.Equal(2, agentInput.GetArrayLength());
+        Assert.Equal("developer", agentInput[0].GetProperty("role").GetString());
+        Assert.Contains("RESPONSE CONTRACT", agentInput[0].GetProperty("content")[0]
+            .GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Equal("user", agentInput[1].GetProperty("role").GetString());
+        Assert.Contains("MATCH EVIDENCE PACKET (JSON)", agentInput[1].GetProperty("content")[0]
+            .GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("source-event-818", agentInput[1].GetProperty("content")[0]
+            .GetProperty("text").GetString(), StringComparison.Ordinal);
         Assert.False(requestRoot.TryGetProperty("text", out _));
     }
 

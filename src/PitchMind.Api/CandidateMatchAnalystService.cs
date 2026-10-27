@@ -212,7 +212,9 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     private const int MaximumOutputTokens = 512;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string ResponseContract = """
-        RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties: {"status":"answered" or "insufficientEvidence","answer":"string","claims":[{"text":"string","evidenceIds":["source event ID"]}]}. Do not include Markdown fences or any text outside the JSON object. Use status "answered" only when every factual claim is supported by the supplied records. Every claim must cite one or more exact records[].evidenceId values; never invent evidence IDs or repeat an ID within one claim. Keep claims concise and ensure every factual sentence in the report appears in claims. The application builds its displayed answer from validated claim text and ignores any uncited extra summary. If the records do not support an answer, use status "insufficientEvidence", give a brief reason in answer, and return an empty claims array.
+        RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties and types:
+        {"status":"answered","answer":"string","claims":[{"text":"string","evidenceIds":["exact records[].evidenceId"]}]}
+        The only allowed status values are "answered" and "insufficientEvidence". For "answered", include 1-8 concise claims; every factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
         """;
 
     private readonly HttpClient _client;
@@ -363,10 +365,24 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
 
     internal static byte[] CreateResponseRequest(string evidencePacket)
     {
-        // Foundry project-agent endpoints reject the Responses API `text` format
-        // override when an agent is selected. Keep the output contract in the
-        // bounded agent input and validate the returned JSON locally instead.
-        var input = $"{ResponseContract}\n\nMATCH EVIDENCE PACKET (JSON):\n{evidencePacket}";
+        // Agent-specific Responses endpoints do not accept the `text.format`
+        // override. Send the strict application contract as a separate
+        // developer message so it is not blended with the user evidence packet
+        // or overridden by the selected agent's default prose style. Returned
+        // claims and evidence IDs are still validated locally below.
+        var input = new object[]
+        {
+            new
+            {
+                role = "developer",
+                content = new[] { new { type = "input_text", text = ResponseContract } }
+            },
+            new
+            {
+                role = "user",
+                content = new[] { new { type = "input_text", text = $"MATCH EVIDENCE PACKET (JSON):\n{evidencePacket}" } }
+            }
+        };
         return JsonSerializer.SerializeToUtf8Bytes(new { input, max_output_tokens = MaximumOutputTokens }, JsonOptions);
     }
 

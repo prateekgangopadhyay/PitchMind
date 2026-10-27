@@ -71,7 +71,10 @@ param signalRAllowedOrigin string = 'https://pm-dev-api-vnet.icyglacier-6b4ac95d
 ])
 param signalRSkuName string = 'Free_F1'
 param storageAccountName string = 'pmdev4iwntkatliy6sst'
-param candidateCheckpointContainer string = 'candidate-checkpoints'
+// Version the checkpoint store when an Event Hub has been recreated or its
+// retained offsets no longer match the persisted checkpoints. Keeping the old
+// container intact makes this a replay-safe migration rather than a deletion.
+param candidateCheckpointContainer string = 'candidate-checkpoints-v2'
 
 resource network 'Microsoft.Network/virtualNetworks@2024-05-01' existing = {
   name: vnetName
@@ -491,6 +494,7 @@ resource redisCache 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivate
       ingress: {
         external: false
         targetPort: 6379
+        exposedPort: 6379
         transport: 'Tcp'
       }
     }
@@ -499,6 +503,10 @@ resource redisCache 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivate
         {
           name: redisContainerAppName
           image: 'redis:7-alpine'
+          // Redis' loopback-only default is not reachable through Container Apps
+          // TCP ingress. This app has internal-only ingress in the private ACA env.
+          command: ['redis-server']
+          args: ['--bind', '0.0.0.0', '--protected-mode', 'no']
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "12241173305045705924"
+      "templateHash": "14284623237192704466"
     }
   },
   "parameters": {
@@ -249,7 +249,7 @@
     },
     "candidateCheckpointContainer": {
       "type": "string",
-      "defaultValue": "candidate-checkpoints"
+      "defaultValue": "candidate-checkpoints-v2"
     }
   },
   "resources": [
@@ -310,6 +310,30 @@
       "dependsOn": [
         "[resourceId('Microsoft.Network/privateDnsZones', parameters('postgresDnsZoneName'))]"
       ]
+    },
+    {
+      "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableEventHubs'))]",
+      "type": "Microsoft.EventHub/namespaces",
+      "apiVersion": "2024-01-01",
+      "name": "[parameters('eventHubsNamespaceName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard",
+        "capacity": 1
+      },
+      "properties": {
+        "disableLocalAuth": false,
+        "isAutoInflateEnabled": false,
+        "minimumTlsVersion": "1.2",
+        "publicNetworkAccess": "Enabled",
+        "zoneRedundant": false
+      },
+      "tags": {
+        "application": "PitchMind",
+        "environment": "dev",
+        "story": "EP03-S03"
+      }
     },
     {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableCandidateFeed'))]",
@@ -432,7 +456,10 @@
       "properties": {
         "partitionCount": 4,
         "messageRetentionInDays": 7
-      }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('eventHubsNamespaceName'))]"
+      ]
     },
     {
       "condition": "[and(parameters('deployPrivateDevTopology'), parameters('enableEventHubs'))]",
@@ -747,6 +774,7 @@
           "ingress": {
             "external": false,
             "targetPort": 6379,
+            "exposedPort": 6379,
             "transport": "Tcp"
           }
         },
@@ -755,6 +783,15 @@
             {
               "name": "[parameters('redisContainerAppName')]",
               "image": "redis:7-alpine",
+              "command": [
+                "redis-server"
+              ],
+              "args": [
+                "--bind",
+                "0.0.0.0",
+                "--protected-mode",
+                "no"
+              ],
               "resources": {
                 "cpu": "[json('0.25')]",
                 "memory": "0.5Gi"
@@ -762,7 +799,7 @@
             }
           ],
           "scale": {
-            "minReplicas": 0,
+            "minReplicas": "[if(parameters('enableCandidateFeed'), 1, 0)]",
             "maxReplicas": 1
           }
         },
@@ -1046,6 +1083,7 @@
         "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'KeyVaultSecretsUser'))]",
         "[extensionResourceId(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-runtime', parameters('appName'))), 'EventHubsDataSender'))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('eventHubsNamespaceName'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
@@ -1155,6 +1193,7 @@
         "[extensionResourceId(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', parameters('eventHubsNamespaceName'), parameters('candidateEventHubName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-eventworker', parameters('appName'))), 'EventHubsDataReceiver'))]",
         "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('candidateCheckpointContainer'))]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "[resourceId('Microsoft.EventHub/namespaces', parameters('eventHubsNamespaceName'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/administrators', parameters('postgresServerName'), parameters('postgresMigratorObjectId'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', parameters('postgresServerName'), 'pitchmind')]",

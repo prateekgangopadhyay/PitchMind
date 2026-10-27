@@ -86,7 +86,7 @@ parameters:
   default: pmdev4iwntkatliy6sst
 - name: devCandidateCheckpointContainer
   type: string
-  default: candidate-checkpoints
+  default: candidate-checkpoints-v2
 - name: devRedisName
   type: string
   default: pm-dev-redis
