@@ -43,6 +43,15 @@ def postgres_command(arguments):
     return subprocess.run(compose + ['exec', '-T', 'postgres'] + arguments,
                           capture_output=True, text=True)
 
+# Synchronize the user password inside PostgreSQL with the resolved Compose password,
+# preventing SQLSTATE 28P01 authentication failures when an existing data volume is reused.
+sync_user = subprocess.run(
+    compose + ['exec', '-T', 'postgres', 'psql', '-U', username, '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-f', '-'],
+    input=f'ALTER USER "{username}" WITH PASSWORD \'{password}\';\n',
+    capture_output=True, text=True)
+if sync_user.returncode:
+    sys.exit('FAIL: cannot synchronize PostgreSQL user password in Compose service')
+
 database = 'pitchmind_test_' + uuid.uuid4().hex
 created = postgres_command(['createdb', '-U', username, database])
 if created.returncode:
