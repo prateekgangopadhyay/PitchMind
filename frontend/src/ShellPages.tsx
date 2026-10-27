@@ -13,7 +13,7 @@ import type {
   AuthSession
 } from './api';
 import type { AppRoute } from './routes';
-import { contextHref, replacePhaseFilterContext, selectedTimeFromSearch } from './routes';
+import { contextHref, handleLinkClick, replacePhaseFilterContext, selectedTimeFromSearch } from './routes';
 import { MatchContextAnalystPage, MatchContextInsightsPage, MatchContextPlayersPage, MatchContextTeamsPage, MatchSelectionPage, useMatchContext } from './MatchContextPages';
 import { LinearEventsTimeline } from './LinearEventsTimeline';
 import { refreshCandidateStatus, useCandidateStreamStatus } from './candidateLiveStatus';
@@ -396,8 +396,19 @@ export function HomePage({ search = '', selectedMatchId, selectedSeconds }: {
                 {activeMatchId === candidateStream.status.matchId ? 'Hide Linear Timeline' : 'View Linear Events Timeline'}
               </button>
             )}
-            <a className="primary-link" href={contextHref('/candidate-live', candidateStream.status.matchId,
-              selectedSeconds ?? candidateStream.status.currentClockValue ?? 0, undefined, 'live')}>Open live match</a>
+            {(() => {
+              const liveHref = contextHref('/candidate-live', candidateStream.status.matchId,
+                selectedSeconds ?? candidateStream.status.currentClockValue ?? 0, undefined, 'live');
+              return (
+                <a
+                  className="primary-link"
+                  href={liveHref}
+                  onClick={e => handleLinkClick(e, liveHref)}
+                >
+                  Open live match
+                </a>
+              );
+            })()}
           </div>
         </article>
           : matches.length === 0 && candidateStream.error ? <div className="page-state error-copy" role="status">

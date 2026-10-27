@@ -906,3 +906,55 @@ it('offers retry after required canonical summary failure without substituting d
     window.history.replaceState(null, '', '/');
   }
 });
+
+it('navigates between nav items without restarting the clock sequence', async () => {
+  const matchId = 'test-match-123';
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', `/teams?matchId=${matchId}&atSeconds=240`);
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/simulation/candidate/status')) {
+      return { ok: true, json: async () => ({ matchId, isStreaming: false, currentSequence: 10, currentClockValue: 240, period: 1 }) };
+    }
+    if (url.pathname.includes('/matches/') && url.pathname.endsWith('/events')) {
+      return { ok: true, json: async () => ({ items: [], hasMore: false }) };
+    }
+    return { ok: true, json: async () => ({ teams: [{ id: 'team-1', name: 'Arsenal' }] }) };
+  }));
+
+  const pushStateSpy = vi.spyOn(window.history, 'pushState');
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(createElement(App)); });
+
+    const nav = container.querySelector('.main-navigation');
+    expect(nav).not.toBeNull();
+
+    // Find "Players" link
+    const playersLink = [...container.querySelectorAll<HTMLAnchorElement>('.main-navigation a')]
+      .find(a => a.textContent === 'Players');
+    expect(playersLink).toBeDefined();
+
+    // The href should preserve atSeconds=240
+    expect(playersLink?.getAttribute('href')).toContain('atSeconds=240');
+
+    // Clicking the link should navigate via client-side pushState
+    await act(async () => {
+      playersLink?.click();
+    });
+
+    expect(pushStateSpy).toHaveBeenCalled();
+    const navigatedUrl = pushStateSpy.mock.calls[pushStateSpy.mock.calls.length - 1][2] as string;
+    expect(navigatedUrl).toContain('/players');
+    expect(navigatedUrl).toContain('atSeconds=240');
+  } finally {
+    pushStateSpy.mockRestore();
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  }
+});
+

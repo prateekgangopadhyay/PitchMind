@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { clock } from './api';
-import { contextHref } from './routes';
+import { contextHref, handleLinkClick } from './routes';
 
 export interface LinearTimelineEvent {
   id: string;
@@ -522,6 +522,7 @@ export function LinearEventsTimeline({
                         title={`View match state at ${clock(event.clockSeconds)}`}
                         onClick={e => {
                           e.stopPropagation();
+                          handleLinkClick(e, targetHref);
                           handleSelectEvent(event);
                         }}
                       >

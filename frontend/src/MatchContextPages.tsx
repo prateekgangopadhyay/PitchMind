@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ApiRequestError, askCandidateAnalyst, clock, getCandidateAnalystAgents, request } from './api';
 import type { CandidateAnalystAnswer, CanonicalEventPage, CanonicalInsightPage, CanonicalMatchPage, CanonicalMatchSnapshot, CanonicalTrackingFramePage } from './api';
 import type { AppRoute } from './routes';
-import { contextHref } from './routes';
+import { contextHref, handleLinkClick } from './routes';
 import { clubInitials, resolveClubLogo, KNOWN_MATCH_FIXTURES } from './clubLogos';
 import { TacticalPitchView, type TacticalPitchEvent } from './TacticalPitchView';
 import { FOUNDRY_AGENTS, computeAgentDiscussionAndExplanation, computeCausalChain, deduceMatchMetrics, deduceKeyMoments, deduceEvidenceFromAnalysis, type AgentDiscussionTurn, type TacticalExplanation, type TacticalSituation, type CausalChainStep } from './tacticalAgentDiscussion';
@@ -523,11 +523,22 @@ function ContextLayout({
         </header>
         <div className="match-context-scope-container">
           <nav className="match-context-subnav" aria-label="Selected match analysis">
-            <a href={contextHref(matchPath, matchId, seconds, revision)} aria-current={route.kind === 'matches' || route.kind === 'candidate-live' ? 'page' : undefined}>Match</a>
-            <a href={contextHref('/teams', matchId, seconds, revision)} aria-current={route.kind === 'teams' ? 'page' : undefined}>Teams</a>
-            <a href={contextHref('/players', matchId, seconds, revision)} aria-current={route.kind === 'players' ? 'page' : undefined}>Players</a>
-            <a href={contextHref('/insights', matchId, seconds, revision)} aria-current={route.kind === 'insights' ? 'page' : undefined}>Insights</a>
-            <a href={contextHref('/analyst', matchId, seconds, revision)} aria-current={route.kind === 'analyst' ? 'page' : undefined}>AI Analyst</a>
+            {(() => {
+              const mHref = contextHref(matchPath, matchId, seconds, revision);
+              const tHref = contextHref('/teams', matchId, seconds, revision);
+              const pHref = contextHref('/players', matchId, seconds, revision);
+              const iHref = contextHref('/insights', matchId, seconds, revision);
+              const aHref = contextHref('/analyst', matchId, seconds, revision);
+              return (
+                <>
+                  <a href={mHref} onClick={e => handleLinkClick(e, mHref)} aria-current={route.kind === 'matches' || route.kind === 'candidate-live' ? 'page' : undefined}>Match</a>
+                  <a href={tHref} onClick={e => handleLinkClick(e, tHref)} aria-current={route.kind === 'teams' ? 'page' : undefined}>Teams</a>
+                  <a href={pHref} onClick={e => handleLinkClick(e, pHref)} aria-current={route.kind === 'players' ? 'page' : undefined}>Players</a>
+                  <a href={iHref} onClick={e => handleLinkClick(e, iHref)} aria-current={route.kind === 'insights' ? 'page' : undefined}>Insights</a>
+                  <a href={aHref} onClick={e => handleLinkClick(e, aHref)} aria-current={route.kind === 'analyst' ? 'page' : undefined}>AI Analyst</a>
+                </>
+              );
+            })()}
           </nav>
         </div>
       </div>
@@ -1554,16 +1565,32 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
               {/* Subnav Tabs Bar */}
               <div className="analyst-subnav-bar">
                 <nav className="analyst-subnav-tabs" aria-label="Selected match analysis">
-                  <a href={contextHref('/home', matchId, seconds, revision)} className="analyst-tab-link">Overview</a>
-                  <a href={contextHref('/candidate-live', matchId, seconds, revision)} className="analyst-tab-link">Match Centre</a>
-                  <a href={contextHref('/teams', matchId, seconds, revision)} className="analyst-tab-link">Team Analysis</a>
-                  <a href={contextHref('/players', matchId, seconds, revision)} className="analyst-tab-link">Player Analysis</a>
-                  <a href={contextHref('/analyst', matchId, seconds, revision)} className="analyst-tab-link is-active" aria-current="page">AI Analyst</a>
+                  {(() => {
+                    const oHref = contextHref('/home', matchId, seconds, revision);
+                    const mcHref = contextHref('/candidate-live', matchId, seconds, revision);
+                    const taHref = contextHref('/teams', matchId, seconds, revision);
+                    const paHref = contextHref('/players', matchId, seconds, revision);
+                    const aaHref = contextHref('/analyst', matchId, seconds, revision);
+                    return (
+                      <>
+                        <a href={oHref} onClick={e => handleLinkClick(e, oHref)} className="analyst-tab-link">Overview</a>
+                        <a href={mcHref} onClick={e => handleLinkClick(e, mcHref)} className="analyst-tab-link">Match Centre</a>
+                        <a href={taHref} onClick={e => handleLinkClick(e, taHref)} className="analyst-tab-link">Team Analysis</a>
+                        <a href={paHref} onClick={e => handleLinkClick(e, paHref)} className="analyst-tab-link">Player Analysis</a>
+                        <a href={aaHref} onClick={e => handleLinkClick(e, aaHref)} className="analyst-tab-link is-active" aria-current="page">AI Analyst</a>
+                      </>
+                    );
+                  })()}
                 </nav>
-                <a href={contextHref('/candidate-live', matchId, seconds, revision)} className="open-match-view-btn">
-                  <span>Open in Match View</span>
-                  <span className="btn-arrow" aria-hidden="true">→</span>
-                </a>
+                {(() => {
+                  const openHref = contextHref('/candidate-live', matchId, seconds, revision);
+                  return (
+                    <a href={openHref} onClick={e => handleLinkClick(e, openHref)} className="open-match-view-btn">
+                      <span>Open in Match View</span>
+                      <span className="btn-arrow" aria-hidden="true">→</span>
+                    </a>
+                  );
+                })()}
               </div>
 
               {/* Two-Column Grid */}

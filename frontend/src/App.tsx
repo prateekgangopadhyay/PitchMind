@@ -3,7 +3,7 @@ import { DEFAULT_ANALYST_AVATAR, clearAllDevData, getHostAccessToken, getStoredA
 import { RoutePage } from './ShellPages';
 import { CanonicalMatchPage } from './CanonicalMatchPage';
 import { RealtimeAuthProvider } from './RealtimeMatchUpdates';
-import { contextHref, currentLocation, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
+import { contextHref, currentLocation, handleLinkClick, resolveRoute, selectedTimeFromSearch, subscribeLocation } from './routes';
 import { CandidateLiveMatchPage } from './CandidateLiveMatchPage';
 import { clearCandidateLiveCache, toggleCandidateStream, useCandidateStreamStatus } from './candidateLiveStatus';
 import { isEntraAuthMode, signOutMicrosoft } from './entraAuth';
@@ -64,22 +64,40 @@ export function App() {
     { label: 'AI Analyst', path: '/analyst', active: route.kind === 'analyst' }
   ];
   const contextMode = realtimeMode === 'LIVE' ? 'live' : undefined;
-  const targetNavSeconds = isCandidateMatch && realtimeMode === 'LIVE' ? undefined : selectedSeconds;
+  const targetNavSeconds = selectedSeconds ?? candidateStream.status?.currentClockValue ?? undefined;
   const candidateStreamMatchesContext = Boolean(candidateStream.status?.matchId && candidateStream.status.matchId === matchId);
 
   const activeUser = authSession?.user;
+  const homeHref = contextHref('/home', matchId, targetNavSeconds, revision, contextMode);
 
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">Skip to main content</a>
     <header className="site-header">
       <div className="header-brand-nav-group">
-        <a className="brand" href={contextHref('/home', matchId, targetNavSeconds, revision, contextMode)} aria-label="PitchMind home">
+        <a
+          className="brand"
+          href={homeHref}
+          onClick={e => handleLinkClick(e, homeHref)}
+          aria-label="PitchMind home"
+        >
           <img className="brand-logo-image" src="/brand/pitchmind-symbol.svg" width="32" height="32" alt="" aria-hidden="true" />
           <span className="brand-name">PitchMind</span>
         </a>
         {route.kind !== 'welcome' && (
           <nav className="main-navigation" aria-label="Main navigation">
-            {links.map(link => <a key={link.label} href={contextHref(link.path, matchId, targetNavSeconds, revision, contextMode)} aria-current={link.active ? 'page' : undefined}>{link.label}</a>)}
+            {links.map(link => {
+              const href = contextHref(link.path, matchId, targetNavSeconds, revision, contextMode);
+              return (
+                <a
+                  key={link.label}
+                  href={href}
+                  onClick={e => handleLinkClick(e, href)}
+                  aria-current={link.active ? 'page' : undefined}
+                >
+                  {link.label}
+                </a>
+              );
+            })}
           </nav>
         )}
       </div>

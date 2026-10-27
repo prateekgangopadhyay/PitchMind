@@ -140,9 +140,34 @@ export function enqueueCandidateEvents(items: CandidateEvent[], targetMatchId: s
   cachedEvents = [...existingMap.values()].sort((a, b) => a.sequence - b.sequence);
 
   if (!currentLiveEvent) {
-    currentLiveEvent = cachedEvents[0];
-    processedEvents = [cachedEvents[0]];
-    eventQueue = cachedEvents.slice(1);
+    let targetSeq: number | null = null;
+    if (status?.currentSequence !== null && status?.currentSequence !== undefined) {
+      targetSeq = status.currentSequence;
+    } else if (typeof window !== 'undefined') {
+      try {
+        const savedSeq = window.sessionStorage.getItem(`pitchmind:lastSeq:${targetMatchId}`);
+        if (savedSeq !== null) {
+          const parsed = Number(savedSeq);
+          if (Number.isFinite(parsed) && parsed > 0) targetSeq = parsed;
+        }
+      } catch {
+        // Ignore sessionStorage read errors
+      }
+    }
+
+    let initialIndex = 0;
+    if (targetSeq !== null && targetSeq > 0) {
+      for (let i = cachedEvents.length - 1; i >= 0; i--) {
+        if (cachedEvents[i].sequence <= targetSeq) {
+          initialIndex = i;
+          break;
+        }
+      }
+    }
+
+    currentLiveEvent = cachedEvents[initialIndex];
+    processedEvents = cachedEvents.slice(0, initialIndex + 1);
+    eventQueue = cachedEvents.slice(initialIndex + 1);
     status = {
       ...(status ?? {
         matchId: targetMatchId,
@@ -196,6 +221,15 @@ function processNextQueueEvent() {
     processedEvents.push(nextEvent);
   }
 
+  if (typeof window !== 'undefined' && nextEvent.matchId) {
+    try {
+      window.sessionStorage.setItem(`pitchmind:lastSeq:${nextEvent.matchId}`, String(nextEvent.sequence));
+      window.sessionStorage.setItem(`pitchmind:lastClock:${nextEvent.matchId}`, String(nextEvent.clockSeconds));
+    } catch {
+      // Ignore sessionStorage write errors
+    }
+  }
+
   status = {
     ...(status ?? {
       matchId: nextEvent.matchId,
@@ -232,6 +266,14 @@ function stopQueueTicker() {
 }
 
 export function clearCandidateLiveCache() {
+  if (typeof window !== 'undefined' && cachedMatchId) {
+    try {
+      window.sessionStorage.removeItem(`pitchmind:lastSeq:${cachedMatchId}`);
+      window.sessionStorage.removeItem(`pitchmind:lastClock:${cachedMatchId}`);
+    } catch {
+      // Ignore sessionStorage removal errors
+    }
+  }
   cachedEvents = [];
   processedEvents = [];
   eventQueue = [];

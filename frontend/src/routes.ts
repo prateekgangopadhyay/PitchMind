@@ -85,3 +85,25 @@ export function replacePhaseFilterContext(phase: string): void {
   window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   window.dispatchEvent(new Event(LOCATION_EVENT));
 }
+
+export function navigateTo(href: string, replace = false): void {
+  if (typeof window === 'undefined') return;
+  if (replace) {
+    window.history.replaceState(null, '', href);
+  } else {
+    window.history.pushState(null, '', href);
+  }
+  window.dispatchEvent(new Event(LOCATION_EVENT));
+}
+
+export function handleLinkClick(
+  e: { defaultPrevented: boolean; button: number; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; preventDefault: () => void },
+  href: string
+): void {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) {
+    return;
+  }
+  e.preventDefault();
+  navigateTo(href);
+}
+
