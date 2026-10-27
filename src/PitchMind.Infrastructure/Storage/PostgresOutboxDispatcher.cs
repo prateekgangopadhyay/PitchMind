@@ -95,7 +95,7 @@ public sealed class PostgresOutboxDispatcher(
     private async Task RenewUntilCancelledAsync(Guid messageId, Guid claimToken,
         CancellationTokenSource publishLifetime)
     {
-        var interval = TimeSpan.FromTicks(Math.Max(1, _leaseDuration.Ticks / 3));
+        var interval = TimeSpan.FromTicks(Math.Max(1, _leaseDuration.Ticks / 4));
         using var timer = new PeriodicTimer(interval);
         try
         {
@@ -104,7 +104,6 @@ public sealed class PostgresOutboxDispatcher(
                 await using var command = dataSource.CreateCommand("""
                     UPDATE pitchmind.outbox SET lease_expires_at = now() + $3
                     WHERE message_id = $1 AND claim_token = $2 AND published_at IS NULL
-                      AND lease_expires_at > now()
                     """);
                 command.Parameters.AddWithValue(messageId);
                 command.Parameters.AddWithValue(claimToken);

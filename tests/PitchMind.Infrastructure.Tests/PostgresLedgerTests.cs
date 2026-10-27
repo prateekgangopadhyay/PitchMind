@@ -1914,11 +1914,11 @@ public sealed class PostgresLedgerTests
         await new PostgresCanonicalUpdateStore(source).CommitAsync(update, CancellationToken.None);
 
         var publisher = new BlockingPublisher();
-        var leaseDuration = TimeSpan.FromMilliseconds(400);
+        var leaseDuration = TimeSpan.FromMilliseconds(800);
         var firstDispatch = new PostgresOutboxDispatcher(source, publisher,
             leaseDuration: leaseDuration).DispatchOneAsync(CancellationToken.None);
         await publisher.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(TimeSpan.FromMilliseconds(650));
+        await Task.Delay(TimeSpan.FromMilliseconds(1300));
 
         var competingPublisher = new CountingPublisher();
         Assert.Equal(OutboxDispatchResult.NoMessage,
