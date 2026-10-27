@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-import { ApiRequestError, getHostAccessToken, request, subscribeAuth } from './api';
+import { ApiRequestError, getHostAccessToken, getStoredAuthSession, request, subscribeAuth } from './api';
 
 export interface CandidateStreamStatus {
   matchId: string | null; isStreaming: boolean; currentSequence: number | null;
@@ -307,6 +307,7 @@ export function scheduleSyncEvents(targetMatchId: string) {
 
 async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
   if (typeof window === 'undefined') return;
+  if (getStoredAuthSession()?.user.provider === 'guest') return;
   if (globalHub && activeHubMatchId === matchId && activeHubSourceHash === sourceHash) {
     return;
   }

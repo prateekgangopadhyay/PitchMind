@@ -11,6 +11,16 @@ import urllib.request
 
 
 def _default_ssl_context() -> ssl.SSLContext | None:
+    configured_bundle = (
+        os.environ.get("PITCHMIND_CA_BUNDLE")
+        or os.environ.get("SSL_CERT_FILE")
+        or os.environ.get("REQUESTS_CA_BUNDLE")
+    )
+    if configured_bundle:
+        if not os.path.isfile(configured_bundle):
+            raise FileNotFoundError(f"Configured CA bundle does not exist: {configured_bundle}")
+        return ssl.create_default_context(cafile=configured_bundle)
+
     ca_candidates = [
         "/etc/ssl/cert.pem",
         "/etc/pki/tls/certs/ca-bundle.crt",
@@ -36,9 +46,32 @@ def _default_open_url(request: urllib.request.Request, timeout: int = 10):
     except urllib.error.URLError as error:
         reason = getattr(error, "reason", None)
         if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(error):
-            fallback_context = _default_ssl_context()
+            try:
+                fallback_context = _default_ssl_context()
+            except (OSError, ssl.SSLError) as context_error:
+                raise urllib.error.URLError(
+                    f"Could not load the configured CA bundle: {context_error}. Set PITCHMIND_CA_BUNDLE "
+                    "on the self-hosted agent to a readable PEM file containing the trusted CA chain."
+                ) from error
             if fallback_context is not None:
-                return urllib.request.urlopen(request, timeout=timeout, context=fallback_context)
+                try:
+                    return urllib.request.urlopen(request, timeout=timeout, context=fallback_context)
+                except urllib.error.URLError as fallback_error:
+                    fallback_reason = getattr(fallback_error, "reason", fallback_error)
+                    if not (
+                        isinstance(fallback_reason, ssl.SSLCertVerificationError)
+                        or "CERTIFICATE_VERIFY_FAILED" in str(fallback_error)
+                    ):
+                        raise
+                    raise urllib.error.URLError(
+                        f"{fallback_reason}. Certificate validation remains enabled. Configure "
+                        "PITCHMIND_CA_BUNDLE on the self-hosted agent with the trusted CA chain "
+                        "used for outbound HTTPS, then restart the agent service."
+                    ) from fallback_error
+            raise urllib.error.URLError(
+                f"{reason}. Certificate validation remains enabled; configure PITCHMIND_CA_BUNDLE "
+                "on the self-hosted agent with the trusted CA chain used for outbound HTTPS."
+            ) from error
         raise
 
 

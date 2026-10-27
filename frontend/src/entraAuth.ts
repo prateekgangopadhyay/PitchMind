@@ -10,6 +10,7 @@ const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID?.trim() ?? '';
 const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID?.trim() ?? '';
 const apiScope = import.meta.env.VITE_ENTRA_API_SCOPE?.trim() ?? '';
 const authMode = import.meta.env.VITE_AUTH_MODE?.trim().toLowerCase() ?? 'local';
+const guestModeEnabled = import.meta.env.VITE_GUEST_MODE_ENABLED?.trim().toLowerCase() === 'true';
 const configured = [tenantId, clientId, apiScope].every(Boolean);
 
 const msalConfig: Configuration = {
@@ -31,6 +32,10 @@ export function isEntraAuthMode(): boolean {
 
 export function isEntraAuthConfigured(): boolean {
   return configured;
+}
+
+export function isGuestModeEnabled(): boolean {
+  return guestModeEnabled;
 }
 
 export async function initializeEntraAuth(): Promise<void> {

@@ -7,7 +7,7 @@ import {
   getStoredAuthSession,
   setStoredAuthSession
 } from './api';
-import { isEntraAuthConfigured, isEntraAuthMode, signInWithMicrosoft } from './entraAuth';
+import { isEntraAuthConfigured, isEntraAuthMode, isGuestModeEnabled, signInWithMicrosoft } from './entraAuth';
 import type {
   CanonicalMatchPage,
   AuthSession
@@ -151,6 +151,19 @@ export function WelcomePage() {
     void signIn(() => loginSimulated({ email, password }));
   };
 
+  const continueAsGuest = () => {
+    const guestSession: AuthSession = {
+      success: true,
+      token: '',
+      authenticatedAt: new Date().toISOString(),
+      user: { name: 'Guest', email: '', role: 'Demo viewer', permissions: ['MatchRead'], provider: 'guest' }
+    };
+    setStoredAuthSession(guestSession);
+    setSession(guestSession);
+    window.history.pushState({}, '', '/candidate-live');
+    window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+  };
+
   return <section className="content-page welcome-screen-root">
     <div className="welcome-split-layout">
       <div className="welcome-left-col">
@@ -174,6 +187,13 @@ export function WelcomePage() {
             <button type="button" className="auth-submit-btn" onClick={() => { void handleMicrosoftSignIn(); }} disabled={busy || !isEntraAuthConfigured()}>
               {busy ? 'Connecting…' : 'Sign in with Microsoft'}
             </button>
+            {isGuestModeEnabled() && <>
+              <div className="auth-divider"><span>or explore the demo</span></div>
+              <button type="button" className="auth-provider-btn guest-access-btn" onClick={continueAsGuest} disabled={busy}>
+                Continue as a guest
+              </button>
+              <p className="guest-access-note">View the live DEV simulation. Sign-in is required for analyst tools and match controls.</p>
+            </>}
           </div> : <form onSubmit={handleSignIn} className="auth-form-fields">
             <div className="auth-field-group">
               <label htmlFor="welcome-email">Email address</label>

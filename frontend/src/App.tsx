@@ -123,7 +123,7 @@ export function App() {
         </div>
       ) : (
         <div className="header-right-controls">
-          <button
+          {activeUser?.provider !== 'guest' && <button
             type="button"
             className="clear-data-pill"
             id="header-clear-data-button"
@@ -138,8 +138,8 @@ export function App() {
               <line x1="14" y1="11" x2="14" y2="17"></line>
             </svg>
             <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
-          </button>
-          {candidateStreamMatchesContext && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
+          </button>}
+          {candidateStreamMatchesContext && activeUser?.provider !== 'guest' && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
             aria-pressed={candidateStream.status?.isStreaming ?? false}
             aria-label={candidateStream.status?.isStreaming ? 'Pause candidate live simulation' : 'Resume candidate live simulation'}
             title={candidateStream.error || (candidateStream.status?.isStreaming ? 'Pause live simulation' : 'Resume live simulation')}
@@ -180,7 +180,7 @@ export function App() {
                   <div className="popover-meta">
                     <strong>{activeUser.name}</strong>
                     <small>{activeUser.email}</small>
-                    <span className="popover-provider-pill">{activeUser.provider === 'entra' ? 'Microsoft Entra ID' : 'Analyst Account'}</span>
+                  <span className="popover-provider-pill">{activeUser.provider === 'entra' ? 'Microsoft Entra ID' : activeUser.provider === 'guest' ? 'Guest demo' : 'Analyst Account'}</span>
                   </div>
                 </div>
                 <div className="popover-menu-divider"></div>
@@ -189,7 +189,7 @@ export function App() {
                   className="popover-signout-btn"
                   onClick={() => {
                     setShowUserMenu(false);
-                    if (isEntraAuthMode()) {
+                    if (isEntraAuthMode() && activeUser.provider === 'entra') {
                       void signOutMicrosoft();
                     } else {
                       logoutSimulated();

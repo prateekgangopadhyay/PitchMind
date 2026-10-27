@@ -1068,6 +1068,10 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
   const [liveReportStatus, setLiveReportStatus] = useState('Waiting for notable live events…');
   const [liveReportError, setLiveReportError] = useState('');
   const agentNameRef = useRef(agentName);
+  const liveAnalysisRef = useRef<{ key: string; controller: AbortController } | null>(null);
+  const failedLiveAnalysisRef = useRef<string | null>(null);
+  const [liveAnalysisCycle, setLiveAnalysisCycle] = useState(0);
+  useEffect(() => () => liveAnalysisRef.current?.controller.abort(), [matchId]);
   useEffect(() => { agentNameRef.current = agentName; }, [agentName]);
   useEffect(() => {
     const controller = new AbortController();
@@ -1080,6 +1084,9 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
   }, []);
   useEffect(() => {
     if (!matchId || !data.context?.candidate) {
+      liveAnalysisRef.current?.controller.abort();
+      liveAnalysisRef.current = null;
+      failedLiveAnalysisRef.current = null;
       setLiveReports([]);
       return;
     }
@@ -1094,12 +1101,17 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
       return;
     }
 
+    const analysisKey = `${matchId}:${latest.id}`;
     if (liveReports.some(r => r.event.eventId === latest.id)) {
       return;
     }
+    if (failedLiveAnalysisRef.current === analysisKey) return;
+    // Serialize live reports. A newer source event should wait for the current
+    // Foundry request instead of cancelling it while it is still being generated.
+    if (liveAnalysisRef.current && !liveAnalysisRef.current.controller.signal.aborted) return;
 
     const controller = new AbortController();
-    let active = true;
+    liveAnalysisRef.current = { key: analysisKey, controller };
 
     const runAnalysis = async () => {
       setLiveReportStatus(`Analyzing ${latest.type} · sequence ${latest.sequence}…`);
@@ -1121,22 +1133,27 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
           agentName: agentNameRef.current,
           question: `Create a concise live event report for source event ${latest.type} (event ID ${latest.id}, sequence ${latest.sequence}) at source clock ${latest.clockSeconds}, period ${data.context?.period ?? 1}. Describe only what the supplied records support, explain cautious tactical implications as possibilities, cite the supplied event IDs, and state uncertainty. Do not infer intent, causation, or unobserved facts.`
         }, controller.signal);
-        if (!active) return;
+        if (controller.signal.aborted || liveAnalysisRef.current?.key !== analysisKey) return;
         setLiveReports(current => [
           { event: candidateEventItem, answer: result },
           ...current.filter(report => report.event.eventId !== latest.id)
         ].slice(0, 6));
         setLiveReportStatus('Latest available event analyzed.');
       } catch (failure) {
-        if (!active || controller.signal.aborted) return;
+        if (controller.signal.aborted || liveAnalysisRef.current?.key !== analysisKey) return;
+        failedLiveAnalysisRef.current = analysisKey;
         setLiveReportError(failure instanceof Error ? failure.message : 'Live event analysis is unavailable.');
         setLiveReportStatus('Could not analyze this event.');
+      } finally {
+        if (liveAnalysisRef.current?.key === analysisKey) {
+          liveAnalysisRef.current = null;
+          if (!controller.signal.aborted) setLiveAnalysisCycle(cycle => cycle + 1);
+        }
       }
     };
 
     void runAnalysis();
-    return () => { active = false; controller.abort(); };
-  }, [matchId, seconds, data.context?.candidate, data.context?.events]);
+  }, [matchId, seconds, data.context?.candidate, data.context?.events, liveReports, liveAnalysisCycle]);
 
   const [customQuestion, setCustomQuestion] = useState('');
   const [scenarioInput, setScenarioInput] = useState('');

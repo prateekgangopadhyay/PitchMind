@@ -441,7 +441,7 @@ export interface AuthSession {
     role: string;
     permissions: string[];
     avatarUrl?: string;
-    provider?: 'email' | 'entra';
+    provider?: 'email' | 'entra' | 'guest';
   };
 }
 

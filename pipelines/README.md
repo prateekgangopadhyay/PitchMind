@@ -19,6 +19,8 @@ The guarded DEV smoke verifies public health, PostgreSQL readiness/current schem
 
 The self-hosted agent is your Mac, not an Azure-hosted clean VM. Keep it powered on, awake, connected to the internet, and running to accept jobs. Pipeline code executes on that machine, so restrict who can queue pipelines and modify pipeline YAML. A single agent in `Default` means jobs queue rather than run concurrently. This avoids consuming Microsoft-hosted parallel-job minutes, but does not make Azure resources, network, or electricity free.
 
+If the deployed DEV smoke reports `CERTIFICATE_VERIFY_FAILED` on this Mac, an outbound TLS inspection proxy is presenting a certificate chain that Python does not trust. Export the trusted proxy/root CA chain as PEM, then set `PITCHMIND_CA_BUNDLE` to that PEM file's absolute path on the agent. You can set it as an Azure DevOps pipeline variable, or in the agent service environment; restart the agent service only when you change its service environment. The smoke script uses this bundle while continuing to verify the server certificate; it does not disable TLS validation. Keep the CA file readable by the agent account.
+
 ## Private DEV topology parameters
 
 - Keep `enableDevDelivery` false during setup. The default-off gate is not a substitute for Azure DevOps permission controls.

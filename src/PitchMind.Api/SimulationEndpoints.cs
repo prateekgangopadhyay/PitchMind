@@ -13,7 +13,7 @@ internal static class SimulationEndpoints
     {
         var group = app.MapGroup("/api/v1/simulation")
             .RequireRateLimiting("api")
-            .AllowAnonymous();
+            .RequireAuthorization("MatchRead");
 
         group.MapGet("/auth-preview", (HttpContext context) =>
         {
@@ -183,7 +183,7 @@ internal static class SimulationEndpoints
             };
 
             return Results.Ok(session);
-        });
+        }).AllowAnonymous();
 
         group.MapGet("/stream/status", (ISimulationStreamer streamer) =>
             Results.Ok(streamer.GetStatus()));
@@ -202,25 +202,26 @@ internal static class SimulationEndpoints
             }
             var status = await streamer.StartAsync(matchId, context.RequestAborted);
             return Results.Ok(status);
-        });
+        }).RequireAuthorization("AnalystAction");
 
         group.MapPost("/stream/stop", async (HttpContext context, ISimulationStreamer streamer) =>
         {
             var status = await streamer.PauseAsync(context.RequestAborted);
             return Results.Ok(status);
-        });
+        }).RequireAuthorization("AnalystAction");
 
         group.MapPost("/stream/step", async (HttpContext context, ISimulationStreamer streamer) =>
         {
             var status = await streamer.StepAsync(context.RequestAborted);
             return Results.Ok(status);
-        });
+        }).RequireAuthorization("AnalystAction");
 
         group.MapPost("/analyst", (HttpContext context) =>
             Problem(context, StatusCodes.Status503ServiceUnavailable,
                 "CANONICAL_MATCH_DATA_UNAVAILABLE",
                 "Tactical analysis is unavailable until canonical match evidence is configured.",
-                "The simulation preview is not an authoritative evidence packet and cannot be used to publish match-specific analysis."));
+                "The simulation preview is not an authoritative evidence packet and cannot be used to publish match-specific analysis."))
+            .RequireAuthorization("AnalystAction");
 
         group.MapPost("/clear-data", async (HttpContext context, IServiceProvider services) =>
         {

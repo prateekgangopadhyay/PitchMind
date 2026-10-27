@@ -40,6 +40,9 @@ var localCandidateFeedEnabled = candidateFeedEnabled && localRealtimeEnabled &&
 var candidateFeedRuntimeEnabled = azureCandidateFeedEnabled || localCandidateFeedEnabled;
 if (candidateFeedEnabled && !localRealtimeEnabled && !azureRuntime)
     throw new InvalidOperationException("CandidateFeed:Enabled requires Runtime:Profile=local or azure.");
+var guestCandidateFeedAccessEnabled = builder.Configuration.GetValue<bool>("CandidateFeed:GuestAccessEnabled");
+if (guestCandidateFeedAccessEnabled && (!azureRuntime || !builder.Environment.IsDevelopment() || !azureCandidateFeedEnabled))
+    throw new InvalidOperationException("CandidateFeed:GuestAccessEnabled is supported only for the Azure DEV candidate-feed runtime.");
 
 if (azureRuntime)
 {
@@ -378,7 +381,7 @@ app.MapSimulationEndpoints();
 app.MapPlayerIntelligenceEndpoints();
 app.MapHackathonOperationsEndpoints();
 if (localRealtimeEnabled || azureCandidateFeedEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
-if (candidateFeedRuntimeEnabled) app.MapCandidateFeedEndpoints();
+if (candidateFeedRuntimeEnabled) app.MapCandidateFeedEndpoints(guestCandidateFeedAccessEnabled);
 var matches = app.MapGroup("/api/v1/matches")
     .RequireAuthorization("MatchRead")
     .RequireRateLimiting("api");

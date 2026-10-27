@@ -6258,6 +6258,27 @@ input[type="checkbox"] {
   outline-offset: 2px !important;
 }
 
+.guest-access-btn {
+  justify-content: center !important;
+  border-color: rgba(74, 239, 172, 0.46) !important;
+  color: #4aefac !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+}
+
+.guest-access-btn:hover:not(:disabled) {
+  background: rgba(74, 239, 172, 0.12) !important;
+  border-color: #4aefac !important;
+}
+
+.guest-access-note {
+  margin: -0.6rem 0 0 !important;
+  color: var(--pm-text-secondary) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.45 !important;
+  text-align: center !important;
+}
+
 .auth-sso-btn {
   display: flex !important;
   align-items: center !important;
@@ -13948,10 +13969,12 @@ button:active,
 }
 
 .scoreboard-main-container {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "home center away" "actions actions actions";
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  column-gap: clamp(12px, 2vw, 32px);
+  row-gap: 5px;
   max-width: 1600px;
   margin: 0 auto 10px;
 }
@@ -13960,14 +13983,16 @@ button:active,
   display: flex;
   align-items: center;
   gap: 14px;
-  flex: 1;
+  min-width: 0;
 }
 
 .scoreboard-team-box.home-side {
+  grid-area: home;
   justify-content: flex-start;
 }
 
 .scoreboard-team-box.away-side {
+  grid-area: away;
   justify-content: flex-end;
   text-align: right;
 }
@@ -14040,6 +14065,7 @@ button:active,
 
 /* Center Cluster: Scores & Clock */
 .scoreboard-center-box {
+  grid-area: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -14143,6 +14169,8 @@ button:active,
 
 /* Quick Action Pills on Right */
 .scoreboard-actions-group {
+  grid-area: actions;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -14274,13 +14302,12 @@ button:active,
 /* Responsive adjustments */
 @media (max-width: 900px) {
   .scoreboard-main-container {
-    flex-wrap: wrap;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 8px;
   }
   .scoreboard-actions-group {
-    order: 4;
-    width: 100%;
-    justify-content: center;
+    justify-self: center;
   }
   .team-name {
     font-size: 1rem;

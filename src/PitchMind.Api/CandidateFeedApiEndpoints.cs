@@ -4,21 +4,21 @@ namespace PitchMind.Api;
 
 internal static class CandidateFeedApiEndpoints
 {
-    public static IEndpointRouteBuilder MapCandidateFeedEndpoints(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapCandidateFeedEndpoints(this IEndpointRouteBuilder endpoints, bool guestAccessEnabled)
     {
         var group = endpoints.MapGroup("/api/v1/simulation/candidate").RequireRateLimiting("api").RequireAuthorization("MatchRead");
-        group.MapGet("/analyst/agents", () => Results.Ok(new
+        var agents = group.MapGet("/analyst/agents", () => Results.Ok(new
         {
             defaultAgent = CandidateAnalystAgentCatalog.DefaultAgentName,
             agents = CandidateAnalystAgentCatalog.All
         }));
-        group.MapGet("/status", async (CandidateFeedPersistence persistence, CandidateFeedSourceCatalog catalog,
+        var statusRoute = group.MapGet("/status", async (CandidateFeedPersistence persistence, CandidateFeedSourceCatalog catalog,
             LocalCandidateSimulationService simulation, HttpContext context) =>
         {
             var status = await simulation.GetStatusAsync(persistence, context.RequestAborted).ConfigureAwait(false);
             return Results.Ok(status);
         });
-        group.MapGet("/matches/{matchId}/events", async (string matchId, long? afterSequence, int? limit,
+        var eventsRoute = group.MapGet("/matches/{matchId}/events", async (string matchId, long? afterSequence, int? limit,
             CandidateFeedPersistence persistence, CandidateFeedSourceCatalog catalog, HttpContext context) =>
         {
             var source = await catalog.GetAsync(context.RequestAborted).ConfigureAwait(false);
@@ -39,10 +39,19 @@ internal static class CandidateFeedApiEndpoints
             return Results.Ok(new { matchId, sourceSha256 = source.SourceSha256, items,
                 nextSequence = items.Length == 0 ? afterSequence : items[^1].sequence, hasMore });
         });
-        group.MapPost("/start", async (LocalCandidateSimulationService simulation,
+        var startRoute = group.MapPost("/start", async (LocalCandidateSimulationService simulation,
             CandidateFeedPersistence persistence, HttpContext context) =>
-            Results.Ok(await simulation.StartAsync(persistence, context.RequestAborted).ConfigureAwait(false)))
-            .RequireAuthorization("AnalystAction");
+            Results.Ok(await simulation.StartAsync(persistence, context.RequestAborted).ConfigureAwait(false)));
+        if (guestAccessEnabled)
+        {
+            // DEV demo visitors may read the configured candidate fixture and start its
+            // singleton replay. All other state-changing routes remain role-protected.
+            agents.AllowAnonymous();
+            statusRoute.AllowAnonymous();
+            eventsRoute.AllowAnonymous();
+            startRoute.AllowAnonymous();
+        }
+        else startRoute.RequireAuthorization("AnalystAction");
         group.MapPost("/pause", async (LocalCandidateSimulationService simulation,
             CandidateFeedPersistence persistence, HttpContext context) =>
             Results.Ok(await simulation.PauseAsync(persistence, context.RequestAborted).ConfigureAwait(false)))

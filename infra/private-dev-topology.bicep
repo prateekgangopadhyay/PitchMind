@@ -660,6 +660,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployPrivateDevTopo
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Development' }
             { name: 'Runtime__Profile', value: 'azure' }
             { name: 'CandidateFeed__Enabled', value: enableCandidateFeed ? 'true' : 'false' }
+            { name: 'CandidateFeed__GuestAccessEnabled', value: enableCandidateFeed ? 'true' : 'false' }
             { name: 'Identity__Authority', value: 'https://login.microsoftonline.com/${entraTenantId}/v2.0' }
             // Entra v2 access tokens use the API application's client ID GUID as aud.
             // The SPA still requests the exposed api://<client-id>/Match.Read scope.

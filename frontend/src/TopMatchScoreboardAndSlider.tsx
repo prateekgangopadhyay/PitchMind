@@ -170,10 +170,6 @@ export function TopMatchScoreboardAndSlider({
       <div className="universal-time-scrubber-bar" aria-label="Match timeline scrubber">
         <div className="scrubber-header-row">
           <span className="scrubber-legend-start">00:00 (Kick-off)</span>
-          <span className="scrubber-current-callout">
-            <span className="callout-clock-dot" aria-hidden="true"></span>
-            Elapsed {currentClockFormatted} · {phaseText}
-          </span>
           <span className="scrubber-legend-end">{clock(effectiveMaxSeconds)} (Full-Time)</span>
         </div>
         <div className="scrubber-slider-container">
