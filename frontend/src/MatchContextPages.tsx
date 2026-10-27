@@ -1103,7 +1103,7 @@ export function MatchContextAnalystPage({ route, matchId, seconds, revision }: {
       liveAnalysisRef.current?.controller.abort();
       liveAnalysisRef.current = null;
       failedLiveAnalysisRef.current = null;
-      setLiveReports([]);
+      if (liveReports.length > 0) setLiveReports([]);
       return;
     }
     const hotEvents = new Set(['goal', 'shot', 'penalty', 'redcard', 'substitution', 'foul', 'ballrecovery', 'possessionlost']);

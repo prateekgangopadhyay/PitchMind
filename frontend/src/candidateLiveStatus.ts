@@ -279,6 +279,13 @@ export function clearCandidateLiveCache() {
   eventQueue = [];
   currentLiveEvent = null;
   cachedMatchId = null;
+  status = null;
+  error = '';
+  pending = false;
+  autoStartRequested = false;
+  autoStartAttempted = false;
+  autoStartInFlight = false;
+  nextAutoStartAttemptAt = 0;
   stopGlobalSignalR();
   stopQueueTicker();
   publish();

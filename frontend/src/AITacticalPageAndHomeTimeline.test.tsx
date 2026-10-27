@@ -8,6 +8,7 @@ import { RoutePage } from './ShellPages';
 import { computeAgentDiscussionAndExplanation, computeCausalChain, FOUNDRY_AGENTS } from './tacticalAgentDiscussion';
 import { resolveRoute } from './routes';
 import { DynamicPassMapThumbnail, DynamicHeatmapThumbnail, deduceTeamFormation } from './DynamicTacticalVisuals';
+import { clearCandidateLiveCache } from './candidateLiveStatus';
 
 describe('Home Page Linear Events Timeline and Differentiated Icons', () => {
   it('differentiates event types with distinct icons and theme classes', () => {
@@ -377,6 +378,8 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
+    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockImplementation(() => 0 as unknown as number);
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval').mockImplementation(() => undefined);
 
     try {
       await act(async () => {
@@ -427,11 +430,14 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
       expect(container.textContent).toContain('BallRecovery');
     } finally {
       await act(async () => root.unmount());
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
       container.remove();
     }
   });
 
   it('shows the Linear Events Timeline on HomePage by default', async () => {
+    clearCandidateLiveCache();
     const matchId = 'home-timeline-match-123';
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
 
@@ -502,11 +508,13 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
+    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockImplementation(() => 0 as unknown as number);
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval').mockImplementation(() => undefined);
 
     try {
       await act(async () => {
         root.render(<RoutePage route={{ kind: 'home' }} search="" />);
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 100));
       });
 
       // The event timeline and commentary are mounted without an extra click.
@@ -517,6 +525,9 @@ describe('AI Tactical Page Split View & Multi-Agent Deliberation', () => {
       expect(container.querySelector('.ai-commentary-timeline-container')).not.toBeNull();
     } finally {
       await act(async () => root.unmount());
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+      clearCandidateLiveCache();
       container.remove();
     }
   });
