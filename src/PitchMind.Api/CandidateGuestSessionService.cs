@@ -38,7 +38,7 @@ internal sealed class CandidateGuestSessionService
             sub = $"guest-{Guid.NewGuid():N}",
             role = "fan",
             guest_demo = true,
-            scope = "candidate:question",
+            scopes = new[] { "candidate:question", "candidate:realtime" },
             iat = now.ToUnixTimeSeconds(),
             exp = expires.ToUnixTimeSeconds()
         }));
@@ -73,7 +73,7 @@ internal sealed class CandidateGuestSessionService
                 root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 8 ||
                 !HasString(root, "iss", Issuer) || !HasString(root, "aud", Audience) ||
                 !root.TryGetProperty("sub", out var subject) || subject.ValueKind != JsonValueKind.String ||
-                !HasString(root, "role", "fan") || !HasString(root, "scope", "candidate:question") ||
+                !HasString(root, "role", "fan") || !HasScopes(root) ||
                 !root.TryGetProperty("guest_demo", out var guest) || guest.ValueKind != JsonValueKind.True ||
                 !root.TryGetProperty("iat", out var issuedAt) || !issuedAt.TryGetInt64(out var issuedSeconds) ||
                 !root.TryGetProperty("exp", out var expiration) || !expiration.TryGetInt64(out var expirationSeconds))
@@ -88,7 +88,8 @@ internal sealed class CandidateGuestSessionService
             var claims = new[]
             {
                 new Claim("sub", subjectValue), new Claim("roles", "fan"),
-                new Claim("pm_guest_demo", "true"), new Claim("scope", "candidate:question")
+                new Claim("pm_guest_demo", "true"), new Claim("scope", "candidate:question"),
+                new Claim("scope", "candidate:realtime")
             };
             principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "CandidateGuest", "sub", "roles"));
             return true;
@@ -102,6 +103,12 @@ internal sealed class CandidateGuestSessionService
     private static bool HasString(JsonElement element, string name, string expected) =>
         element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String &&
         string.Equals(property.GetString(), expected, StringComparison.Ordinal);
+
+    private static bool HasScopes(JsonElement element) =>
+        element.TryGetProperty("scopes", out var scopes) && scopes.ValueKind == JsonValueKind.Array &&
+        scopes.GetArrayLength() == 2 && scopes.EnumerateArray().All(scope => scope.ValueKind == JsonValueKind.String) &&
+        scopes.EnumerateArray().Select(scope => scope.GetString()).ToHashSet(StringComparer.Ordinal)
+            .SetEquals(["candidate:question", "candidate:realtime"]);
 
     private static string Base64Url(ReadOnlySpan<byte> value) =>
         Convert.ToBase64String(value).TrimEnd('=').Replace('+', '-').Replace('/', '_');

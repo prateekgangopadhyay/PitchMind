@@ -129,6 +129,8 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, Candidate
 
     public async Task SubscribeToMatch(Guid matchId)
     {
+        if (Context.User?.HasClaim("pm_guest_demo", "true") == true)
+            throw new HubException("Guest sessions can subscribe to candidate-feed updates only.");
         var state = GetSubscriptionState();
         var reservation = state.TryBegin(matchId);
         if (reservation == SubscriptionReservation.AlreadySubscribed)
@@ -171,8 +173,10 @@ public sealed class MatchUpdatesHub(IMatchRealtimeAccessPolicy access, Candidate
              principal.Claims.Any(c => (c.Type == "roles" || c.Type == ClaimTypes.Role) &&
                  (string.Equals(c.Value, "analyst", StringComparison.OrdinalIgnoreCase) ||
                   string.Equals(c.Value, "admin", StringComparison.OrdinalIgnoreCase))));
+        var hasGuestRealtimeScope = principal?.Identity?.IsAuthenticated == true &&
+            principal.HasClaim("pm_guest_demo", "true") && principal.HasClaim("scope", "candidate:realtime");
 
-        if (!hasAnalystRole ||
+        if ((!hasAnalystRole && !hasGuestRealtimeScope) ||
             !Guid.TryParse(matchId, out var parsed) || parsed == Guid.Empty ||
             sourceSha256 is not { Length: 64 } || sourceSha256.Any(c => !Uri.IsHexDigit(c)) || candidateSource is null)
             throw new HubException("Candidate match subscription is not authorized.");

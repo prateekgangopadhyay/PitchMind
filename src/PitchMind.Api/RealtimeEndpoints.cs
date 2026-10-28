@@ -58,6 +58,9 @@ internal static class RealtimeEndpoints
             return Problem(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Invalid realtime negotiation request");
         if (context.User.Identity?.IsAuthenticated != true)
             return Problem(context, StatusCodes.Status401Unauthorized, "UNAUTHORIZED", "Authentication is required");
+        if (context.User.HasClaim("pm_guest_demo", "true"))
+            return Problem(context, StatusCodes.Status403Forbidden, "FORBIDDEN",
+                "Guest sessions can negotiate candidate-feed realtime only");
         var accessDecision = await access.CheckAsync(context.User, request.MatchId, context.RequestAborted)
             .ConfigureAwait(false);
         if (accessDecision.Status == MatchRealtimeAccessStatus.Forbidden)

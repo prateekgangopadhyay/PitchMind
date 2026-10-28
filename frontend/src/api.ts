@@ -121,11 +121,17 @@ export async function getHostAccessToken(): Promise<string | null> {
   return window.pitchMindAuth.getAccessToken();
 }
 
+/** Returns the current API credential, including the restricted guest-demo token. */
+export async function getApiAccessToken(): Promise<string | null> {
+  const session = getStoredAuthSession();
+  if (session?.user.provider === 'guest')
+    return typeof window === 'undefined' ? null : window.sessionStorage.getItem('pitchmind_guest_access_token');
+  return getHostAccessToken();
+}
+
 export async function request<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
   const session = getStoredAuthSession();
-  const token = session?.user.provider === 'guest' && typeof window !== 'undefined'
-    ? window.sessionStorage.getItem('pitchmind_guest_access_token')
-    : await getHostAccessToken();
+  const token = await getApiAccessToken();
   const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);

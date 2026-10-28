@@ -91,6 +91,10 @@ internal static class CandidateFeedApiEndpoints
         group.MapPost("/realtime/negotiate", async (CandidateRealtimeNegotiateRequest request,
             CandidateFeedSourceCatalog catalog, HttpContext context) =>
         {
+            if (context.User.HasClaim("pm_guest_demo", "true") &&
+                !context.User.HasClaim("scope", "candidate:realtime"))
+                return Problem(context, StatusCodes.Status403Forbidden, "GUEST_SCOPE_FORBIDDEN",
+                    "Guest demo sessions cannot negotiate this realtime feed.");
             var source = await catalog.GetAsync(context.RequestAborted).ConfigureAwait(false);
             if (!string.Equals(request.MatchId, source.Events[0].SourceMatchId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(request.SourceSha256, source.SourceSha256, StringComparison.OrdinalIgnoreCase))

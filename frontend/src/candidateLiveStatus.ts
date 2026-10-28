@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-import { ApiRequestError, getHostAccessToken, getStoredAuthSession, request, subscribeAuth } from './api';
+import { ApiRequestError, getApiAccessToken, getStoredAuthSession, request, subscribeAuth } from './api';
 
 export interface CandidateStreamStatus {
   matchId: string | null; isStreaming: boolean; currentSequence: number | null;
@@ -314,7 +314,6 @@ export function scheduleSyncEvents(targetMatchId: string) {
 
 async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
   if (typeof window === 'undefined') return;
-  if (getStoredAuthSession()?.user.provider === 'guest') return;
   if (globalHub && activeHubMatchId === matchId && activeHubSourceHash === sourceHash) {
     return;
   }
@@ -326,7 +325,7 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
       globalHub = null;
       await old.stop().catch(() => undefined);
     }
-    const token = await getHostAccessToken();
+    const token = await getApiAccessToken();
     const local = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -352,7 +351,7 @@ async function ensureGlobalSignalR(matchId: string, sourceHash: string) {
     }
     const hub = new HubConnectionBuilder()
       .withUrl(url.toString(), {
-        accessTokenFactory: async () => (await getHostAccessToken()) ?? '',
+        accessTokenFactory: async () => (await getApiAccessToken()) ?? '',
         ...(local
           ? { headers: { 'X-Dev-Subject': 'local-analyst', 'X-Dev-Roles': 'analyst' }, transport: HttpTransportType.LongPolling }
           : {})
