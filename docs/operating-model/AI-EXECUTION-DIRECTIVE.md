@@ -1,6 +1,6 @@
 # PitchMind — fast development, concurrent integration and CodeGraph directive
 
-**Operating instruction:** Implement and independently verify all **59 PitchMind stories across 12 epics**, using the Engineering Council's existing skill-to-story routing and authoritative workpacks. Treat this as an execution directive, not a new source of story acceptance. Preserve the 49 P0 / 7 P1 / 3 P2 priorities and the October 27 hackathon delivery path.
+**Operating instruction:** Use the authoritative backlog and current routing for **53 PitchMind stories across EP01–EP10** (49 P0 and 4 P1), using the Engineering Council's existing skill-to-story routing and workpacks. Treat this as an execution directive, not a source of story acceptance. The target submission date, 2026-10-27, has passed; unless the owner sets a new date, track remaining work as post-submission maintenance and do not imply that a submission is still upcoming.
 
 ## First priority: develop the product fast
 

@@ -1,5 +1,5 @@
 # PitchMind — Hackathon Development Story Work Packets (EP01 to EP10)
-**Status:** Hackathon stories scoped to EP01–EP10 (49 P0 Hackathon MVP stories + 4 EP09 operational enhancements). All 49 P0 stories are verified and accepted by the Product Owner. Non-hackathon post-submission items (EP11 Release Governance & EP12 Enterprise Expansion) are pruned. [Epic authority](HACKATHON-MVP-EPICS.md) | [Execution](../engineering/COUNCIL-EXECUTION-PLAN.md) | [PO Acceptance Ledger](PRODUCT-OWNER-ACCEPTANCE-LEDGER.md).
+**Status:** 53 stories are scoped to EP01–EP10 (49 P0 and 4 P1). Story implementation, verification, deployment and Product Owner acceptance are tracked per story in the [execution register](STORY-EXECUTION.md); this index does not imply that every story is complete or accepted. The 2026-10-27 target submission date has passed. [Epic authority](HACKATHON-MVP-EPICS.md) | [Execution](../engineering/COUNCIL-EXECUTION-PLAN.md) | [PO Acceptance Ledger](PRODUCT-OWNER-ACCEPTANCE-LEDGER.md).
 
 | Story ID | Title | Priority | Workstream | Work packet |
 |---|---|---|---|---|

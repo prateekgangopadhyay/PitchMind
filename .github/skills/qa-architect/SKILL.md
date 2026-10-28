@@ -40,7 +40,7 @@ Use when planning test strategy, validating acceptance, certifying story complet
 
 ## Role-specific story gate and executable evidence
 
-**Primary epics:** EP05, EP07, EP08, EP10. **Gate to enforce:** Map all 59 original acceptance criteria to observable test evidence; ban skipped PG integration, mock-only cloud proof, future-score leakage and unsupported tactical certainty.
+**Primary epics:** EP05, EP07, EP08, EP10. **Gate to enforce:** Map the current 53 backlog stories to observable test evidence; ban skipped PostgreSQL integration, mock-only cloud proof, future-score leakage and unsupported tactical certainty.
 
 **Mandatory deliverable:** Traceable golden, negative, degraded and E2E evidence matrix with real execution results. State exact EPxx-Syy, test runner and commit, source provenance, architecture/UX artifacts, independent reviewer and unresolved risks; unrun checks stay unverified.
 

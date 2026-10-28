@@ -2,9 +2,9 @@
 
 **Authority:** repository-derived structural observations only. No provider-authoritative data dictionary was supplied. This document records the exact JSON representation and observed value distributions; it does not certify field meaning, football validity, rights/privacy, or source-to-canonical mapping.
 
-- Source: [`data/simulations/manu-liv-match-dataset.json`](data/simulations/manu-liv-match-dataset.json)
+- Source: [`data/simulations/manu-liv-match-dataset.json`](../../data/simulations/manu-liv-match-dataset.json)
 - Source SHA-256: `e3743ccc17c63792f39858299c0b22e9b610f26686603f049347f3eb262edf8c`; bytes: 28,601,013; event objects: 2,199.
-- Pinned manifest: [`data/simulations/manu-liv-candidate-manifest.json`](data/simulations/manu-liv-candidate-manifest.json); manifest must match source bytes before generation.
+- Pinned manifest: [`data/simulations/manu-liv-candidate-manifest.json`](../../data/simulations/manu-liv-candidate-manifest.json); manifest must match source bytes before generation.
 - Reproduce: `python3 scripts/generate_manu_liv_field_dictionary.py`.
 - The repository owner confirmed synthetic provenance and redistribution permission on 2026-10-08; independent rights/privacy review and football approval remain pending.
 

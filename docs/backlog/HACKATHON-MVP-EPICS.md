@@ -7,6 +7,8 @@
 **Status:** **PROPOSED backlog expansion — NOT evidence of implementation**  
 **Intended placement:** `docs/backlog/HACKATHON-MVP-EPICS.md`
 
+The 2026-10-27 target submission date has passed. This dated backlog proposal remains the story authority; implementation and acceptance are recorded separately in [the execution register](STORY-EXECUTION.md). Current runtime limits are recorded in [the Azure DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+
 > This document expands the existing M01–M16 milestones into epics and implementation-ready development stories. The original backlog remains the authoritative source for milestone priority. All new story decomposition, proposed screens, agent roles, prioritization refinements, and delivery sequencing are Product Owner proposals, not capabilities asserted to exist in the repository.
 
 ## 1. Product mission and MVP outcome

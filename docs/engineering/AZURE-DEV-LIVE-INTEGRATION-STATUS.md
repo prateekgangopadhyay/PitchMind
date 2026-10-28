@@ -37,6 +37,8 @@ The current source path is:
 
 The candidate tables are separate from canonical football tables. The source's clock, event mapping, coordinate units/orientation, player metrics, and football realism remain unvalidated. Do not describe the stream as canonical match truth.
 
+The reset endpoint's code clears candidate PostgreSQL records and Redis cache state, resets in-memory candidate state, and starts a new replay from sequence zero. A recent owner-supplied DEV reset call returned a dependency-unavailable error. Therefore the deployed clear/cache/restart transaction and subsequent visible replay are **not verified end to end**.
+
 ## AI Analyst status
 
 The API has a direct Foundry project-agent adapter. It sends a bounded packet of persisted candidate events to one of ten allowlisted project agents and validates response shape and cited event-ID membership. The answer, if generated, is a hypothesis; the API does not persist a durable event-report ledger. In the current source, the browser's tactical-discussion helper computes illustrative text locally and is not a response from Azure AI agents.

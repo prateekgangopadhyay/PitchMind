@@ -34,6 +34,8 @@ flowchart LR
 
 The UI reads event pages from the API; SignalR carries a refresh cursor rather than match facts. PostgreSQL candidate tables hold persisted source records. Redis is a rebuildable cursor cache. Candidate records are separate from canonical match tables. Service Bus is provisioned in DEV but is not part of this candidate live-feed path. Azure Managed Redis is an optional infrastructure parameter, not the Redis service currently reported by the deployed DEV inventory.
 
+The full deployed event path is not currently verified end to end. Recent owner-supplied DEV calls reported dependency failures for clear-data/replay and `503 ANALYST_UNAVAILABLE` for Foundry analysis; see the dated [integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md). The code path describes the intended behavior, not proof that the current DEV revision completed it.
+
 ### DEV services and cost notes
 
 DEV currently includes Azure Container Apps, Azure Event Hubs Standard, Azure Database for PostgreSQL Flexible Server, Blob Storage, a Redis container app, Azure SignalR Free F1, Microsoft Foundry, Azure AI Search Serverless, Azure Container Registry Basic, Key Vault, Log Analytics, Service Bus Standard, VNet/private DNS, and managed identities. Free allowances are limited and shared or usage-dependent; PostgreSQL, Event Hubs, registry, storage, AI inference/search, private endpoints, and other metered services can incur charges. See [DEV runtime and current inventory](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [cost assumptions](docs/cost/COST-ASSUMPTIONS.md). Inventory is not a bill or a guarantee that every integration is healthy.

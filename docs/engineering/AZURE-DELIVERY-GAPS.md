@@ -15,6 +15,7 @@
 
 - The 2026-10-28 inventory reports the current Redis service as a Redis 7 container app on Azure Container Apps (`pm-dev-redis-cache`), not Azure Managed Redis. Its minimum replica is one.
 - Recent owner-supplied analyst API calls return `503 ANALYST_UNAVAILABLE`. Successful Foundry project-agent invocation is not currently verified.
+- The candidate clear-data operation is implemented to clear PostgreSQL candidate state and Redis, then restart replay at source sequence zero. A recent owner-supplied DEV call returned a dependency-unavailable error; successful end-to-end clear/cache/restart behavior in the deployed environment is not verified.
 - Azure resource presence does not prove active revisions, effective identity grants, database readiness, event consumption, checkpoint progression, Redis updates, or SignalR delivery.
 - Candidate source records remain non-canonical; source clock, event semantics, coordinate conventions, player metrics, and football realism are not approved as canonical facts.
 - The UI's locally computed tactical discussion helper is illustrative and does not prove that Foundry agents generated the displayed text.
