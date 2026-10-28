@@ -209,12 +209,15 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
 {
     private const int MaximumRequestBytes = 40_960;
     private const int MaximumResponseBytes = 16_384;
-    private const int MaximumOutputTokens = 512;
+    // Foundry specialist agents need enough room to finish the required JSON
+    // envelope. At 512 tokens, TacticalAnalyst regularly returned an
+    // `incomplete` response with its claims JSON cut off.
+    private const int MaximumOutputTokens = 1_536;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string ResponseContract = """
         RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties and types:
         {"status":"answered","answer":"string","claims":[{"text":"string","evidenceIds":["exact records[].evidenceId"]}]}
-        The only allowed status values are "answered" and "insufficientEvidence". For "answered", include 1-8 concise claims; every factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
+        The only allowed status values are "answered" and "insufficientEvidence". For "answered", write a concise report of at most 3 short sentences and include 1-4 concise claims; each factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
         """;
 
     private readonly HttpClient _client;
