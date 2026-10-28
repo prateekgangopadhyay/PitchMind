@@ -1,6 +1,8 @@
 # C4 Level 4 — Azure DEV deployment and runtime evidence
 
-This document combines the current Azure DEV resource inventory with the repository's deployment topology. It distinguishes a resource being present from the app successfully using it. Inventory was read on **2026-10-28** in `rg-pitchmind-dev-001`; runtime failures below are based on recent owner-supplied responses. See [the integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the detail and limits.
+**CURRENT:** This document combines the Azure DEV resource inventory with the repository's deployment topology. It distinguishes a resource being present from the app successfully using it. Inventory was read on **2026-10-28** in `rg-pitchmind-dev-001`; runtime failures below are based on recent owner-supplied responses. See [the integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the detail and limits.
+
+**TARGET:** the planned Azure topology and release shape are described in the [target Azure HLD](06-target-azure-hld.md); the resource table and diagram below document current DEV only and do not imply target completeness.
 
 ## Current DEV candidate-feed path
 

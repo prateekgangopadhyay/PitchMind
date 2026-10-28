@@ -1,6 +1,8 @@
 # C4 Level 1 — PitchMind system context
 
-This view describes the current candidate-feed demo. The feed is synthetic and non-canonical. Arrows show the intended application path in source/configuration; current runtime health must be checked separately in the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+**CURRENT:** This diagram describes the synthetic, non-canonical candidate-feed demo. Arrows show the application path in source/configuration; current runtime health must be checked separately in the [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+
+**TARGET:** verified source validation, football-semantics review, and explicit admission into canonical match records remain future work; no canonical ingestion path is represented by this diagram. See the [target Azure HLD](06-target-azure-hld.md) for planned components and [delivery gaps](../engineering/AZURE-DELIVERY-GAPS.md) for current status.
 
 ```mermaid
 flowchart LR
