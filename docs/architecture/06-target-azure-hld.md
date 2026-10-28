@@ -24,11 +24,11 @@ flowchart LR
   Worker -->|"checkpoint after durable stage"| Blob[("Azure Blob checkpoint container")]
   Outbox --> Dispatch["API CandidateOutboxDispatchWorker"]
   Dispatch -->|"persist event history"| History[("Azure PostgreSQL — candidate history")]
-  Dispatch -->|"rebuildable cursor projection"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"rebuildable cursor projection"| Redis["Redis container app on Azure Container Apps"]
   Dispatch -->|"after durable processing; cursor only"| SignalR["Azure SignalR Service"]
   History -->|"match event pages / source positions"| API
   SignalR -. "refresh hint only" .-> Browser
-  API -->|"bounded selected-match evidence"| Foundry["Azure AI pitchmind-ai-resource<br/>(gpt-4.1-mini)"]
+  API -->|"bounded selected-match evidence"| Foundry["Microsoft Foundry project agent"]
   Foundry -. "labeled hypothesis; no canonical write" .-> API
 ```
 
@@ -38,20 +38,20 @@ flowchart LR
 2. EventWorker consumes the dedicated candidate hub. It stores the raw event or a durable poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. Delivery is at least once; the candidate persistence key preserves idempotency.
 3. The API dispatcher processes the committed candidate outbox. It writes the ordered candidate event history to PostgreSQL and updates the latest Redis cursor as independent projections. SignalR sends a cursor notification after durable processing; it does not carry event facts.
 4. The React UI fetches event pages and source player-position fields from the API. It can pause/resume the feed and update the pitch from returned data. Candidate data remains separate from canonical match/insight records.
-5. The AI Analyst API reads a bounded selected-match event prefix and calls Azure AI Services (`pitchmind-ai-resource` running `gpt-4.1-mini`). It returns an evidence-grounded hypothesis, supports fan/analyst audience modes, and powers the interactive multi-agent deliberation room across 10 tactical agent profiles.
+5. The AI Analyst API reads a bounded selected-match event prefix and calls an allowlisted Microsoft Foundry project agent. The returned answer is a hypothesis. Recent DEV requests returned `503 ANALYST_UNAVAILABLE`; current live success is not verified. The browser's locally computed tactical discussion helper is illustrative and is not multi-agent deliberation.
 
 ### Service boundaries
 
 | Azure component | Responsibility in DEV | Authority / limitation |
 |---|---|---|
-| Azure Container Apps | Hosts API/static React app and separate EventWorker app | Application compute; verified live responding 200 on `/health` |
+| Azure Container Apps | Hosts API/static React app, EventWorker, and current Redis container app | Consumption compute; inventory observed 2026-10-28. Runtime health is separate. |
 | Azure Event Hubs | Ordered candidate event transport | Transport only; not canonical storage |
-| Azure Database for PostgreSQL Flexible Server | Candidate outbox/history and canonical schema/read models | Durable database; candidate tables are not canonical truth; migrations 1-10 verified |
+| Azure Database for PostgreSQL Flexible Server | Candidate outbox/history and canonical schema/read models | Durable database; candidate tables are not canonical truth. Current migration/readiness must be probed. |
 | Azure Blob Storage | Event Hubs processor checkpoint container | Consumer progress only |
-| Azure Managed Redis | Latest candidate cursor/cache projection | Rebuildable; no authoritative event pages |
+| Redis Container App (`pm-dev-redis-cache`) | Latest candidate cursor/cache projection | Current image `redis:7-alpine`, min/max replicas 1; rebuildable, no authoritative event pages. Azure Managed Redis is only an optional Bicep path. |
 | Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API with fallback polling |
-| Microsoft Entra ID | Browser/API identity and managed identity token authority | User auth configuration with PKCE and safe offline evaluation fallback |
-| Azure AI Services (`pitchmind-ai-resource`) | Bounded match explanations & multi-agent deliberation | Verified live with `gpt-4.1-mini` responding 200 OK; deterministic evidence citation fallback |
+| Microsoft Entra ID | Signed-in user identity and managed-identity token authority | DEV candidate routes may also be anonymous when `CandidateFeed:GuestAccessEnabled=true`; clear-data remains protected. |
+| Microsoft Foundry project `pitchmind-ai` | Bounded match-scoped hypotheses via selected agent | Recent DEV calls returned 503; no deterministic candidate-answer substitution. |
 
 ## Canonical football pipeline — target, not current candidate flow
 
@@ -81,7 +81,7 @@ The canonical target commits the event/revision/outbox atomically, checkpoints a
 
 ## Security, reliability and operations
 
-- API validates Entra issuer, audience, expiry and configured roles. Browser tokens are short-lived and never replaced by a service-connection credential. The UI/network evidence includes an `audience (null)` 401; therefore user identity configuration is not considered verified.
+- Signed-in API requests validate Entra issuer, audience, expiry and configured roles. In DEV only, the candidate feed may be guest-accessible via configuration; this is a public synthetic demo path, not proof of user authentication. Clear-data and other privileged actions remain role-protected.
 - API and EventWorker use their assigned managed identities for PostgreSQL, Event Hubs, Blob, Redis and SignalR. Grant only required data-plane roles. Migration runs use a separate privileged identity; runtime roles do not own schema objects.
 - Private endpoints, VNet routing, private DNS, subnet delegation, ACA ingress mode and service egress must match the reviewed DEV topology. Do not infer network reachability from Bicep declarations.
 - Event Hubs delivery is at least once. PostgreSQL idempotency keys and durable staging protect against duplicate delivery. A failed durable write must not advance the checkpoint. Redis failure must not replace or corrupt PostgreSQL data; SignalR failure requires API polling/backfill.
@@ -89,9 +89,9 @@ The canonical target commits the event/revision/outbox atomically, checkpoints a
 
 ## Delivery and verification
 
-`enableDevDelivery` remains default-off. The guarded Azure DevOps path compiles Bicep, checks topology and what-if, records the immutable image digest and cost estimate, pauses at the owner approval gate, applies only the reviewed plan in the protected DEV environment, then runs smoke checks. `enableCandidateFeed` defaults on only within that release path; the Bicep module default remains off. CI success alone does not deploy.
+In `pipelines/azure-pipelines.yml`, `enableDevDelivery` and `enableCandidateFeed` currently default to `true`; the Bicep module's topology/feed defaults remain off unless pipeline parameters enable them. The Azure DevOps release path validates topology/what-if, records an image digest and cost estimate, and uses configured approval/deployment gates. YAML does not prove service connections or server-side approvals are present. CI success alone does not prove deployment.
 
-The screenshots supplied by the owner on 2026-10-20 show DEV UI builds labelled 68/69, candidate-feed event/position rendering, and an analyst screen with selected source events. They do not identify the backend resource connections or demonstrate a successful generated Foundry report. The last repository-recorded read-only Azure resource inventory is dated 2026-10-19; no current Azure inventory was available during this documentation update. No Azure operation was performed.
+The 2026-10-28 read-only inventory is summarized in [C4 deployment](04-deployment.md). Earlier screenshots show candidate event/position rendering but do not prove every service link. The latest owner-supplied AI API responses show `503 ANALYST_UNAVAILABLE`, so successful report generation remains unverified.
 
 ## Related designs
 

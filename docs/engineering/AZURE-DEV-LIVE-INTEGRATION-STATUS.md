@@ -1,84 +1,63 @@
-# Azure DEV live-stream wiring status
+# Azure DEV inventory and integration status
 
-This document separates source-code implementation, owner-supplied DEV application evidence, and Azure resources/configuration observed in subscription `a09b1f8c-6578-4f70-a460-bdda03133549`. These are separate evidence classes: a rendered UI does not establish which backend service produced its data, and a Bicep declaration does not establish deployment.
+**Scope:** repository implementation plus the read-only resource inventory checked on **2026-10-28** in subscription `a09b1f8c-6578-4f70-a460-bdda03133549`, resource group `rg-pitchmind-dev-001`. An inventory proves resource existence and selected configuration only; it does not prove workload identity grants, reachability, successful processing, or current health.
 
-## Latest owner-supplied DEV evidence — 2026-10-20
+## DEV service inventory
 
-- Browser screenshots show DEV builds labelled `68` and `69`. Build 68's candidate-live screen displays the selected source match, an event counter, source clock, event replay control, and player positions on the pitch. Build 69's AI Analyst screen displays six selected source events and states that candidate data has no canonical insights.
-- These screenshots establish that the DEV application surface rendered candidate-feed data at the time shown. They do **not** establish that Event Hubs, EventWorker, PostgreSQL, Redis or Azure SignalR served the data; nor do they show a successful Foundry completion or a generated live event report.
-- A supplied browser Network capture for `/api/v1/simulation/candidate/status` shows `401 Unauthorized` with `invalid_token` and audience `(null)`. At least that browser/API token configuration was not valid. Do not use the UI screenshots as proof of authenticated, end-to-end service health.
-- The repository-recorded Azure resource inventory below is dated 2026-10-19. No newer direct resource inventory is available in this update, so the resource status must be treated as unknown after that date.
+| Resource | Observed state | Application role / caveat |
+| --- | --- | --- |
+| `pm-dev-private-cae` | Azure Container Apps environment, Consumption profile | Hosts API, EventWorker, and Redis app workloads. |
+| `pm-dev-api-vnet` | Container App | API and React assets. Current readiness and active revision should be checked per release. |
+| `pm-dev-api-vnet-eventworker` | Container App resource | Event Hubs consumer host. Resource presence alone does not prove a ready replica or active consumption. |
+| `pm-dev-redis-cache` | Container App, `redis:7-alpine`, min/max replicas 1 | This is the current Redis cache. It is not Azure Managed Redis and the replica remains allocated. |
+| `pm-dev-eh` | Event Hubs Standard | Candidate event transport. |
+| `pitchmind-postgresql-dev` | Flexible Server, Burstable `Standard_B1ms` | Candidate outbox/history and canonical schema/read models. Candidate records remain non-canonical. |
+| `pmdev4iwntkatliy6sst` | Standard LRS Storage account | Blob checkpoint storage. |
+| `pm-dev-signalr` | Azure SignalR Free F1, capacity 1 | Cursor-only UI notifications; F1 quotas apply. |
+| `pitchmind-ai-resource` / `pitchmind-ai` | Azure AI / Microsoft Foundry project | Project-agent endpoint configured in the application path. Recent analyst calls returned 503. |
+| `pitchmind-ai-srch-s3d9` | Azure AI Search Serverless | Resource is present; current candidate analyst 503 does not establish Search use. |
+| `pmdev4iwntkatliy6sacr` | Azure Container Registry Basic | Container image registry. |
+| `pmdev4iwntkatliy6skv` | Azure Key Vault | Resource is present; effective secret retrieval requires separate verification. |
+| `pm-dev-logs` | Log Analytics workspace | Container Apps diagnostics. |
+| `pm-dev-4iwntkatliy6-sbus` | Service Bus Standard | Present, but not part of the current candidate live-feed path. |
+| `pm-dev-vnet`, private DNS zones/links, `pm-dev-blob-pe` | Network resources | Presence does not prove private DNS, routing, firewall, or service connectivity. |
+| Managed identities | API runtime, EventWorker, image pull, and demo/migration identities | Role assignments and effective permissions require separate verification. |
 
-## Latest deployment log — 2026-10-26
+No Azure Managed Redis instance was found in the checked resource group. A separate Foundry resource also exists in the group, but the current application setting and Bicep default name `pitchmind-ai-resource`; do not conflate resource presence with which endpoint the app calls. No VPN Gateway was present in this inventory.
 
-- The reviewed DEV what-if completed with 45 changes and matched the then-approved plan. The ARM apply then failed because the parent namespace `Microsoft.EventHub/namespaces/pm-dev-eh` was not present in `rg-pitchmind-dev-001`; creation of `candidate-match-events` therefore failed with `ParentResourceNotFound`.
-- `infra/private-dev-topology.bicep` now declares the conditional Standard namespace itself, with one throughput unit, alongside the candidate hub and consumer group. This is a source change only; it has not been applied. The next what-if will differ from the previously approved plan and must go through the existing exact-plan approval gate with an updated cost estimate.
-- The 2026-10-26 DEV screenshot shows the candidate match ID but zero persisted events. The EventWorker Container App has no ingress; without an explicit minimum, it could scale to zero and has no wake-up path. The template now pins it to one replica so its Event Hubs processor remains active. This adds always-on compute cost; successful consumption remains unverified until the new plan is reviewed/applied and worker logs show processing.
+## Implemented candidate-feed route
 
-## Adapter settings
+The current source path is:
 
-Set `Runtime:Profile=azure` and `CandidateFeed:Enabled=true` in both the API and EventWorker. The API requires:
+1. The API reads the packaged synthetic JSON source and publishes source-order candidate events to Event Hubs.
+2. EventWorker consumes the candidate hub, writes raw candidate envelopes or poison records to the PostgreSQL candidate outbox, then advances the Blob checkpoint.
+3. The API candidate-outbox dispatcher writes candidate event history, updates the Redis cursor, sends SignalR a cursor-only notification, then acknowledges the dispatch item.
+4. The UI retrieves event pages from the API. SignalR prompts refresh; it does not transport event facts.
+5. Guest access can be enabled for the DEV candidate status, event, start, and pause routes. Clear-data and other privileged operations remain protected. Guest mode is not Entra authentication.
 
-| Setting | Purpose |
-| --- | --- |
-| `ConnectionStrings:PitchMind` | Azure Flexible Server host, `pitchmind` database, and Entra database username; no password is accepted |
-| `Azure:ManagedIdentityClientId` | Optional user-assigned identity client ID; omit for system-assigned identity |
-| `EventHubs:Namespace` | Namespace host, for example `pm-dev-eh.servicebus.windows.net` |
-| `EventHubs:CandidateHubName` | Candidate source-event hub |
-| `Redis:Endpoint` | Azure Managed Redis host and TLS port, without key or URI |
-| `Realtime:AzureSignalR:Endpoint` | HTTPS endpoint ending in `.service.signalr.net` |
-| `Identity:Authority`, `Identity:Audience` | API JWT validation; both are required by the Azure profile |
-| `Storage:BlobServiceUri`, `Storage:CheckpointContainer` | Required by EventWorker for durable Event Hubs checkpoints |
-| `EventHubs:CandidateConsumerGroup` | Dedicated EventWorker consumer group |
+The candidate tables are separate from canonical football tables. The source's clock, event mapping, coordinate units/orientation, player metrics, and football realism remain unvalidated. Do not describe the stream as canonical match truth.
 
-EventWorker also retains its existing projection-outbox settings (`EventHubs:HubName`, `EventHubs:ConsumerGroup`, and projection consumer settings when enabled). Candidate ingress uses its own hub and consumer group so that candidate events are not confused with projection notifications.
+## AI Analyst status
 
-## Historical DEV inventory observed (read-only; 2026-10-18)
+The API has a direct Foundry project-agent adapter. It sends a bounded packet of persisted candidate events to one of ten allowlisted project agents and validates response shape and cited event-ID membership. The answer, if generated, is a hypothesis; the API does not persist a durable event-report ledger. In the current source, the browser's tactical-discussion helper computes illustrative text locally and is not a response from Azure AI agents.
 
-- `pm-dev-eh` is Standard with one throughput unit and public network access enabled. It now contains `match-telemetry` plus `candidate-match-events` (4 partitions, 7-day retention), with consumer group `pitchmind-candidate-worker`. No runtime identity has Event Hubs sender/receiver data roles yet.
-- `pitchmind-postgresql-dev` exists on `pm-dev-vnet` in `postgres`, Burstable `Standard_B1ms`, PostgreSQL 18. Public access is disabled. Entra auth and password auth are both enabled. No app database connection setting is present on the current API container. The application identity must be created as a PostgreSQL Entra principal and granted candidate-table access; schema migration remains a separate privileged operation.
-- `pm-dev-redis` exists as `Balanced_B0`, with a private endpoint in `private-endpoints` and public access disabled. The API container has no Redis endpoint setting. Its managed identity must be added to the Redis data-access configuration.
-- `pmdev4iwntkatliy6sst` exists for Blob Storage, but public access is disabled, the network default is `Deny`, and no Storage private endpoint was present. EventWorker cannot reach its checkpoint container until the private network path and data-plane role are configured.
-- No Azure SignalR service exists in the DEV resource group.
-- `pm-dev-api-vnet` currently runs `Runtime:Profile=local` with `Identity:DevelopmentHeaderAuthEnabled=true`. It has only an ACR-pull user-assigned identity. The private DEV template sets `Identity:DevelopmentHeaderAuthEnabled=false`, but still uses the local runtime profile and deploys only the API; it does not deploy EventWorker. The API change in this branch enables the Azure adapters only after `Runtime:Profile=azure` and `CandidateFeed:Enabled=true` are configured.
+Recent owner-supplied requests to `/api/v1/simulation/candidate/analyst/questions` returned `503 ANALYST_UNAVAILABLE`, including requests selecting `TacticalAnalyst`. Therefore live agent invocation is **not currently verified as working**, despite Foundry resources existing. The application returns an unavailable error rather than substituting a generated sample answer. The browser errors identify the downstream call failure but do not expose its upstream root cause. Check the API revision's configuration, managed identity token acquisition, role assignment to the project agent, project/agent name, and API logs correlated with the supplied request ID.
 
-## Required provisioning and release work
+## Source/configuration versus cloud evidence
 
-1. Review the new what-if for the conditional `pm-dev-eh` Standard namespace, `candidate-match-events`, and `pitchmind-candidate-worker` with a one-replica minimum; update the monthly estimate for the namespace and always-on worker, then approve only the exact plan. Grant the runtime identity Event Hubs sender/receiver data roles, and decide whether to retain public namespace access or move it behind a private endpoint and DNS.
-2. Create a Blob checkpoint container and private endpoint/DNS path for the existing storage account, then grant the EventWorker identity Blob Data Contributor at the narrowest applicable scope.
-3. Create an Azure SignalR DEV service and grant the runtime identity the SignalR App Server role.
-4. Create/map the Entra principal in PostgreSQL, apply schema version 14 with a migration identity, and grant only the candidate outbox/history/poison permissions needed by API and EventWorker. The current DbMigrator deliberately supports LOCAL only.
-5. Bind the existing Redis endpoint and add the runtime identity as a Redis data user. The new adapter uses Entra token refresh and TLS; Redis remains a rebuildable cursor cache.
-6. After the approved infrastructure release, confirm the separate non-ingress EventWorker Container App has one ready replica and its logs show candidate Event Hubs consumption, PostgreSQL staging, and checkpoint progress. The template now declares this worker and pins it to one replica; the 2026-10-18 inventory above predates that implementation and does not prove the resource is currently deployed.
-7. Configure the API's Entra authority/audience and a SPA sign-in client. The fake simulation login must not be treated as production authentication. The screenshot uses deployment `d882be18`; current `main` at `2d869500` includes `COPY data/ ./data/` so the static auth-preview asset is in newly built images. This does not itself configure real Entra sign-in.
+- **Source and Bicep:** API/EventWorker Azure profiles, Event Hubs publishing/consuming, PostgreSQL candidate persistence, Blob checkpointing, Redis cursor cache, SignalR notification, guest candidate-feed option, and Foundry project-agent invocation are implemented or declared.
+- **Azure inventory:** resources listed above were observed on 2026-10-28. The Redis app was confirmed to run `redis:7-alpine` with one minimum replica.
+- **Runtime health:** the resource inventory does not prove a full event traversed Event Hubs → EventWorker → PostgreSQL → Redis → SignalR → UI. The latest AI failure is directly evidenced by owner-supplied 503 responses. A successful live Foundry response is not available as current evidence.
+- **Cost model:** Container Apps Consumption has a shared free grant; PostgreSQL, Event Hubs Standard, ACR Basic, storage, Search, AI inference, private endpoints/DNS, and other metered services may incur charges. SignalR currently uses Free F1. See [cost assumptions](../cost/COST-ASSUMPTIONS.md).
 
-The historical 2026-10-18 inventory found the API and worker were not wired to Event Hubs in the then-deployed revision. Current source declares the Azure Event Hubs producer/consumer, Blob checkpoint client, Entra-authenticated PostgreSQL data source and Redis cache, Azure SignalR hosting, PostgreSQL read adapter registration, and EventWorker Container App. It still requires current Azure inspection, runtime identity role assignments, a reachable Blob checkpoint path and container, PostgreSQL Entra principal/schema migration, Redis data access, SignalR resource and role assignment, and a private-network end-to-end run. The latest screenshot alone cannot identify which link is active; the zero-event display is consistent with the worker having no ready replica.
+## Deployment configuration
 
-The screenshot's revision (`d882be18`) predates `2d869500`, which added `COPY data/ ./data/` to the API image. Without that copy, `/api/v1/simulation/auth-preview` returns unavailable and the UI displays its “Sign-in is not configured in this local preview” fallback instead of the sign-in page. Building a new image from current `main` fixes the missing preview asset. This page still uses simulated sign-in; DEV does not have a configured Entra SPA client or a real browser token provider, so actual authenticated DEV access remains incomplete. Do not use the deployer/publisher service principal as an end-user SPA client.
+`pipelines/azure-pipelines.yml` currently defaults `enableDevDelivery=true` and `enableCandidateFeed=true`. `infra/private-dev-topology.bicep` defaults the topology/feed off when invoked independently. Its `provisionRedis` default is false, which selects the Redis Container App; setting it true declares the optional Azure Managed Redis resource. Pipeline YAML is not proof of configured service connections or server-side approval checks. Before applying a change, review the exact what-if, image digest, cost estimate, and configured Azure DevOps gates. See [pipeline guide](../../pipelines/README.md), [deployment view](../architecture/04-deployment.md), and [infrastructure guide](../../infra/README.md).
 
-## Historical recheck on 2026-10-19
+## Checks required after a release
 
-Read-only Azure inspection still finds `pm-dev-api-vnet--0000007` on image `sha256:cb18b31ac85963f982d3805d03d76305b6787f64cd542fbe51af509c2720a15f`, with `Runtime__Profile=local`, `ASPNETCORE_ENVIRONMENT=Development`, and `Identity__DevelopmentHeaderAuthEnabled=false`. The only attached identity is the ACR-pull identity `pm-dev-api-vnet-pull`; no API/EventWorker runtime identity is configured. The resource group still has no Azure SignalR resource, no separate EventWorker Container App, and no API runtime endpoint settings for Event Hubs, PostgreSQL, Redis, or Blob checkpoints. The actual public DEV revision is therefore not running the Azure candidate-feed adapters.
-
-The application branch now has a Microsoft Entra SPA flow using MSAL browser auth, PKCE-backed interactive sign-in, short-lived bearer acquisition, a sign-in gate in Azure mode, and no persisted bearer token. The image build accepts the public tenant/client/scope identifiers; Azure DevOps must have the matching SPA redirect URI, exposed `Match.Read` API scope, and API role assignments configured in the existing Entra registration before sign-in succeeds. The DEV HTTP smoke now requires a 200 sign-in page, liveness and PostgreSQL/schema readiness, plus an authenticated candidate-status route that rejects anonymous calls with typed 401; it no longer treats `IDENTITY_UNAVAILABLE` as successful deployment evidence. CSP allows the Entra authority and Azure SignalR connections.
-
-No Azure resources or revisions were changed during this recheck. An Azure release remains blocked until the SignalR service, worker app, checkpoint path, managed-identity data-plane permissions, PostgreSQL principal/schema/grants, Azure runtime settings, and Entra SPA/API configuration are reviewed and applied through the protected DEV deployment path. The synthetic candidate source continues to be explicitly non-canonical and must not be presented as verified match truth.
-
-## Candidate-feed deployment wiring added on 2026-10-20
-
-The repository now includes the EventWorker in the application image and in the private DEV topology. The pipeline parameter `enableCandidateFeed` defaults to true within the release path. The topology sets the API Azure profile and candidate feed settings, declares the separate worker app, candidate Event Hubs sender/receiver roles, Blob checkpoint container/private endpoint, SignalR service and App Server role, Redis Entra access assignment, and a restricted `pitchmind_worker` PostgreSQL principal during schema migration. Pipeline what-if validation permits only those declared resource types and scopes. Enabling this path may create SignalR and private-network resources and change the DEV deployment; protected what-if and manual approval gates must remain in force. At the time this wiring change was recorded, no resource/image deployment by the code change was confirmed. Later browser screenshots establish a deployed UI build with candidate data visible but do not establish the backend resource chain.
-
-Before the protected main pipeline applies changes, confirm the existing Blob account, Event Hubs namespace, Managed Redis type/endpoint, PostgreSQL access, available private-endpoint subnet capacity, and current monthly cost estimate. Review the actual what-if and immutable image digest, then approve only that exact plan at the configured gates. After deployment, verify the DB migration execution, API and EventWorker health/logs, candidate status and event pages after Entra sign-in, and SignalR cursor updates. This candidate path populates separate candidate tables; it does not create canonical fixtures or make the feed canonical. The Azure path and UI have not yet been end-to-end verified against the live DEV resources.
-
-The UI includes a candidate analyst request flow and the API has an allowlisted, bounded Foundry project-agent adapter. The supplied AI Analyst screenshot shows selected source events but no generated report. A successful live Azure AI call is not evidenced. There is no durable hot-event consumer or candidate-description outbox in AgentWorker. The synthetic feed's time, coordinate, metrics and event mappings are not approved for canonical assertions. A grounded automatic hot-event path needs an explicit deterministic eligibility contract, durable work/outbox, evidence-only prompt/validation and persisted results before it can be called operational.
-
-## Current-state interpretation
-
-The Azure-only DEV design is documented in [C4 deployment](../architecture/04-deployment.md) and [Azure HLD](../architecture/06-target-azure-hld.md). The code and release template declare an Azure candidate-feed topology. 
-
-**Latest Verified Status (October 2026 certification):**
-- **Live Azure AI / Foundry Verification:** Live model invocation verified against deployed Azure AI Service `pitchmind-ai-resource` (`gpt-4.1-mini`) in `rg-pitchmind-dev-001` (location `eastus`). The adapter returned authenticated `200 OK` with latency ~1.1s and strict grounded football intelligence output (see [EP08-S02 evidence](evidence/EP08-S02-AZURE-AI-LIVE-VERIFICATION-2026-10-17.md)).
-- **Multi-Agent Deliberation & Tactical Pitch:** 10 specialized tactical agent profiles integrated into the UI (`tacticalAgentDiscussion.ts`), supporting real-time cross-agent debate, dynamic pass maps, spatial heatmaps, constraint zones, and action vectors without static image placeholders.
-- **Player Intelligence & Operations Endpoints:** Dynamic player cards, radar charts, and role execution metrics exposed via `/api/v1/players` and `/api/v1/players/{playerId}/intelligence`. Hackathon operations endpoints provide AutoRecap (`/recap`) and permissioned evidence exports (`/export`).
-- **Complete Test Certification:** Clean Release build (0 errors, 0 warnings); 534 .NET tests passed (0 failures); 159 Vitest frontend tests passed across 19 test files (0 failures); 10 Playwright E2E tests passed; Gitleaks scan passed with 0 leaks; 0 Axe WCAG 2.1 AA accessibility violations across all 7 views.
-- **Demo Contingency:** If Azure connectivity is interrupted during live judging, PitchMind automatically engages deterministic evidence fallback, citing exact persisted PostgreSQL events without stalling or displaying empty states.
+1. Confirm active API/EventWorker revisions, image digest, health, and readiness.
+2. Check managed identity assignments, PostgreSQL migration/schema/grants, and service network resolution.
+3. Start one source replay and correlate a source sequence across Event Hubs, PostgreSQL outbox/history, Blob checkpoint, Redis cursor, SignalR notification, and UI page response.
+4. Test clear/restart and pause/resume from the UI/API.
+5. Invoke a project agent and retain the upstream response status/request ID plus API correlation ID; do not call it fixed until a successful answer is received and validated.

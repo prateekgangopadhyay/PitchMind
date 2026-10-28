@@ -3,7 +3,7 @@
 **Football truth invariants:** Position ≠ Role; Formation ≠ Shape; Event ≠ Tactical Mechanism; Sequence ≠ Causation; possession ≠ territory; a detector never guesses unobserved speed/pressure.
 **Candidate feed status:** owner-supplied JSON is present with 2,199 event records and event-level player positions (see [source profile](../data/MANU-LIV-SOURCE-PROFILE.md)). The owner confirmed synthetic provenance and redistribution permission. No source-specific canonical importer/admission policy exists; clock, coordinates, player metrics, event mappings and football realism remain unverified.
 
-**DEV hosting boundary:** Azure Container Apps, Azure Event Hubs, Azure Database for PostgreSQL Flexible Server, Azure Blob Storage checkpoints, Azure Managed Redis, Azure SignalR, Microsoft Entra ID, and Microsoft Foundry are the Azure services in the DEV implementation design. These service names describe the code and guarded deployment template; see [Azure DEV integration evidence](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) before treating a runtime connection as verified. Local Docker services are not part of DEV.
+**DEV hosting boundary:** Azure Container Apps, Azure Event Hubs, Azure Database for PostgreSQL Flexible Server, Azure Blob Storage checkpoints, Azure SignalR, Microsoft Entra ID, and Microsoft Foundry are present in the DEV implementation/inventory. The current Redis runtime is a Redis 7 container app, not Azure Managed Redis. Service presence does not prove data-plane connectivity; see [Azure DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md). Local Docker services are not part of DEV.
 
 ## Current implementation versus this target LLD
 

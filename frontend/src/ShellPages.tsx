@@ -167,9 +167,58 @@ export function WelcomePage() {
   return <section className="content-page welcome-screen-root">
     <div className="welcome-split-layout">
       <div className="welcome-left-col">
-        <h1 className="welcome-hero-headline">Football intelligence, grounded in evidence.</h1>
-        <p>Choose a match to explore the data available from its connected feed.</p>
-        <a className="primary-link" href="/home">Browse available matches</a>
+        <div className="welcome-hero-copy">
+          <p className="welcome-hero-eyebrow"><span aria-hidden="true" />Synthetic EPL intelligence view</p>
+          <h1 className="welcome-hero-headline">
+            <span>Understand the</span>
+            <span className="text-emerald">Premier League</span>
+            <span>beyond the scoreline.</span>
+          </h1>
+          <p className="welcome-hero-subhead">Evidence-grounded football intelligence. Tactical insights. Explainable AI. A deeper understanding of the game.</p>
+        </div>
+
+        <div className="welcome-visual-card">
+          <div className="welcome-visual-heading">
+            <span><i aria-hidden="true" />Match intelligence</span>
+            <small>Illustrative interface preview</small>
+          </div>
+          <div className="welcome-tactical-visual" role="img" aria-label="Illustrative football pitch with abstract tactical movement paths">
+            <svg viewBox="0 0 960 280" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <defs>
+                <linearGradient id="welcome-pitch" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#0a412f" /><stop offset="1" stopColor="#062a22" />
+                </linearGradient>
+                <linearGradient id="welcome-glow" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stopColor="#26e9a5" stopOpacity="0" /><stop offset=".48" stopColor="#26e9a5" stopOpacity=".8" /><stop offset="1" stopColor="#26e9a5" stopOpacity="0" />
+                </linearGradient>
+                <filter id="welcome-soft-glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+              </defs>
+              <rect width="960" height="280" fill="url(#welcome-pitch)" />
+              <path d="M0 0h120v280H0zm240 0h120v280H240zm240 0h120v280H480zm240 0h120v280H720z" fill="#ffffff" opacity=".025" />
+              <g fill="none" stroke="#d5f7e8" strokeOpacity=".45" strokeWidth="2">
+                <rect x="20" y="18" width="920" height="244" rx="2" /><path d="M480 18v244M20 78h138v120H20m0-90h48v60H20m782-90h138v120H802m90-90h48v60h-48" />
+                <circle cx="480" cy="140" r="54" /><circle cx="480" cy="140" r="2.5" fill="#d5f7e8" />
+              </g>
+              <g fill="none" stroke="url(#welcome-glow)" strokeWidth="3" strokeDasharray="8 9" filter="url(#welcome-soft-glow)">
+                <path d="M110 205C225 193 247 117 355 133S510 195 604 111 753 74 850 110" />
+                <path d="M155 76C270 92 304 199 420 182S568 71 676 105 794 197 888 174" />
+              </g>
+              <g stroke="#e9fff6" strokeWidth="3">
+                <g fill="#31e7aa"><circle cx="110" cy="205" r="8"/><circle cx="263" cy="153" r="8"/><circle cx="420" cy="182" r="8"/><circle cx="604" cy="111" r="8"/><circle cx="850" cy="110" r="8"/></g>
+                <g fill="#69aaff"><circle cx="155" cy="76" r="8"/><circle cx="304" cy="199" r="8"/><circle cx="510" cy="112" r="8"/><circle cx="676" cy="105" r="8"/><circle cx="888" cy="174" r="8"/></g>
+              </g>
+              <rect x="86" y="231" width="788" height="2" fill="#35e9ac" opacity=".5" />
+            </svg>
+            <div className="welcome-visual-caption"><span>Read the shape of the game</span><span>Connect events to context</span></div>
+          </div>
+        </div>
+
+        <div className="welcome-features-row" aria-label="PitchMind capabilities">
+          <div className="wfeat-card"><span className="wfeat-icon" aria-hidden="true">◒</span><div><strong>Live match intelligence</strong><p>Follow match moments and context.</p></div></div>
+          <div className="wfeat-card"><span className="wfeat-icon" aria-hidden="true">⌁</span><div><strong>Tactical insights</strong><p>Explore how teams create advantages.</p></div></div>
+          <div className="wfeat-card"><span className="wfeat-icon" aria-hidden="true">◎</span><div><strong>Explainable analysis</strong><p>Keep observations connected to evidence.</p></div></div>
+          <div className="wfeat-card"><span className="wfeat-icon" aria-hidden="true">◇</span><div><strong>Built for football</strong><p>Match views for clubs and analysts.</p></div></div>
+        </div>
       </div>
       <div className="welcome-right-col">
         <div className="welcome-auth-card">

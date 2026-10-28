@@ -14,7 +14,7 @@ flowchart LR
   Worker -->|"durable stage then checkpoint"| Blob[("Azure Blob checkpoint container")]
   PGOutbox --> Dispatch["API CandidateOutboxDispatchWorker"]
   Dispatch --> PGHistory[("Azure Database for PostgreSQL — candidate history")]
-  Dispatch -->|"rebuildable cursor"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"rebuildable cursor"| Redis["Redis container app on Azure Container Apps"]
   Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
   PGHistory -->|"ordered event pages"| API
   SignalR -. "wake-up hint; no match facts" .-> Browser
@@ -93,7 +93,7 @@ flowchart LR
   Outbox --> Dispatcher["Independent at-least-once outbox fan-out"]
   Dispatcher --> CacheWriter["Revision-guarded Redis projection writer"]
   Dispatcher --> CursorPublisher["Cursor-only realtime publisher"]
-  CacheWriter --> Redis["Azure Managed Redis (rebuildable)"]
+  CacheWriter --> Redis["Azure Managed Redis (optional target; not current DEV Redis)"]
   CursorPublisher --> AzureSignal
   AzureSignal -->|match / revision / sequence cursor only| Web
   Web -->|snapshot and backfill reads| BFF
@@ -113,7 +113,7 @@ flowchart LR
 
 **Non-negotiable contract:** Event Hubs is the first durable cloud ingress for source-bound simulation events, but ingress envelopes remain candidates until validated and admitted. The EventWorker validates ordering/idempotency and commits each canonical event, projection revision, and PostgreSQL outbox intent in one transaction; it checkpoints Event Hubs only after that commit (or durable quarantine). The outbox is downstream of canonical commit, not a pre-database write. Independent, idempotent outbox consumers update revision-guarded cache entries and publish SignalR cursors after commit; cache failure cannot block or replace canonical truth. SignalR carries only match/revision/sequence cursors, and the UI fetches canonical snapshots/backfill through the BFF. Service Bus is asynchronous command transport, not an event-ledger replacement. Redis, Search and Data Explorer are rebuildable projections. Foundry may suggest words but cannot change score, event IDs or detector evidence. The BFF enforces selected-time and authorization on every read.
 
-**Observed code versus target:** the Azure candidate path is implemented as an opt-in raw candidate feed: the API publishes source-order envelopes to Event Hubs, the EventWorker records them to candidate staging/history in PostgreSQL, and the API's outbox dispatcher updates Redis and sends cursor-only SignalR notifications. This candidate path does not admit canonical football facts. The Azure `EventWorker` also leases committed PostgreSQL outbox rows and publishes `ProjectionPublishedV1` to Event Hubs; its opt-in consumer persists an inbox/snapshot and advances a Blob checkpoint. Azure source-ingress, managed Redis, Entra PostgreSQL, and Azure SignalR adapters exist in code but are not configured or cloud-verified in DEV. `SimulationStreamerService` retains a separate in-process demo projection path; it is not proof of Event Hubs ingress. Canonical source-envelope admission and mapping remain blocked on candidate-feed semantics and domain validation.
+**Current-state evidence:** source/configuration implements the Azure candidate path: API publishes ordered raw envelopes to Event Hubs; EventWorker stages an envelope or poison record in PostgreSQL before advancing its Blob checkpoint; the API dispatcher writes candidate history and updates the cursor cache before sending cursor-only SignalR notifications. This path does not admit canonical football facts. Azure resource inventory observed on 2026-10-28 includes the Event Hubs namespace, PostgreSQL server, checkpoint storage, SignalR F1 resource, and Redis Container App. The Redis app uses `redis:7-alpine` and has `minReplicas: 1`; it is not Azure Managed Redis. These inventory facts do not prove that every connection, identity grant, migration, or event-processing step is healthy. The candidate analyst API is implemented, but recent DEV requests returned `503 ANALYST_UNAVAILABLE`. The UI's local tactical discussion helper is computed client-side and is not a Foundry agent response. The canonical source-envelope admission/mapping path remains target work pending feed semantics and domain validation.
 
 **Environment mapping:** LOCAL Docker PostgreSQL + local event/AI adapters through ports; Azure DEV/STAGE/PROD managed services only. Source JSON units, rights and sparse frame quality require review before pressure/xT/xG or player performance claims.
 

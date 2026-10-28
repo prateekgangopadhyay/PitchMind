@@ -14,19 +14,19 @@ flowchart LR
   Worker -->|"checkpoint state"| Blob[("Azure Blob Storage")]
   CandidateOutbox --> Dispatch["API CandidateOutboxDispatchWorker"]
   Dispatch -->|"event history"| CandidateHistory[("Azure PostgreSQL candidate_feed_events")]
-  Dispatch -->|"latest cursor"| Redis[("Azure Managed Redis")]
+  Dispatch -->|"latest cursor"| Redis["Redis container app on Azure Container Apps"]
   Dispatch -->|"cursor only"| SignalR["Azure SignalR Service"]
   CandidateHistory --> API["Candidate page API"]
   API --> UI["React Match / AI Analyst views"]
   SignalR -. "refresh hint; no facts" .-> UI
   UI -->|"bounded match-scoped request"| Analyst["Candidate analyst API"]
   Analyst -->|"selected persisted evidence"| CandidateHistory
-  Analyst -->|"live gpt-4.1-mini verified"| Foundry["Azure AI pitchmind-ai-resource (gpt-4.1-mini)"]
+  Analyst -->|"bounded project-agent request"| Foundry["Microsoft Foundry project agent"]
   API --> PlayerIntel["PlayerIntelligenceEndpoints / Service"]
   API --> HackOps["HackathonOperationsEndpoints (Recap, Export, Search)"]
 ```
 
-All infrastructure shown for the DEV runtime is Azure-managed. The Candidate Simulation Service, outbox dispatcher, Player Intelligence Service, and Hackathon Operations Endpoints are application components hosted by the API container; EventWorker is a separate Container App. Azure AI integration is verified live against `pitchmind-ai-resource` running `gpt-4.1-mini` in `rg-pitchmind-dev-001`. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [EP08-S02 evidence](../engineering/evidence/EP08-S02-AZURE-AI-LIVE-VERIFICATION-2026-10-17.md).
+The Candidate Simulation Service, outbox dispatcher, Player Intelligence Service, and Hackathon Operations Endpoints are application components hosted by the API container; EventWorker is a separate Container App. The Azure inventory includes Foundry resources, but recent user-reported candidate analyst requests returned `503 ANALYST_UNAVAILABLE`; this document does not claim a current successful call. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
 ## Candidate-live adapters — raw source events, non-canonical
 
@@ -70,14 +70,11 @@ sequenceDiagram
   API-->>UI: hypothesis + source hash + limitations
 ```
 
-The API validates the request and limits its context to at most 12 persisted source events and 32 KiB. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response's claims must cite event IDs present in the supplied packet; the answer is labeled `hypothesis` and is not persisted as a canonical insight. The AI Analyst UI polls the candidate cursor, displays real-time multi-agent deliberations (`tacticalAgentDiscussion.ts`), and can request reports for newly observed notable event types (`Goal`, `Shot`, `RedCard`, etc.). User questions use the selected match and source-clock boundary. Azure AI integration is live-verified against deployed `pitchmind-ai-resource` (`gpt-4.1-mini`) in `rg-pitchmind-dev-001`, enforcing audience mode rules (fan vs analyst) and falling back deterministically if connectivity is interrupted.
+The API validates the request and supplies at most eight persisted source events (bounded by a 32 KiB context) at or before the selected source-clock value. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response must cite event IDs in the supplied packet; it is labeled `hypothesis` and is not persisted as a canonical insight. The AI Analyst UI can request a report for a newly observed notable event and accept user questions. Such reports are held in page state, not a durable report ledger. `tacticalAgentDiscussion.ts` computes illustrative discussion text in the browser; it is not multi-agent deliberation and is not an Azure AI response. The server-side project-agent call uses managed identity in the Azure profile, but recent DEV calls returned 503 and a successful live response is not currently verified. The API does not substitute deterministic text for an unavailable candidate analyst response.
 
 ## Player intelligence and dynamic visual services
 
-`PlayerIntelligenceEndpoints` exposes:
-- `/api/v1/players`: Aggregated roster with tactical roles and metrics computed from `manchester-united-liverpool-players.json`.
-- `/api/v1/players/{playerId}/intelligence`: Individual player intelligence including tactical radar attributes, role descriptions, spatial heat index, and key match contributions.
-- Dynamic frontend visuals in `DynamicTacticalVisuals.tsx` dynamically compute pass vectors, pressure collapse zones, constraint areas, and spatial heatmaps directly on HTML5 Canvas/SVG, without static placeholders.
+`PlayerIntelligenceEndpoints` exposes roster and player-intelligence API routes. The service contains computed match-derived fields as well as explicit fallback/default values; these endpoints should not be described as exclusively live-feed-derived. The frontend's pitch and visual components render returned match context, while any local tactical discussion helper remains illustrative. See the API contract and current source before treating a displayed metric as validated football analysis.
 
 ## Canonical BFF and PostgreSQL readers
 
@@ -99,7 +96,7 @@ The API hosts `/hubs/matches` for enabled local realtime or Azure candidate-feed
 
 ## AgentWorker and tactical intelligence
 
-`PitchMind.AgentWorker` contains the Foundry explanation adapter, bounded tactical knowledge retrieval, and 10 specialist agent profiles (`tactical-agents.v1.json`). The web client exposes this in the AI Analyst view through a multi-agent deliberation room where specialists debate tactical implications of notable match events in real-time.
+`PitchMind.AgentWorker` contains Foundry-related explanation and knowledge-retrieval components and the specialist profiles in `tactical-agents.v1.json`. The candidate analyst HTTP path is currently hosted by the API and calls a selected allowlisted project agent. `PitchMind.AgentWorker` is not a live multi-agent deliberation service for the current UI. Project configuration, agent invocation, and successful response are separate checks.
 
 ## Canonical versus candidate persistence
 

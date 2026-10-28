@@ -1,13 +1,24 @@
-# PitchMind infrastructure (Bicep)
+# PitchMind Azure infrastructure
 
-M03 adds a DEV-only network and RBAC Key Vault baseline and tightens storage security. It does **not** deploy resources automatically.
+The Bicep files describe deployment options; they do not prove a resource exists, a pipeline applied it, or the app can reach it. Current DEV inventory and runtime limitations are recorded in [Azure DEV integration status](../docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
-Run `az bicep build --file infra/main.bicep`, then `az bicep build-params --file infra/environments/dev.bicepparam`. Use `./scripts/azure-dev-whatif.sh --resource-group <existing-dev-resource-group>` to preview changes. See [M03 runbook](../docs/engineering/M03-AZURE-DEV.md) for security exceptions, environment isolation, acceptance gates, and deployment prerequisites.
+## Templates
 
-The versioned [EP02-S01 resource dependency contract](resource-dependency-contract.json) records repository declarations, current access disposition, required consumers, and unverified reachability. Validate it locally with `python3 scripts/validate_iac_dependency_contract.py`; the validator only reads repository files and makes no Azure calls. A successful check does not establish deployment, resource existence, network reachability, or story acceptance.
+- `main.bicep`, `canonical-dev-topology.bicep`, and `demo-dev.bicep` describe other canonical or demo topologies. Check each template's scope, parameters, and defaults before using it.
+- `private-dev-topology.bicep` is the guarded DEV release topology. `deployPrivateDevTopology` and `enableCandidateFeed` default to false in the module; the pipeline can pass true after its gates.
+- The topology targets `pm-dev-vnet`, adds/uses a delegated Container Apps subnet, and references the existing `private-endpoints` subnet. It can reuse the existing PostgreSQL server by default.
+- `provisionRedis=false` (default) declares the Redis Container App `pm-dev-redis-cache`. `provisionRedis=true` instead opts into an Azure Managed Redis instance and private endpoint. Current DEV inventory reports the Container App, not Azure Managed Redis.
+- Candidate feed resources include Event Hubs, a candidate hub and consumer group, Blob checkpoint storage, SignalR, app/worker identities and scoped role assignments. Template declarations do not establish successful data-plane access.
 
-## Explicit offline DEV prototype
+## Validate and release
 
-`demo-dev.bicep` deploys the bounded synthetic demonstration into an existing ACA environment/ACR using a managed identity and immutable image digest. This is separate from target canonical Azure integration and cannot satisfy PostgreSQL/Event Hubs/Foundry release gates. See [delivery gaps](../docs/engineering/AZURE-DELIVERY-GAPS.md) and [story register](../docs/backlog/STORY-EXECUTION.md).
+Build the relevant Bicep file and parameter files with Azure CLI/Bicep. Use `scripts/validate_iac_dependency_contract.py` to check the repository resource-dependency contract. Neither static check calls Azure nor verifies cloud connectivity.
 
-`private-dev-topology.bicep` is invoked only by the guarded Azure DevOps release path. The separate `enableDevDelivery` parameter defaults to `false`; inside that opt-in path `enableCandidateFeed` defaults to `true`, while the Bicep module itself defaults it to `false` unless the pipeline passes the value. The topology targets the existing `pm-dev-vnet`, adds a separate delegated ACA subnet and environment, and keeps the existing `private-endpoints` subnet untouched. PostgreSQL Flexible Server (Entra-only/private) and Azure Managed Redis named `pm-dev-redis` (private endpoint, TLS 1.2, public access disabled) can be reused or provisioned under explicit parameters. The pipeline requires a reviewed free ACA CIDR, cost estimate, exact what-if, owner approval, and a protected `pitchmind-dev` Environment before apply. Static Bicep compilation is validation evidence only. With candidate feed enabled, the template declares API/EventWorker settings and identities/roles for Event Hubs, Blob checkpointing, PostgreSQL, Redis, SignalR and Foundry. Those declarations are not proof of successful deployment, identity grants, network access, migration, or an end-to-end runtime. Do not deploy without the protected approval gates.
+The Azure DevOps pipeline currently defaults `enableDevDelivery=true` and `enableCandidateFeed=true`. A DEV change requires the configured service connections, exact what-if review, cost estimate, immutable image digest, and deployment Environment checks. Confirm those controls in Azure DevOps; they cannot be inferred from this repository. Follow [the pipeline guide](../pipelines/README.md) and [M03 runbook](../docs/engineering/M03-AZURE-DEV.md).
+
+## Current deployment notes
+
+- DEV uses Azure services; LOCAL uses separate Docker adapters.
+- Current DEV Redis is a Redis container app on the Container Apps Consumption environment, with one minimum replica. This differs from the optional Managed Redis Bicep path.
+- PostgreSQL Flexible Server, Event Hubs Standard, SignalR F1, Foundry, and other metered resources may incur charges. Review actual Azure Cost Management data before approval.
+- Keep migrations on a separate privileged identity; runtime identities should receive only scoped data-plane roles.

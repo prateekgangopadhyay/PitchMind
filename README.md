@@ -1,93 +1,67 @@
 # PitchMind
 
-**Evidence-first football intelligence for exploring a match as it unfolds.** PitchMind brings match events, player positions, replay and tactical questions into one workspace. Its demo uses an owner-approved synthetic Manchester United–Liverpool feed; candidate data is clearly distinguished from verified, canonical match facts.
+PitchMind is an evidence-first football match demo. It replays a synthetic Manchester United–Liverpool event feed, shows source events and player positions, and provides a match-scoped AI analyst interface. The feed is a candidate source: its clock, event meanings, coordinates, and football realism have not been validated as canonical match facts.
 
-## Application Demo [YouTube](https://youtu.be/lDAyClR8QUM)
-https://youtu.be/lDAyClR8QUM
+## Demo experience
 
-## Hackathon demo
+- **Home and Match:** select the demo match, follow its score and event timeline, pause/resume replay, and inspect source player positions on the pitch.
+- **Teams and Players:** browse match-related team and player views exposed by the API. Values derived from the candidate feed inherit its unverified status.
+- **Insights:** inspect evidence-backed data when the selected match has canonical records; unavailable canonical data is not replaced with a synthetic canonical fixture.
+- **AI Analyst:** ask a match-scoped question using persisted source events and choose one of the project's configured agents. Responses, when available, are hypotheses and not verified match facts. Recent DEV analyst requests have returned `503 ANALYST_UNAVAILABLE`; a successful live response is not currently claimed.
 
-1. **Match Workspace & Replay (`/matches/{matchId}`):** Follow real-time match events, live pitch with player positions and directional vectors, and scrub through match history with the interactive Top Match Scoreboard and slider.
-2. **Tactical Insights (`/insights`):** Inspect progressive tactical sequence disclosures, pressing traps, possession transitions, and corridor overloads with full evidence lineage.
-3. **AI Tactical Analyst (`/analyst`):** Step into the multi-agent deliberation room where 10 specialized tactical agents deliberate on key match events in real-time. View dynamic tactical pitch overlays with action vectors, constraint zones, pressure collapse, dynamic pass map thumbnails, and spatial heatmaps.
-4. **Player Intelligence Dashboard (`/players`):** Explore dynamic player cards with verified headshots, radar attribute charts, tactical role summaries, and positional heatmaps.
-5. **Team Formations (`/teams`):** Inspect team-level tactical structures and starting lineups.
-6. **Entra Security & Portal (`/login`):** Microsoft Entra ID enterprise authentication with offline evaluation fallback.
+The UI's locally computed tactical discussion helpers are illustrative client-side analysis, not responses from Azure AI agents. The server-side candidate analyst endpoint is the Foundry integration boundary.
 
-**What to look for:** Synchronized clock and timeline, dynamic tactical overlays (without static image placeholders), live multi-agent deliberation, deterministic evidence replay, and strict separation between observed source events and evidence-grounded hypotheses.
+## Azure DEV architecture
 
-## Azure architecture
-
-The DEV target runs on Azure services. Local development has a separate Docker-based topology.
+The current DEV candidate-feed path is distinct from the proposed canonical football-ingestion target.
 
 ```mermaid
 flowchart LR
-  Browser[React web app] -->|HTTPS / Entra token| API["ASP.NET Core API<br/>Azure Container Apps"]
-  Entra[Microsoft Entra ID] -. sign-in .-> Browser
-  API -->|candidate events| EH[Azure Event Hubs]
-  EH --> Worker["EventWorker<br/>Azure Container Apps"]
-  Worker -->|durable stage| PG[(Azure Database for PostgreSQL)]
-  Worker --> Blob[(Azure Blob checkpoint)]
-  PG --> Dispatcher[Candidate outbox dispatcher]
-  Dispatcher --> PG
-  Dispatcher --> Redis[(Azure Managed Redis)]
-  Dispatcher --> SignalR[Azure SignalR Service]
-  SignalR -. cursor notification .-> Browser
-  Browser -->|match pages / selected-time evidence| API
-  API -. bounded explanation request .-> Foundry["Microsoft Foundry / Azure AI<br/>pitchmind-ai-resource (gpt-4.1-mini)"]
+  Browser[React UI] -->|HTTPS; Entra or DEV guest candidate access| API[PitchMind API on Azure Container Apps]
+  Source[Packaged synthetic candidate JSON] --> API
+  API -->|source-order events| EH[Azure Event Hubs]
+  EH --> Worker[EventWorker on Azure Container Apps]
+  Worker -->|raw envelope / poison record| PG[(Azure Database for PostgreSQL)]
+  Worker -->|consumer checkpoint| Blob[(Azure Blob Storage)]
+  PG --> Dispatcher[API candidate outbox dispatcher]
+  Dispatcher -->|candidate history| PG
+  Dispatcher -->|cursor cache| Redis[Redis container app on Azure Container Apps]
+  Dispatcher -->|cursor-only notification| SignalR[Azure SignalR Free F1]
+  SignalR -. refresh hint .-> Browser
+  Browser -->|event pages and match-scoped requests| API
+  API -. bounded evidence request .-> Foundry[Microsoft Foundry project agent]
 ```
 
-**Flow:** the API-hosted simulation publishes source-order events to Event Hubs. The EventWorker stages raw candidate records in PostgreSQL before advancing its Blob checkpoint. The API dispatcher persists candidate history, refreshes the Redis cursor and sends cursor-only SignalR notifications (with automatic client fallback polling). The UI obtains match facts and event pages from the API; SignalR prompts a refresh and does not carry facts. PostgreSQL is the canonical store for admitted football data; candidate records remain isolated.
+The UI reads event pages from the API; SignalR carries a refresh cursor rather than match facts. PostgreSQL candidate tables hold persisted source records. Redis is a rebuildable cursor cache. Candidate records are separate from canonical match tables. Service Bus is provisioned in DEV but is not part of this candidate live-feed path. Azure Managed Redis is an optional infrastructure parameter, not the Redis service currently reported by the deployed DEV inventory.
 
-## AI and data boundaries
+### DEV services and cost notes
 
-- Microsoft Foundry / Azure AI agents explain bounded match evidence. They never create or alter canonical football facts.
-- The project implements 10 specialized tactical agent profiles: `TacticalAnalyst`, `HighPressAnalyst`, `DefensiveStructureAnalyst`, `TransitionStrategist`, `SetPieceStrategist`, `MatchStateStrategist`, `GoalkeeperAnalyst`, `ChanceCreationAnalyst`, `PositionalPlayArchitect`, and `CoachFrameworkAnalyst`.
-- Live Azure AI verification is complete: tested and verified against deployed Azure AI service `pitchmind-ai-resource` running `gpt-4.1-mini` in `rg-pitchmind-dev-001` with fan/analyst audience mode enforcement and deterministic evidence-citation fallback.
-- Multi-agent deliberation is integrated in the web application (`tacticalAgentDiscussion.ts` & `MatchContextPages.tsx`) with dynamic visual computation of pass vectors, heatmaps, and constraint zones.
+DEV currently includes Azure Container Apps, Azure Event Hubs Standard, Azure Database for PostgreSQL Flexible Server, Blob Storage, a Redis container app, Azure SignalR Free F1, Microsoft Foundry, Azure AI Search Serverless, Azure Container Registry Basic, Key Vault, Log Analytics, Service Bus Standard, VNet/private DNS, and managed identities. Free allowances are limited and shared or usage-dependent; PostgreSQL, Event Hubs, registry, storage, AI inference/search, private endpoints, and other metered services can incur charges. See [DEV runtime and current inventory](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) and [cost assumptions](docs/cost/COST-ASSUMPTIONS.md). Inventory is not a bill or a guarantee that every integration is healthy.
 
-## Current status at a glance
+## Local development
 
-| Area | Status |
-| --- | --- |
-| 7-Screen Web Experience | Fully implemented and verified: Home, Match Live, Insights, Teams, Players, AI Analyst, and Login. 0 Axe WCAG 2.1 AA accessibility violations across 1440px desktop and 320px mobile. |
-| Pitch & Dynamic Visuals | Fully implemented: interactive pitch canvas, dynamic pass map thumbnails, spatial heatmap generation, action vectors, constraint zones, and pressure collapse diagrams. |
-| Ingestion & Streaming Pipeline | Event Hubs → EventWorker → PostgreSQL outbox → Redis cursor → SignalR live notifications (with fallback polling) implemented and tested. |
-| Authentication & Identity | Microsoft Entra ID authentication with PKCE token acquisition and safe offline demo evaluation fallback. |
-| AI Analyst & Multi-Agent Deliberation | Verified live against Azure AI service `pitchmind-ai-resource` (`gpt-4.1-mini`). Multi-agent discussion room and deterministic evidence fallback verified. |
-| Automated Test Certification | 534 .NET tests passed (0 failures); 159 frontend Vitest tests passed (0 failures); 10 Playwright E2E tests passed; Gitleaks secret scan 0 leaks. |
-
-## Run locally
-
-See the [local infrastructure guide](docker/README.md) for setup and troubleshooting. Start the processes in separate terminals:
+LOCAL uses Docker PostgreSQL, Redis, and Kafka plus local API, EventWorker, and frontend processes. DEV, STAGE, and PROD use Azure profiles. See [local setup](docs/engineering/M02-LOCAL-DEVELOPMENT.md).
 
 ```bash
-# Terminal 1: Docker dependencies and schema (LOCAL only)
 ./scripts/dev-up.sh
 ./scripts/dev-migrate.py
-
-# Terminal 2
 ./scripts/start-local-api.sh
-
-# Terminal 3
 ./scripts/start-local-eventworker.sh
-
-# Terminal 4
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-Open the URL printed by Vite. LOCAL uses Docker PostgreSQL, Redis and Kafka. DEV, STAGE and PRODUCTION are Azure-only.
+Run each long-lived command in a separate terminal. Open the Vite URL it prints.
 
-## CI/CD and deployment safety
+## Technical documentation
 
-Azure DevOps builds and tests the application, produces an immutable image and validates Bicep. DEV delivery is gated by a reviewed what-if plan and protected approvals. Pipeline configuration does not mean a release has completed. Do not apply infrastructure or deploy a DEV revision without approval for the exact reviewed changes.
-
-## Project guide
-
-- [Azure architecture and C4 views](docs/architecture/README.md)
-- [Azure DEV implementation and evidence](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md)
+- [C4 architecture and Azure HLD/LLD](docs/architecture/README.md)
+- [Current Azure DEV inventory and integration status](docs/engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md)
 - [API contract](docs/api/API.md)
-- [Candidate feed profile and validation limits](docs/data/MANU-LIV-SOURCE-PROFILE.md)
-- [Local development guide](docs/engineering/M02-LOCAL-DEVELOPMENT.md)
-- [CI/CD pipeline guide](pipelines/README.md)
-- [Hackathon MVP stories](docs/backlog/HACKATHON-MVP-EPICS.md)
+- [Candidate feed contract and source profile](docs/data/SIMULATION-FEED-CONTRACT.md)
+- [Azure DevOps pipeline](pipelines/README.md)
+- [Infrastructure](infra/README.md)
+- [Cost assumptions](docs/cost/COST-ASSUMPTIONS.md)
+
+## CI/CD
+
+Azure DevOps is the configured CI/CD orchestrator and uses a self-hosted agent in the `Default` pool. `enableDevDelivery` currently defaults to `true` in YAML, but delivery remains subject to service-connection availability, the reviewed infrastructure plan, and Azure DevOps environment approvals. A successful validation run alone does not prove a deployment occurred. See [pipeline setup and gates](pipelines/README.md).

@@ -1,43 +1,39 @@
 # M03 — Azure DEV runtime and delivery
 
-**Purpose:** describe the Azure-only DEV runtime defined by the application and guarded release path. This is not an Azure resource inventory or deployment approval. For the latest evidence, see [Azure DEV live integration status](AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+This document describes the current Azure DEV candidate-feed runtime. It is not a deployment approval or a guarantee of runtime health. The most recent resource inventory is in [Azure DEV integration status](AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
 ## Runtime topology
 
-DEV uses Azure services only. The API and React static assets run in Azure Container Apps; a separate EventWorker Container App consumes Azure Event Hubs. PostgreSQL Flexible Server stores candidate outbox/history and canonical schemas. Azure Blob Storage holds Event Hubs processor checkpoints; Azure Managed Redis stores rebuildable candidate cursors; Azure SignalR sends cursor-only notifications. Microsoft Entra ID handles user tokens and workload identity. The candidate AI Analyst API can call an allowlisted agent in the existing Microsoft Foundry project with bounded selected-match source evidence.
+The API and React static assets run in Azure Container Apps. The API publishes packaged synthetic candidate source records to Azure Event Hubs; a separate EventWorker Container App stages raw envelopes or poison records in PostgreSQL before advancing a Blob checkpoint. The API candidate outbox dispatcher writes candidate history, updates a Redis cursor, and sends a cursor-only SignalR notification. The UI reads event pages from the API. Candidate records are not admitted into canonical match tables.
 
-The candidate feed is read from `data/simulations/manu-liv-match-dataset.json` packaged in the application image and published in source order to Event Hubs. EventWorker stages each raw envelope or poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. The API dispatcher persists candidate event history and updates the Redis cursor; SignalR carries a cursor hint, and the UI retrieves facts from API event pages. Candidate records are not canonical match facts. The candidate analyst response is a hypothesis; the code does not establish an automatic durable hot-event reporting workflow.
+The current Redis deployment is `pm-dev-redis-cache`, a Container App running `redis:7-alpine` with minimum and maximum replica count 1. It is not Azure Managed Redis. The Bicep topology has an optional managed Redis provisioning path, controlled by `provisionRedis` (default false); enabling it changes the service and cost model.
 
-## Azure resources and identity boundaries
+Microsoft Entra ID supports signed-in access. The DEV deployment can enable guest access for the candidate match status, event, start, and pause routes. Guest mode does not authenticate a user and is restricted to the synthetic candidate feed. Clear-data and privileged routes remain role-protected. The Foundry candidate analyst call has a server-side adapter but recent DEV requests returned `503 ANALYST_UNAVAILABLE`; a current successful AI response is not verified. Browser-computed tactical discussion text is illustrative, not Foundry output.
 
-`infra/private-dev-topology.bicep` declares the guarded private DEV topology and conditional candidate-feed components. Depending on parameters and existing resource IDs, the path can configure/reuse PostgreSQL Flexible Server and Azure Managed Redis, and declares Azure Container Apps, a Standard Event Hubs namespace with one throughput unit, the candidate event hub and consumer group, a Blob checkpoint container/private endpoint, Azure SignalR, managed identities and scoped role assignments. The candidate hub is separate from projection telemetry. The API and worker receive `Runtime:Profile=azure`; the Bicep module itself defaults candidate provisioning off, while the release template parameter defaults it on inside the separately gated release path.
+## Resource and identity boundaries
 
-- API identity: Event Hubs sender, PostgreSQL candidate/read access, Redis data access, Azure SignalR server access, and Foundry project-agent invocation as declared by the template.
-- EventWorker identity: Event Hubs receiver, Blob checkpoint access, and restricted PostgreSQL candidate-outbox access.
-- Migration identity: applies schema changes separately from runtime principals. Runtime identities must not own schema objects.
-- Browser identity: Entra access token validated by API issuer, audience, expiry and role policy. A service connection is not a user identity and never belongs in browser configuration.
+The checked DEV inventory includes Azure Container Apps, Event Hubs Standard, PostgreSQL Flexible Server, Blob Storage, the Redis Container App, SignalR Free F1, Foundry, AI Search Serverless, ACR Basic, Key Vault, Log Analytics, Service Bus Standard, VNet/private DNS, and managed identities. See the [dated inventory](AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for names and caveats. Service Bus, AI Search, and AgentWorker capabilities exist in the wider architecture but are not the candidate event-processing path.
 
-Role assignment declarations do not prove that the principal has the effective role or can reach the resource. Validate VNet/subnet delegation, private endpoints, private DNS, routing, service firewall, identity object IDs, PostgreSQL principal/grants, Redis access policy, SignalR endpoint and Foundry role before claiming runtime readiness.
+The topology uses separate runtime, EventWorker, image-pull, and migration identities. Bicep role-assignment declarations are not proof of effective permissions. Verify Event Hubs producer/consumer roles, Blob checkpoint access, PostgreSQL Entra principals/grants, Redis access, SignalR app-server access, Key Vault secret access, and Foundry agent invocation access against the currently deployed identities.
 
-## CI/CD and deployment controls
+## Release controls
 
-Azure DevOps owns delivery. CI validates code, tests, frontend, pipeline contracts and Bicep without applying infrastructure. The release parameter `enableDevDelivery` is default-off. When explicitly enabled through the approved pipeline, the release builds one immutable image digest, validates the topology, captures what-if and estimated cost, waits for exact-change owner approval and the protected `pitchmind-dev` environment, applies the approved plan, then runs post-deployment smoke checks. A green CI run alone does not deploy.
+The pipeline YAML currently defaults `enableDevDelivery=true` and `enableCandidateFeed=true`; the Bicep module defaults candidate provisioning off when used separately. The guarded release builds an immutable application image, validates the network and Bicep plan, publishes a what-if/cost artifact, and uses its configured Azure DevOps approval/deployment gates. A successful validation stage is not evidence that an image or infrastructure was deployed. Repository code cannot confirm external service connections, agent-pool availability, or protected Environment approvers.
 
-The 2026-10-26 release log showed that `pm-dev-eh` was absent from the target resource group, so the prior existing-resource declaration failed when creating the candidate hub. The template now provisions the namespace when candidate Event Hubs are enabled. The EventWorker has no ingress and must stay active to consume Event Hubs, so its scale is pinned to one replica instead of allowing the default zero-replica state with no wake-up path. These changes add a billable Standard namespace and always-on Container Apps compute; review and update the monthly estimate before approval. They are source changes only: they did not provision Azure resources, apply Bicep, alter environment settings, or deploy an image. Do not deploy from a local shell. Any deployment requires review of the exact what-if, image digest, cost and rollback before the protected approval gates.
+Before applying a change, verify the exact resource group, subnet CIDR, service connection identities, what-if output, image digest, cost estimate, and approvals. Never reuse an old approval after the what-if changes.
 
-## Verification status and remaining evidence
+## Post-release verification
 
-Owner-provided DEV screenshots dated 2026-10-20 show builds labelled 68/69, with candidate source events and player positions rendered. A separate captured network response shows candidate status failing with `401` and `audience (null)`. The screenshots do not prove the Event Hubs → EventWorker → PostgreSQL → Redis → SignalR chain or a successful Foundry response. The last repository-recorded Azure resource inventory is dated 2026-10-19 and must be treated as historical; a current inventory and runtime probe are still required.
+For the same source event/sequence, confirm:
 
-Before calling DEV end to end, retain evidence for each of the following:
+1. API reports candidate feed enabled and starts the replay.
+2. Event Hubs receives the event; EventWorker logs show consumption.
+3. PostgreSQL contains the corresponding candidate outbox/history record and Blob checkpoint advances only after durable staging.
+4. Redis cursor advances and SignalR emits the cursor-only notification.
+5. API event pages return the event and the UI updates the match timeline/pitch.
+6. Pause/resume and clear/restart behave as documented in the API contract.
+7. A direct AI analyst request returns a valid, evidence-bounded answer. A 503 means this item is not passed even if the agent resource exists.
 
-1. Current Azure Resource Graph inventory and active ACA revisions/image digest.
-2. API and worker app settings, attached identities, role assignments, VNet and private DNS.
-3. PostgreSQL migration job status, schema version and narrowly scoped runtime grants.
-4. Authenticated Event Hubs publish/consume and Blob checkpoint advance for a source event.
-5. PostgreSQL candidate history, Redis cursor update, SignalR negotiate/notification and UI page refresh for the same match/sequence.
-6. Entra browser login and API audience/role checks for the intended user.
-7. Successful live Foundry request and response validation, if generated explanations are in scope.
-8. Health/readiness and rollback evidence from the immutable deployed revision.
+Capture image digest, revision, schema version, source hash, sequence, correlation ID, service request IDs, and health status without logging tokens or source secrets. Local Docker success is not Azure connectivity evidence.
 
-See [C4 deployment view](../architecture/04-deployment.md), [Azure HLD](../architecture/06-target-azure-hld.md), [API contract](../api/API.md), and [delivery pipeline guide](../../pipelines/README.md).
+See [C4 deployment](../architecture/04-deployment.md), [Azure HLD](../architecture/06-target-azure-hld.md), [API contract](../api/API.md), [pipeline guide](../../pipelines/README.md), and [cost assumptions](../cost/COST-ASSUMPTIONS.md).
