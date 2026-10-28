@@ -27,6 +27,23 @@ public sealed class RealtimeApiTests
     private static readonly Guid MatchId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     [Fact]
+    public void Candidate_guest_session_is_signed_limited_to_fan_role_and_rejects_tampering()
+    {
+        var sessions = new CandidateGuestSessionService("unit-test-foundry-secret");
+        var token = sessions.CreateSession().AccessToken;
+
+        Assert.StartsWith("pmguest.v1.", token);
+        Assert.True(sessions.TryValidate(token, out var principal));
+        Assert.True(principal.IsInRole("fan"));
+        Assert.False(principal.IsInRole("analyst"));
+        Assert.True(principal.HasClaim("scope", "candidate:question"));
+        Assert.True(principal.HasClaim("pm_guest_demo", "true"));
+        var signatureStart = token.LastIndexOf('.') + 1;
+        var tampered = token[..signatureStart] + (token[signatureStart] == 'A' ? 'B' : 'A') + token[(signatureStart + 1)..];
+        Assert.False(sessions.TryValidate(tampered, out _));
+    }
+
+    [Fact]
     public void Projection_outbox_is_reduced_to_a_cursor_without_match_state()
     {
         var messageId = Guid.NewGuid();

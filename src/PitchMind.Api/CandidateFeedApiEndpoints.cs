@@ -7,6 +7,18 @@ internal static class CandidateFeedApiEndpoints
     public static IEndpointRouteBuilder MapCandidateFeedEndpoints(this IEndpointRouteBuilder endpoints, bool guestAccessEnabled)
     {
         var group = endpoints.MapGroup("/api/v1/simulation/candidate").RequireRateLimiting("api").RequireAuthorization("MatchRead");
+        if (guestAccessEnabled)
+        {
+            group.MapPost("/guest-session", (CandidateGuestSessionService sessions, HttpContext context) =>
+            {
+                try { return Results.Ok(sessions.CreateSession()); }
+                catch (InvalidOperationException)
+                {
+                    return Problem(context, StatusCodes.Status503ServiceUnavailable, "GUEST_SESSION_UNAVAILABLE",
+                        "Guest demo sign-in is temporarily unavailable.");
+                }
+            }).AllowAnonymous().RequireRateLimiting("guest-session");
+        }
         var agents = group.MapGet("/analyst/agents", () => Results.Ok(new
         {
             defaultAgent = CandidateAnalystAgentCatalog.DefaultAgentName,
@@ -88,6 +100,9 @@ internal static class CandidateFeedApiEndpoints
         group.MapPost("/analyst/questions", async (CandidateAnalystQuestion request,
             CandidateMatchAnalystService analyst, HttpContext context) =>
         {
+            if (context.User.HasClaim("pm_guest_demo", "true") && request.Audience != "fan")
+                return Problem(context, StatusCodes.Status403Forbidden, "GUEST_SCOPE_FORBIDDEN",
+                    "Guest demo sessions can ask fan-audience questions only.");
             try
             {
                 return Results.Ok(await analyst.AskAsync(request, context.RequestAborted).ConfigureAwait(false));
@@ -111,7 +126,7 @@ internal static class CandidateFeedApiEndpoints
                     "The configured match-scoped analyst is unavailable. No answer was generated.");
             }
         })
-            .RequireAuthorization("AnalystAction")
+            .RequireAuthorization("CandidateQuestion")
             .RequireRateLimiting("analyst");
         return endpoints;
     }

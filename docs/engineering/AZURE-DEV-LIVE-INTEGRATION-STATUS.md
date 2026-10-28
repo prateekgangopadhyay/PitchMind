@@ -33,7 +33,7 @@ The current source path is:
 2. EventWorker consumes the candidate hub, writes raw candidate envelopes or poison records to the PostgreSQL candidate outbox, then advances the Blob checkpoint.
 3. The API candidate-outbox dispatcher writes candidate event history, updates the Redis cursor, sends SignalR a cursor-only notification, then acknowledges the dispatch item.
 4. The UI retrieves event pages from the API. SignalR prompts refresh; it does not transport event facts.
-5. Guest access can be enabled for the DEV candidate status, event, start, and pause routes. Clear-data and other privileged operations remain protected. Guest mode is not Entra authentication.
+5. Guest access is limited to the DEV synthetic candidate feed. The guest-session enrollment issues a short-lived signed fan token; candidate question requests still require a bearer token and guests are limited to fan-audience questions. Guest mode is not Entra authentication. The clear-data route is anonymous only in the explicitly guest-enabled DEV profile.
 
 The candidate tables are separate from canonical football tables. The source's clock, event mapping, coordinate units/orientation, player metrics, and football realism remain unvalidated. Do not describe the stream as canonical match truth.
 

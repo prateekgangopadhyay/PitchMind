@@ -122,11 +122,14 @@ export async function getHostAccessToken(): Promise<string | null> {
 }
 
 export async function request<T>(path: string, signal?: AbortSignal, body?: unknown): Promise<T> {
-  const token = await getHostAccessToken();
+  const session = getStoredAuthSession();
+  const token = session?.user.provider === 'guest' && typeof window !== 'undefined'
+    ? window.sessionStorage.getItem('pitchmind_guest_access_token')
+    : await getHostAccessToken();
   const headers = new Headers(body ? { 'Content-Type': 'application/json' } : undefined);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-  } else if (typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
+  } else if (session?.user.provider !== 'guest' && typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
     headers.set('X-Dev-Subject', 'local-analyst');
     headers.set('X-Dev-Roles', 'analyst');
   }
@@ -772,6 +775,7 @@ export interface CandidateAnalystQuestion {
   agentName: string;
 }
 export interface CandidateAnalystAgentCatalog { defaultAgent: string; agents: string[] }
+export interface CandidateGuestSession { accessToken: string; expiresAt: string }
 export interface CandidateAnalystClaim { text: string; evidenceIds: string[] }
 export interface CandidateAnalystAnswer {
   status: 'answered' | 'insufficientEvidence'; answer: string; claims: CandidateAnalystClaim[];
@@ -780,8 +784,12 @@ export interface CandidateAnalystAnswer {
 export function getCandidateAnalystAgents(signal?: AbortSignal): Promise<CandidateAnalystAgentCatalog> {
   return request<CandidateAnalystAgentCatalog>('simulation/candidate/analyst/agents', signal);
 }
+export function createCandidateGuestSession(signal?: AbortSignal): Promise<CandidateGuestSession> {
+  return request<CandidateGuestSession>('simulation/candidate/guest-session', signal, {});
+}
 export function askCandidateAnalyst(payload: CandidateAnalystQuestion, signal?: AbortSignal): Promise<CandidateAnalystAnswer> {
-  return request<CandidateAnalystAnswer>('simulation/candidate/analyst/questions', signal, payload);
+  const question = getStoredAuthSession()?.user.provider === 'guest' ? { ...payload, audience: 'fan' as const } : payload;
+  return request<CandidateAnalystAnswer>('simulation/candidate/analyst/questions', signal, question);
 }
 
 const AUTH_STORAGE_KEY = 'pitchmind_auth_session';
@@ -837,6 +845,7 @@ export function subscribeAuth(onChange: () => void): () => void {
 }
 
 export function logoutSimulated(): void {
+  if (typeof window !== 'undefined') window.sessionStorage.removeItem('pitchmind_guest_access_token');
   setStoredAuthSession(null);
 }
 

@@ -29,6 +29,7 @@ internal static class ApiSecurity
         var runtimeProfile = builder.Configuration["Runtime:Profile"]?.Trim();
         var hasAuthority = !string.IsNullOrWhiteSpace(authority);
         var hasAudience = !string.IsNullOrWhiteSpace(audience);
+        var guestCandidateFeedAccessEnabled = builder.Configuration.GetValue<bool>("CandidateFeed:GuestAccessEnabled");
 
         if (runtimeProfile is not ("local" or "azure"))
             throw new InvalidOperationException("Runtime:Profile must be explicitly set to 'local' or 'azure'.");
@@ -51,6 +52,11 @@ internal static class ApiSecurity
             throw new InvalidOperationException("Development header authentication is allowed only in the local Development profile.");
         if (developmentHeaderAuth && hasAuthority)
             throw new InvalidOperationException("Development header authentication cannot be combined with Entra authentication.");
+        if (guestCandidateFeedAccessEnabled)
+        {
+            var signingSecret = builder.Configuration["Identity:GuestSessionSigningKey"] ?? builder.Configuration["Foundry:ApiKey"] ?? string.Empty;
+            builder.Services.AddSingleton(new CandidateGuestSessionService(signingSecret));
+        }
 
         var defaultScheme = developmentHeaderAuth
             ? DevelopmentScheme
@@ -83,6 +89,22 @@ internal static class ApiSecurity
                         // Never accept access_token from query strings on other API routes.
                         if (GetMatchHubQueryToken(context.Request) is { } token)
                             context.Token = token;
+
+                        if (context.Token is null)
+                        {
+                            var authorization = context.Request.Headers.Authorization.ToString();
+                            if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) && authorization.Length <= 8200)
+                                context.Token = authorization[7..].Trim();
+                        }
+
+                        if (guestCandidateFeedAccessEnabled && context.Token is { } guestToken &&
+                            context.HttpContext.RequestServices.GetService<CandidateGuestSessionService>() is { } guestSessions &&
+                            guestSessions.TryValidate(guestToken, out var guestPrincipal))
+                        {
+                            context.Principal = guestPrincipal;
+                            context.Success();
+                            return Task.CompletedTask;
+                        }
 
                         if (builder.Environment.IsDevelopment())
                         {
@@ -129,6 +151,9 @@ internal static class ApiSecurity
             options.AddPolicy("MatchRead", policy => policy.RequireAuthenticatedUser().RequireRole(AllowedRoles));
             options.AddPolicy("MatchReplay", policy => policy.RequireAuthenticatedUser().RequireRole("analyst", "admin"));
             options.AddPolicy("AnalystAction", policy => policy.RequireAuthenticatedUser().RequireRole("analyst", "admin"));
+            options.AddPolicy("CandidateQuestion", policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                context.User.IsInRole("analyst") || context.User.IsInRole("admin") ||
+                (context.User.HasClaim("pm_guest_demo", "true") && context.User.HasClaim("scope", "candidate:question"))));
             options.AddPolicy("AdminAction", policy => policy.RequireAuthenticatedUser().RequireRole("admin"));
         });
         builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, TypedAuthorizationMiddlewareResultHandler>();

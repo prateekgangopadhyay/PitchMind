@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askCandidateAnalyst, clearAllDevData, getCandidateAnalystAgents, getHostAccessToken, request } from './api';
+import { askCandidateAnalyst, clearAllDevData, getCandidateAnalystAgents, getHostAccessToken, request, setStoredAuthSession } from './api';
 
 describe('host access-token boundary', () => {
   afterEach(() => {
     delete window.pitchMindAuth;
+    window.sessionStorage.removeItem('pitchmind_guest_access_token');
+    setStoredAuthSession(null);
     vi.unstubAllGlobals();
   });
 
@@ -46,6 +48,29 @@ describe('host access-token boundary', () => {
 
     expect(result.agentName).toBe('GoalkeeperAnalyst');
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).agentName).toBe('GoalkeeperAnalyst');
+  });
+
+  it('sends the signed guest token and limits guest questions to the fan audience', async () => {
+    window.sessionStorage.setItem('pitchmind_guest_access_token', 'pmguest.v1.signed-demo-token');
+    setStoredAuthSession({
+      success: true,
+      token: '',
+      authenticatedAt: new Date().toISOString(),
+      user: { name: 'Guest', email: '', role: 'Demo viewer', permissions: ['MatchRead'], provider: 'guest' }
+    });
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json({
+      status: 'answered', answer: 'Fan-safe answer.', claims: [], matchId: 'match-1',
+      selectedSourceClockValue: 32, sourceSha256: 'abc', agentName: 'TacticalAnalyst',
+      truthClass: 'hypothesis', limitations: []
+    }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await askCandidateAnalyst({ matchId: 'match-1', selectedSourceClockValue: 32,
+      audience: 'analyst', question: 'What does the evidence show?', agentName: 'TacticalAnalyst' });
+
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('Authorization'))
+      .toBe('Bearer pmguest.v1.signed-demo-token');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).audience).toBe('fan');
   });
 
   it('posts to simulation/clear-data when clearing dev database and cache records', async () => {

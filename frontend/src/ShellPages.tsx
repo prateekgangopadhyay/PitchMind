@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   request,
+  createCandidateGuestSession,
   clock,
   loginSimulated,
   getStoredAuthSession,
@@ -151,17 +152,27 @@ export function WelcomePage() {
     void signIn(() => loginSimulated({ email, password }));
   };
 
-  const continueAsGuest = () => {
-    const guestSession: AuthSession = {
-      success: true,
-      token: '',
-      authenticatedAt: new Date().toISOString(),
-      user: { name: 'Guest', email: '', role: 'Demo viewer', permissions: ['MatchRead'], provider: 'guest' }
-    };
-    setStoredAuthSession(guestSession);
-    setSession(guestSession);
-    window.history.pushState({}, '', '/candidate-live');
-    window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+  const continueAsGuest = async () => {
+    setBusy(true);
+    setAuthError('');
+    try {
+      const guestCredential = await createCandidateGuestSession();
+      window.sessionStorage.setItem('pitchmind_guest_access_token', guestCredential.accessToken);
+      const guestSession: AuthSession = {
+        success: true,
+        token: '',
+        authenticatedAt: new Date().toISOString(),
+        user: { name: 'Guest', email: '', role: 'Demo viewer', permissions: ['MatchRead'], provider: 'guest' }
+      };
+      setStoredAuthSession(guestSession);
+      setSession(guestSession);
+      window.history.pushState({}, '', '/candidate-live');
+      window.dispatchEvent(new CustomEvent('pitchmind:locationchange'));
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Guest demo access is unavailable. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return <section className="content-page welcome-screen-root">
@@ -242,7 +253,7 @@ export function WelcomePage() {
               <button type="button" className="auth-provider-btn guest-access-btn" onClick={continueAsGuest} disabled={busy}>
                 Continue as a guest
               </button>
-              <p className="guest-access-note">View and control the shared DEV simulation. Clear demo data before signing in. Sign-in is required for AI analyst tools.</p>
+              <p className="guest-access-note">Explore the shared DEV match and ask fan-audience questions. Analyst-only actions require an analyst account.</p>
             </>}
           </div> : <form onSubmit={handleSignIn} className="auth-form-fields">
             <div className="auth-field-group">
