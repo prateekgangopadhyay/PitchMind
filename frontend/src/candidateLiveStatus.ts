@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { HttpTransportType, HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-import { ApiRequestError, getApiAccessToken, getStoredAuthSession, request, subscribeAuth } from './api';
+import { ApiRequestError, getApiAccessToken, request, subscribeAuth } from './api';
 
 export interface CandidateStreamStatus {
   matchId: string | null; isStreaming: boolean; currentSequence: number | null;
