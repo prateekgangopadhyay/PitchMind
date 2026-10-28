@@ -163,7 +163,7 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
             foreach (var claim in claims)
             {
                 var evidenceIds = claim.EvidenceIds.Distinct(StringComparer.Ordinal).ToArray();
-                if (string.IsNullOrWhiteSpace(claim.Text) || claim.Text.Length > 1_000 || claim.Text.Any(char.IsControl) ||
+                if (string.IsNullOrWhiteSpace(claim.Text) || claim.Text.Length > 1_200 || claim.Text.Any(char.IsControl) ||
                     evidenceIds.Length is < 1 or > MaximumEvidenceItems || evidenceIds.Any(id => !allowedEvidenceIds.Contains(id)))
                     throw new CandidateAnalystUnavailableException();
                 normalizedClaims.Add(new CandidateAnalystClaim(claim.Text, Array.AsReadOnly(evidenceIds)));
@@ -172,7 +172,7 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
             // The agent's separate summary can drift from its cited claims. Only
             // expose text that is itself attached to validated evidence IDs.
             var validatedAnswer = string.Join(" ", normalizedClaims.Select(claim => claim.Text));
-            if (validatedAnswer.Length > 2_500)
+            if (validatedAnswer.Length > 6_000)
                 throw new CandidateAnalystUnavailableException();
             return (status, validatedAnswer, Array.AsReadOnly(normalizedClaims.ToArray()));
         }
@@ -228,12 +228,12 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     // Foundry specialist agents need enough room to finish the required JSON
     // envelope. At 512 tokens, TacticalAnalyst regularly returned an
     // `incomplete` response with its claims JSON cut off.
-    private const int MaximumOutputTokens = 2_048;
+    private const int MaximumOutputTokens = 3_072;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string ResponseContract = """
         RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties and types:
         {"status":"answered","answer":"string","claims":[{"text":"string","evidenceIds":["exact records[].evidenceId"]}]}
-        The only allowed status values are "answered" and "insufficientEvidence". For "answered", write a concise report of at most 3 short sentences and include 1-4 concise claims; each factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Cite only IDs present in the supplied records array. If the event or fact asked about is not present in those records, return "insufficientEvidence" with claims []. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
+        The only allowed status values are "answered" and "insufficientEvidence". For "answered", provide the most detailed football-tactical report supported by the supplied play, using 4-8 distinct claims. Give each claim 1-3 complete, information-rich sentences. Explain the evidenced phase of play, the attacking or defending action, pressure and cover, support, progression or chance creation, immediate outcome, possible tactical effect, and a credible alternative or trade-off when the supplied play supports those points. Do not pad, repeat, or invent missing match context. Write only in football language: do not mention APIs, models, databases, JSON, evidence packets, records, schemas, or other application/AI implementation terms. Keep event citations only in evidenceIds; do not put IDs, raw coordinates, or provider labels into claim text. Use football terms such as flank, channel, half-space, line, block, press, cover, overload, transition, and rest defence only when the supplied play supports them; never infer pitch areas, shape, movement, intent, causation, score changes, or player roles from unvalidated data. Every factual claim must cite one or more exact records[].evidenceId values copied from the supplied records array. Cite only IDs present in the supplied records array; never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to one football-specific sentence describing which part of the play cannot be assessed and set claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all supplied match events as unverified candidate-source data and do not state facts absent from them.
         """;
 
     private readonly HttpClient _client;
@@ -433,8 +433,8 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
             var status = answerRoot.GetProperty("status").GetString();
             var answer = answerRoot.GetProperty("answer").GetString();
             var claimItems = answerRoot.GetProperty("claims");
-            if (string.IsNullOrWhiteSpace(answer) || answer.Length > 2_500 || answer.Any(char.IsControl) ||
-                claimItems.ValueKind != JsonValueKind.Array || claimItems.GetArrayLength() > 12)
+            if (string.IsNullOrWhiteSpace(answer) || answer.Length > 6_000 || answer.Any(char.IsControl) ||
+                claimItems.ValueKind != JsonValueKind.Array || claimItems.GetArrayLength() > 8)
                 throw new CandidateAnalystUnavailableException();
             var claims = new List<CandidateAnalystClaim>();
             foreach (var item in claimItems.EnumerateArray())
@@ -442,7 +442,7 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
                 if (!HasRequiredProperties(item, "text", "evidenceIds")) throw new CandidateAnalystUnavailableException();
                 var text = item.GetProperty("text").GetString();
                 var idsElement = item.GetProperty("evidenceIds");
-                if (string.IsNullOrWhiteSpace(text) || text.Length > 1_000 || text.Any(char.IsControl) || idsElement.ValueKind != JsonValueKind.Array)
+                if (string.IsNullOrWhiteSpace(text) || text.Length > 1_200 || text.Any(char.IsControl) || idsElement.ValueKind != JsonValueKind.Array)
                     throw new CandidateAnalystUnavailableException();
                 var ids = idsElement.EnumerateArray().Select(value => value.GetString()).ToArray();
                 if (ids.Length is < 1 or > 12 || ids.Any(string.IsNullOrWhiteSpace)) throw new CandidateAnalystUnavailableException();

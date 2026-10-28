@@ -75,14 +75,16 @@ public sealed class CandidateAnalystEvidenceProjectionTests
         Assert.True(outerRequest.Length < 40_960,
             $"Serialized Foundry request was {outerRequest.Length} bytes.");
         Assert.Equal(2, requestRoot.EnumerateObject().Count());
-        Assert.Equal(2_048, requestRoot.GetProperty("max_output_tokens").GetInt32());
+        Assert.Equal(3_072, requestRoot.GetProperty("max_output_tokens").GetInt32());
         var agentInput = requestRoot.GetProperty("input");
         Assert.Equal(2, agentInput.GetArrayLength());
         Assert.Equal("message", agentInput[0].GetProperty("type").GetString());
         Assert.Equal("developer", agentInput[0].GetProperty("role").GetString());
         Assert.Contains("RESPONSE CONTRACT", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
-        Assert.Contains("at most 3 short sentences", agentInput[0].GetProperty("content")[0]
+        Assert.Contains("most detailed football-tactical report", agentInput[0].GetProperty("content")[0]
+            .GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Write only in football language", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
         Assert.Contains("Cite only IDs present in the supplied records array", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
