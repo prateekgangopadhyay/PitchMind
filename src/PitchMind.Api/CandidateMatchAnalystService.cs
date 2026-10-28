@@ -58,7 +58,8 @@ public sealed class CandidateEvidenceUnavailableException : Exception
 
 /// <summary>Builds a bounded, source-clock-scoped hypothesis request from persisted candidate events.</summary>
 public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog catalog,
-    CandidateFeedPersistence persistence, ICandidateMatchAnswerGenerator generator)
+    CandidateFeedPersistence persistence, ICandidateMatchAnswerGenerator generator,
+    ILogger<CandidateMatchAnalystService>? logger = null)
 {
     private const int MaximumEvidenceItems = 8;
     private const int MaximumEvidencePayloadBytes = 4_096;
@@ -126,10 +127,25 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
             Encoding.UTF8.GetByteCount(item.SourceEventId) + 192);
         if (contextBytes > MaximumContextBytes) throw new CandidateEvidenceUnavailableException();
 
-        var result = await generator.GenerateAsync(request, source.SourceSha256, selected, cancellationToken)
-            .ConfigureAwait(false);
         var allowedIds = selected.Select(item => item.SourceEventId).ToHashSet(StringComparer.Ordinal);
-        var validated = NormalizeGeneratedAnswer(result.Status, result.Answer, result.Claims, allowedIds);
+        (string Status, string Answer, IReadOnlyList<CandidateAnalystClaim> Claims) validated;
+        for (var attempt = 1; ; attempt++)
+        {
+            var result = await generator.GenerateAsync(request, source.SourceSha256, selected, cancellationToken)
+                .ConfigureAwait(false);
+            try
+            {
+                validated = NormalizeGeneratedAnswer(result.Status, result.Answer, result.Claims, allowedIds);
+                break;
+            }
+            catch (CandidateAnalystUnavailableException) when (attempt == 1)
+            {
+                // Agent instructions are advisory. One bounded regeneration
+                // handles occasional unsupported or malformed citations while
+                // keeping local evidence validation authoritative.
+                logger?.LogWarning("Foundry analyst answer failed evidence validation; retrying once.");
+            }
+        }
 
         return new(validated.Status, validated.Answer, validated.Claims, request.MatchId,
             request.SelectedSourceClockValue, source.SourceSha256, request.AgentName, "hypothesis", Limitations);
@@ -212,12 +228,12 @@ public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswer
     // Foundry specialist agents need enough room to finish the required JSON
     // envelope. At 512 tokens, TacticalAnalyst regularly returned an
     // `incomplete` response with its claims JSON cut off.
-    private const int MaximumOutputTokens = 1_536;
+    private const int MaximumOutputTokens = 2_048;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const string ResponseContract = """
         RESPONSE CONTRACT: Return only one valid JSON object with exactly these properties and types:
         {"status":"answered","answer":"string","claims":[{"text":"string","evidenceIds":["exact records[].evidenceId"]}]}
-        The only allowed status values are "answered" and "insufficientEvidence". For "answered", write a concise report of at most 3 short sentences and include 1-4 concise claims; each factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
+        The only allowed status values are "answered" and "insufficientEvidence". For "answered", write a concise report of at most 3 short sentences and include 1-4 concise claims; each factual sentence must appear in a claim, and every claim must cite one or more exact records[].evidenceId values copied from the supplied packet. Cite only IDs present in the supplied records array. If the event or fact asked about is not present in those records, return "insufficientEvidence" with claims []. Never invent IDs or repeat an ID within one claim. For "insufficientEvidence", set answer to a brief reason and claims to []. Do not include Markdown fences, extra properties, or text outside the JSON object. The application builds the displayed answer from validated claim text; an uncited summary is ignored. Treat all evidence as unverified candidate-source data; do not infer intent, causation, score changes, or facts not present in the packet.
         """;
 
     private readonly HttpClient _client;

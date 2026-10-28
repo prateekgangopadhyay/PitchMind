@@ -75,7 +75,7 @@ public sealed class CandidateAnalystEvidenceProjectionTests
         Assert.True(outerRequest.Length < 40_960,
             $"Serialized Foundry request was {outerRequest.Length} bytes.");
         Assert.Equal(2, requestRoot.EnumerateObject().Count());
-        Assert.Equal(1_536, requestRoot.GetProperty("max_output_tokens").GetInt32());
+        Assert.Equal(2_048, requestRoot.GetProperty("max_output_tokens").GetInt32());
         var agentInput = requestRoot.GetProperty("input");
         Assert.Equal(2, agentInput.GetArrayLength());
         Assert.Equal("message", agentInput[0].GetProperty("type").GetString());
@@ -83,6 +83,8 @@ public sealed class CandidateAnalystEvidenceProjectionTests
         Assert.Contains("RESPONSE CONTRACT", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
         Assert.Contains("at most 3 short sentences", agentInput[0].GetProperty("content")[0]
+            .GetProperty("text").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Cite only IDs present in the supplied records array", agentInput[0].GetProperty("content")[0]
             .GetProperty("text").GetString(), StringComparison.Ordinal);
         Assert.Equal("message", agentInput[1].GetProperty("type").GetString());
         Assert.Equal("user", agentInput[1].GetProperty("role").GetString());
