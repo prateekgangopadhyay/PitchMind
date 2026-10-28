@@ -224,7 +224,12 @@ public sealed class CandidateMatchAnalystService(CandidateFeedSourceCatalog cata
 public sealed class FoundryCandidateMatchAnswerGenerator : ICandidateMatchAnswerGenerator, IDisposable
 {
     private const int MaximumRequestBytes = 40_960;
-    private const int MaximumResponseBytes = 16_384;
+    // Foundry agent Responses include the configured agent instructions and
+    // tool metadata alongside the generated answer. The envelope can exceed
+    // 16 KiB even when output_text is short and valid (TacticalAnalyst DEV
+    // response measured 30,076 bytes). Keep a bounded but sufficiently large
+    // limit so agent metadata does not turn successful answers into 503s.
+    private const int MaximumResponseBytes = 65_536;
     // Foundry specialist agents need enough room to finish the required JSON
     // envelope. At 512 tokens, TacticalAnalyst regularly returned an
     // `incomplete` response with its claims JSON cut off.
