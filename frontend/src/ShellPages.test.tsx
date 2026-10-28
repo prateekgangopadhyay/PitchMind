@@ -8,7 +8,11 @@ describe('match context navigation and pages', () => {
   it('renders a data-neutral sign-in page without example match claims', () => {
     const markup = renderToStaticMarkup(createElement(RoutePage, { route: { kind: 'welcome' }, search: '' }));
     expect(markup).toContain('Sign in to your account');
-    expect(markup).toContain('Browse available matches');
+    expect(markup).toContain('Synthetic EPL intelligence view');
+    expect(markup).toContain('Understand the');
+    expect(markup).toContain('Premier League');
+    expect(markup).toContain('beyond the scoreline.');
+    expect(markup).toContain('Illustrative interface preview');
     expect(markup).not.toMatch(/Arsenal|Manchester City|67:24|4 - 3 - 3|AI Insight/);
   });
 
