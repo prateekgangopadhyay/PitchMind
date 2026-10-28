@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scope": "Cross-cutting football narrative skill, separate from Engineering Council roles and design specialists",
+  "skillCount": 1,
+  "skills": [
+    {
+      "name": "cinematic-football-commentary",
+      "path": ".github/skills/cinematic-football-commentary/SKILL.md",
+      "purpose": "Turn evidence-grounded football analysis into vivid, original, supporter-facing live commentary",
+      "references": [
+        ".github/skills/football-analytics-engineer/SKILL.md",
+        ".github/skills/product-owner/SKILL.md",
+        "docs/ai/FOUNDRY-TACTICAL-AGENTS-DETAILED.md"
+      ],
+      "styleBoundary": "Use broad craft qualities only; do not imitate an identifiable commentator or claim their review"
+    }
+  ]
+}

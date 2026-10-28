@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Validate all Engineering Council skills and 59 story routes at a repository checkout.
+/** Validate Engineering Council, specialist skills, and story routes at a repository checkout.
  * Standard Node 22 API only; pure read-only metadata checks (no cloud deployment).
  */
 import assert from 'node:assert/strict';
@@ -76,6 +76,7 @@ function gateFailureProbeSelfTest(pipeline) {
 function check() {
   const reg = parse('docs/operating-model/COUNCIL-SKILL-REGISTRY.json');
   const design = parse('docs/design/DESIGN-SKILL-REGISTRY.json');
+  const commentary = parse('docs/ai/COMMENTARY-SKILL-REGISTRY.json');
   const plan = parse('docs/operating-model/STORY-EXECUTION-ROUTING.json');
   const backlog = read('docs/backlog/HACKATHON-MVP-EPICS.md');
   const stories = [...backlog.matchAll(story)];
@@ -86,6 +87,9 @@ function check() {
   assert.equal(design.councilRoleCount, 28, 'Design skills are not accountable Council roles');
   assert.equal(design.skillCount, 5, 'Exactly five design skill sources are required');
   assert.equal(design.skills.length, 5, 'Exactly five design skill entries are required');
+  assert.equal(commentary.schemaVersion, 1, 'Commentary skill registry schema version mismatch');
+  assert.equal(commentary.skillCount, 1, 'Exactly one cross-cutting commentary skill is required');
+  assert.equal(commentary.skills.length, 1, 'Exactly one commentary skill entry is required');
   assert.deepEqual(design.skills.map(x=>x.name).sort(), ['awesome-design-audit','design-taste-frontend','emil-design-eng','impeccable','web-design-guidelines'],
     'All five named design specialties must be registered');
   assert.equal(new Set(reg.roles.map(x => x.name)).size, 28, 'Duplicate role');
@@ -95,10 +99,11 @@ function check() {
   const allSlugs = readdirSync(path.join(root, '.github/skills'), {withFileTypes: true})
     .filter(x => x.isDirectory()).map(x => x.name);
   const designSlugs = design.skills.map(x => x.name);
+  const commentarySlugs = commentary.skills.map(x => x.name);
   const councilSlugs = reg.roles.map(x => x.name);
-  assert.equal(new Set([...councilSlugs,...designSlugs]).size,33,'Skill names must be unique across all 33 skill directories');
-  assert.deepEqual(allSlugs.sort(), [...councilSlugs,...designSlugs].sort(),
-    'Disk skills must match the 28 Council roles plus 5 design skills');
+  assert.equal(new Set([...councilSlugs,...designSlugs,...commentarySlugs]).size,34,'Skill names must be unique across all 34 skill directories');
+  assert.deepEqual(allSlugs.sort(), [...councilSlugs,...designSlugs,...commentarySlugs].sort(),
+    'Disk skills must match 28 Council roles, 5 design skills, and 1 commentary skill');
   const seen = new Set();
   for (const role of reg.roles) {
     const file = role.skillFile;
@@ -131,6 +136,19 @@ function check() {
     }
     if(skill.instrument) assert.ok(existsSync(path.join(root,skill.instrument)),
       'Missing design audit instrument '+skill.instrument);
+  }
+  for (const skill of commentary.skills) {
+    assert.equal(skill.path, `.github/skills/${skill.name}/SKILL.md`, 'Commentary skill path mismatch');
+    assert.ok(existsSync(path.join(root,skill.path)), 'Missing commentary skill '+skill.path);
+    const content = read(skill.path);
+    const meta = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(meta, 'Missing commentary skill frontmatter '+skill.path);
+    assert.ok(new RegExp(`^name:\\s*["']?${skill.name}["']?\\s*$`, 'm').test(meta[1]),
+      'Commentary skill frontmatter name mismatch '+skill.path);
+    assert.ok(/^description:\s*.+$/m.test(meta[1]), 'Commentary skill description missing '+skill.name);
+    assert.ok(skill.references.length >= 2, 'Commentary skill references are required');
+    for (const file of skill.references) assert.ok(existsSync(path.join(root,file)), 'Missing commentary skill reference '+file);
+    assert.match(content, /do not imitate|do not.*imitat/i, 'Commentary originality boundary is required');
   }
   for (const file of ['docs/design/PITCHMIND-DESIGN-SYSTEM.md',
     'docs/design/FRONTEND-DESIGN-DELIVERY.md','docs/design/VENDOR-SOURCES.md',
@@ -171,7 +189,7 @@ function check() {
   assertStackedPrTrigger(pipeline);
   const counts = plan.stories.reduce((a,x)=>(a[x.priority]=(a[x.priority]||0)+1,a), {});
   assert.equal(counts.P0, 49); assert.equal(counts.P1, 4); assert.equal(counts.P2 || 0, 0);
-  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
+  return {epics:epics.length,stories:stories.length,councilSkills:reg.roles.length,designSkills:design.skills.length,commentarySkills:commentary.skills.length,discoverableSkills:allSlugs.length,priority:counts,cycles:0,approvalGates:2};
 }
 
 if (process.argv.includes('--self-test')) {
