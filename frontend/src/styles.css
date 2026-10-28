@@ -5345,7 +5345,9 @@ a[href*='#open-player'] {
 .welcome-header-auth-cta {
   display: flex !important;
   align-items: center !important;
-  gap: 0.85rem !important;
+  justify-content: flex-end;
+  gap: clamp(12px, 1.2vw, 20px) !important;
+  margin-left: auto;
 }
 
 .new-to-pitchmind {
@@ -5354,11 +5356,12 @@ a[href*='#open-player'] {
 }
 
 .header-demo-disclaimer {
-  max-width: 255px;
+  max-width: 310px;
   color: var(--pm-text-secondary);
   font-size: 0.72rem;
   line-height: 1.35;
   text-align: right;
+  white-space: nowrap;
 }
 
 .btn-request-access {
@@ -10083,7 +10086,7 @@ input[type="checkbox"] {
     justify-content: flex-end;
     gap: 0.55rem !important;
   }
-  .header-demo-disclaimer { max-width: 220px; text-align: left; }
+  .header-demo-disclaimer { max-width: 220px; text-align: left; white-space: normal; }
 
   .site-header {
     flex-direction: column !important;
