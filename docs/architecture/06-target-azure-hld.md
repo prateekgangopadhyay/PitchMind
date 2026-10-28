@@ -50,7 +50,7 @@ flowchart LR
 | Azure Blob Storage | Event Hubs processor checkpoint container | Consumer progress only |
 | Redis Container App (`pm-dev-redis-cache`) | Latest candidate cursor/cache projection | Current image `redis:7-alpine`, min/max replicas 1; rebuildable, no authoritative event pages. Azure Managed Redis is only an optional Bicep path. |
 | Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API with fallback polling |
-| Microsoft Entra ID | Signed-in user identity and managed-identity token authority | DEV candidate routes may also be anonymous when `CandidateFeed:GuestAccessEnabled=true`; clear-data remains protected. |
+| Microsoft Entra ID | Signed-in user identity and managed-identity token authority | Candidate demo routes, including clear-and-restart, may be anonymous only when `CandidateFeed:GuestAccessEnabled=true` in Azure DEV. Other environments require the configured authorization policies. |
 | Microsoft Foundry project `pitchmind-ai` | Bounded match-scoped hypotheses via selected agent | Recent DEV calls returned 503; no deterministic candidate-answer substitution. |
 
 ## Canonical football pipeline — target, not current candidate flow

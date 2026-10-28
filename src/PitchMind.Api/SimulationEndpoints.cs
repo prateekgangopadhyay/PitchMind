@@ -9,7 +9,7 @@ internal static class SimulationEndpoints
     private static JsonDocument? _cachedSimulation;
     private static DateTime _lastLoadedUtc = DateTime.MinValue;
 
-    public static IEndpointRouteBuilder MapSimulationEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapSimulationEndpoints(this IEndpointRouteBuilder app, bool guestCandidateFeedAccessEnabled)
     {
         var group = app.MapGroup("/api/v1/simulation")
             .RequireRateLimiting("api")
@@ -223,7 +223,7 @@ internal static class SimulationEndpoints
                 "The simulation preview is not an authoritative evidence packet and cannot be used to publish match-specific analysis."))
             .RequireAuthorization("AnalystAction");
 
-        group.MapPost("/clear-data", async (HttpContext context, IServiceProvider services) =>
+        var clearDataRoute = group.MapPost("/clear-data", async (HttpContext context, IServiceProvider services) =>
         {
             var count = await CandidateSimulationDataReset.ClearAndRestartAsync(
                 services, context.RequestAborted).ConfigureAwait(false);
@@ -234,7 +234,17 @@ internal static class SimulationEndpoints
                 clearedCandidateRecords = count,
                 message = "Candidate match records and cache were cleared; replay restarted from source sequence zero."
             });
-        }).RequireAuthorization("AnalystAction");
+        });
+        if (guestCandidateFeedAccessEnabled)
+        {
+            // Clearing is available to unauthenticated visitors only for the explicitly
+            // enabled Azure DEV candidate demo. Other environments remain role protected.
+            clearDataRoute.AllowAnonymous();
+        }
+        else
+        {
+            clearDataRoute.RequireAuthorization("AnalystAction");
+        }
 
         return app;
     }

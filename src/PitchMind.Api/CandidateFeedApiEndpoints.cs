@@ -62,7 +62,7 @@ internal static class CandidateFeedApiEndpoints
             pauseRoute.AllowAnonymous();
         }
         else pauseRoute.RequireAuthorization("AnalystAction");
-        group.MapPost("/clear", async (IServiceProvider services, HttpContext context) =>
+        var clearRoute = group.MapPost("/clear", async (IServiceProvider services, HttpContext context) =>
         {
             var count = await CandidateSimulationDataReset.ClearAndRestartAsync(
                 services, context.RequestAborted).ConfigureAwait(false);
@@ -73,8 +73,9 @@ internal static class CandidateFeedApiEndpoints
                 clearedCandidateRecords = count,
                 message = "Candidate match records and cache were cleared; replay restarted from source sequence zero."
             });
-        })
-            .RequireAuthorization("AnalystAction");
+        });
+        if (guestAccessEnabled) clearRoute.AllowAnonymous();
+        else clearRoute.RequireAuthorization("AnalystAction");
         group.MapPost("/realtime/negotiate", async (CandidateRealtimeNegotiateRequest request,
             CandidateFeedSourceCatalog catalog, HttpContext context) =>
         {

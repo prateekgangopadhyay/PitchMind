@@ -236,12 +236,13 @@ export function WelcomePage() {
             <button type="button" className="auth-submit-btn" onClick={() => { void handleMicrosoftSignIn(); }} disabled={busy || !isEntraAuthConfigured()}>
               {busy ? 'Connecting…' : 'Sign in with Microsoft'}
             </button>
+            <p className="microsoft-signin-note">Microsoft organization sign-in is not available yet. It is a planned future capability.</p>
             {isGuestModeEnabled() && <>
               <div className="auth-divider"><span>or explore the demo</span></div>
               <button type="button" className="auth-provider-btn guest-access-btn" onClick={continueAsGuest} disabled={busy}>
                 Continue as a guest
               </button>
-              <p className="guest-access-note">View the live DEV simulation. Sign-in is required for analyst tools and match controls.</p>
+              <p className="guest-access-note">View and control the shared DEV simulation. Clear demo data before signing in. Sign-in is required for AI analyst tools.</p>
             </>}
           </div> : <form onSubmit={handleSignIn} className="auth-form-fields">
             <div className="auth-field-group">

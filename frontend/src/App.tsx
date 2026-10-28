@@ -17,7 +17,7 @@ export function App() {
   const [clearingData, setClearingData] = useState(false);
 
   const handleClearData = async () => {
-    if (typeof window !== 'undefined' && !window.confirm('Are you sure you want to clear all records from the database and cache?')) {
+    if (typeof window !== 'undefined' && !window.confirm('Clear the shared DEV demo match data and restart the simulation from the beginning?')) {
       return;
     }
     setClearingData(true);
@@ -25,7 +25,7 @@ export function App() {
       clearCandidateLiveCache();
       const res = await clearAllDevData();
       if (typeof window !== 'undefined') {
-        window.alert(`Data cleared: ${res.message || 'All database records and cache flushed successfully.'}`);
+        window.alert(`Demo data cleared: ${res.message || 'The shared demo match and cache were cleared, and the simulation restarted.'}`);
         window.location.reload();
       }
     } catch (err) {
@@ -103,12 +103,14 @@ export function App() {
       </div>
       {route.kind === 'welcome' ? (
         <div className="welcome-header-auth-cta">
+          <span className="new-to-pitchmind">New to PitchMind?</span>
+          <span className="header-demo-disclaimer">Please clear shared demo data before signing in.</span>
           <button
             type="button"
             className="clear-data-pill"
             id="welcome-clear-data-button"
-            aria-label="Clear database and cache records"
-            title="Clear all match records from Database and Cache in dev"
+            aria-label="Clear shared DEV demo match data"
+            title="Clear the shared DEV demo match data and restart the simulation"
             disabled={clearingData}
             onClick={() => { void handleClearData(); }}
           >
@@ -119,16 +121,15 @@ export function App() {
             </svg>
             <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
           </button>
-          <span className="new-to-pitchmind">New to PitchMind?</span>
         </div>
       ) : (
         <div className="header-right-controls">
-          {activeUser?.provider !== 'guest' && <button
+          <button
             type="button"
             className="clear-data-pill"
             id="header-clear-data-button"
-            aria-label="Clear database and cache records"
-            title="Clear all match records from Database and Cache in dev"
+            aria-label="Clear shared DEV demo match data"
+            title="Clear the shared DEV demo match data and restart the simulation"
             disabled={clearingData}
             onClick={() => { void handleClearData(); }}
           >
@@ -138,7 +139,7 @@ export function App() {
               <line x1="14" y1="11" x2="14" y2="17"></line>
             </svg>
             <span>{clearingData ? 'Clearing...' : 'Clear Data'}</span>
-          </button>}
+          </button>
           {candidateStreamMatchesContext && <button type="button" className={`live-status-pill ${candidateStream.status?.isStreaming ? 'is-streaming' : ''}`}
             aria-pressed={candidateStream.status?.isStreaming ?? false}
             aria-label={candidateStream.status?.isStreaming ? 'Pause candidate live simulation' : 'Resume candidate live simulation'}

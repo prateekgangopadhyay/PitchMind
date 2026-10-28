@@ -377,7 +377,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
 }).AllowAnonymous();
 app.MapCanonicalMatchEndpoints();
 app.MapRealtimeEndpoints();
-app.MapSimulationEndpoints();
+app.MapSimulationEndpoints(guestCandidateFeedAccessEnabled);
 app.MapPlayerIntelligenceEndpoints();
 app.MapHackathonOperationsEndpoints();
 if (localRealtimeEnabled || azureCandidateFeedEnabled) app.MapHub<MatchUpdatesHub>("/hubs/matches").RequireAuthorization();
