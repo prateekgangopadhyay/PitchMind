@@ -8,6 +8,7 @@ Architecture documents distinguish **implemented in source/configuration**, **re
 - [C4 Level 4 — Deployment/trust and environments](04-deployment.md)
 - [Football analytics baseline LLD](05-football-lld.md) and [detailed football LLD](07-football-analytics-detailed-lld.md)
 - [Azure DEV HLD and canonical target](06-target-azure-hld.md)
+- [Azure and Microsoft Foundry technologies](AZURE-AND-FOUNDRY-TECHNOLOGIES.md)
 - [Football knowledge RAG design and local-to-Azure runbook](../ai/FOOTBALL-KNOWLEDGE-RAG-PIPELINE.md)
 - [Architecture review + findings](../engineering/ARCHITECTURE-REVIEW-2026-10-08.md) and [ADR index](../adr/README.md)
 - [Observed source profile](../data/MANU-LIV-SOURCE-PROFILE.md) and [source feed contract](../data/SIMULATION-FEED-CONTRACT.md)

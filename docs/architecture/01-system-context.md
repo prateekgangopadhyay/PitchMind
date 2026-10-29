@@ -28,7 +28,7 @@ flowchart LR
 
 The candidate journey starts, pauses, and replays source records; reads persisted event pages; and displays source player-position fields. Those raw records are stored in candidate tables and are not admitted into canonical match tables. Their event semantics, clock, coordinates, and player metrics remain unvalidated. Canonical BFF routes read only already-admitted canonical records and fail closed when those records or dependencies are unavailable.
 
-The candidate analyst API can pass a bounded, selected-time packet to an allowlisted Foundry project agent and validate the returned JSON and citation IDs. The result is a hypothesis, not a canonical insight. Recent DEV requests have returned `503 ANALYST_UNAVAILABLE`; the code path exists, but the current successful cloud invocation is not verified. The separate tactical discussion helper in the browser computes illustrative text locally and must not be described as an Azure-agent response.
+The candidate analyst API can pass a bounded, selected-time packet to an allowlisted Foundry project agent and validate the returned JSON and citation IDs. The result is a hypothesis, not a canonical insight. The reported `503 ANALYST_UNAVAILABLE` was traced to a 30,076-byte Foundry Responses envelope exceeding the API's former 16,384-byte limit; main commit `dbd04f1f` raises the bound to 65,536 bytes, and the reported issue is resolved. The separate tactical discussion helper in the browser computes illustrative text locally and must not be described as an Azure-agent response.
 
 ## Service and evidence status
 

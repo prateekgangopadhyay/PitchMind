@@ -1,6 +1,6 @@
 # C4 Level 4 — Azure DEV deployment and runtime evidence
 
-**CURRENT:** This document combines the Azure DEV resource inventory with the repository's deployment topology. It distinguishes a resource being present from the app successfully using it. Inventory was read on **2026-10-28** in `rg-pitchmind-dev-001`; runtime failures below are based on recent owner-supplied responses. See [the integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for the detail and limits.
+**CURRENT:** This document combines the Azure DEV resource inventory with the repository's deployment topology. It distinguishes a resource being present from the app successfully using it. Inventory was read on **2026-10-28** in `rg-pitchmind-dev-001`; incident notes reflect the owner-reported resolution state as of **2026-10-29**. See [the integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md) for detail and evidence limits.
 
 **TARGET:** the planned Azure topology and release shape are described in the [target Azure HLD](06-target-azure-hld.md); the resource table and diagram below document current DEV only and do not imply target completeness.
 
@@ -38,7 +38,7 @@ The candidate flow is distinct from canonical match ingestion. PostgreSQL stores
 | `pitchmind-postgresql-dev` | Flexible Server, Burstable `Standard_B1ms` | Durable DB; canonical and candidate records have different trust boundaries. |
 | `pmdev4iwntkatliy6sst` | Standard LRS Storage | Blob checkpoint storage. |
 | `pm-dev-signalr` | Free F1, capacity 1 | Realtime cursor notifications subject to F1 limits. |
-| `pitchmind-ai-resource` / project `pitchmind-ai` | Azure AI / Foundry resource | Configured project-agent path; recent API invocations returned 503. |
+| `pitchmind-ai-resource` / project `pitchmind-ai` | Azure AI / Foundry resource | Configured project-agent path; reported API 503 was resolved by raising the bounded response envelope size. |
 | `pitchmind-ai-srch-s3d9` | Azure AI Search Serverless | Resource exists; current analyst request does not prove this index is configured or used. |
 | `pmdev4iwntkatliy6sacr` | Azure Container Registry Basic | Image registry. |
 | `pmdev4iwntkatliy6skv` | Azure Key Vault | Exists; exact secret reads and workload identity access require separate verification. |
@@ -52,7 +52,7 @@ Managed identities are also present for API runtime, EventWorker, image pull, an
 
 - `infra/private-dev-topology.bicep` configures a Redis container app when `provisionRedis=false` (the default); when true, it can declare Azure Managed Redis and a private endpoint. The deployed `pm-dev-redis-cache` is the container-app option.
 - The pipeline YAML currently defaults `enableDevDelivery=true` and `enableCandidateFeed=true`. Exact-plan review and Azure DevOps environment/service-connection controls remain necessary; repository YAML alone does not prove external approvals or a completed release.
-- The candidate analyst API sends bounded persisted source evidence to an allowlisted Foundry project agent and validates response shape and evidence-ID membership. Recent DEV requests returned `503 ANALYST_UNAVAILABLE`; successful live analysis is not verified. The browser's tactical discussion helper is computed text, not an agent response.
+- The candidate analyst API sends bounded persisted source evidence to an allowlisted Foundry project agent and validates response shape and evidence-ID membership. The reported `503 ANALYST_UNAVAILABLE` was fixed in main commit `dbd04f1f` by raising the Foundry response bound from 16,384 to 65,536 bytes. The browser's tactical discussion helper is computed text, not an agent response.
 - Candidate data remains synthetic and non-canonical. The UI must not treat source sequence, clock, coordinate units, or raw event labels as validated football semantics.
 - The provisioned Service Bus, optional managed Redis, AI Search, AgentWorker code, and canonical-ingestion design are not automatically part of the live candidate-feed path.
 

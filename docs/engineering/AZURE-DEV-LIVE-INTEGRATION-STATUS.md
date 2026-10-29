@@ -14,8 +14,8 @@
 | `pitchmind-postgresql-dev` | Flexible Server, Burstable `Standard_B1ms` | Candidate outbox/history and canonical schema/read models. Candidate records remain non-canonical. |
 | `pmdev4iwntkatliy6sst` | Standard LRS Storage account | Blob checkpoint storage. |
 | `pm-dev-signalr` | Azure SignalR Free F1, capacity 1 | Cursor-only UI notifications; F1 quotas apply. |
-| `pitchmind-ai-resource` / `pitchmind-ai` | Azure AI / Microsoft Foundry project | Project-agent endpoint configured in the application path. Recent analyst calls returned 503. |
-| `pitchmind-ai-srch-s3d9` | Azure AI Search Serverless | Resource is present; current candidate analyst 503 does not establish Search use. |
+| `pitchmind-ai-resource` / `pitchmind-ai` | Azure AI / Microsoft Foundry project | Project-agent endpoint configured in the application path. The reported response-size-related API 503 has been fixed. |
+| `pitchmind-ai-srch-s3d9` | Azure AI Search Serverless | Resource is present; the resolved candidate analyst 503 did not establish Search use. |
 | `pmdev4iwntkatliy6sacr` | Azure Container Registry Basic | Container image registry. |
 | `pmdev4iwntkatliy6skv` | Azure Key Vault | Resource is present; effective secret retrieval requires separate verification. |
 | `pm-dev-logs` | Log Analytics workspace | Container Apps diagnostics. |
@@ -37,19 +37,19 @@ The current source path is:
 
 The candidate tables are separate from canonical football tables. The source's clock, event mapping, coordinate units/orientation, player metrics, and football realism remain unvalidated. Do not describe the stream as canonical match truth.
 
-The reset endpoint's code clears candidate PostgreSQL records and Redis cache state, resets in-memory candidate state, and starts a new replay from sequence zero. A recent owner-supplied DEV reset call returned a dependency-unavailable error. Therefore the deployed clear/cache/restart transaction and subsequent visible replay are **not verified end to end**.
+The reset endpoint clears candidate PostgreSQL records and Redis cache state, resets in-memory candidate state, and starts a new replay from sequence zero. The reported DEV dependency error is resolved. On a release, confirm the reset response, cleared counts, restarted sequence, and refreshed UI as a routine end-to-end check.
 
 ## AI Analyst status
 
 The API has a direct Foundry project-agent adapter. It sends a bounded packet of persisted candidate events to one of ten allowlisted project agents and validates response shape and cited event-ID membership. The answer, if generated, is a hypothesis; the API does not persist a durable event-report ledger. In the current source, the browser's tactical-discussion helper computes illustrative text locally and is not a response from Azure AI agents.
 
-Recent owner-supplied requests to `/api/v1/simulation/candidate/analyst/questions` returned `503 ANALYST_UNAVAILABLE`, including requests selecting `TacticalAnalyst`. Therefore live agent invocation is **not currently verified as working**, despite Foundry resources existing. The application returns an unavailable error rather than substituting a generated sample answer. The browser errors identify the downstream call failure but do not expose its upstream root cause. Check the API revision's configuration, managed identity token acquisition, role assignment to the project agent, project/agent name, and API logs correlated with the supplied request ID.
+Owner-supplied requests to `/api/v1/simulation/candidate/analyst/questions` returned `503 ANALYST_UNAVAILABLE`, including requests selecting `TacticalAnalyst`. Follow-up diagnosis found the API response-body cap was 16,384 bytes, while a successful Foundry Responses call returned a 30,076-byte envelope containing agent instructions/tool metadata as well as its shorter generated answer. The bounded reader rejected that envelope and the API surfaced 503. Main commit `dbd04f1f` (2026-10-29) raises the bounded cap to 65,536 bytes; input limits, timeout, retry, and response validation remain in place. The reported analyst 503 is resolved. Other token, permission, upstream, timeout, parse, and contract failures can still produce a sanitized unavailable error. Continue normal post-release monitoring and correlate any future failure with the deployed image digest, API correlation ID, and Foundry request ID/status.
 
 ## Source/configuration versus cloud evidence
 
 - **Source and Bicep:** API/EventWorker Azure profiles, Event Hubs publishing/consuming, PostgreSQL candidate persistence, Blob checkpointing, Redis cursor cache, SignalR notification, guest candidate-feed option, and Foundry project-agent invocation are implemented or declared.
 - **Azure inventory:** resources listed above were observed on 2026-10-28. The Redis app was confirmed to run `redis:7-alpine` with one minimum replica.
-- **Runtime health:** the resource inventory does not prove a full event traversed Event Hubs → EventWorker → PostgreSQL → Redis → SignalR → UI. The latest AI failure is directly evidenced by owner-supplied 503 responses. A successful live Foundry response is not available as current evidence.
+- **Runtime health:** the resource inventory does not prove a full event traversed Event Hubs → EventWorker → PostgreSQL → Redis → SignalR → UI. The reported AI 503 is resolved. This inventory itself does not certify the complete streaming path or guarantee future health.
 - **Cost model:** Container Apps Consumption has a shared free grant; PostgreSQL, Event Hubs Standard, ACR Basic, storage, Search, AI inference, private endpoints/DNS, and other metered services may incur charges. SignalR currently uses Free F1. See [cost assumptions](../cost/COST-ASSUMPTIONS.md).
 
 ## Deployment configuration

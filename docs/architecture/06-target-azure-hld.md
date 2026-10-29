@@ -38,7 +38,7 @@ flowchart LR
 2. EventWorker consumes the dedicated candidate hub. It stores the raw event or a durable poison record in the PostgreSQL candidate outbox before advancing the Blob checkpoint. Delivery is at least once; the candidate persistence key preserves idempotency.
 3. The API dispatcher processes the committed candidate outbox. It writes the ordered candidate event history to PostgreSQL and updates the latest Redis cursor as independent projections. SignalR sends a cursor notification after durable processing; it does not carry event facts.
 4. The React UI fetches event pages and source player-position fields from the API. It can pause/resume the feed and update the pitch from returned data. Candidate data remains separate from canonical match/insight records.
-5. The AI Analyst API reads a bounded selected-match event prefix and calls an allowlisted Microsoft Foundry project agent. The returned answer is a hypothesis. Recent DEV requests returned `503 ANALYST_UNAVAILABLE`; current live success is not verified. The browser's locally computed tactical discussion helper is illustrative and is not multi-agent deliberation.
+5. The AI Analyst API reads a bounded selected-match event prefix and calls an allowlisted Microsoft Foundry project agent. The returned answer is a hypothesis. The reported `503 ANALYST_UNAVAILABLE` was resolved by raising the bounded response limit in main commit `dbd04f1f`. The browser's locally computed tactical discussion helper is illustrative and is not multi-agent deliberation.
 
 ### Service boundaries
 
@@ -51,7 +51,7 @@ flowchart LR
 | Redis Container App (`pm-dev-redis-cache`) | Latest candidate cursor/cache projection | Current image `redis:7-alpine`, min/max replicas 1; rebuildable, no authoritative event pages. Azure Managed Redis is only an optional Bicep path. |
 | Azure SignalR Service | Cursor-only realtime notification to browsers | Wake-up hint; clients refetch facts from API with fallback polling |
 | Microsoft Entra ID | Signed-in user identity and managed-identity token authority | Candidate demo routes, including clear-and-restart, may be anonymous only when `CandidateFeed:GuestAccessEnabled=true` in Azure DEV. Other environments require the configured authorization policies. |
-| Microsoft Foundry project `pitchmind-ai` | Bounded match-scoped hypotheses via selected agent | Recent DEV calls returned 503; no deterministic candidate-answer substitution. |
+| Microsoft Foundry project `pitchmind-ai` | Bounded match-scoped hypotheses via selected agent | Reported API 503 issue is resolved; no deterministic candidate-answer substitution. |
 
 ## Canonical football pipeline — target, not current candidate flow
 
@@ -91,7 +91,7 @@ The canonical target commits the event/revision/outbox atomically, checkpoints a
 
 In `pipelines/azure-pipelines.yml`, `enableDevDelivery` and `enableCandidateFeed` currently default to `true`; the Bicep module's topology/feed defaults remain off unless pipeline parameters enable them. The Azure DevOps release path validates topology/what-if, records an image digest and cost estimate, and uses configured approval/deployment gates. YAML does not prove service connections or server-side approvals are present. CI success alone does not prove deployment.
 
-The 2026-10-28 read-only inventory is summarized in [C4 deployment](04-deployment.md). Earlier screenshots show candidate event/position rendering but do not prove every service link. The latest owner-supplied AI API responses show `503 ANALYST_UNAVAILABLE`, so successful report generation remains unverified.
+The 2026-10-28 read-only inventory is summarized in [C4 deployment](04-deployment.md). Earlier screenshots show candidate event/position rendering but do not prove every service link. The owner reports the DEV 503 issues are resolved; use the post-release smoke and normal runtime telemetry to check for regressions.
 
 ## Related designs
 

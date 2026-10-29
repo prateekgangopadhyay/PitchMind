@@ -26,7 +26,7 @@ flowchart LR
   API --> HackOps["HackathonOperationsEndpoints (Recap, Export, Search)"]
 ```
 
-The Candidate Simulation Service, outbox dispatcher, Player Intelligence Service, and Hackathon Operations Endpoints are application components hosted by the API container; EventWorker is a separate Container App. The Azure inventory includes Foundry resources, but recent user-reported candidate analyst requests returned `503 ANALYST_UNAVAILABLE`; this document does not claim a current successful call. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
+The Candidate Simulation Service, outbox dispatcher, Player Intelligence Service, and Hackathon Operations Endpoints are application components hosted by the API container; EventWorker is a separate Container App. The candidate analyst's recent 503 was traced to a 30,076-byte Foundry Responses envelope exceeding the former 16,384-byte API limit. Main commit `dbd04f1f` raises the bound to 65,536 bytes, resolving the reported issue. See [DEV integration status](../engineering/AZURE-DEV-LIVE-INTEGRATION-STATUS.md).
 
 ## Candidate-live adapters — raw source events, non-canonical
 
@@ -70,7 +70,7 @@ sequenceDiagram
   API-->>UI: hypothesis + source hash + limitations
 ```
 
-The API validates the request and supplies at most eight persisted source events (bounded by a 32 KiB context) at or before the selected source-clock value. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response must cite event IDs in the supplied packet; it is labeled `hypothesis` and is not persisted as a canonical insight. The AI Analyst UI can request a report for a newly observed notable event and accept user questions. Such reports are held in page state, not a durable report ledger. `tacticalAgentDiscussion.ts` computes illustrative discussion text in the browser; it is not multi-agent deliberation and is not an Azure AI response. The server-side project-agent call uses managed identity in the Azure profile, but recent DEV calls returned 503 and a successful live response is not currently verified. The API does not substitute deterministic text for an unavailable candidate analyst response.
+The API validates the request and supplies at most eight persisted source events (bounded by a 32 KiB context) at or before the selected source-clock value. It restricts agent names to the ten-agent allowlist and defaults to `TacticalAnalyst`. The response must cite event IDs in the supplied packet; it is labeled `hypothesis` and is not persisted as a canonical insight. The AI Analyst UI can request a report for a newly observed notable event and accept user questions. Such reports are held in page state, not a durable report ledger. `tacticalAgentDiscussion.ts` computes illustrative discussion text in the browser; it is not multi-agent deliberation and is not an Azure AI response. The server-side project-agent call uses managed identity in the Azure profile. Its former response-size cap was too small for the full Foundry envelope; main commit `dbd04f1f` raises the limit and resolves the reported 503. The API does not substitute deterministic text for a future unavailable candidate analyst response.
 
 ## Player intelligence and dynamic visual services
 
