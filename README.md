@@ -1,6 +1,7 @@
 # PitchMind
 
 [Application Link](https://pm-dev-api-vnet.icyglacier-6b4ac95d.centralindia.azurecontainerapps.io/)
+[YouTube Link](https://www.youtube.com/watch?v=lDAyClR8QUM) Please visit this in case the Azure Credits ends and the application is not opening.
 
 **Football intelligence grounded in match evidence.** PitchMind is a hackathon demo that replays a synthetic Premier League-style match feed and makes its events easier to explore through a live timeline, player-position view, and match-scoped AI analysis.
 
